@@ -18,11 +18,11 @@ class StorageService
             return config('filesystems.default');
         }
 
-        if (env('CLOUDFLARE_R2_ACCESS_KEY_ID') && env('CLOUDFLARE_R2_BUCKET')) {
+        if (config('filesystems.disks.r2.key') && config('filesystems.disks.r2.bucket')) {
             return 'r2';
         }
 
-        if (env('AWS_ACCESS_KEY_ID') && env('AWS_BUCKET')) {
+        if (config('filesystems.disks.s3.key') && config('filesystems.disks.s3.bucket')) {
             return 's3';
         }
 
@@ -119,7 +119,7 @@ class StorageService
         $disk = $disk ?: self::disk();
 
         if ($disk === 'r2' || $disk === 's3') {
-            $r2PublicUrl = env('CLOUDFLARE_R2_URL', env('AWS_URL'));
+            $r2PublicUrl = config('filesystems.disks.r2.url') ?: config('filesystems.disks.s3.url');
             if ($r2PublicUrl) {
                 return rtrim($r2PublicUrl, '/') . '/' . ltrim($path, '/');
             }
@@ -151,7 +151,7 @@ class StorageService
                 if (Storage::disk($disk)->exists($path)) {
                     // For R2 / S3, if public URL is configured and we're inline viewing, we can redirect or stream
                     if (($disk === 'r2' || $disk === 's3') && ! $download) {
-                        $publicUrl = env('CLOUDFLARE_R2_URL', env('AWS_URL'));
+                        $publicUrl = config('filesystems.disks.r2.url') ?: config('filesystems.disks.s3.url');
                         if ($publicUrl) {
                             return redirect()->away(rtrim($publicUrl, '/') . '/' . ltrim($path, '/'));
                         }

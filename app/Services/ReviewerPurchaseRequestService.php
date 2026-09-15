@@ -31,13 +31,7 @@ class ReviewerPurchaseRequestService
             return true;
         }
 
-        $emailMap = [
-            'EXECUTION' => 'ayman@gmail.com',
-            'BUILDINGS' => 'hatem@gmail.com',
-            'FINISHING' => 'kheshen@gmail.com',
-            'LICENSES' => 'mostafa@gmail.com',
-            'BUFFET' => 'amr@gmail.com',
-        ];
+        $emailMap = (array) config('procurement.default_department_reviewers', []);
 
         // 2. Target department takes priority when set
         if ($request->target_department_id !== null) {

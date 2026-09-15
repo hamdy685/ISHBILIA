@@ -26,10 +26,10 @@ class SetSecurityHeaders
             $response->headers->set('Pragma', 'no-cache');
         }
 
-        if (app()->environment('production') && $request->isSecure() && env('ENABLE_HSTS', true)) {
-            $maxAge = max(0, (int) env('HSTS_MAX_AGE', 31536000));
-            $includeSubDomains = env('HSTS_INCLUDE_SUBDOMAINS', true) ? '; includeSubDomains' : '';
-            $preload = env('HSTS_PRELOAD', false) ? '; preload' : '';
+        if (app()->environment('production') && $request->isSecure() && config('app.hsts.enabled', true)) {
+            $maxAge = max(0, (int) config('app.hsts.max_age', 31536000));
+            $includeSubDomains = config('app.hsts.include_subdomains', true) ? '; includeSubDomains' : '';
+            $preload = config('app.hsts.preload', false) ? '; preload' : '';
             $response->headers->set('Strict-Transport-Security', "max-age={$maxAge}{$includeSubDomains}{$preload}");
         }
 

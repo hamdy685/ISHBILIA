@@ -339,7 +339,8 @@ Route::middleware('auth:sanctum')->prefix('purchase-receipts')->group(function (
         ->middleware('permission:purchase_receipt.view_assigned');
     Route::post('/purchase-orders/{purchaseOrderId}', [PurchaseReceiptController::class, 'store'])
         ->middleware('permission:purchase_receipt.edit');
-    Route::post('/purchase-orders/{purchaseOrderId}/confirm-office', [PurchaseReceiptController::class, 'confirmOfficeReceipt']);
+    Route::post('/purchase-orders/{purchaseOrderId}/confirm-office', [PurchaseReceiptController::class, 'confirmOfficeReceipt'])
+        ->middleware('permission:purchase_receipt.edit');
     Route::put('/{id}', [PurchaseReceiptController::class, 'update'])
         ->middleware('permission:purchase_receipt.edit');
     Route::post('/{id}/approve', [PurchaseReceiptController::class, 'approve'])
@@ -376,13 +377,6 @@ Route::middleware('auth:sanctum')->prefix('notifications')->group(function () {
     Route::get('/stream', [NotificationController::class, 'stream'])->middleware('throttle:30,1');
     Route::post('/{id}/read', [NotificationController::class, 'markAsRead']);
     Route::post('/read-all', [NotificationController::class, 'markAllAsRead']);
-    Route::post('/device-token', [NotificationController::class, 'registerDeviceToken']);
-    Route::delete('/device-token', [NotificationController::class, 'deleteDeviceToken']);
-    Route::post('/test-push', [NotificationController::class, 'testPush']);
-});
-
-// Fallback aliases for cached client requests
-Route::middleware('auth:sanctum')->prefix('api/v1/notifications')->group(function () {
     Route::post('/device-token', [NotificationController::class, 'registerDeviceToken']);
     Route::delete('/device-token', [NotificationController::class, 'deleteDeviceToken']);
     Route::post('/test-push', [NotificationController::class, 'testPush']);

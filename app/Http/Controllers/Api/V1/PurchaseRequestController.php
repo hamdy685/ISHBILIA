@@ -60,13 +60,7 @@ class PurchaseRequestController extends Controller
                         ->first();
                 }
                 if (! $manager) {
-                    $emailMap = [
-                        'EXECUTION' => 'ayman@gmail.com',
-                        'BUILDINGS' => 'hatem@gmail.com',
-                        'FINISHING' => 'kheshen@gmail.com',
-                        'LICENSES' => 'mostafa@gmail.com',
-                        'BUFFET' => 'amr@gmail.com',
-                    ];
+                    $emailMap = (array) config('procurement.default_department_reviewers', []);
                     if (isset($emailMap[$department->code])) {
                         $manager = User::where('email', $emailMap[$department->code])->first();
                     }

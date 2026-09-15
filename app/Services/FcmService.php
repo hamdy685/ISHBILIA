@@ -221,7 +221,7 @@ class FcmService
     private function getServiceAccountCredentials(): ?array
     {
         // 1. Try environment variable (raw JSON or base64-encoded)
-        $envJson = env('FIREBASE_CREDENTIALS_JSON', '');
+        $envJson = config('services.firebase.credentials_json') ?: env('FIREBASE_CREDENTIALS_JSON', '');
         if (!empty($envJson)) {
             $decoded = json_decode($envJson, true);
             if (is_array($decoded) && !empty($decoded['private_key'])) {
@@ -238,7 +238,7 @@ class FcmService
         }
 
         // 2. Try file path from environment
-        $filePath = env('FIREBASE_CREDENTIALS_FILE', base_path('firebase-service-account.json'));
+        $filePath = config('services.firebase.credentials_file') ?: env('FIREBASE_CREDENTIALS_FILE', base_path('firebase-service-account.json'));
         if (file_exists($filePath)) {
             $content = file_get_contents($filePath);
             $decoded = json_decode($content, true);

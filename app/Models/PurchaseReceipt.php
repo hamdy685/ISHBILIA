@@ -46,7 +46,7 @@ class PurchaseReceipt extends Model
         if (filter_var($this->photo_path, FILTER_VALIDATE_URL)) {
             return $this->photo_path;
         }
-        $r2Url = env('CLOUDFLARE_R2_URL');
+        $r2Url = config('filesystems.disks.r2.url');
         if ($r2Url) {
             return rtrim($r2Url, '/') . '/' . ltrim($this->photo_path, '/');
         }

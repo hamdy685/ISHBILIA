@@ -35,4 +35,9 @@ return [
         ],
     ],
 
+    'firebase' => [
+        'credentials_json' => env('FIREBASE_CREDENTIALS_JSON'),
+        'credentials_file' => env('FIREBASE_CREDENTIALS_FILE'),
+    ],
+
 ];

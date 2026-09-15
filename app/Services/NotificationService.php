@@ -46,13 +46,7 @@ class NotificationService
             }
 
             // Mapped official reviewer for the department
-            $emailMap = [
-                'EXECUTION' => 'ayman@gmail.com',
-                'BUILDINGS' => 'hatem@gmail.com',
-                'FINISHING' => 'kheshen@gmail.com',
-                'LICENSES' => 'mostafa@gmail.com',
-                'BUFFET' => 'amr@gmail.com',
-            ];
+            $emailMap = (array) config('procurement.default_department_reviewers', []);
             if ($dept?->code && isset($emailMap[$dept->code])) {
                 $mappedUser = User::where('email', $emailMap[$dept->code])->where('is_active', true)->first();
                 if ($mappedUser && $mappedUser->hasPermission($permissionSlug)) {

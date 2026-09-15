@@ -44,6 +44,13 @@ return [
     // Local-only quick-login panel for demo/UAT workstations.
     'demo_login_panel' => (bool) env('DEMO_LOGIN_PANEL', false),
 
+    'hsts' => [
+        'enabled' => (bool) env('ENABLE_HSTS', true),
+        'max_age' => (int) env('HSTS_MAX_AGE', 31536000),
+        'include_subdomains' => (bool) env('HSTS_INCLUDE_SUBDOMAINS', true),
+        'preload' => (bool) env('HSTS_PRELOAD', false),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Application URL

@@ -193,13 +193,7 @@ class PurchaseRequestService
                     ->first();
             }
             if (!$assignedManager) {
-                $emailMap = [
-                    'EXECUTION' => 'ayman@gmail.com',
-                    'BUILDINGS' => 'hatem@gmail.com',
-                    'FINISHING' => 'kheshen@gmail.com',
-                    'LICENSES' => 'mostafa@gmail.com',
-                    'BUFFET' => 'amr@gmail.com',
-                ];
+                $emailMap = (array) config('procurement.default_department_reviewers', []);
                 if (isset($emailMap[$targetDepartment->code])) {
                     $assignedManager = User::where('email', $emailMap[$targetDepartment->code])->first();
                 }
@@ -372,13 +366,7 @@ class PurchaseRequestService
                         ->first();
                 }
                 if (!$assignedManager) {
-                    $emailMap = [
-                        'EXECUTION' => 'ayman@gmail.com',
-                        'BUILDINGS' => 'hatem@gmail.com',
-                        'FINISHING' => 'kheshen@gmail.com',
-                        'LICENSES' => 'mostafa@gmail.com',
-                        'BUFFET' => 'amr@gmail.com',
-                    ];
+                    $emailMap = (array) config('procurement.default_department_reviewers', []);
                     if (isset($emailMap[$targetDepartment->code])) {
                         $assignedManager = User::where('email', $emailMap[$targetDepartment->code])->first();
                     }
