@@ -1,0 +1,1 @@
+import{o as t}from"./index-DwP7GkrB.js";const r=async()=>(await t.get("/admin/categories")).data.data,n=async a=>(await t.post("/admin/categories",a)).data.data,o=async(a,e)=>(await t.put(`/admin/categories/${a}`,e)).data.data,d=async a=>{await t.delete(`/admin/categories/${a}`)};export{n as c,d,r as g,o as u};

@@ -13,7 +13,12 @@ export const AuthenticatedLayout: React.FC = () => {
     const { user, logout, sessionExpired, hasPermission } = useAuth();
     const unreadNotificationsCount = useNotificationCount();
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-    const [sidebarOpen, setSidebarOpen] = usePersistedState('layout.sidebar-open.v1', true);
+    const [sidebarOpen, setSidebarOpen] = usePersistedState('layout.sidebar-open.v2', () => {
+        if (typeof window !== 'undefined') {
+            return window.innerWidth >= 1280;
+        }
+        return false;
+    });
     const location = useLocation();
 
     const primaryRoleSlug = getPrimaryRoleSlug(user);
@@ -26,7 +31,12 @@ export const AuthenticatedLayout: React.FC = () => {
         );
     };
 
-    const closeMobileMenu = () => setMobileMenuOpen(false);
+    const closeMobileMenu = () => {
+        setMobileMenuOpen(false);
+        if (typeof window !== 'undefined' && window.innerWidth < 1280) {
+            setSidebarOpen(false);
+        }
+    };
 
     const linkClassName = (path: string): string => {
         const active = isActivePath(path);
@@ -460,19 +470,20 @@ export const AuthenticatedLayout: React.FC = () => {
             </header>
 
             {/* Container */}
-            <div className="relative flex-1 flex flex-col md:flex-row max-w-[1800px] w-full mx-auto px-2 sm:px-3 lg:px-4 py-2 sm:py-3 gap-2 sm:gap-3">
-                {mobileMenuOpen && sidebarOpen && (
+            <div className="relative flex-1 flex flex-col xl:flex-row max-w-[1800px] w-full mx-auto px-2 sm:px-3 lg:px-4 py-2 sm:py-3 gap-2 sm:gap-3">
+                {/* Backdrop when sidebar is open on tablet & mobile (< 1280px) */}
+                {(sidebarOpen || mobileMenuOpen) && (
                     <button
                         type="button"
                         aria-label="إغلاق القائمة الجانبية"
                         onClick={closeMobileMenu}
-                        className="fixed inset-0 z-30 bg-slate-950/70 backdrop-blur-[1px] md:hidden"
+                        className="fixed inset-0 z-30 bg-slate-950/70 backdrop-blur-[1px] xl:hidden"
                     />
                 )}
                 {/* Sidebar Nav */}
                 <aside
-                    className={`fixed inset-x-2 bottom-2 top-[4.75rem] z-40 max-h-[calc(100dvh-5.5rem)] w-auto overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900/95 p-3 shadow-xl backdrop-blur-sm transition-all duration-200 md:relative md:inset-auto md:bottom-auto md:top-auto md:max-h-none md:w-64 md:overflow-visible md:p-4 ${
-                        sidebarOpen ? (mobileMenuOpen ? "block" : "hidden md:block") : "hidden"
+                    className={`fixed inset-x-2 bottom-2 top-[4.75rem] z-40 max-h-[calc(100dvh-5.5rem)] w-auto sm:max-w-xs sm:right-3 sm:left-auto overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900/95 p-3 shadow-2xl backdrop-blur-md transition-all duration-200 xl:relative xl:inset-auto xl:bottom-auto xl:top-auto xl:max-h-none xl:w-64 xl:max-w-none xl:overflow-visible xl:p-4 xl:shadow-xl ${
+                        sidebarOpen ? "block" : (mobileMenuOpen ? "block" : "hidden")
                     }`}
                 >
                     <div className="px-3 py-2 mb-3 bg-slate-950/60 rounded-xl border border-slate-800/80 flex items-center justify-between">
@@ -486,7 +497,7 @@ export const AuthenticatedLayout: React.FC = () => {
                             <button
                                 type="button"
                                 onClick={closeMobileMenu}
-                                className="md:hidden flex items-center justify-center w-8 h-8 rounded-lg border border-slate-700 bg-slate-800 text-slate-400 hover:text-rose-300 hover:border-rose-500/60 hover:bg-rose-950/40 transition-colors"
+                                className="xl:hidden flex items-center justify-center w-8 h-8 rounded-lg border border-slate-700 bg-slate-800 text-slate-400 hover:text-rose-300 hover:border-rose-500/60 hover:bg-rose-950/40 transition-colors"
                                 aria-label="إغلاق القائمة"
                             >
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -494,7 +505,7 @@ export const AuthenticatedLayout: React.FC = () => {
                         </div>
                     </div>
                     <nav
-                        className="space-y-1.5 pb-16 md:pb-0"
+                        className="space-y-1.5 pb-16 xl:pb-0"
                         onClick={(event) => {
                             if ((event.target as HTMLElement).closest('a')) closeMobileMenu();
                         }}

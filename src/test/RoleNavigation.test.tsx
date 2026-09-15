@@ -340,7 +340,7 @@ describe("Role-based navigation and redirect flow", () => {
         expect(root).toBeInTheDocument();
 
         const aside = document.querySelector("aside");
-        expect(aside?.className).toContain("hidden md:block");
+        expect(aside?.className).toContain("hidden");
 
         fireEvent.click(
             screen.getByRole("button", { name: "Toggle navigation menu" }),
