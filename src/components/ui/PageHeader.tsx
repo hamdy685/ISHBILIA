@@ -10,6 +10,7 @@ const PAGE_TITLES: Array<{ prefix: string; title: string }> = [
   { prefix: '/profile', title: 'الملف الشخصي' },
   { prefix: '/preferences', title: 'تفضيلات المستخدم' },
   { prefix: '/requests/create', title: 'إنشاء طلب شراء' },
+  { prefix: '/requests/favorites', title: 'الطلبات المفضلة وقوالب الطلبات' },
   { prefix: '/requests', title: 'طلبات الشراء' },
   { prefix: '/admin/request-tracker', title: 'مركز متابعة الطلبات والتحكم الإداري' },
   { prefix: '/admin/system-monitor', title: 'مراقبة النظام والـDeploy' },

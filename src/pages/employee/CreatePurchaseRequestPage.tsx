@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { saveFavoriteRequest, FavoriteRequest } from '../../utils/favoriteRequestsStorage';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { FormField, Input, Select, Textarea } from '../../components/ui/FormField';
@@ -156,7 +157,8 @@ const normalizeRequestData = (data: CreatePurchaseRequestPayload): CreatePurchas
 
 const CreatePurchaseRequestPage: React.FC = () => {
   const navigate = useNavigate();
-  const { hasRole } = useAuth();
+  const location = useLocation();
+  const { hasRole, user } = useAuth();
   const isGeneralManager = hasRole('general_manager');
   const [data, setData] = useState<CreatePurchaseRequestPayload>(() => getInitialData());
   const [landParcels, setLandParcels] = useState<LandParcel[]>([]);
@@ -173,12 +175,50 @@ const CreatePurchaseRequestPage: React.FC = () => {
   const [draftReady, setDraftReady] = useState(false);
   const [draftMessage, setDraftMessage] = useState<string | null>(null);
   const [serverDraftId, setServerDraftId] = useState<number | null>(null);
+  const [loadedFavoriteInfo, setLoadedFavoriteInfo] = useState<{ title: string; count: number } | null>(null);
   const initialDataSnapshot = useMemo(() => getInitialData(), []);
   const isDirty = useMemo(() => JSON.stringify(data) !== JSON.stringify(initialDataSnapshot), [data, initialDataSnapshot]);
   useUnsavedChangesWarning(isDirty && !isSubmitting);
 
-  // Restore local draft silently
+  // Restore local draft or favorite template
   useEffect(() => {
+    const locState = location.state as { fromFavorite?: boolean; favoriteTemplate?: FavoriteRequest } | undefined;
+    if (locState?.fromFavorite && locState.favoriteTemplate) {
+      const fav = locState.favoriteTemplate;
+      const todayStr = getTodayDateInputValue();
+      setData({
+        ...getInitialData(),
+        target_department_id: fav.target_department_id,
+        request_type: fav.request_type || 'PROJECT',
+        priority: fav.priority || 'NORMAL',
+        notes: fav.notes || '',
+        date_needed: todayStr,
+        // Reset and require parcel and region:
+        region: '',
+        parcel_reference: '',
+        land_parcel_id: undefined,
+        items: fav.items && fav.items.length > 0 ? fav.items.map((it) => ({
+          ...emptyItem(),
+          item_description: it.item_description,
+          uom: it.uom || it.unit || 'قطعة',
+          quantity: Number(it.quantity) || 1,
+          specifications: it.specifications || '',
+          notes: it.notes || '',
+        })) : [emptyItem()],
+      });
+      setLoadedFavoriteInfo({
+        title: fav.title,
+        count: fav.items.length,
+      });
+      setShowValidation(true);
+      setDraftReady(true);
+      setTimeout(() => {
+        const parcelEl = document.getElementById('pr-parcel-reference');
+        if (parcelEl) parcelEl.focus();
+      }, 250);
+      return;
+    }
+
     try {
       const todayStr = getTodayDateInputValue();
       const savedDraft = window.localStorage.getItem(DRAFT_STORAGE_KEY);
@@ -200,7 +240,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
     } finally {
       setDraftReady(true);
     }
-  }, []);
+  }, [location.state]);
 
   // Auto-save local draft silently in the background
   useEffect(() => {
@@ -355,10 +395,10 @@ const CreatePurchaseRequestPage: React.FC = () => {
     }
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (saveToFavorites = false) => {
     setShowValidation(true);
     if (requestHasErrors) {
-      setError('يرجى تصحيح الأخطاء المحددة في النموذج أولاً.');
+      setError('يرجى تصحيح الأخطاء المحددة في النموذج وإدخال رقم القطعة والمنطقة أولاً.');
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
@@ -366,6 +406,30 @@ const CreatePurchaseRequestPage: React.FC = () => {
     setError(null);
     setIsSubmitting(true);
     try {
+      if (saveToFavorites) {
+        const firstItem = data.items[0]?.item_description?.trim() || 'بنود طلب شراء';
+        const locRef = data.parcel_reference ? ` (${data.parcel_reference})` : '';
+        const favTitle = `طلب ${firstItem}${locRef}`;
+        saveFavoriteRequest(
+          {
+            title: favTitle,
+            target_department_id: data.target_department_id,
+            request_type: data.request_type,
+            priority: data.priority,
+            notes: data.notes,
+            items: data.items.map((it) => ({
+              item_description: it.item_description,
+              uom: it.uom || 'قطعة',
+              unit: it.uom || 'قطعة',
+              quantity: Number(it.quantity) || 1,
+              specifications: it.specifications,
+              notes: it.notes,
+            })),
+          },
+          user?.id
+        );
+      }
+
       const draft = await ensureServerDraft();
       await submitPurchaseRequestApi(draft.id, {
         site_engineer_user_id: data.site_engineer_user_id || undefined,
@@ -374,9 +438,11 @@ const CreatePurchaseRequestPage: React.FC = () => {
       emitAppDataUpdated();
       navigate(`/requests/${draft.id}`, {
         state: {
-          message: isGeneralManager
-            ? 'تم إرسال طلب الشراء مباشرة إلى مدير المشتريات بنجاح بعد تحديد مسؤول الاستلام.'
-            : 'تم إرسال طلب الشراء للمراجعة بنجاح.',
+          message: saveToFavorites
+            ? 'تم إرسال طلب الشراء وحفظه في الطلبات المفضلة بنجاح! ⭐'
+            : isGeneralManager
+              ? 'تم إرسال طلب الشراء مباشرة إلى مدير المشتريات بنجاح بعد تحديد مسؤول الاستلام.'
+              : 'تم إرسال طلب الشراء للمراجعة بنجاح.',
         },
       });
     } catch (err) {
@@ -390,6 +456,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
     window.localStorage.removeItem(DRAFT_STORAGE_KEY);
     setData(getInitialData());
     setServerDraftId(null);
+    setLoadedFavoriteInfo(null);
     setDraftMessage('تم مسح المسودة والبدء من جديد.');
     setTimeout(() => setDraftMessage(null), 3000);
   };
@@ -426,6 +493,11 @@ const CreatePurchaseRequestPage: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            <Link to="/requests/favorites">
+              <Button type="button" variant="secondary" size="sm" className="text-[11px] sm:text-xs px-2.5 py-1 sm:px-3 text-amber-300 border-amber-500/30 hover:border-amber-400 bg-amber-950/20">
+                ⭐ <span className="hidden sm:inline">الطلبات</span> المفضلة
+              </Button>
+            </Link>
             <Link to="/requests">
               <Button type="button" variant="secondary" size="sm" className="text-[11px] sm:text-xs px-2.5 py-1 sm:px-3">
                 ← <span className="hidden sm:inline">أرشيف</span> طلباتي
@@ -434,6 +506,37 @@ const CreatePurchaseRequestPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Banner when loaded from Favorite Template */}
+      {loadedFavoriteInfo && (
+        <div className="rounded-xl border border-amber-500/60 bg-gradient-to-r from-amber-950/70 via-slate-900 to-amber-950/50 p-3 sm:p-4 text-xs shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start sm:items-center gap-3">
+            <span className="text-2xl shrink-0">⭐</span>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-black text-amber-300 text-xs sm:text-sm">تم استدعاء البنود من القالب المفضل:</span>
+                <span className="font-bold text-slate-100 bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/30">
+                  {loadedFavoriteInfo.title}
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 font-mono text-[10px] font-bold border border-cyan-500/30">
+                  {loadedFavoriteInfo.count} أصناف
+                </span>
+              </div>
+              <p className="text-[11px] text-amber-200/90 mt-1 font-semibold flex items-center gap-1.5">
+                <span className="text-amber-400">⚠️</span>
+                <span>تنبيه إلزامي: تم تفريغ المنطقة ورقم القطعة. يجب إدخال رقم القطعة والمنطقة الخاصة بالموقع الجديد لإتمام الإرسال.</span>
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setLoadedFavoriteInfo(null)}
+            className="text-slate-400 hover:text-slate-200 text-xs shrink-0 self-end sm:self-auto px-2.5 py-1 bg-slate-800/80 hover:bg-slate-700/80 rounded-lg border border-slate-700 transition-colors"
+          >
+            ✕ إخفاء التنبيه
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="rounded-xl border border-rose-800/80 bg-rose-950/40 p-2.5 sm:p-3 text-xs font-bold text-rose-200 shadow-lg" role="alert">
@@ -1139,8 +1242,8 @@ const CreatePurchaseRequestPage: React.FC = () => {
           )}
         </div>
 
-        {/* Action Buttons: Unified Single Row on Mobile */}
-        <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
+        {/* Action Buttons: Unified Row on Mobile & Desktop */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
           <Button
             type="button"
             variant="secondary"
@@ -1156,9 +1259,24 @@ const CreatePurchaseRequestPage: React.FC = () => {
 
           <Button
             type="button"
+            variant="secondary"
+            size="md"
+            onClick={() => void handleSubmit(true)}
+            disabled={isSubmitting || isSavingDraft}
+            isLoading={isSubmitting}
+            className="py-2 sm:py-2.5 px-3 sm:px-4 text-xs sm:text-sm font-bold border-amber-500/60 bg-amber-950/40 text-amber-300 hover:bg-amber-900/60 hover:border-amber-400 shrink-0 shadow-md shadow-amber-950/40"
+            title="إرسال الطلب وحفظ بنوده في قائمتك المفضلة لاستخدامها لاحقاً"
+          >
+            <span>⭐</span>
+            <span className="hidden sm:inline">إرسال وحفظ في المفضلة</span>
+            <span className="sm:hidden">إرسال ومفضلة ⭐</span>
+          </Button>
+
+          <Button
+            type="button"
             variant="primary"
             size="md"
-            onClick={() => void handleSubmit()}
+            onClick={() => void handleSubmit(false)}
             disabled={isSubmitting || isSavingDraft}
             isLoading={isSubmitting}
             className="flex-1 sm:flex-initial px-4 sm:px-6 py-2.5 shadow-lg shadow-cyan-600/30 text-xs sm:text-sm font-bold justify-center"

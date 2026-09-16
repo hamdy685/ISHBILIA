@@ -48,6 +48,7 @@ export const AuthenticatedLayout: React.FC = () => {
                     <>
                         <Link to="/requests" className={linkClassName("/requests")}><span className="ml-2.5 text-sm" aria-hidden="true">📋</span> طلبات الشراء الخاصة بي</Link>
                         <Link to="/requests/create" className={linkClassName("/requests/create")}><span className="ml-2.5 text-sm" aria-hidden="true">✍️</span> إنشاء طلب شراء</Link>
+                        <Link to="/requests/favorites" className={linkClassName("/requests/favorites")}><span className="ml-2.5 text-sm" aria-hidden="true">⭐</span> الطلبات المفضلة</Link>
                         <Link
                             to="/reviewer"
                             className={linkClassName("/reviewer")}
@@ -79,6 +80,7 @@ export const AuthenticatedLayout: React.FC = () => {
                     <>
                         <Link to="/requests" className={linkClassName("/requests")}><span className="ml-2.5 text-sm" aria-hidden="true">📋</span> طلبات الشراء الخاصة بي</Link>
                         <Link to="/requests/create" className={linkClassName("/requests/create")}><span className="ml-2.5 text-sm" aria-hidden="true">✍️</span> إنشاء طلب شراء</Link>
+                        <Link to="/requests/favorites" className={linkClassName("/requests/favorites")}><span className="ml-2.5 text-sm" aria-hidden="true">⭐</span> الطلبات المفضلة</Link>
                         <Link to="/warehouse" className={linkClassName("/warehouse")}><span className="ml-2.5 text-sm" aria-hidden="true">📦</span> استلام المواد (المستودع)</Link>
                         <Link to="/site-engineer" className={linkClassName("/site-engineer")}><span className="ml-2.5 text-sm" aria-hidden="true">📋</span> إذن استلام المواد</Link>
                     </>
@@ -88,6 +90,7 @@ export const AuthenticatedLayout: React.FC = () => {
                     <>
                         <Link to="/requests" className={linkClassName("/requests")}><span className="ml-2.5 text-sm" aria-hidden="true">📋</span> طلبات الشراء الخاصة بي</Link>
                         <Link to="/requests/create" className={linkClassName("/requests/create")}><span className="ml-2.5 text-sm" aria-hidden="true">✍️</span> إنشاء طلب شراء</Link>
+                        <Link to="/requests/favorites" className={linkClassName("/requests/favorites")}><span className="ml-2.5 text-sm" aria-hidden="true">⭐</span> الطلبات المفضلة</Link>
                         <Link to="/site-engineer" className={linkClassName("/site-engineer")}><span className="ml-2.5 text-sm" aria-hidden="true">📦</span> إذن استلام المواد</Link>
                     </>
                 );
@@ -96,6 +99,7 @@ export const AuthenticatedLayout: React.FC = () => {
                     <>
                         <Link to="/requests" className={linkClassName("/requests")}><span className="ml-2.5 text-sm" aria-hidden="true">📋</span> طلبات الشراء الخاصة بي</Link>
                         <Link to="/requests/create" className={linkClassName("/requests/create")}><span className="ml-2.5 text-sm" aria-hidden="true">✍️</span> إنشاء طلب شراء</Link>
+                        <Link to="/requests/favorites" className={linkClassName("/requests/favorites")}><span className="ml-2.5 text-sm" aria-hidden="true">⭐</span> الطلبات المفضلة</Link>
                         <Link
                             to="/procurement"
                             className={linkClassName("/procurement")}
@@ -139,6 +143,7 @@ export const AuthenticatedLayout: React.FC = () => {
                     <>
                         <Link to="/requests" className={linkClassName("/requests")}><span className="ml-2.5 text-sm" aria-hidden="true">📋</span> طلبات الشراء الخاصة بي</Link>
                         <Link to="/requests/create" className={linkClassName("/requests/create")}><span className="ml-2.5 text-sm" aria-hidden="true">✍️</span> إنشاء طلب شراء</Link>
+                        <Link to="/requests/favorites" className={linkClassName("/requests/favorites")}><span className="ml-2.5 text-sm" aria-hidden="true">⭐</span> الطلبات المفضلة</Link>
                         <Link
                             to="/accounting"
                             className={linkClassName("/accounting")}
@@ -237,6 +242,12 @@ export const AuthenticatedLayout: React.FC = () => {
                             <span className="ml-2.5 text-sm" aria-hidden="true">✍️</span> إنشاء طلب شراء
                         </Link>
                         <Link
+                            to="/requests/favorites"
+                            className={linkClassName("/requests/favorites")}
+                        >
+                            <span className="ml-2.5 text-sm" aria-hidden="true">⭐</span> الطلبات المفضلة
+                        </Link>
+                        <Link
                             to="/requests"
                             className={linkClassName("/requests")}
                         >
@@ -249,6 +260,7 @@ export const AuthenticatedLayout: React.FC = () => {
                     <>
                         <Link to="/requests" className={linkClassName("/requests")}><span className="ml-2.5 text-sm" aria-hidden="true">📋</span> طلبات الشراء الخاصة بي</Link>
                         <Link to="/requests/create" className={linkClassName("/requests/create")}><span className="ml-2.5 text-sm" aria-hidden="true">✍️</span> إنشاء طلب شراء</Link>
+                        <Link to="/requests/favorites" className={linkClassName("/requests/favorites")}><span className="ml-2.5 text-sm" aria-hidden="true">⭐</span> الطلبات المفضلة</Link>
                         <Link
                             to="/general-manager"
                             className={linkClassName("/general-manager")}
@@ -330,6 +342,12 @@ export const AuthenticatedLayout: React.FC = () => {
                             className={linkClassName("/employee/requests/create")}
                         >
                             <span className="ml-2.5 text-sm" aria-hidden="true">✍️</span> إنشاء طلب شراء
+                        </Link>
+                        <Link
+                            to="/requests/favorites"
+                            className={linkClassName("/requests/favorites")}
+                        >
+                            <span className="ml-2.5 text-sm" aria-hidden="true">⭐</span> الطلبات المفضلة
                         </Link>
                         <Link
                             to="/site-engineer"

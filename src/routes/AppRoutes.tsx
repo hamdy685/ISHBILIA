@@ -6,6 +6,7 @@ import ProtectedPage from "../pages/ProtectedPage";
 const EmployeeDashboardPage = React.lazy(() => import("../pages/employee/EmployeeDashboardPage"));
 const PurchaseRequestsPage = React.lazy(() => import("../pages/employee/PurchaseRequestsPage"));
 const CreatePurchaseRequestPage = React.lazy(() => import("../pages/employee/CreatePurchaseRequestPage"));
+const FavoriteRequestsPage = React.lazy(() => import("../pages/employee/FavoriteRequestsPage"));
 const EditPurchaseRequestPage = React.lazy(() => import("../pages/employee/EditPurchaseRequestPage"));
 const PurchaseRequestDetailsPage = React.lazy(() => import("../pages/employee/PurchaseRequestDetailsPage"));
 const AdminSystemMonitoringPage = React.lazy(() => import("../pages/admin/AdminSystemMonitoringPage"));
@@ -83,6 +84,7 @@ export const AppRoutes: React.FC = () => {
                 <Route element={<RoleRoute allowedRoles={["employee", "reviewer", "warehouse_keeper", "site_engineer", "procurement_manager", "accountant", "site_accountant", "licenses_accountant", "buffet_accountant", "general_manager", "admin"]} />}>
                     <Route path="/requests" element={<PurchaseRequestsPage />} />
                     <Route path="/requests/create" element={<CreatePurchaseRequestPage />} />
+                    <Route path="/requests/favorites" element={<FavoriteRequestsPage />} />
                     <Route path="/requests/:id" element={<PurchaseRequestDetailsPage />} />
                     <Route path="/requests/:id/edit" element={<EditPurchaseRequestPage />} />
                 </Route>
@@ -107,6 +109,7 @@ export const AppRoutes: React.FC = () => {
                     <Route path="/employee" element={<EmployeeDashboardPage />} />
                     <Route path="/employee/requests" element={<PurchaseRequestsPage />} />
                     <Route path="/employee/requests/create" element={<CreatePurchaseRequestPage />} />
+                    <Route path="/employee/requests/favorites" element={<FavoriteRequestsPage />} />
                     <Route path="/employee/requests/:id" element={<PurchaseRequestDetailsPage />} />
                     <Route path="/employee/requests/:id/edit" element={<EditPurchaseRequestPage />} />
                 </Route>

@@ -50,7 +50,8 @@ return [
     |
     */
 
-    'expiration' => env('SANCTUM_TOKEN_EXPIRATION', null),
+    // Permanent session: tokens do not expire automatically. They remain valid until the user explicitly logs out.
+    'expiration' => null,
 
     /*
     |--------------------------------------------------------------------------

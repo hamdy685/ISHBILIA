@@ -90,6 +90,14 @@ export const QuickLauncherBar: React.FC<QuickLauncherBarProps> = ({
           variant: 'primary',
           description: 'بدء طلب شراء مستلزمات أو مواد مشروع',
         });
+        items.push({
+          id: 'emp-favorites',
+          label: 'الطلبات المفضلة',
+          icon: '⭐',
+          to: '/requests/favorites',
+          variant: 'amber',
+          description: 'استخدام القوالب والطلبات المحفوظة مسبقاً',
+        });
       }
       items.push(
         { id: 'emp-list', label: 'متابعة طلباتي الحالية', icon: '📋', to: '/employee/requests', variant: 'slate' },
