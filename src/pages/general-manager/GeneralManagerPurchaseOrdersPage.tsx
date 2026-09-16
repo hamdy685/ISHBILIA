@@ -157,9 +157,9 @@ export const GeneralManagerPurchaseOrdersPage: React.FC = () => {
         </Table>
       </div>
 
-      <div className="space-y-3 md:hidden">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 md:hidden">
         {filteredPos.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-800 bg-slate-900/50 p-8 text-center text-xs text-slate-400">
+          <div className="sm:col-span-2 rounded-xl border border-dashed border-slate-800 bg-slate-900/50 p-8 text-center text-xs text-slate-400">
             {pos.length === 0 ? 'لا توجد أوامر شراء صادرة حالياً' : 'لم نجد أوامر شراء مطابقة للفلاتر الحالية.'}
           </div>
         ) : (

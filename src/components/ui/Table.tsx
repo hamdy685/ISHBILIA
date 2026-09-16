@@ -3,13 +3,14 @@ import React from 'react';
 export interface TableProps {
   children: React.ReactNode;
   className?: string;
+  minWidth?: string | number;
 }
 
-export const Table: React.FC<TableProps> = ({ children, className = '' }) => {
+export const Table: React.FC<TableProps> = ({ children, className = '', minWidth = '650px' }) => {
   return (
     <div className="w-full max-w-full min-w-0 overflow-x-auto overscroll-x-contain touch-pan-x [scrollbar-width:thin] rounded-2xl border border-slate-800/90 bg-slate-900/70 shadow-xl shadow-slate-950/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-md">
       <table
-        style={{ minWidth: '650px' }}
+        style={{ minWidth: typeof minWidth === 'number' ? `${minWidth}px` : minWidth }}
         className={`w-full text-right text-xs text-slate-200 border-collapse ${className}`}
       >
         {children}

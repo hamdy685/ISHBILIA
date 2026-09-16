@@ -24,7 +24,7 @@ export const Button: React.FC<ButtonProps> = ({
   ...props
 }) => {
   const baseClasses =
-    'inline-flex min-h-[42px] sm:min-h-0 items-center justify-center font-bold rounded-xl transition-all duration-200 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/80 disabled:opacity-50 disabled:cursor-not-allowed select-none cursor-pointer';
+    'inline-flex min-h-[42px] lg:min-h-0 items-center justify-center font-bold rounded-xl transition-all duration-200 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/80 disabled:opacity-50 disabled:cursor-not-allowed select-none cursor-pointer';
 
   const variantClasses: Record<ButtonVariant, string> = {
     primary:

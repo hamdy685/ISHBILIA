@@ -296,7 +296,7 @@ export const GeneralManagerDashboardPage: React.FC = () => {
       })()}
 
       {/* Filters */}
-      <div className="grid grid-cols-1 gap-3 rounded-xl border border-slate-800 bg-slate-950/70 p-4 sm:grid-cols-2 xl:grid-cols-5" aria-label="فلاتر لوحة المدير العام">
+      <div className="grid grid-cols-1 gap-3 rounded-xl border border-slate-800 bg-slate-950/70 p-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5" aria-label="فلاتر لوحة المدير العام">
         <label className="text-xs text-slate-400">
           من تاريخ
           <input type="date" value={dateFrom} onChange={event => setDateFrom(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none focus:border-cyan-400" />

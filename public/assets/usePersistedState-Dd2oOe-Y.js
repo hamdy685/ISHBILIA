@@ -1,0 +1,1 @@
+import{b as s}from"./react-vendor-BqelvuE3.js";const n=(r,t)=>{try{const e=window.sessionStorage.getItem(r);return e!==null?JSON.parse(e):typeof t=="function"?t():t}catch{return typeof t=="function"?t():t}},f=(r,t)=>{const[e,o]=s.useState(()=>n(r,t));return s.useEffect(()=>{try{window.sessionStorage.setItem(r,JSON.stringify(e))}catch{}},[r,e]),[e,o]};export{f as u};

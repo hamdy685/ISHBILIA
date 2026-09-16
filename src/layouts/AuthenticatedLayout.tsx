@@ -5,7 +5,6 @@ import NotificationBell from "../components/notifications/NotificationBell";
 import GlobalSearchBar from "../components/search/GlobalSearchBar";
 import { getPrimaryRoleSlug, getRoleLabel } from "../routes/roleRouting";
 import PageHeader from "../components/ui/PageHeader";
-import { usePersistedState } from "../hooks/usePersistedState";
 import InstallPrompt from "../components/pwa/InstallPrompt";
 import { useNotificationCount } from "../utils/notificationBadge";
 
@@ -13,12 +12,7 @@ export const AuthenticatedLayout: React.FC = () => {
     const { user, logout, sessionExpired, hasPermission } = useAuth();
     const unreadNotificationsCount = useNotificationCount();
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-    const [sidebarOpen, setSidebarOpen] = usePersistedState('layout.sidebar-open.v2', () => {
-        if (typeof window !== 'undefined') {
-            return window.innerWidth >= 1280;
-        }
-        return false;
-    });
+    const [sidebarOpen, setSidebarOpen] = useState(false);
     const location = useLocation();
 
     const primaryRoleSlug = getPrimaryRoleSlug(user);
