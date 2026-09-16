@@ -43,6 +43,12 @@ export const NotificationBell: React.FC = () => {
   dropdownOpenRef.current = dropdownOpen;
   const navigate = useNavigate();
 
+  const [pushPerm, setPushPerm] = useState<string>(() => {
+    return typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported';
+  });
+  const [pushActivating, setPushActivating] = useState(false);
+  const [pushBannerMsg, setPushBannerMsg] = useState<string | null>(null);
+
   // ─── Synchronize App Icon Badge, Favicon, and Global Navigation ───
   useEffect(() => {
     broadcastNotificationCount(count);
@@ -409,27 +415,69 @@ export const NotificationBell: React.FC = () => {
             </div>
           </div>
 
-          {/* Mobile Permission Banner to activate Home Screen Badge */}
-          {typeof window !== 'undefined' && 'Notification' in window && Notification.permission !== 'granted' && (
-            <div className="bg-amber-950/60 border-b border-amber-800/60 px-3 py-2 flex items-center justify-between gap-2 text-xs text-amber-200 animate-fade-in">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="text-base shrink-0">📱</span>
-                <span className="text-[11px] leading-tight font-medium">لتفعيل عداد الأيقونة على الموبايل، يُرجى تفعيل الإذن:</span>
+          {/* Mobile/Tablet Permission Banner to activate Notifications & Badge */}
+          {typeof window !== 'undefined' && 'Notification' in window && (
+            pushPerm === 'denied' ? (
+              <div className="bg-rose-950/80 border-b border-rose-800/70 px-3 py-2 text-xs text-rose-200 animate-fade-in space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 font-bold text-[11px] text-rose-300">
+                    <span>⚠️</span>
+                    <span>إذن الإشعارات محظور في متصفح التابلت</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPushPerm(Notification.permission);
+                    }}
+                    className="text-[10px] text-cyan-400 underline hover:text-cyan-300 cursor-pointer"
+                  >
+                    إعادة الفحص 🔄
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-300 leading-tight">
+                  اضغط على رمز القفل 🔒 أعلى المتصفح بجانب الرابط، ثم اختر (أذونات الموقع ← الإشعارات ← سماح).
+                </p>
               </div>
-              <button
-                type="button"
-                onClick={async (e) => {
-                  e.stopPropagation();
-                  const res = await requestAndRegisterPushToken();
-                  if (res.success) {
-                    broadcastNotificationCount(count);
-                  }
-                }}
-                className="shrink-0 bg-amber-500 hover:bg-amber-400 text-slate-950 px-2.5 py-1 rounded-lg font-black text-[11px] shadow-sm transition-colors cursor-pointer"
-              >
-                تفعيل الإذن 🔔
-              </button>
-            </div>
+            ) : pushPerm !== 'granted' ? (
+              <div className="bg-amber-950/70 border-b border-amber-800/60 px-3 py-2 text-xs text-amber-200 animate-fade-in space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-base shrink-0">📱</span>
+                    <span className="text-[11px] leading-tight font-medium">لتفعيل وصول الإشعارات على التابلت:</span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={pushActivating}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      setPushActivating(true);
+                      setPushBannerMsg(null);
+                      try {
+                        const res = await requestAndRegisterPushToken();
+                        setPushPerm(Notification.permission);
+                        if (res.success) {
+                          broadcastNotificationCount(count);
+                          setPushBannerMsg('تم تفعيل إشعارات التابلت بنجاح! 🔔');
+                        } else {
+                          setPushBannerMsg(res.error || 'تعذر التفعيل.');
+                        }
+                      } finally {
+                        setPushActivating(false);
+                      }
+                    }}
+                    className="shrink-0 bg-amber-500 hover:bg-amber-400 text-slate-950 px-2.5 py-1 rounded-lg font-black text-[11px] shadow-sm transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {pushActivating ? 'جاري...' : 'تفعيل الإذن 🔔'}
+                  </button>
+                </div>
+                {pushBannerMsg && (
+                  <div className="text-[10px] text-amber-300 font-bold bg-slate-900/80 p-1.5 rounded mt-1 border border-amber-700/50">
+                    {pushBannerMsg}
+                  </div>
+                )}
+              </div>
+            ) : null
           )}
 
           {/* List */}

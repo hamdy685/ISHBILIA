@@ -16,6 +16,7 @@ import { DashboardBars, DashboardDonut } from '../../components/ui/DashboardChar
 import { getDefaultDateFrom, getTodayInputDate } from '../../utils/dateFilters';
 import ActionRequiredInbox, { ActionInboxItem } from '../../components/dashboard/ActionRequiredInbox';
 import QuickLauncherBar from '../../components/dashboard/QuickLauncherBar';
+import { PushNotificationPrompt } from '../../components/notifications/PushNotificationPrompt';
 
 import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh';
 
@@ -134,6 +135,9 @@ export const GeneralManagerDashboardPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* ── حالة واختبار إشعارات التابلت ── */}
+      <PushNotificationPrompt variant="executive" title="إشعارات التابلت وجهاز المدير العام" className="mb-1" />
 
       {/* ── اختصارات الإجراءات السريعة (Quick Launcher Bar) ── */}
       <QuickLauncherBar className="mb-2" />

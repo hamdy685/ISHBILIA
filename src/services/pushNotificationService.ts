@@ -5,6 +5,24 @@ import { apiClient } from '../api/client';
 export type PushPermissionState = 'default' | 'granted' | 'denied' | 'unsupported';
 
 /**
+ * Check if the device is an iOS/iPadOS device (iPad, iPhone, iPod)
+ */
+export const isIosDevice = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+};
+
+/**
+ * Check if running as a standalone installed PWA (Home Screen)
+ */
+export const isStandalonePwa = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  return window.matchMedia('(display-mode: standalone)').matches ||
+    Boolean((navigator as unknown as { standalone?: boolean }).standalone);
+};
+
+/**
  * Check if the current browser/OS supports Web Push Notifications
  */
 export const getPushSupportStatus = (): boolean => {
@@ -20,6 +38,48 @@ export const getPushSupportStatus = (): boolean => {
 export const getPushPermissionState = (): PushPermissionState => {
   if (!getPushSupportStatus()) return 'unsupported';
   return Notification.permission;
+};
+
+export interface PushDiagnostic {
+  isSupported: boolean;
+  permission: PushPermissionState;
+  isIos: boolean;
+  isStandalone: boolean;
+  isHttps: boolean;
+  isConfigured: boolean;
+  reason?: string;
+}
+
+export const getPushDiagnostic = (): PushDiagnostic => {
+  const isHttps = typeof window !== 'undefined'
+    ? (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+    : true;
+  const isIos = isIosDevice();
+  const isStandalone = isStandalonePwa();
+  const configured = isFirebaseConfigured();
+  const supported = getPushSupportStatus();
+  const permission = getPushPermissionState();
+
+  let reason: string | undefined;
+  if (!isHttps) {
+    reason = 'تتطلب الإشعارات اتصالاً آمناً (HTTPS). يرجى فتح النظام عبر رابط https://';
+  } else if (isIos && !isStandalone) {
+    reason = 'نظام Apple (iPad/iPhone) يتطلب إضافة الموقع إلى الشاشة الرئيسية (Add to Home Screen) لتفعيل الإشعارات.';
+  } else if (!configured) {
+    reason = 'خدمة Firebase غير مهيأة لهذه النسخة.';
+  } else if (permission === 'denied') {
+    reason = 'إذن الإشعارات محظور في إعدادات متصفح التابلت. يرجى إلغاء الحظر من رمز القفل 🔒 أعلى المتصفح.';
+  }
+
+  return {
+    isSupported: supported || (isIos && isStandalone),
+    permission,
+    isIos,
+    isStandalone,
+    isHttps,
+    isConfigured: configured,
+    reason,
+  };
 };
 
 /**
@@ -54,6 +114,23 @@ export const registerServiceWorker = async (): Promise<ServiceWorkerRegistration
  * Request Push Notification Permission and Register FCM Device Token with backend
  */
 export const requestAndRegisterPushToken = async (): Promise<{ success: boolean; token?: string; error?: string }> => {
+  const isHttps = typeof window !== 'undefined'
+    ? (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+    : true;
+  if (!isHttps) {
+    return {
+      success: false,
+      error: 'تتطلب إشعارات المتصفح اتصالاً آمناً (HTTPS). يرجى فتح الموقع عبر رابط https://',
+    };
+  }
+
+  if (isIosDevice() && !isStandalonePwa()) {
+    return {
+      success: false,
+      error: 'على أجهزة الآيباد والآيفون، تشترط Apple إضافة الموقع للشاشة الرئيسية أولاً: اضغط زر المشاركة 📤 في Safari ثم "إضافة إلى الشاشة الرئيسية" (Add to Home Screen)، ثم افتح التطبيق من الأيقونة الجديدة.',
+    };
+  }
+
   if (!getPushSupportStatus()) {
     return { success: false, error: 'المتصفح الحالي لا يدعم الإشعارات الفورية (Web Push).' };
   }
@@ -65,10 +142,20 @@ export const requestAndRegisterPushToken = async (): Promise<{ success: boolean;
     };
   }
 
+  if (Notification.permission === 'denied') {
+    return {
+      success: false,
+      error: 'إذن الإشعارات محظور في متصفح التابلت. يرجى الضغط على رمز القفل 🔒 بجانب الرابط أعلى المتصفح، ثم اختيار أذونات الموقع -> الإشعارات -> سماح (Allow).',
+    };
+  }
+
   try {
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') {
-      return { success: false, error: 'تم رفض إذن الإشعارات من قبل المستخدم.' };
+      return {
+        success: false,
+        error: 'تم رفض إذن الإشعارات من قبل المستخدم. يمكنك تفعيلها بالضغط على رمز القفل 🔒 أعلى المتصفح.',
+      };
     }
 
     const swRegistration = await registerServiceWorker();
