@@ -18,6 +18,7 @@ use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\SystemEventController;
 use App\Http\Controllers\Api\V1\ProcurementPurchaseOrderController;
 use App\Http\Controllers\Api\V1\PurchaseRequestController;
+use App\Http\Controllers\Api\V1\PurchaseRequestSupplementController;
 use App\Http\Controllers\Api\V1\PurchasesReportController;
 use App\Http\Controllers\Api\V1\ReviewerPurchaseRequestController;
 use Illuminate\Support\Facades\Route;
@@ -66,6 +67,11 @@ Route::middleware('auth:sanctum')->prefix('purchase-requests')->group(function (
     Route::get('/department-options', [PurchaseRequestController::class, 'departmentOptions']);
     Route::get('/reviewer-options', [PurchaseRequestController::class, 'reviewerOptions']);
     Route::get('/site-engineer-options', [PurchaseRequestController::class, 'siteEngineerOptions']);
+    Route::get('/eligible-for-supplement', [PurchaseRequestSupplementController::class, 'eligibleRequests']);
+    Route::get('/{id}/supplements', [PurchaseRequestSupplementController::class, 'index'])->whereNumber('id');
+    Route::post('/{id}/supplements', [PurchaseRequestSupplementController::class, 'store'])->whereNumber('id');
+    Route::post('/supplements/{supplementId}/approve', [PurchaseRequestSupplementController::class, 'approveReviewer'])->whereNumber('supplementId');
+    Route::post('/supplements/{supplementId}/process-procurement', [PurchaseRequestSupplementController::class, 'processProcurement'])->whereNumber('supplementId');
 
     Route::get('/{id}', [PurchaseRequestController::class, 'show'])
         ->whereNumber('id')

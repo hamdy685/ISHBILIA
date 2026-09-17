@@ -269,6 +269,7 @@ export interface PurchaseRequest {
       receiver_notes?: string | null;
     }>;
   }>;
+  supplements?: any[];
 }
 
 export interface ApprovalHistoryEntry {

@@ -1,0 +1,1 @@
+import{n as a}from"./index-C0EWRnty.js";const n=async()=>(await a.get("/admin/users")).data.data,i=async s=>(await a.post("/admin/users",s)).data.data,d=async(s,t)=>(await a.put(`/admin/users/${s}`,t)).data.data,c=async s=>(await a.delete(`/admin/users/${s}`)).data;export{i as c,n as g,c as t,d as u};

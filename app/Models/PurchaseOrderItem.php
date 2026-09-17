@@ -24,12 +24,16 @@ class PurchaseOrderItem extends Model
         'uom',
         'unit_price',
         'line_total',
+        'is_supplementary',
+        'supplement_batch',
         'specifications',
     ];
 
     protected function casts(): array
     {
         return [
+            'is_supplementary' => 'boolean',
+            'supplement_batch' => 'integer',
             'quantity' => 'decimal:2',
             'unit_price' => 'decimal:2',
             'line_total' => 'decimal:2',

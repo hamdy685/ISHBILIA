@@ -18,7 +18,7 @@ export const isIosDevice = (): boolean => {
  */
 export const isStandalonePwa = (): boolean => {
   if (typeof window === 'undefined') return false;
-  return window.matchMedia('(display-mode: standalone)').matches ||
+  return (typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches) ||
     Boolean((navigator as unknown as { standalone?: boolean }).standalone);
 };
 

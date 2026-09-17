@@ -169,6 +169,42 @@ class PurchaseRequest extends Model
         return $this->hasMany(PurchaseOrder::class, 'purchase_request_id');
     }
 
+    public function supplements(): HasMany
+    {
+        return $this->hasMany(PurchaseRequestSupplement::class, 'purchase_request_id');
+    }
+
+    public function canAcceptSupplement(): bool
+    {
+        // Must be an approved/issued requisition
+        $validStatuses = ['APPROVED_BY_REVIEWER', 'APPROVED_BY_GM', 'PO_ISSUED', 'ACCOUNTING_APPROVED'];
+        if (! in_array($this->status, $validStatuses, true) && $this->purchaseOrders()->count() === 0) {
+            return false;
+        }
+
+        // Must NOT have any approved final receipt
+        $hasApprovedReceipt = PurchaseReceipt::where('purchase_request_id', $this->id)
+            ->where('status', 'APPROVED')
+            ->exists();
+
+        if ($hasApprovedReceipt) {
+            return false;
+        }
+
+        $linkedPoIds = $this->purchaseOrders()->pluck('id')->all();
+        if (! empty($linkedPoIds)) {
+            $hasApprovedPoReceipt = PurchaseReceipt::whereIn('purchase_order_id', $linkedPoIds)
+                ->where('status', 'APPROVED')
+                ->exists();
+
+            if ($hasApprovedPoReceipt) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     public function approvalHistory(): MorphMany
     {
         return $this->morphMany(ApprovalHistory::class, 'target');

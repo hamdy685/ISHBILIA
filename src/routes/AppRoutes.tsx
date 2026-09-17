@@ -9,6 +9,7 @@ const CreatePurchaseRequestPage = React.lazy(() => import("../pages/employee/Cre
 const FavoriteRequestsPage = React.lazy(() => import("../pages/employee/FavoriteRequestsPage"));
 const EditPurchaseRequestPage = React.lazy(() => import("../pages/employee/EditPurchaseRequestPage"));
 const PurchaseRequestDetailsPage = React.lazy(() => import("../pages/employee/PurchaseRequestDetailsPage"));
+const SupplementaryRequestsPage = React.lazy(() => import("../pages/SupplementaryRequestsPage").then(m => ({ default: m.SupplementaryRequestsPage })));
 const AdminSystemMonitoringPage = React.lazy(() => import("../pages/admin/AdminSystemMonitoringPage"));
 import ProtectedRoute from "./ProtectedRoute";
 import RoleRoute from "./RoleRoute";
@@ -85,6 +86,7 @@ export const AppRoutes: React.FC = () => {
                     <Route path="/requests" element={<PurchaseRequestsPage />} />
                     <Route path="/requests/create" element={<CreatePurchaseRequestPage />} />
                     <Route path="/requests/favorites" element={<FavoriteRequestsPage />} />
+                    <Route path="/requests/supplements" element={<SupplementaryRequestsPage />} />
                     <Route path="/requests/:id" element={<PurchaseRequestDetailsPage />} />
                     <Route path="/requests/:id/edit" element={<EditPurchaseRequestPage />} />
                 </Route>

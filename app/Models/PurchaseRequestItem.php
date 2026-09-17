@@ -25,6 +25,9 @@ class PurchaseRequestItem extends Model
         'uom',
         'estimated_unit_price',
         'estimated_line_total',
+        'is_supplementary',
+        'supplement_id',
+        'supplement_batch',
         'specifications',
         'notes',
     ];
@@ -32,6 +35,8 @@ class PurchaseRequestItem extends Model
     protected function casts(): array
     {
         return [
+            'is_supplementary' => 'boolean',
+            'supplement_batch' => 'integer',
             'quantity' => 'decimal:2',
             'estimated_unit_price' => 'decimal:2',
             'estimated_line_total' => 'decimal:2',
@@ -41,6 +46,11 @@ class PurchaseRequestItem extends Model
     public function purchaseRequest(): BelongsTo
     {
         return $this->belongsTo(PurchaseRequest::class, 'purchase_request_id');
+    }
+
+    public function supplement(): BelongsTo
+    {
+        return $this->belongsTo(PurchaseRequestSupplement::class, 'supplement_id');
     }
 
     public function item(): BelongsTo
