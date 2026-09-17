@@ -22,7 +22,6 @@ export const CreateSupplementModal: React.FC<CreateSupplementModalProps> = ({
       item_description: '',
       quantity: 1,
       uom: 'قطعة',
-      estimated_unit_price: 0,
       specifications: '',
       notes: '',
     },
@@ -39,7 +38,6 @@ export const CreateSupplementModal: React.FC<CreateSupplementModalProps> = ({
         item_description: '',
         quantity: 1,
         uom: 'قطعة',
-        estimated_unit_price: 0,
         specifications: '',
         notes: '',
       },
@@ -57,14 +55,6 @@ export const CreateSupplementModal: React.FC<CreateSupplementModalProps> = ({
       updated[index] = { ...updated[index], [field]: value };
       return updated;
     });
-  };
-
-  const calculateTotal = () => {
-    return items.reduce((acc, item) => {
-      const qty = Number(item.quantity) || 0;
-      const price = Number(item.estimated_unit_price) || 0;
-      return acc + qty * price;
-    }, 0);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -90,7 +80,7 @@ export const CreateSupplementModal: React.FC<CreateSupplementModalProps> = ({
         items: items.map((itm) => ({
           ...itm,
           quantity: Number(itm.quantity),
-          estimated_unit_price: Number(itm.estimated_unit_price) || 0,
+          estimated_unit_price: 0, // Pricing is exclusively set by procurement
           item_reference: request.parcel_reference,
           region: request.region,
         })),
@@ -122,7 +112,7 @@ export const CreateSupplementModal: React.FC<CreateSupplementModalProps> = ({
               </h3>
             </div>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              إضافة بنود تكميلية لنفس الطلب قبل اعتماد إذن الاستلام في الموقع
+              إضافة بنود تكميلية لنفس الطلب — حدد الأصناف والكميات فقط والتسعير يتم من المشتريات
             </p>
           </div>
           <button
@@ -162,6 +152,14 @@ export const CreateSupplementModal: React.FC<CreateSupplementModalProps> = ({
               {error}
             </div>
           )}
+
+          {/* Info: pricing handled by procurement */}
+          <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50/70 p-3 text-xs text-blue-800 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-300">
+            <div className="flex items-start gap-2">
+              <span className="text-base">💡</span>
+              <span>حدد البنود والكميات والمواصفات المطلوبة فقط. <strong>التسعير وتحديد المورد يتم بواسطة مدير المشتريات</strong> بعد اعتماد المراجع.</span>
+            </div>
+          </div>
 
           {/* Supplement Notes */}
           <div className="mb-6">
@@ -214,7 +212,7 @@ export const CreateSupplementModal: React.FC<CreateSupplementModalProps> = ({
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                    <div className="sm:col-span-5">
+                    <div className="sm:col-span-6">
                       <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
                         وصف الصنف *
                       </label>
@@ -228,7 +226,7 @@ export const CreateSupplementModal: React.FC<CreateSupplementModalProps> = ({
                       />
                     </div>
 
-                    <div className="sm:col-span-2">
+                    <div className="sm:col-span-3">
                       <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
                         الكمية *
                       </label>
@@ -243,7 +241,7 @@ export const CreateSupplementModal: React.FC<CreateSupplementModalProps> = ({
                       />
                     </div>
 
-                    <div className="sm:col-span-2">
+                    <div className="sm:col-span-3">
                       <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
                         الوحدة
                       </label>
@@ -252,21 +250,6 @@ export const CreateSupplementModal: React.FC<CreateSupplementModalProps> = ({
                         value={item.uom || ''}
                         onChange={(e) => handleItemChange(idx, 'uom', e.target.value)}
                         placeholder="طن / م3 / حبة"
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                      />
-                    </div>
-
-                    <div className="sm:col-span-3">
-                      <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
-                        سعر تقديري (ج.م)
-                      </label>
-                      <input
-                        type="number"
-                        step="any"
-                        min="0"
-                        value={item.estimated_unit_price || ''}
-                        onChange={(e) => handleItemChange(idx, 'estimated_unit_price', e.target.value)}
-                        placeholder="0.00"
                         className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                       />
                     </div>
@@ -286,13 +269,12 @@ export const CreateSupplementModal: React.FC<CreateSupplementModalProps> = ({
             </div>
           </div>
 
-          {/* Footer with totals and action buttons */}
+          {/* Footer with action buttons */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-slate-100 pt-4 dark:border-slate-800">
-            <div className="text-sm">
-              <span className="text-slate-500 dark:text-slate-400">إجمالي تقديري للكمالة: </span>
-              <strong className="text-amber-600 dark:text-amber-400 font-bold text-base">
-                {calculateTotal().toLocaleString('en-US', { minimumFractionDigits: 2 })} ج.م
-              </strong>
+            <div className="text-xs text-slate-500 dark:text-slate-400">
+              <span>عدد البنود: <strong className="text-slate-700 dark:text-slate-200">{items.length}</strong></span>
+              <span className="mx-2">•</span>
+              <span>سيتم التسعير بواسطة إدارة المشتريات</span>
             </div>
 
             <div className="flex items-center gap-3">

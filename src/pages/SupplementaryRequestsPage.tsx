@@ -400,7 +400,7 @@ export const SupplementaryRequestsPage: React.FC = () => {
                                       <th className="p-2">الصنف</th>
                                       <th className="p-2">الكمية</th>
                                       <th className="p-2">الوحدة</th>
-                                      <th className="p-2">السعر التقديري</th>
+                                      {isProcurement && <th className="p-2">السعر التقديري</th>}
                                       <th className="p-2">المواصفات</th>
                                     </tr>
                                   </thead>
@@ -416,9 +416,11 @@ export const SupplementaryRequestsPage: React.FC = () => {
                                         <td className="p-2 text-slate-500">
                                           {item.uom || '—'}
                                         </td>
-                                        <td className="p-2 text-slate-600 dark:text-slate-300">
-                                          {item.estimated_unit_price ? `${item.estimated_unit_price} ج.م` : '—'}
-                                        </td>
+                                        {isProcurement && (
+                                          <td className="p-2 text-slate-600 dark:text-slate-300">
+                                            {item.estimated_unit_price ? `${item.estimated_unit_price} ج.م` : '—'}
+                                          </td>
+                                        )}
                                         <td className="p-2 text-slate-400">
                                           {item.specifications || '—'}
                                         </td>

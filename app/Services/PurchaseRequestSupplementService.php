@@ -126,9 +126,14 @@ class PurchaseRequestSupplementService
 
             $supplementTotal = 0.0;
 
+            // Only procurement/admin can set pricing; requesters/reviewers cannot
+            $canSetPrice = $creator->hasAnyRole(['admin', 'procurement_manager']);
+
             foreach ($itemsData as $row) {
                 $qty = (float) ($row['quantity'] ?? 1);
-                $unitPrice = isset($row['estimated_unit_price']) ? (float) $row['estimated_unit_price'] : 0.0;
+                $unitPrice = $canSetPrice && isset($row['estimated_unit_price'])
+                    ? (float) $row['estimated_unit_price']
+                    : 0.0;
                 $lineTotal = round($qty * $unitPrice, 2);
                 $supplementTotal += $lineTotal;
 
