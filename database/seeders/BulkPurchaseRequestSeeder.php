@@ -2,6 +2,9 @@
 
 namespace Database\Seeders;
 
+use App\Models\ApprovalHistory;
+use App\Models\AuditLog;
+use App\Models\Category;
 use App\Models\Department;
 use App\Models\Item;
 use App\Models\PurchaseRequest;
@@ -13,47 +16,50 @@ use Illuminate\Support\Facades\DB;
 class BulkPurchaseRequestSeeder extends Seeder
 {
     private array $regions = [
-        'القاهرة الجديدة', 'الشيخ زايد', '6 أكتوبر', 'المعادي', 'العاصمة الإدارية',
-        'العبور', 'الشروق', 'بدر', 'المستقبل سيتي', 'هليوبوليس الجديدة',
-        'الرحاب', 'مدينتي', 'حدائق أكتوبر', 'جاردن سيتي',
-    ];
-
-    private array $parcelRefs = [
-        'قطعة A-101', 'قطعة A-102', 'قطعة A-103', 'قطعة B-201', 'قطعة B-202',
-        'قطعة B-203', 'قطعة C-301', 'قطعة C-302', 'قطعة D-401', 'قطعة D-402',
-        'قطعة E-501', 'قطعة E-502', 'قطعة F-601', 'قطعة F-602', 'قطعة G-701',
-        'قطعة H-801', 'قطعة I-901', 'قطعة J-1001', 'قطعة K-1101', 'قطعة L-1201',
+        ['parcel' => 'قطعة 105 - حي النرجس', 'region' => 'القاهرة الجديدة'],
+        ['parcel' => 'قطعة B-24 - الحي المالي', 'region' => 'العاصمة الإدارية'],
+        ['parcel' => 'قطعة 412 - بيت الوطن', 'region' => 'التجمع الخامس'],
+        ['parcel' => 'قطعة C-18 - حي الياسمين', 'region' => 'الشيخ زايد'],
+        ['parcel' => 'قطعة 56 - منطقة المستثمرين', 'region' => '6 أكتوبر'],
+        ['parcel' => 'قطعة 89 - المنطقة الصناعية', 'region' => 'العبور'],
+        ['parcel' => 'قطعة 204 - كمبوند سراي', 'region' => 'القاهرة الجديدة'],
+        ['parcel' => 'قطعة A-31 - منطقة الفيلات', 'region' => 'الشروق'],
+        ['parcel' => 'قطعة 715 - المجاورة الثالثة', 'region' => 'الشروق'],
+        ['parcel' => 'قطعة 92 - جنوب الأكاديمية', 'region' => 'التجمع الأول'],
+        ['parcel' => 'قطعة D-15 - حدائق الأهرام', 'region' => 'الجيزة'],
+        ['parcel' => 'قطعة 330 - الامتداد الشرقي', 'region' => 'بدر'],
+        ['parcel' => 'قطعة M-45 - المستثمر الصغير', 'region' => 'العاشر من رمضان'],
+        ['parcel' => 'قطعة E-12 - منطقة النوادي', 'region' => 'التجمع الخامس'],
     ];
 
     private array $noteTemplates = [
-        'مطلوب بشكل عاجل للدور %d — الأعمال الإنشائية',
-        'توريد مواد الأساسات والميدات — قطعة %s',
-        'استكمال أعمال الشدات والقوالب للبلاطات',
-        'تجهيز مواد الأعمدة والكمرات — المرحلة الثانية',
-        'مواد تشطيبات داخلية وخارجية للفيلا',
-        'استكمال مواد العزل والسباكة والكهرباء',
-        'طلب مواد بناء متنوعة لأعمال المباني',
-        'مواد التسليح والحديد — الأعمدة والأسقف',
-        'متطلبات موقع %s — مرحلة الإنشاء',
-        'توريد أخشاب شدات وسقالات',
-        'أعمال صب خرسانة — القواعد المسلحة',
-        'مواد البناء الأساسية للمشروع',
-        'طلب مستلزمات إنشائية — الدور الأرضي',
-        'توريد مواد تأسيس كهرباء وسباكة',
-        'مواد عزل وحماية الأساسات',
+        'صب خرسانة مسلحة لأعمدة وسقف الدور الأول فوق الأرضي للمبنى الرئيسي',
+        'أعمال صب القواعد المسلحة والميدات الرابطة للقطعة والمباني الملحقة',
+        'استكمال حوائط المباني الداخلية والخارجية للدور الأرضي مع الشدات الخشبية',
+        'عزل رطوبة وحرارة للأسطح والقواعد وميدات الأساسات قبل الردم',
+        'تجهيز وتوريد حديد التسليح وشبكات الأرضيات لبلاطة السقف والجراج',
+        'توريد سقالات ومستلزمات شدات معدنية لأعمال الواجهات الخارجية',
+        'أعمال خرسانة النظافة وتأسيس الميدات الأرضية للمشروع',
+        'توريد مواد البناء الأساسية وأسمنت التشطيبات لأعمال الموقع',
+        'استكمال عزل الحمامات والمطابخ والسطح واختبار المياه',
+        'أعمال شدات وقوالب خشبية للأعمدة الدائرية والحوائط الخرسانية',
+        'توريد خامات ومستلزمات تأسيس الأعمال الإنشائية للمرحلة الحالية',
+        'تجهيز حديد كمرات وبلاطات السقف مع فواصل التمدد والهبوط',
     ];
 
     private array $specTemplates = [
-        'وفقاً للمواصفات الفنية المعتمدة',
-        'مطابق للكود المصري — ECP',
-        'يجب أن يكون من إنتاج محلي معتمد',
-        'ماركة محلية معتمدة أو مستوردة بشرط الجودة',
-        'حسب المواصفات المرفقة بالمخطط التنفيذي',
-        'يفضل نفس المورد السابق لضمان التجانس',
-        'يجب توفير شهادة جودة مع التوريد',
-        'مقاسات حسب اللوحات التنفيذية',
-        'يراعى مطابقة العينة المعتمدة',
-        null, null, null,
+        'مطابق للمواصفات القياسية المصرية والكود المصري ECP 203، مع تقديم شهادة الاختبار الفني',
+        'حديد تسليح صلب عالي المقاومة رتبة 400/600 B من مصنع معتمد ومطابق للرسومات الإنشائية',
+        'خرسانة جاهزة رتبة C30 توريد محطة خلط معتمدة ومطابقة لمواصفات المشروع',
+        'أسمنت بورتلاندي عادي معبأ حديثاً ومطابق للمواصفة القياسية المصرية ES 4756-1',
+        'طوب أحمر مفرغ نخب أول مطابق للمقاسات الهندسية ومواصفات العزل',
+        'لفائف بيتومين مسلحة بالبوليستر سمك 4 مم مع ضمان 10 سنوات ضد التسريب',
+        'أخشاب بونتي وموسكي نخب أول مستوردة وخالية من العقد والتشوهات لأعمال القوالب',
+        'سقالات معدنية ثقيلة مطابقة لاشتراطات السلامة والصحة المهنية ومعتمدة',
+        'رمل مغسول خالي من الأملاح والشوائب الطينية ومطابق للتدرج الحبيبي القياسي',
+        'زلط سن 2 متدرج ونظيف مطابق للمواصفات ومعتمد لخلطات الخرسانة المسلحة',
+        'ملدنات وإضافات كيميائية معتمدة لزيادة قابلية التشغيل وتقليل نسبة الماء',
+        'سلك رباط صلب مجلفن نمرة 16 عالي المرونة والقوة للحدادة المسلحة',
     ];
 
     public function run(): void
@@ -61,46 +67,114 @@ class BulkPurchaseRequestSeeder extends Seeder
         $allItems = Item::with('category')->get();
         $itemsByCategory = $allItems->groupBy(fn ($i) => $i->category_id);
         $categoryIds = $itemsByCategory->keys()->toArray();
-        $deptIds = Department::pluck('id')->toArray();
         $users = User::with(['roles', 'department'])->get();
 
-        $existingNumbers = PurchaseRequest::pluck('request_number')->toArray();
-        $prCounter = count($existingNumbers) + 1;
-        $totalCreated = 0;
-        $totalItems = 0;
+        // Department managers mapping
+        $deptManagers = [
+            1 => 1, // التنفيذ -> م. أيمن ماهر
+            2 => 2, // المباني -> المهندس حاتم
+            3 => 3, // التشطيبات -> المهندس مصطفى الخشن
+            4 => 4, // التراخيص -> م. مصطفى
+            5 => 5, // البوفيه -> أ. عمرو
+        ];
+
+        // Site engineers
+        $siteEngineerIds = [11, 12, 13, 14];
 
         DB::beginTransaction();
 
         try {
-            // Clean any existing initial PRs that mistakenly had financial data
-            PurchaseRequest::whereIn('status', ['DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'APPROVED_BY_REVIEWER', 'PENDING_EXECUTIVE_APPROVAL'])
-                ->update(['total_estimated_cost' => 0]);
-            PurchaseRequestItem::whereHas('purchaseRequest', function ($q) {
-                $q->whereIn('status', ['DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'APPROVED_BY_REVIEWER', 'PENDING_EXECUTIVE_APPROVAL']);
-            })->update(['estimated_unit_price' => 0, 'estimated_line_total' => 0]);
+            // Delete previous test PRs except PR ID 18 (which has active PO / Supplements)
+            $oldPrIds = PurchaseRequest::where('id', '!=', 18)->pluck('id')->toArray();
+            if (!empty($oldPrIds)) {
+                PurchaseRequestItem::whereIn('purchase_request_id', $oldPrIds)->delete();
+                ApprovalHistory::where('target_type', PurchaseRequest::class)
+                    ->whereIn('target_id', $oldPrIds)
+                    ->delete();
+                AuditLog::where('entity_type', PurchaseRequest::class)
+                    ->whereIn('entity_id', $oldPrIds)
+                    ->delete();
+                PurchaseRequest::whereIn('id', $oldPrIds)->forceDelete();
+            }
+
+            // Ensure PR 18 has 0 estimated cost
+            PurchaseRequest::where('id', 18)->update(['total_estimated_cost' => 0]);
+            PurchaseRequestItem::where('purchase_request_id', 18)->update([
+                'estimated_unit_price' => 0,
+                'estimated_line_total' => 0,
+            ]);
+
+            $prCounter = 1;
+            $totalCreated = 0;
+            $totalItems = 0;
+
+            // Define the 5 request profiles for each user
+            $requestProfiles = [
+                [
+                    'status' => 'DRAFT',
+                    'priority' => 'normal',
+                    'target_dept' => 1, // التنفيذ
+                    'days_ahead' => 7,
+                    'num_items' => 8,
+                    'num_cats' => 4,
+                ],
+                [
+                    'status' => 'SUBMITTED',
+                    'priority' => 'urgent',
+                    'target_dept' => 2, // المباني
+                    'days_ahead' => 12,
+                    'num_items' => 10,
+                    'num_cats' => 4,
+                ],
+                [
+                    'status' => 'UNDER_REVIEW',
+                    'priority' => 'normal',
+                    'target_dept' => 3, // التشطيبات
+                    'days_ahead' => 15,
+                    'num_items' => 9,
+                    'num_cats' => 3,
+                ],
+                [
+                    'status' => 'APPROVED_BY_REVIEWER',
+                    'priority' => 'critical',
+                    'target_dept' => 1, // التنفيذ
+                    'days_ahead' => 18,
+                    'num_items' => 11,
+                    'num_cats' => 5,
+                ],
+                [
+                    'status' => 'APPROVED_BY_GM',
+                    'priority' => 'urgent',
+                    'target_dept' => 4, // التراخيص
+                    'days_ahead' => 22,
+                    'num_items' => 8,
+                    'num_cats' => 3,
+                ],
+            ];
 
             foreach ($users as $user) {
-                for ($prIdx = 1; $prIdx <= 5; $prIdx++) {
-                    $region = $this->pick($this->regions);
-                    $parcel = $this->pick($this->parcelRefs);
-                    $priority = $this->weightedPriority();
-                    $notes = sprintf($this->pick($this->noteTemplates), mt_rand(1, 8), $parcel, $region);
-                    $targetDeptId = mt_rand(1, 100) > 60 ? $this->pick($deptIds) : ($user->department_id ?? 1);
-                    $numItems = mt_rand(4, 10);
+                foreach ($requestProfiles as $pIdx => $profile) {
+                    $loc = $this->pick($this->regions);
+                    $parcel = $loc['parcel'];
+                    $region = $loc['region'];
 
-                    $shuffledCats = $categoryIds;
-                    shuffle($shuffledCats);
-                    $selectedCatIds = array_slice($shuffledCats, 0, min(mt_rand(2, 5), count($shuffledCats)));
+                    $targetDeptId = $profile['target_dept'];
+                    $targetManagerId = $deptManagers[$targetDeptId] ?? 1;
 
-                    $statuses = ['SUBMITTED', 'SUBMITTED', 'SUBMITTED', 'SUBMITTED', 'APPROVED_BY_REVIEWER', 'APPROVED_BY_REVIEWER', 'APPROVED_BY_GM'];
-                    $status = $this->pick($statuses);
-                    $dateNeeded = now()->addDays(mt_rand(3, 30))->format('Y-m-d');
+                    // If user is GM, no reviewer
+                    $reviewerUserId = $user->hasRole('general_manager') ? null : $targetManagerId;
+                    $siteEngId = $this->pick($siteEngineerIds);
 
-                    $prNumber = $this->generatePrNumber($prCounter);
-                    while (in_array($prNumber, $existingNumbers)) {
-                        $prNumber = $this->generatePrNumber($prCounter);
-                    }
-                    $existingNumbers[] = $prNumber;
+                    $dateNeeded = now()->addDays($profile['days_ahead'])->format('Y-m-d');
+                    $notes = $this->pick($this->noteTemplates);
+
+                    $prNumber = sprintf('PR-2026-%05d', $prCounter);
+                    $prCounter++;
+
+                    $status = $profile['status'];
+                    $submittedAt = in_array($status, ['SUBMITTED', 'UNDER_REVIEW', 'APPROVED_BY_REVIEWER', 'APPROVED_BY_GM'])
+                        ? now()->subDays(mt_rand(1, 5))
+                        : null;
 
                     $pr = PurchaseRequest::create([
                         'request_number' => $prNumber,
@@ -110,24 +184,35 @@ class BulkPurchaseRequestSeeder extends Seeder
                         'user_id' => $user->id,
                         'department_id' => $user->department_id ?? 1,
                         'target_department_id' => $targetDeptId,
-                        'priority' => $priority,
+                        'reviewer_user_id' => $reviewerUserId,
+                        'site_engineer_user_id' => $siteEngId,
+                        'priority' => $profile['priority'],
                         'status' => $status,
-                        'total_estimated_cost' => 0,
+                        'total_estimated_cost' => 0, // STRICTLY ZERO
                         'date_needed' => $dateNeeded,
                         'notes' => $notes,
-                        'submitted_at' => now()->subDays(mt_rand(0, 14)),
+                        'submitted_at' => $submittedAt,
+                        'requires_warehouse_receipt' => true,
                     ]);
 
-                    $totalCost = 0;
+                    // Pick diverse categories for this request
+                    $shuffledCats = $categoryIds;
+                    shuffle($shuffledCats);
+                    $selectedCats = array_slice($shuffledCats, 0, $profile['num_cats']);
 
-                    for ($i = 0; $i < $numItems; $i++) {
-                        $catId = $this->pick($selectedCatIds);
+                    // Distribute items across selected categories
+                    for ($itemIdx = 0; $itemIdx < $profile['num_items']; $itemIdx++) {
+                        $catId = $selectedCats[$itemIdx % count($selectedCats)];
                         $catItems = $itemsByCategory->get($catId);
-                        if (! $catItems || $catItems->isEmpty()) {
-                            continue;
+                        if (!$catItems || $catItems->isEmpty()) {
+                            $item = $allItems->random();
+                        } else {
+                            $item = $catItems->random();
                         }
 
-                        $item = $catItems->random();
+                        $qty = $this->qtyForUom($item->uom);
+                        $spec = $this->pick($this->specTemplates);
+
                         PurchaseRequestItem::create([
                             'purchase_request_id' => $pr->id,
                             'item_id' => $item->id,
@@ -136,28 +221,90 @@ class BulkPurchaseRequestSeeder extends Seeder
                             'region' => $region,
                             'quantity' => $qty,
                             'uom' => $item->uom,
-                            'estimated_unit_price' => 0,
-                            'estimated_line_total' => 0,
-                            'specifications' => $this->pick($this->specTemplates),
+                            'estimated_unit_price' => 0, // STRICTLY ZERO
+                            'estimated_line_total' => 0, // STRICTLY ZERO
+                            'specifications' => $spec,
                             'notes' => null,
                         ]);
                         $totalItems++;
                     }
 
+                    // Create AuditLog & ApprovalHistory according to status
+                    AuditLog::create([
+                        'user_id' => $user->id,
+                        'action' => 'CREATED',
+                        'entity_type' => PurchaseRequest::class,
+                        'entity_id' => $pr->id,
+                        'new_value' => json_encode([
+                            'request_number' => $pr->request_number,
+                            'status' => 'DRAFT',
+                            'items_count' => $profile['num_items'],
+                        ], JSON_UNESCAPED_UNICODE),
+                    ]);
+
+                    if ($status === 'SUBMITTED' || $status === 'UNDER_REVIEW' || $status === 'APPROVED_BY_REVIEWER' || $status === 'APPROVED_BY_GM') {
+                        ApprovalHistory::create([
+                            'target_type' => PurchaseRequest::class,
+                            'target_id' => $pr->id,
+                            'actor_user_id' => $user->id,
+                            'action' => 'SUBMITTED',
+                            'from_state' => 'DRAFT',
+                            'to_state' => 'SUBMITTED',
+                            'comments' => 'تم تقديم طلب الشراء وإحالته لمراجع القسم المختص.',
+                        ]);
+                    }
+
+                    if ($status === 'UNDER_REVIEW' || $status === 'APPROVED_BY_REVIEWER' || $status === 'APPROVED_BY_GM') {
+                        ApprovalHistory::create([
+                            'target_type' => PurchaseRequest::class,
+                            'target_id' => $pr->id,
+                            'actor_user_id' => $reviewerUserId ?? 1,
+                            'action' => 'START_REVIEW',
+                            'from_state' => 'SUBMITTED',
+                            'to_state' => 'UNDER_REVIEW',
+                            'comments' => 'بدأ مراجع القسم بمراجعة البنود والمواصفات الفنية للطلب.',
+                        ]);
+                    }
+
+                    if ($status === 'APPROVED_BY_REVIEWER' || $status === 'APPROVED_BY_GM') {
+                        ApprovalHistory::create([
+                            'target_type' => PurchaseRequest::class,
+                            'target_id' => $pr->id,
+                            'actor_user_id' => $reviewerUserId ?? 1,
+                            'action' => 'APPROVED_BY_REVIEWER',
+                            'from_state' => 'UNDER_REVIEW',
+                            'to_state' => 'PENDING_EXECUTIVE_APPROVAL',
+                            'comments' => 'اعتمد مراجع القسم بنود وكميات الطلب وتم رفعه للإدارة العامة للموافقة والتوجيه.',
+                        ]);
+                    }
+
+                    if ($status === 'APPROVED_BY_GM') {
+                        ApprovalHistory::create([
+                            'target_type' => PurchaseRequest::class,
+                            'target_id' => $pr->id,
+                            'actor_user_id' => 8, // المهندس محمد عبدالكريم (المدير العام)
+                            'action' => 'APPROVED_BY_GM',
+                            'from_state' => 'PENDING_EXECUTIVE_APPROVAL',
+                            'to_state' => 'PENDING_PROCUREMENT_APPROVAL',
+                            'comments' => 'وافق المدير العام على الطلب وأحاله لإدارة المشتريات للبدء في إجراءات الشراء والتسعير.',
+                        ]);
+                    }
+
                     $totalCreated++;
                 }
 
-                $this->command->info("✅ {$user->name}: 5 PRs created");
+                $this->command->info("✅ {$user->name}: 5 PRs created with diverse categories & 8-11 items each.");
             }
 
             DB::commit();
             $this->command->info("============================================");
-            $this->command->info("Total PRs: {$totalCreated} | Total items: {$totalItems}");
+            $this->command->info("SUCCESS: Created {$totalCreated} Purchase Requests with {$totalItems} total items across 18 users!");
             $this->command->info("============================================");
 
         } catch (\Exception $e) {
             DB::rollBack();
-            $this->command->error("ERROR: {$e->getMessage()}");
+            $this->command->error("ERROR: {$e->getMessage()} in {$e->getFile()}:{$e->getLine()}");
+            throw $e;
         }
     }
 
@@ -166,54 +313,21 @@ class BulkPurchaseRequestSeeder extends Seeder
         return $arr[array_rand($arr)];
     }
 
-    private function weightedPriority(): string
-    {
-        $r = mt_rand(1, 100);
-        if ($r <= 60) return 'normal';
-        if ($r <= 90) return 'urgent';
-        return 'critical';
-    }
-
-    private function generatePrNumber(int &$counter): string
-    {
-        $num = str_pad($counter, 4, '0', STR_PAD_LEFT);
-        $counter++;
-        return "PR-2026-{$num}";
-    }
-
     private function qtyForUom(string $uom): float
     {
         return match ($uom) {
-            'M3' => round(mt_rand(5, 200) + mt_rand(0, 99) / 100, 2),
-            'BAG' => mt_rand(20, 500),
-            'TON' => round(mt_rand(1, 50) + mt_rand(0, 99) / 100, 2),
-            'KG' => mt_rand(50, 2000),
-            'M2' => round(mt_rand(10, 500) + mt_rand(0, 99) / 100, 2),
-            'ML' => round(mt_rand(5, 200) + mt_rand(0, 99) / 100, 2),
-            'PCS' => mt_rand(10, 300),
-            'SET' => mt_rand(1, 20),
-            'ROLL' => mt_rand(2, 50),
-            'DRUM' => mt_rand(1, 20),
-            'LITER' => mt_rand(5, 100),
-            default => mt_rand(5, 100),
-        };
-    }
-
-    private function priceForUom(string $uom): float
-    {
-        return match ($uom) {
-            'M3' => round(mt_rand(300, 3000) + mt_rand(0, 99) / 100, 2),
-            'BAG' => round(mt_rand(30, 200) + mt_rand(0, 99) / 100, 2),
-            'TON' => round(mt_rand(8000, 30000) + mt_rand(0, 99) / 100, 2),
-            'KG' => round(mt_rand(5, 80) + mt_rand(0, 99) / 100, 2),
-            'M2' => round(mt_rand(50, 500) + mt_rand(0, 99) / 100, 2),
-            'ML' => round(mt_rand(20, 300) + mt_rand(0, 99) / 100, 2),
-            'PCS' => round(mt_rand(10, 500) + mt_rand(0, 99) / 100, 2),
-            'SET' => round(mt_rand(200, 5000) + mt_rand(0, 99) / 100, 2),
-            'ROLL' => round(mt_rand(100, 2000) + mt_rand(0, 99) / 100, 2),
-            'DRUM' => round(mt_rand(500, 5000) + mt_rand(0, 99) / 100, 2),
-            'LITER' => round(mt_rand(15, 200) + mt_rand(0, 99) / 100, 2),
-            default => round(mt_rand(20, 1000) + mt_rand(0, 99) / 100, 2),
+            'M3' => round(mt_rand(15, 120) + mt_rand(0, 99) / 100, 2),
+            'BAG' => mt_rand(50, 400),
+            'TON' => round(mt_rand(2, 35) + mt_rand(0, 99) / 100, 2),
+            'KG' => mt_rand(50, 1500),
+            'M2' => round(mt_rand(50, 400) + mt_rand(0, 99) / 100, 2),
+            'ML' => round(mt_rand(20, 250) + mt_rand(0, 99) / 100, 2),
+            'PCS' => mt_rand(50, 800),
+            'SET' => mt_rand(2, 15),
+            'ROLL' => mt_rand(5, 40),
+            'DRUM' => mt_rand(2, 15),
+            'LITER' => mt_rand(20, 150),
+            default => mt_rand(10, 100),
         };
     }
 }
