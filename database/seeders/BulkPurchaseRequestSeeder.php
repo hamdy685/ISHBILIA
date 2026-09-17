@@ -72,6 +72,13 @@ class BulkPurchaseRequestSeeder extends Seeder
         DB::beginTransaction();
 
         try {
+            // Clean any existing initial PRs that mistakenly had financial data
+            PurchaseRequest::whereIn('status', ['DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'APPROVED_BY_REVIEWER', 'PENDING_EXECUTIVE_APPROVAL'])
+                ->update(['total_estimated_cost' => 0]);
+            PurchaseRequestItem::whereHas('purchaseRequest', function ($q) {
+                $q->whereIn('status', ['DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'APPROVED_BY_REVIEWER', 'PENDING_EXECUTIVE_APPROVAL']);
+            })->update(['estimated_unit_price' => 0, 'estimated_line_total' => 0]);
+
             foreach ($users as $user) {
                 for ($prIdx = 1; $prIdx <= 5; $prIdx++) {
                     $region = $this->pick($this->regions);
@@ -121,11 +128,6 @@ class BulkPurchaseRequestSeeder extends Seeder
                         }
 
                         $item = $catItems->random();
-                        $qty = $this->qtyForUom($item->uom);
-                        $unitPrice = $this->priceForUom($item->uom);
-                        $lineTotal = round($qty * $unitPrice, 2);
-                        $totalCost += $lineTotal;
-
                         PurchaseRequestItem::create([
                             'purchase_request_id' => $pr->id,
                             'item_id' => $item->id,
@@ -134,15 +136,14 @@ class BulkPurchaseRequestSeeder extends Seeder
                             'region' => $region,
                             'quantity' => $qty,
                             'uom' => $item->uom,
-                            'estimated_unit_price' => $unitPrice,
-                            'estimated_line_total' => $lineTotal,
+                            'estimated_unit_price' => 0,
+                            'estimated_line_total' => 0,
                             'specifications' => $this->pick($this->specTemplates),
                             'notes' => null,
                         ]);
                         $totalItems++;
                     }
 
-                    $pr->update(['total_estimated_cost' => $totalCost]);
                     $totalCreated++;
                 }
 

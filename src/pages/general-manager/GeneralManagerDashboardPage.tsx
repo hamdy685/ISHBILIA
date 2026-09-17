@@ -146,11 +146,14 @@ export const GeneralManagerDashboardPage: React.FC = () => {
       {(() => {
         const gmActionItems: ActionInboxItem[] = [
           ...requests.map((req) => {
+            const isInitialStatus = ['DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'APPROVED_BY_REVIEWER'].includes(req.status);
             const isReturnedFromProcurement =
-              req.procurement_route === 'DIRECT' ||
-              Boolean(req.direct_supplier_id || req.direct_supplier) ||
-              Number(req.total_estimated_cost || 0) > 0 ||
-              Boolean(req.items?.some((it) => Number(it.estimated_unit_price || 0) > 0));
+              !isInitialStatus &&
+              (req.status === 'APPROVED_BY_PROCUREMENT' ||
+                req.procurement_route === 'DIRECT' ||
+                Boolean(req.direct_supplier_id || req.direct_supplier) ||
+                Number(req.total_estimated_cost || 0) > 0 ||
+                Boolean(req.items?.some((it) => Number(it.estimated_unit_price || 0) > 0)));
 
             return {
               id: `req-${req.id}`,
@@ -161,8 +164,8 @@ export const GeneralManagerDashboardPage: React.FC = () => {
               subtitle: req.justification ? (req.request_type === 'OFFICE_SUPPLIES' ? 'مستلزمات مكتبية' : 'مشتريات مواقع') : undefined,
               department: req.department?.name,
               requester: req.requester?.name,
-              amount: req.total_estimated_cost ? Number(req.total_estimated_cost) : undefined,
-              supplier: req.direct_supplier?.company_name,
+              amount: isReturnedFromProcurement && req.total_estimated_cost ? Number(req.total_estimated_cost) : undefined,
+              supplier: isReturnedFromProcurement ? req.direct_supplier?.company_name : undefined,
               urgency: req.priority === 'HIGH' ? ('CRITICAL' as const) : ('HIGH' as const),
 
               // Stage badge differentiation
@@ -204,8 +207,8 @@ export const GeneralManagerDashboardPage: React.FC = () => {
                 uom: it.uom,
                 parcel: it.item_reference,
                 region: it.region,
-                unit_price: it.estimated_unit_price,
-                line_total: it.estimated_line_total,
+                unit_price: isReturnedFromProcurement ? it.estimated_unit_price : undefined,
+                line_total: isReturnedFromProcurement ? it.estimated_line_total : undefined,
               })),
               onDirectApprove: async (_item: any, comment?: string) => {
                 await approveGeneralManagerPurchaseRequestApi(req.id, comment);

@@ -21,8 +21,8 @@ const INITIAL_FILTERS: ReviewerRequestFilters = {
   status: '',
   item_reference: '',
   region: '',
-  from_date: getDefaultDateFrom(),
-  to_date: getTodayInputDate(),
+  from_date: '',
+  to_date: '',
 };
 
 const formatDate = (value?: string | null) => {
@@ -57,7 +57,7 @@ export const ReviewerRequestsPage: React.FC = () => {
   const urlStatus = searchParams.get('status');
   const [requests, setRequests] = useState<PurchaseRequest[]>([]);
   const [activeFilter, setActiveFilter] = usePersistedState<string>('reviewer.active-filter.v1', urlStatus || 'ALL');
-  const [searchFilters, setSearchFilters] = usePersistedState<ReviewerRequestFilters>('reviewer.search-filters.v3', INITIAL_FILTERS);
+  const [searchFilters, setSearchFilters] = usePersistedState<ReviewerRequestFilters>('reviewer.search-filters.v4', INITIAL_FILTERS);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [requestToApprove, setRequestToApprove] = useState<PurchaseRequest | null>(null);
   const [isApproving, setIsApproving] = useState<boolean>(false);

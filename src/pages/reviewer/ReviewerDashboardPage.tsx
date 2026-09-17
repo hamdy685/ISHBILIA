@@ -124,7 +124,7 @@ export const ReviewerDashboardPage: React.FC = () => {
         department: req.department?.name,
         target_department: req.target_department?.name,
         requester: req.requester?.name,
-        amount: req.total_estimated_cost ? Number(req.total_estimated_cost) : undefined,
+        amount: undefined, // Reviewers do not handle financial data on purchase requests
         urgency: req.priority === 'HIGH' ? ('CRITICAL' as const) : ('NORMAL' as const),
         reason: req.status === 'SUBMITTED' ? 'طلب جديد مقدم بانتظار مراجعتك واعتمادك الفني' : 'طلب قيد المراجعة الفنية',
         actionUrl: hasPermission('purchase_request.review') ? `/reviewer/requests/${req.id}/review` : `/reviewer/requests/${req.id}`,
@@ -142,8 +142,6 @@ export const ReviewerDashboardPage: React.FC = () => {
           uom: it.uom,
           parcel: it.item_reference,
           region: it.region,
-          unit_price: it.estimated_unit_price,
-          line_total: it.estimated_line_total,
         })),
         requires_warehouse_receipt: req.requires_warehouse_receipt ?? true,
         onDirectApprove: hasPermission('purchase_request.review')

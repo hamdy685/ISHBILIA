@@ -173,7 +173,7 @@ export const EmployeeDashboardPage: React.FC = () => {
               title: r.justification || (r.request_type === 'OFFICE_SUPPLIES' ? 'مسودة مستلزمات مكتبية' : 'مسودة طلب مواد مشروعات'),
               subtitle: r.justification ? (r.request_type === 'OFFICE_SUPPLIES' ? 'مستلزمات مكتبية' : 'مشتريات مواقع') : undefined,
               department: r.department?.name,
-              amount: r.total_estimated_cost ? Number(r.total_estimated_cost) : undefined,
+              amount: undefined,
               urgency: 'HIGH' as const,
               reason: 'مسودة لم تُرسل بعد للمراجعة والاعتماد',
               actionUrl: `/employee/requests/${r.id}/edit`,
@@ -189,8 +189,6 @@ export const EmployeeDashboardPage: React.FC = () => {
                 description: it.item_description || it.item?.name || 'صنف',
                 quantity: it.quantity,
                 uom: it.uom,
-                unit_price: it.estimated_unit_price,
-                line_total: it.estimated_line_total,
               })),
               onDirectSubmit: async (_item: any) => {
                 await submitPurchaseRequestApi(r.id);

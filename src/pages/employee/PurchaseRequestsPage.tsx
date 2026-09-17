@@ -45,8 +45,8 @@ export const PurchaseRequestsPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const todayInputDate = getTodayInputDate();
   const defaultDateFrom = getDefaultDateFrom();
-  const [dateFrom, setDateFrom] = useState<string>(() => isProcurementOrAdmin ? '' : defaultDateFrom);
-  const [dateTo, setDateTo] = useState<string>(() => isProcurementOrAdmin ? '' : todayInputDate);
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -134,9 +134,8 @@ export const PurchaseRequestsPage: React.FC = () => {
     const normalizedSearch = searchQuery.trim().toLocaleLowerCase('ar-EG');
     const matchesSearch = !normalizedSearch || searchableText.includes(normalizedSearch);
     const neededDate = r.date_needed || (r.created_at ? r.created_at.slice(0, 10) : '');
-    const ignoreDefaultDateRangeForSearch = Boolean(normalizedSearch) && isDefaultTodayRange(dateFrom, dateTo);
-    const matchesFrom = ignoreDefaultDateRangeForSearch || !dateFrom || neededDate >= dateFrom;
-    const matchesTo = ignoreDefaultDateRangeForSearch || !dateTo || neededDate <= dateTo;
+    const matchesFrom = !dateFrom || neededDate >= dateFrom;
+    const matchesTo = !dateTo || neededDate <= dateTo;
     return matchesNeedsAction && matchesFilter && matchesSearch && matchesFrom && matchesTo;
   });
 
@@ -145,7 +144,7 @@ export const PurchaseRequestsPage: React.FC = () => {
   }
 
   const btnFilterVariant = (filter: string) => (activeFilter === filter ? 'primary' : 'outline');
-  const hasResultFilters = Boolean(searchQuery.trim() || dateFrom !== defaultDateFrom || dateTo !== todayInputDate || activeFilter !== 'ALL' || needsActionOnly);
+  const hasResultFilters = Boolean(searchQuery.trim() || dateFrom || dateTo || activeFilter !== 'ALL' || needsActionOnly);
 
   return (
     <div className="space-y-3.5" dir="rtl">
@@ -204,8 +203,8 @@ export const PurchaseRequestsPage: React.FC = () => {
           dateTo={dateTo}
           onDateFromChange={setDateFrom}
           onDateToChange={setDateTo}
-          onClear={() => { setSearchQuery(''); setDateFrom(defaultDateFrom); setDateTo(todayInputDate); setActiveFilter('ALL'); setNeedsActionOnly(false); }}
-          hasActiveFilters={Boolean(searchQuery || dateFrom !== defaultDateFrom || dateTo !== todayInputDate || activeFilter !== 'ALL' || needsActionOnly)}
+          onClear={() => { setSearchQuery(''); setDateFrom(''); setDateTo(''); setActiveFilter('ALL'); setNeedsActionOnly(false); }}
+          hasActiveFilters={Boolean(searchQuery || dateFrom || dateTo || activeFilter !== 'ALL' || needsActionOnly)}
           resultCount={filteredRequests.length}
           totalCount={requests.length}
           resultLabel="طلب شراء"

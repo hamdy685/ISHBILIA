@@ -268,12 +268,14 @@ export const SupplementaryRequestsPage: React.FC = () => {
                         <span className="text-slate-400 dark:text-slate-500">مقدم الطلب: </span>
                         <strong className="text-slate-700 dark:text-slate-300">{pr.requester?.name || '—'}</strong>
                       </div>
-                      <div>
-                        <span className="text-slate-400 dark:text-slate-500">الإجمالي الحالي: </span>
-                        <strong className="text-slate-900 dark:text-white font-bold">
-                          {Number(pr.total_estimated_cost || 0).toLocaleString('en-US')} ج.م
-                        </strong>
-                      </div>
+                      {isProcurement && (
+                        <div>
+                          <span className="text-slate-400 dark:text-slate-500">الإجمالي الحالي: </span>
+                          <strong className="text-slate-900 dark:text-white font-bold">
+                            {Number(pr.total_estimated_cost || 0).toLocaleString('en-US')} ج.م
+                          </strong>
+                        </div>
+                      )}
                     </div>
                   </div>
 
