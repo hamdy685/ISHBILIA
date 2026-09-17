@@ -29,7 +29,9 @@ export const getPurchaseRequestDepartmentOptionsApi = async (): Promise<Departme
 };
 
 export const getOwnPurchaseRequestsApi = async (): Promise<PurchaseRequest[]> => {
-  const response = await apiClient.get<{ data: PurchaseRequest[] }>('/purchase-requests');
+  const response = await apiClient.get<{ data: PurchaseRequest[] }>('/purchase-requests', {
+    params: { per_page: 100 },
+  });
   return response.data.data;
 };
 

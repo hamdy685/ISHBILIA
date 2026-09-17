@@ -120,7 +120,7 @@ class PurchaseRequestController extends Controller
 
     public function index(Request $request): AnonymousResourceCollection
     {
-        $perPage = min((int) $request->query('per_page', 15), 100);
+        $perPage = min((int) $request->query('per_page', 50), 200);
         $requests = $this->purchaseRequestService->getOwnRequests($request->user(), $perPage);
 
         return PurchaseRequestResource::collection($requests);

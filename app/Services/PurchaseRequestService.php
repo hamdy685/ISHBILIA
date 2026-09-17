@@ -590,7 +590,14 @@ class PurchaseRequestService
      */
     public function getOwnRequests(User $user, int $perPage = 15)
     {
-        return PurchaseRequest::where('user_id', $user->id)
+        $query = PurchaseRequest::query();
+
+        // Procurement Manager and Admin see all purchase requests across the organization
+        if (! $user->hasAnyRole(['procurement_manager', 'admin'])) {
+            $query->where('user_id', $user->id);
+        }
+
+        return $query
             ->with([
                 'requester.roles',
                 'requester:id,name,email,department_id',
@@ -601,6 +608,8 @@ class PurchaseRequestService
                 'siteEngineer:id,name,email,department_id',
                 'items.item',
                 'approvalHistory.actor',
+                'purchaseOrders:id,po_number,purchase_request_id,status,grand_total',
+                'supplements',
             ])
             ->orderBy('created_at', 'desc')
             ->paginate($perPage);

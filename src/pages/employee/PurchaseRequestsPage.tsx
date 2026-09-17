@@ -35,7 +35,8 @@ const EMPLOYEE_APPROVED_STATUSES = new Set([
 import { useRealtimeRefresh, emitAppDataUpdated } from '../../hooks/useRealtimeRefresh';
 
 export const PurchaseRequestsPage: React.FC = () => {
-  const { hasPermission } = useAuth();
+  const { hasRole, hasPermission } = useAuth();
+  const isProcurementOrAdmin = hasRole('procurement_manager') || hasRole('admin');
   const [searchParams] = useSearchParams();
   const initialStatus = searchParams.get('status') || 'ALL';
   const [requests, setRequests] = useState<PurchaseRequest[]>([]);
@@ -44,8 +45,8 @@ export const PurchaseRequestsPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const todayInputDate = getTodayInputDate();
   const defaultDateFrom = getDefaultDateFrom();
-  const [dateFrom, setDateFrom] = useState<string>(() => defaultDateFrom);
-  const [dateTo, setDateTo] = useState<string>(() => todayInputDate);
+  const [dateFrom, setDateFrom] = useState<string>(() => isProcurementOrAdmin ? '' : defaultDateFrom);
+  const [dateTo, setDateTo] = useState<string>(() => isProcurementOrAdmin ? '' : todayInputDate);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -132,7 +133,7 @@ export const PurchaseRequestsPage: React.FC = () => {
     ].filter(Boolean).join(' ').toLocaleLowerCase('ar-EG');
     const normalizedSearch = searchQuery.trim().toLocaleLowerCase('ar-EG');
     const matchesSearch = !normalizedSearch || searchableText.includes(normalizedSearch);
-    const neededDate = r.date_needed || '';
+    const neededDate = r.date_needed || (r.created_at ? r.created_at.slice(0, 10) : '');
     const ignoreDefaultDateRangeForSearch = Boolean(normalizedSearch) && isDefaultTodayRange(dateFrom, dateTo);
     const matchesFrom = ignoreDefaultDateRangeForSearch || !dateFrom || neededDate >= dateFrom;
     const matchesTo = ignoreDefaultDateRangeForSearch || !dateTo || neededDate <= dateTo;
@@ -152,10 +153,12 @@ export const PurchaseRequestsPage: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-3">
         <div>
           <h1 className="text-xl font-black text-slate-100 flex items-center gap-2">
-            <span>📋</span> طلبات الشراء الخاصة بي
+            <span>📋</span> {isProcurementOrAdmin ? 'طلبات الشراء' : 'طلبات الشراء الخاصة بي'}
           </h1>
           <p className="text-xs text-slate-400 mt-1">
-            سجل وتتبع جميع طلبات الشراء المقدمة من قبلك.
+            {isProcurementOrAdmin
+              ? 'سجل ومتابعة جميع طلبات الشراء في الشركة ومتابعة حالاتها.'
+              : 'سجل وتتبع جميع طلبات الشراء المقدمة من قبلك.'}
           </p>
         </div>
 
