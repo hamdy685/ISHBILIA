@@ -81,25 +81,53 @@ class BulkPurchaseRequestSeeder extends Seeder
         // Site engineers
         $siteEngineerIds = [11, 12, 13, 14];
 
+        // If database is already seeded with at least 90 PRs, skip re-seeding to keep startup fast
+        $existingCount = PurchaseRequest::count();
+        if ($existingCount >= 90) {
+            $this->command->info("Database already contains {$existingCount} purchase requests. Skipping seeder.");
+            return;
+        }
+
         DB::beginTransaction();
 
         try {
-            // Delete previous test PRs except PR ID 18 (which has active PO / Supplements)
-            $oldPrIds = PurchaseRequest::where('id', '!=', 18)->pluck('id')->toArray();
-            if (!empty($oldPrIds)) {
-                PurchaseRequestItem::whereIn('purchase_request_id', $oldPrIds)->delete();
+            // Find all PR IDs that are protected (referenced by orders, receipts, supplements, quotes)
+            $protectedPrIds = array_unique(array_filter(array_merge(
+                DB::table('purchase_orders')->whereNotNull('purchase_request_id')->pluck('purchase_request_id')->toArray(),
+                DB::table('purchase_receipts')->whereNotNull('purchase_request_id')->pluck('purchase_request_id')->toArray(),
+                DB::table('purchase_request_supplements')->pluck('purchase_request_id')->toArray(),
+                DB::table('purchase_request_quotes')->pluck('purchase_request_id')->toArray(),
+                [18]
+            )));
+
+            $deletablePrIds = PurchaseRequest::whereNotIn('id', $protectedPrIds)->pluck('id')->toArray();
+            if (!empty($deletablePrIds)) {
+                $driver = DB::getDriverName();
+                if ($driver === 'mysql') {
+                    DB::statement('SET FOREIGN_KEY_CHECKS=0;');
+                } elseif ($driver === 'sqlite') {
+                    DB::statement('PRAGMA foreign_keys = OFF;');
+                }
+
+                PurchaseRequestItem::whereIn('purchase_request_id', $deletablePrIds)->delete();
                 ApprovalHistory::where('target_type', PurchaseRequest::class)
-                    ->whereIn('target_id', $oldPrIds)
+                    ->whereIn('target_id', $deletablePrIds)
                     ->delete();
                 AuditLog::where('entity_type', PurchaseRequest::class)
-                    ->whereIn('entity_id', $oldPrIds)
+                    ->whereIn('entity_id', $deletablePrIds)
                     ->delete();
-                PurchaseRequest::whereIn('id', $oldPrIds)->forceDelete();
+                PurchaseRequest::whereIn('id', $deletablePrIds)->forceDelete();
+
+                if ($driver === 'mysql') {
+                    DB::statement('SET FOREIGN_KEY_CHECKS=1;');
+                } elseif ($driver === 'sqlite') {
+                    DB::statement('PRAGMA foreign_keys = ON;');
+                }
             }
 
-            // Ensure PR 18 has 0 estimated cost
-            PurchaseRequest::where('id', 18)->update(['total_estimated_cost' => 0]);
-            PurchaseRequestItem::where('purchase_request_id', 18)->update([
+            // Ensure any protected PRs have 0 estimated cost
+            PurchaseRequest::whereIn('id', $protectedPrIds)->update(['total_estimated_cost' => 0]);
+            PurchaseRequestItem::whereIn('purchase_request_id', $protectedPrIds)->update([
                 'estimated_unit_price' => 0,
                 'estimated_line_total' => 0,
             ]);
