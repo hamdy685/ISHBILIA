@@ -65,19 +65,16 @@ class BulkPurchaseRequestSeeder extends Seeder
 
     public function run(): void
     {
-        // Skip if already seeded with at least 90 clean PRs to keep subsequent container restarts fast
+        // Skip if already seeded with at least 85 clean PRs to keep container restarts fast
         $existingCount = PurchaseRequest::count();
-        if ($existingCount >= 90) {
-            $this->command->info("Database already contains {$existingCount} purchase requests. Skipping seeder.");
+        if ($existingCount >= 85) {
+            $this->command?->info("Database already contains {$existingCount} purchase requests. Skipping seeder.");
             return;
         }
 
-        $driver = DB::getDriverName();
-        if ($driver === 'mysql') {
-            DB::statement('SET FOREIGN_KEY_CHECKS=0;');
-        } elseif ($driver === 'sqlite') {
-            DB::statement('PRAGMA foreign_keys = OFF;');
-        }
+        try {
+            Schema::disableForeignKeyConstraints();
+        } catch (\Throwable $e) {}
 
         // Clean all PR-related tables
         $tablesToClear = [
@@ -93,7 +90,6 @@ class BulkPurchaseRequestSeeder extends Seeder
             'purchase_requests',
             'approval_history',
             'audit_logs',
-            'system_events',
             'notifications',
             'attachments',
         ];
@@ -104,11 +100,9 @@ class BulkPurchaseRequestSeeder extends Seeder
             }
         }
 
-        if ($driver === 'mysql') {
-            DB::statement('SET FOREIGN_KEY_CHECKS=1;');
-        } elseif ($driver === 'sqlite') {
-            DB::statement('PRAGMA foreign_keys = ON;');
-        }
+        try {
+            Schema::enableForeignKeyConstraints();
+        } catch (\Throwable $e) {}
 
         DB::beginTransaction();
 
@@ -116,88 +110,108 @@ class BulkPurchaseRequestSeeder extends Seeder
             $allItems = Item::with('category')->get();
             $itemsByCategory = $allItems->groupBy(fn ($i) => $i->category_id);
             $categoryIds = $itemsByCategory->keys()->toArray();
-            $users = User::with(['roles', 'department'])->get();
 
-            // Department managers mapping
-            $deptManagers = [
-                1 => 1, // التنفيذ -> م. أيمن ماهر
-                2 => 2, // المباني -> المهندس حاتم
-                3 => 3, // التشطيبات -> المهندس مصطفى الخشن
-                4 => 4, // التراخيص -> م. مصطفى
-                5 => 5, // البوفيه -> أ. عمرو
-            ];
+            // Load real departments dynamically
+            $departments = Department::where('is_active', true)->get();
+            if ($departments->isEmpty()) {
+                $departments = Department::all();
+            }
 
-            // Site engineers
-            $siteEngineerIds = [11, 12, 13, 14];
+            $deptExecution = $departments->firstWhere('code', 'EXECUTION') ?? $departments->first();
+            $deptBuildings = $departments->firstWhere('code', 'BUILDINGS') ?? $departments->skip(1)->first() ?? $deptExecution;
+            $deptFinishing = $departments->firstWhere('code', 'FINISHING') ?? $departments->skip(2)->first() ?? $deptExecution;
+            $deptLicenses = $departments->firstWhere('code', 'LICENSES') ?? $departments->skip(3)->first() ?? $deptExecution;
+            $deptBuffet = $departments->firstWhere('code', 'BUFFET') ?? $departments->skip(4)->first() ?? $deptExecution;
+
+            // Load real site engineers dynamically
+            $siteEngineers = User::where('is_active', true)
+                ->whereHas('roles', fn ($q) => $q->where('slug', 'site_engineer'))
+                ->get();
+
+            if ($siteEngineers->isEmpty()) {
+                $siteEngineers = User::where('is_active', true)->get();
+            }
+            $siteEngineerIds = $siteEngineers->pluck('id')->toArray();
+
+            // Load all real active users
+            $users = User::where('is_active', true)->with(['roles', 'department'])->get();
+            if ($users->isEmpty()) {
+                $users = User::all();
+            }
 
             $prCounter = 1;
             $totalCreated = 0;
             $totalItems = 0;
 
-            // 5 request profiles per user
-            $requestProfiles = [
-                [
-                    'status' => 'DRAFT',
-                    'priority' => 'NORMAL',
-                    'target_dept' => 1, // التنفيذ
-                    'days_ahead' => 10,
-                    'num_items' => 7,
-                    'num_cats' => 4,
-                    'is_office' => false,
-                ],
-                [
-                    'status' => 'SUBMITTED',
-                    'priority' => 'URGENT',
-                    'target_dept' => 2, // المباني
-                    'days_ahead' => 14,
-                    'num_items' => 9,
-                    'num_cats' => 4,
-                    'is_office' => false,
-                ],
-                [
-                    'status' => 'SUBMITTED',
-                    'priority' => 'NORMAL',
-                    'target_dept' => 3, // التشطيبات
-                    'days_ahead' => 18,
-                    'num_items' => 8,
-                    'num_cats' => 4,
-                    'is_office' => false,
-                ],
-                [
-                    'status' => 'SUBMITTED',
-                    'priority' => 'HIGH',
-                    'target_dept' => 1, // التنفيذ
-                    'days_ahead' => 21,
-                    'num_items' => 10,
-                    'num_cats' => 5,
-                    'is_office' => false,
-                ],
-                [
-                    'status' => 'SUBMITTED',
-                    'priority' => 'URGENT',
-                    'target_dept' => 4, // التراخيص
-                    'days_ahead' => 25,
-                    'num_items' => 7,
-                    'num_cats' => 3,
-                    'is_office' => false,
-                ],
-            ];
-
             foreach ($users as $user) {
+                // 5 request profiles per user
+                $requestProfiles = [
+                    [
+                        'status' => 'DRAFT',
+                        'priority' => 'NORMAL',
+                        'target_dept' => $deptExecution,
+                        'days_ahead' => 10,
+                        'num_items' => 7,
+                        'num_cats' => 4,
+                    ],
+                    [
+                        'status' => 'SUBMITTED',
+                        'priority' => 'URGENT',
+                        'target_dept' => $deptBuildings,
+                        'days_ahead' => 14,
+                        'num_items' => 9,
+                        'num_cats' => 4,
+                    ],
+                    [
+                        'status' => 'SUBMITTED',
+                        'priority' => 'NORMAL',
+                        'target_dept' => $deptFinishing,
+                        'days_ahead' => 18,
+                        'num_items' => 8,
+                        'num_cats' => 4,
+                    ],
+                    [
+                        'status' => 'SUBMITTED',
+                        'priority' => 'HIGH',
+                        'target_dept' => $deptExecution,
+                        'days_ahead' => 21,
+                        'num_items' => 10,
+                        'num_cats' => 5,
+                    ],
+                    [
+                        'status' => 'SUBMITTED',
+                        'priority' => 'URGENT',
+                        'target_dept' => ($user->id % 2 === 0 ? $deptLicenses : $deptBuffet),
+                        'days_ahead' => 25,
+                        'num_items' => 7,
+                        'num_cats' => 3,
+                    ],
+                ];
+
                 foreach ($requestProfiles as $pIdx => $profile) {
                     $loc = $this->pick($this->regions);
                     $parcel = $loc['parcel'];
                     $region = $loc['region'];
 
-                    $targetDeptId = $profile['target_dept'];
-                    if ($pIdx === 4 && ($user->id % 2 === 1)) {
-                        $targetDeptId = 5; // البوفيه for alternate users
+                    /** @var Department $targetDept */
+                    $targetDept = $profile['target_dept'];
+
+                    // Determine manager dynamically
+                    $targetManagerId = $targetDept->manager_user_id;
+                    if (! $targetManagerId) {
+                        $reviewer = User::where('department_id', $targetDept->id)
+                            ->whereHas('roles', fn ($q) => $q->where('slug', 'reviewer'))
+                            ->first();
+                        $targetManagerId = $reviewer?->id;
+                    }
+                    if (! $targetManagerId) {
+                        $reviewer = User::whereHas('roles', fn ($q) => $q->where('slug', 'reviewer'))->first();
+                        $targetManagerId = $reviewer?->id ?? $user->id;
                     }
 
-                    $targetManagerId = $deptManagers[$targetDeptId] ?? 1;
                     $isGM = $user->hasRole('general_manager');
                     $reviewerUserId = $isGM ? null : $targetManagerId;
-                    $siteEngId = $this->pick($siteEngineerIds);
+                    $siteEngId = ! empty($siteEngineerIds) ? $this->pick($siteEngineerIds) : null;
 
                     $dateNeeded = now()->addDays($profile['days_ahead'])->format('Y-m-d');
                     $notes = $this->pick($this->noteTemplates);
@@ -210,7 +224,7 @@ class BulkPurchaseRequestSeeder extends Seeder
                         ? now()->subDays(5 - $pIdx)->subHours(mt_rand(1, 12))
                         : null;
 
-                    $requiresWarehouseReceipt = ($targetDeptId !== 2);
+                    $requiresWarehouseReceipt = ($targetDept->code !== 'BUILDINGS');
 
                     $pr = PurchaseRequest::create([
                         'request_number' => $prNumber,
@@ -218,8 +232,8 @@ class BulkPurchaseRequestSeeder extends Seeder
                         'parcel_reference' => $parcel,
                         'region' => $region,
                         'user_id' => $user->id,
-                        'department_id' => $user->department_id ?? 1,
-                        'target_department_id' => $targetDeptId,
+                        'department_id' => $user->department_id ?? $targetDept->id,
+                        'target_department_id' => $targetDept->id,
                         'reviewer_user_id' => $reviewerUserId,
                         'site_engineer_user_id' => $siteEngId,
                         'priority' => $profile['priority'],
@@ -238,12 +252,16 @@ class BulkPurchaseRequestSeeder extends Seeder
                     $selectedCats = array_slice($shuffledCats, 0, $profile['num_cats']);
 
                     for ($itemIdx = 0; $itemIdx < $profile['num_items']; $itemIdx++) {
-                        $catId = $selectedCats[$itemIdx % count($selectedCats)];
-                        $catItems = $itemsByCategory->get($catId);
-                        if (!$catItems || $catItems->isEmpty()) {
-                            $item = $allItems->random();
+                        $catId = ! empty($selectedCats) ? $selectedCats[$itemIdx % count($selectedCats)] : null;
+                        $catItems = $catId ? $itemsByCategory->get($catId) : null;
+                        if (! $catItems || $catItems->isEmpty()) {
+                            $item = $allItems->isNotEmpty() ? $allItems->random() : null;
                         } else {
                             $item = $catItems->random();
+                        }
+
+                        if (! $item) {
+                            continue;
                         }
 
                         $qty = $this->qtyForUom($item->uom);
@@ -294,17 +312,17 @@ class BulkPurchaseRequestSeeder extends Seeder
                     $totalCreated++;
                 }
 
-                $this->command->info("✅ {$user->name}: 5 PRs created successfully.");
+                $this->command?->info("✅ {$user->name}: 5 PRs created successfully.");
             }
 
             DB::commit();
-            $this->command->info("============================================");
-            $this->command->info("SUCCESS: Created {$totalCreated} Purchase Requests with {$totalItems} total items across {$users->count()} users!");
-            $this->command->info("============================================");
+            $this->command?->info("============================================");
+            $this->command?->info("SUCCESS: Created {$totalCreated} Purchase Requests with {$totalItems} total items across {$users->count()} users!");
+            $this->command?->info("============================================");
 
         } catch (\Exception $e) {
             DB::rollBack();
-            $this->command->error("ERROR: {$e->getMessage()} in {$e->getFile()}:{$e->getLine()}");
+            $this->command?->error("ERROR: {$e->getMessage()} in {$e->getFile()}:{$e->getLine()}");
             throw $e;
         }
     }
