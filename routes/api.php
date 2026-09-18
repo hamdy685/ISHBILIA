@@ -34,30 +34,6 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/health', [HealthController::class, 'index']);
 
-Route::get('/debug-deployment', function (\Illuminate\Http\Request $request) {
-    $seeded = null;
-    $seedError = null;
-    if ($request->query('seed') === 'run') {
-        try {
-            (new \Database\Seeders\BulkPurchaseRequestSeeder())->run();
-            $seeded = 'SUCCESS';
-        } catch (\Throwable $e) {
-            $seedError = $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine();
-        }
-    }
-
-    return response()->json([
-        'time' => now()->toIso8601String(),
-        'seeded_action' => $seeded,
-        'seed_error' => $seedError,
-        'prs_count' => \App\Models\PurchaseRequest::count(),
-        'items_count' => \App\Models\PurchaseRequestItem::count(),
-        'users_count' => \App\Models\User::count(),
-        'migrations' => \Illuminate\Support\Facades\DB::table('migrations')->orderBy('id', 'desc')->take(8)->get(),
-        'latest_logs' => file_exists(storage_path('logs/laravel.log')) ? substr(file_get_contents(storage_path('logs/laravel.log')), -3000) : 'no log',
-    ]);
-});
-
 // Authentication & Authorization Routes
 Route::prefix('auth')->group(function () {
     Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
