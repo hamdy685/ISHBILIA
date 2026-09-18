@@ -3,9 +3,9 @@
 namespace Database\Seeders;
 
 use App\Models\ApprovalHistory;
+use App\Models\Category;
 use App\Models\Department;
 use App\Models\Item;
-use App\Models\Category;
 use App\Models\LandParcel;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
@@ -28,12 +28,18 @@ class BulkPurchaseRequestSeeder extends Seeder
             return;
         }
 
-        // If already 36 PRs and 18 users with 2 PRs each, skip to avoid duplicate runs if not forced
+        $users = User::where('is_active', true)->orderBy('id')->get();
+        if ($users->isEmpty()) {
+            $users = User::all();
+        }
+
+        // If already seeded with 2 PRs per user, skip
+        $expectedCount = $users->count() * 2;
         $existingCount = PurchaseRequest::count();
-        if ($existingCount === 36) {
+        if ($existingCount === $expectedCount && $expectedCount > 0) {
             $userCounts = PurchaseRequest::select('user_id', DB::raw('count(*) as c'))->groupBy('user_id')->pluck('c')->all();
-            if (count($userCounts) === 18 && min($userCounts) === 2 && max($userCounts) === 2) {
-                $this->command?->info("Database already contains exactly 36 purchase requests (2 per user). Skipping seeder.");
+            if (count($userCounts) === $users->count() && min($userCounts) === 2 && max($userCounts) === 2) {
+                $this->command?->info("Database already contains exactly {$expectedCount} purchase requests (2 per user). Skipping seeder.");
                 return;
             }
         }
@@ -66,11 +72,12 @@ class BulkPurchaseRequestSeeder extends Seeder
                 'audit_logs',
                 'system_events',
                 'notifications',
+                'attachments',
             ];
 
             foreach ($tablesToClear as $table) {
                 if (Schema::hasTable($table)) {
-                    DB::table($table)->truncate();
+                    DB::table($table)->delete();
                 }
             }
 
@@ -115,11 +122,29 @@ class BulkPurchaseRequestSeeder extends Seeder
             );
         }
 
-        $users = User::where('is_active', true)->orderBy('id')->get();
-        $departments = Department::with(['manager', 'siteEngineer'])->get()->keyBy('id');
-        $suppliers = Supplier::where('is_active', true)->get();
-        $catalogItems = Item::where('is_active', true)->get();
+        $departments = Department::where('is_active', true)->get();
+        if ($departments->isEmpty()) {
+            $departments = Department::all();
+        }
+        $deptList = $departments->values();
 
+        $suppliers = Supplier::where('is_active', true)->get();
+        if ($suppliers->isEmpty()) {
+            $suppliers = Supplier::all();
+        }
+        if ($suppliers->isEmpty()) {
+            $suppliers = collect([
+                Supplier::create([
+                    'company_name' => 'شركة السويدي للأسمنت والمقاولات',
+                    'contact_person' => 'م. إبراهيم السويدي',
+                    'phone' => '01011112222',
+                    'email' => 'elsewedy@supplier.com',
+                    'is_active' => true,
+                ])
+            ]);
+        }
+
+        $catalogItems = Item::where('is_active', true)->get();
         if ($catalogItems->isEmpty()) {
             $cat = Category::firstOrCreate(['name' => 'مواد عامة'], ['code' => 'GEN', 'is_active' => true]);
             $catalogItems = collect([
@@ -130,8 +155,15 @@ class BulkPurchaseRequestSeeder extends Seeder
             ]);
         }
 
+        $procurementUser = User::whereHas('roles', fn($q) => $q->where('slug', 'procurement_manager'))->first() ?? $users->first();
         $siteEngineers = User::whereHas('roles', fn($q) => $q->where('slug', 'site_engineer'))->get();
+        if ($siteEngineers->isEmpty()) {
+            $siteEngineers = $users;
+        }
         $warehouseKeepers = User::whereHas('roles', fn($q) => $q->where('slug', 'warehouse_keeper'))->get();
+        if ($warehouseKeepers->isEmpty()) {
+            $warehouseKeepers = $users;
+        }
 
         $prCounter = 1;
         $poCounter = 1;
@@ -159,17 +191,17 @@ class BulkPurchaseRequestSeeder extends Seeder
             for ($reqIndex = 1; $reqIndex <= 2; $reqIndex++) {
                 $prNum = sprintf('PR-2026-%04d', $prCounter++);
 
-                $userDeptId = $user->department_id ?: 1;
-                $targetDeptId = (($userIndex + $reqIndex) % 3) + 1;
-                $targetDept = $departments->get($targetDeptId) ?? $departments->first();
+                $targetDept = $deptList[($userIndex + $reqIndex) % $deptList->count()];
+                $userDeptId = $user->department_id ?: $targetDept->id;
+                $targetDeptId = $targetDept->id;
 
-                $reviewer = $targetDept?->manager ?: User::where('department_id', $targetDeptId)->whereHas('roles', fn($q) => $q->where('slug', 'reviewer'))->first();
+                $reviewer = $targetDept->manager ?: User::where('department_id', $targetDeptId)->whereHas('roles', fn($q) => $q->where('slug', 'reviewer'))->first();
                 if (! $reviewer) {
-                    $reviewer = User::whereHas('roles', fn($q) => $q->where('slug', 'reviewer'))->first();
+                    $reviewer = User::whereHas('roles', fn($q) => $q->where('slug', 'reviewer'))->first() ?? $user;
                 }
 
-                $siteEng = $siteEngineers->get(($userIndex + $reqIndex) % max(1, $siteEngineers->count()));
-                $warehouseKeeper = $warehouseKeepers->first();
+                $siteEng = $siteEngineers->get(($userIndex + $reqIndex) % max(1, $siteEngineers->count())) ?? $user;
+                $warehouseKeeper = $warehouseKeepers->first() ?? $user;
 
                 $parcel = $parcels[($userIndex * 2 + $reqIndex) % count($parcels)];
 
@@ -261,7 +293,7 @@ class BulkPurchaseRequestSeeder extends Seeder
                         'po_number' => $poNum,
                         'purchase_request_id' => $pr->id,
                         'supplier_id' => $supplier->id,
-                        'created_by_user_id' => 6,
+                        'created_by_user_id' => $procurementUser->id,
                         'status' => 'ISSUED',
                         'subtotal' => $prTotal,
                         'grand_total' => $prTotal,
@@ -298,8 +330,8 @@ class BulkPurchaseRequestSeeder extends Seeder
                             'receipt_number' => $grnNum,
                             'receipt_type' => 'WAREHOUSE',
                             'status' => $receiptStatus,
-                            'warehouse_keeper_user_id' => $warehouseKeeper?->id ?: 10,
-                            'site_engineer_user_id' => $siteEng?->id ?: 11,
+                            'warehouse_keeper_user_id' => $warehouseKeeper->id,
+                            'site_engineer_user_id' => $siteEng->id,
                             'received_at' => now()->subHours(6),
                             'warehouse_submitted_at' => now()->subHours(6),
                             'warehouse_notes' => 'تم استلام وتفريغ الشحنة في المخزن بحالة ممتازة ومطابقة للأختام.',
@@ -353,6 +385,6 @@ class BulkPurchaseRequestSeeder extends Seeder
             }
         }
 
-        $this->command?->info("Successfully seeded exactly 2 PRs per active user (Total 36 PRs)!");
+        $this->command?->info("Successfully seeded exactly 2 PRs per active user!");
     }
 }
