@@ -623,7 +623,35 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                   </div>
                                 )}
 
-                                {/* Received Quantity Input Section (Blind Receiving: PO quantity hidden) */}
+                                {/* Requested / Ordered Quantity Callout for Storekeeper */}
+                                <div className="rounded-2xl border-2 border-cyan-500/70 bg-gradient-to-r from-cyan-950/40 via-slate-900 to-slate-950 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
+                                  <div className="flex items-center gap-3">
+                                    <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-500/20 text-cyan-300 text-xl border border-cyan-500/40 shrink-0">
+                                      📋
+                                    </span>
+                                    <div>
+                                      <span className="text-xs font-bold text-cyan-300 block">الكمية المطلوبة في أمر الشراء:</span>
+                                      <span className="text-xl sm:text-2xl font-black font-mono text-white flex items-baseline gap-1.5 mt-0.5">
+                                        <span>{item.quantity}</span>
+                                        <span className="text-sm font-bold text-cyan-200">{getUnitLabel(item.uom || '')}</span>
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      tabIndex={-1}
+                                      onClick={() => setQuantities({ ...quantities, [key]: String(item.quantity) })}
+                                      className="px-3 py-1.5 rounded-xl bg-cyan-900/60 hover:bg-cyan-800 text-cyan-200 border border-cyan-700/80 font-bold text-xs flex items-center gap-1.5 transition select-none active:scale-95 shadow-sm cursor-pointer"
+                                      title="تعبئة الكمية بالكامل كما في أمر الشراء"
+                                    >
+                                      <span>⚡</span>
+                                      <span>مطابقة واستلام كامل الكمية ({item.quantity})</span>
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Received Quantity Input Section */}
                                 <div className="rounded-2xl border-2 border-emerald-500/80 bg-emerald-950/30 p-4 sm:p-5 space-y-3 shadow-inner">
                                   <div className="flex items-center justify-between">
                                     <label htmlFor={`qty-${key}`} className="text-sm sm:text-base font-black text-emerald-300 flex items-center gap-2">
@@ -1348,13 +1376,23 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                               )}
                             </div>
 
-                            <div className="bg-emerald-950/40 p-3 rounded-xl border border-emerald-800/60 flex items-center justify-between text-xs sm:text-sm pt-1">
-                              <span className="text-emerald-300 font-bold flex items-center gap-1.5">
-                                <span>✓</span> الكمية الفعلية المستلمة والمعتمدة:
-                              </span>
-                              <span className="font-mono font-black text-emerald-200 text-sm sm:text-base">
-                                {item.received_quantity} {getUnitLabel(item.purchase_order_item?.uom || '')}
-                              </span>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                              <div className="bg-slate-900/90 p-3 rounded-xl border border-slate-800 flex items-center justify-between text-xs sm:text-sm">
+                                <span className="text-slate-400 font-bold flex items-center gap-1.5">
+                                  <span>📋</span> الكمية المطلوبة بأمر الشراء:
+                                </span>
+                                <span className="font-mono font-black text-cyan-300 text-sm sm:text-base">
+                                  {item.ordered_quantity ?? item.purchase_order_item?.quantity ?? '—'} {getUnitLabel(item.purchase_order_item?.uom || '')}
+                                </span>
+                              </div>
+                              <div className="bg-emerald-950/40 p-3 rounded-xl border border-emerald-800/60 flex items-center justify-between text-xs sm:text-sm">
+                                <span className="text-emerald-300 font-bold flex items-center gap-1.5">
+                                  <span>✓</span> الكمية الفعلية المستلمة:
+                                </span>
+                                <span className="font-mono font-black text-emerald-200 text-sm sm:text-base">
+                                  {item.received_quantity} {getUnitLabel(item.purchase_order_item?.uom || '')}
+                                </span>
+                              </div>
                             </div>
                             {item.notes && (
                               <p className="text-xs text-slate-400 bg-slate-900/60 p-2 rounded-lg">
@@ -1406,7 +1444,7 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
             <div className="p-2 overflow-auto max-h-[75vh] flex items-center justify-center w-full">
               <img
                 src={previewPhotoUrl}
-                alt="معاينة كاملة"
+                alt="معاينة كاملة لصورة إذن الاستلام الميداني أو بون الميزان"
                 className="max-h-[70vh] max-w-full object-contain rounded-lg shadow-inner"
               />
             </div>

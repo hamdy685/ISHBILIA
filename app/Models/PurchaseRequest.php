@@ -182,26 +182,6 @@ class PurchaseRequest extends Model
             return false;
         }
 
-        // Must NOT have any approved final receipt
-        $hasApprovedReceipt = PurchaseReceipt::where('purchase_request_id', $this->id)
-            ->where('status', 'APPROVED')
-            ->exists();
-
-        if ($hasApprovedReceipt) {
-            return false;
-        }
-
-        $linkedPoIds = $this->purchaseOrders()->pluck('id')->all();
-        if (! empty($linkedPoIds)) {
-            $hasApprovedPoReceipt = PurchaseReceipt::whereIn('purchase_order_id', $linkedPoIds)
-                ->where('status', 'APPROVED')
-                ->exists();
-
-            if ($hasApprovedPoReceipt) {
-                return false;
-            }
-        }
-
         return true;
     }
 

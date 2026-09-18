@@ -45,10 +45,6 @@ class PurchaseRequestSupplementService
             ->where(function ($q) {
                 $q->whereIn('status', ['APPROVED_BY_REVIEWER', 'APPROVED_BY_GM', 'PO_ISSUED', 'ACCOUNTING_APPROVED'])
                     ->orWhereHas('purchaseOrders');
-            })
-            // Exclude requests that already have an approved receipt
-            ->whereDoesntHave('purchaseOrders.receipts', function ($q) {
-                $q->where('status', 'APPROVED');
             });
 
         // Department and role scoping
@@ -97,7 +93,7 @@ class PurchaseRequestSupplementService
         // 2. Eligibility check
         if (! $pr->canAcceptSupplement()) {
             throw ValidationException::withMessages([
-                'eligibility' => ['لا يمكن إنشاء طلب كمالة لهذا الطلب؛ حيث تم تأكيد استلام المواد بإذن استلام معتمد بالفعل.'],
+                'eligibility' => ['لا يمكن إنشاء طلب كمالة لهذا الطلب؛ الطلب غير معتمد أو غير سارٍ.'],
             ]);
         }
 
@@ -110,16 +106,18 @@ class PurchaseRequestSupplementService
         return DB::transaction(function () use ($pr, $creator, $itemsData, $notes, $isReviewer) {
             $nextBatch = ($pr->supplements()->max('batch_number') ?? 0) + 1;
 
-            // Auto-advance to REVIEWER_APPROVED if creator is a reviewer
-            $autoApprove = $isReviewer && $creator->hasRole('reviewer');
-            $status = $autoApprove ? 'REVIEWER_APPROVED' : 'SUBMITTED';
+            // Smart Bypass: If creator is department reviewer, general manager, procurement manager, or admin,
+            // bypass the review stage directly to PENDING_PROCUREMENT_APPROVAL
+            $isDepartmentReviewer = $isReviewer && $creator->hasRole('reviewer');
+            $canBypassReview = $isDepartmentReviewer || $creator->hasAnyRole(['admin', 'procurement_manager', 'general_manager']);
+            $status = $canBypassReview ? 'PENDING_PROCUREMENT_APPROVAL' : 'SUBMITTED';
 
             $supplement = PurchaseRequestSupplement::create([
                 'purchase_request_id' => $pr->id,
                 'batch_number' => $nextBatch,
                 'requested_by_user_id' => $creator->id,
-                'reviewer_user_id' => $autoApprove ? $creator->id : null,
-                'reviewed_at' => $autoApprove ? now() : null,
+                'reviewer_user_id' => $canBypassReview ? $creator->id : null,
+                'reviewed_at' => $canBypassReview ? now() : null,
                 'status' => $status,
                 'notes' => $notes,
             ]);
@@ -171,7 +169,7 @@ class PurchaseRequestSupplementService
             ]);
 
             // Notify
-            if (! $autoApprove) {
+            if (! $canBypassReview) {
                 $reviewerUsers = $this->notificationService->resolveUsersWithPermission(
                     'review_purchase_requests',
                     $pr->target_department_id ?? $pr->department_id
@@ -199,11 +197,12 @@ class PurchaseRequestSupplementService
     }
 
     /**
-     * Reviewer approves supplementary items.
+     * Reviewer approves supplementary items and assigns receiver.
      */
     public function approveByReviewer(
         PurchaseRequestSupplement $supplement,
         User $reviewer,
+        int|string|null $receiverUserId = null,
         ?string $notes = null
     ): PurchaseRequestSupplement {
         $pr = $supplement->purchaseRequest;
@@ -214,9 +213,20 @@ class PurchaseRequestSupplementService
             ]);
         }
 
-        return DB::transaction(function () use ($supplement, $pr, $reviewer, $notes) {
+        $effectiveReceiverId = $receiverUserId ?: $pr->site_engineer_user_id;
+        if (! $effectiveReceiverId) {
+            throw ValidationException::withMessages([
+                'receiver_user_id' => ['يجب تحديد الشخص المسؤول عن الاستلام (مهندس الموقع أو أمين المخزن) قبل اعتماد الطلب.'],
+            ]);
+        }
+
+        return DB::transaction(function () use ($supplement, $pr, $reviewer, $effectiveReceiverId, $notes) {
+            if ($effectiveReceiverId && (int) $pr->site_engineer_user_id !== (int) $effectiveReceiverId) {
+                $pr->update(['site_engineer_user_id' => (int) $effectiveReceiverId]);
+            }
+
             $supplement->update([
-                'status' => 'REVIEWER_APPROVED',
+                'status' => 'PENDING_PROCUREMENT_APPROVAL',
                 'reviewer_user_id' => $reviewer->id,
                 'reviewed_at' => now(),
                 'notes' => $notes ? trim(($supplement->notes ? $supplement->notes . "\n" : '') . "ملاحظات المراجع: {$notes}") : $supplement->notes,
@@ -229,7 +239,7 @@ class PurchaseRequestSupplementService
                 'action' => 'APPROVE_SUPPLEMENT',
                 'from_state' => $pr->status,
                 'to_state' => $pr->status,
-                'comments' => "تم اعتماد طلب الكمالة (دفعة {$supplement->batch_number}) من قِبل مراجع القسم.",
+                'comments' => "تم اعتماد طلب الكمالة (دفعة {$supplement->batch_number}) وتوجيهه للمشتريات وتحديد جهة الاستلام.",
             ]);
 
             // Notify Procurement
@@ -261,9 +271,9 @@ class PurchaseRequestSupplementService
     ): PurchaseRequestSupplement {
         $pr = $supplement->purchaseRequest;
 
-        if ($supplement->status !== 'REVIEWER_APPROVED') {
+        if (! in_array($supplement->status, ['PENDING_PROCUREMENT_APPROVAL', 'REVIEWER_APPROVED'], true)) {
             throw ValidationException::withMessages([
-                'status' => ['طلب الكمالة يجب أن يكون معتمداً من المراجع أولاً قبل معالجة المشتريات.'],
+                'status' => ['طلب الكمالة يجب أن يكون معتمداً من المراجع وموجهاً للمشتريات أولاً.'],
             ]);
         }
 

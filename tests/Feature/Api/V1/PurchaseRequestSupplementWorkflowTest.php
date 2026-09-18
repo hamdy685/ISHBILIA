@@ -146,7 +146,7 @@ class PurchaseRequestSupplementWorkflowTest extends TestCase
         $this->assertCount(1, $response->json('data'));
         $this->assertSame($pr->id, $response->json('data.0.id'));
 
-        // If an approved receipt is created, it should disappear from eligible list
+        // Even if an approved receipt is created, request remains eligible for supplements (Rule 1)
         PurchaseReceipt::create([
             'purchase_order_id' => $po->id,
             'purchase_request_id' => $pr->id,
@@ -162,7 +162,7 @@ class PurchaseRequestSupplementWorkflowTest extends TestCase
             ->getJson('/api/v1/purchase-requests/eligible-for-supplement');
 
         $responseAfterReceipt->assertOk();
-        $this->assertCount(0, $responseAfterReceipt->json('data'));
+        $this->assertCount(1, $responseAfterReceipt->json('data'));
     }
 
     public function test_full_supplement_lifecycle_with_same_supplier(): void
@@ -197,14 +197,15 @@ class PurchaseRequestSupplementWorkflowTest extends TestCase
             'quantity' => 2,
         ]);
 
-        // 2. Reviewer approves supplement
+        // 2. Reviewer approves supplement with receiver assignment (Rule 3)
         $approveResponse = $this->actingAs($this->reviewer)
             ->postJson("/api/v1/purchase-requests/supplements/{$supplementId}/approve", [
+                'receiver_user_id' => $this->siteEngineer->id,
                 'notes' => 'معتمد من مراجع القسم للاحتياج الفعلي',
             ]);
 
         $approveResponse->assertOk();
-        $this->assertSame('REVIEWER_APPROVED', $approveResponse->json('data.status'));
+        $this->assertSame('PENDING_PROCUREMENT_APPROVAL', $approveResponse->json('data.status'));
 
         // 3. Procurement Manager processes supplement with SAME supplier
         $processResponse = $this->actingAs($this->procurement)
@@ -255,8 +256,8 @@ class PurchaseRequestSupplementWorkflowTest extends TestCase
 
         $storeResponse->assertStatus(201);
         $supplementId = $storeResponse->json('data.id');
-        // Reviewer creator auto-advances to REVIEWER_APPROVED
-        $this->assertSame('REVIEWER_APPROVED', $storeResponse->json('data.status'));
+        // Reviewer creator smart bypass directly to PENDING_PROCUREMENT_APPROVAL (Rule 2)
+        $this->assertSame('PENDING_PROCUREMENT_APPROVAL', $storeResponse->json('data.status'));
 
         // 2. Procurement processes with DIFFERENT supplier (Supplier B)
         $processResponse = $this->actingAs($this->procurement)
@@ -289,7 +290,7 @@ class PurchaseRequestSupplementWorkflowTest extends TestCase
         ]);
     }
 
-    public function test_cannot_create_supplement_if_order_already_has_approved_receipt(): void
+    public function test_can_create_supplement_even_if_order_already_has_approved_receipt(): void
     {
         [$pr, $po] = $this->createSamplePrWithPo();
 
@@ -305,18 +306,19 @@ class PurchaseRequestSupplementWorkflowTest extends TestCase
             'received_at' => now(),
         ]);
 
+        // Creating supplement must succeed even with an approved receipt (Rule 1)
         $response = $this->actingAs($this->employee)
             ->postJson("/api/v1/purchase-requests/{$pr->id}/supplements", [
                 'items' => [
                     [
-                        'item_description' => 'بند إضافي',
+                        'item_description' => 'بند إضافي بعد الاستلام',
                         'quantity' => 1,
                     ],
                 ],
             ]);
 
-        $response->assertStatus(422);
-        $response->assertJsonValidationErrors('eligibility');
+        $response->assertStatus(201);
+        $this->assertSame('SUBMITTED', $response->json('data.status'));
     }
 
     public function test_can_list_supplements_for_purchase_request(): void
@@ -344,6 +346,42 @@ class PurchaseRequestSupplementWorkflowTest extends TestCase
         $this->assertCount(1, $listResponse->json('data'));
         $this->assertSame(1, $listResponse->json('data.0.batch_number'));
         $this->assertCount(1, $listResponse->json('data.0.items'));
+    }
+
+    public function test_reviewer_approval_enforces_receiver_user_id(): void
+    {
+        [$pr, $po] = $this->createSamplePrWithPo();
+        // Clear receiver from PR
+        $pr->update(['site_engineer_user_id' => null]);
+
+        $storeResponse = $this->actingAs($this->employee)
+            ->postJson("/api/v1/purchase-requests/{$pr->id}/supplements", [
+                'items' => [
+                    [
+                        'item_description' => 'بند إضافي',
+                        'quantity' => 2,
+                    ],
+                ],
+            ]);
+        $supplementId = $storeResponse->json('data.id');
+
+        // Approval without receiver when none is set on PR should fail with 422
+        $failResponse = $this->actingAs($this->reviewer)
+            ->postJson("/api/v1/purchase-requests/supplements/{$supplementId}/approve", [
+                'notes' => 'بدون تحديد مستلم',
+            ]);
+        $failResponse->assertStatus(422);
+        $failResponse->assertJsonValidationErrors('receiver_user_id');
+
+        // Approval with receiver must succeed and update PR site_engineer_user_id
+        $successResponse = $this->actingAs($this->reviewer)
+            ->postJson("/api/v1/purchase-requests/supplements/{$supplementId}/approve", [
+                'receiver_user_id' => $this->warehouse->id,
+                'notes' => 'تم تعيين أمين المخزن للاستلام',
+            ]);
+        $successResponse->assertOk();
+        $this->assertSame('PENDING_PROCUREMENT_APPROVAL', $successResponse->json('data.status'));
+        $this->assertSame($this->warehouse->id, (int) $pr->fresh()->site_engineer_user_id);
     }
 }
 

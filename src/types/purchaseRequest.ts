@@ -15,11 +15,13 @@ export interface SiteEngineerReceiverOption {
   department_id?: number;
   department_name?: string;
   is_site_engineer?: boolean;
+  is_warehouse_keeper?: boolean;
 }
 
 export interface SiteEngineerOptionsResponse {
   data: SiteEngineerReceiverOption[];
   site_engineers: SiteEngineerReceiverOption[];
+  warehouse_keepers?: SiteEngineerReceiverOption[];
   other_users: SiteEngineerReceiverOption[];
 }
 
@@ -269,7 +271,33 @@ export interface PurchaseRequest {
       receiver_notes?: string | null;
     }>;
   }>;
-  supplements?: any[];
+  supplements?: PurchaseRequestSupplement[];
+}
+
+export interface PurchaseRequestSupplement {
+  id: number;
+  purchase_request_id: number;
+  supplement_number?: string | null;
+  status:
+    | 'DRAFT'
+    | 'SUBMITTED'
+    | 'REVIEWER_APPROVED'
+    | 'PENDING_PROCUREMENT_APPROVAL'
+    | 'PROCESSED'
+    | 'PROCUREMENT_PROCESSED'
+    | 'REJECTED';
+  requested_quantity?: number | null;
+  approved_quantity?: number | null;
+  unit_price?: number | null;
+  total_amount?: number | null;
+  supplier_id?: number | null;
+  supplier?: { id: number; company_name: string } | null;
+  notes?: string | null;
+  rejection_reason?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  created_by?: number | null;
+  reviewed_by?: number | null;
 }
 
 export interface ApprovalHistoryEntry {

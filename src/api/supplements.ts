@@ -62,11 +62,12 @@ export const createSupplementApi = async (
  */
 export const approveSupplementReviewerApi = async (
   supplementId: number,
-  notes?: string
+  payload?: string | { notes?: string; receiver_user_id?: number; site_engineer_user_id?: number }
 ): Promise<{ message: string; data: PurchaseRequestSupplement }> => {
+  const body = typeof payload === 'string' ? { notes: payload } : (payload || {});
   const response = await apiClient.post<{ message: string; data: PurchaseRequestSupplement }>(
     `/purchase-requests/supplements/${supplementId}/approve`,
-    { notes }
+    body
   );
   return response.data;
 };

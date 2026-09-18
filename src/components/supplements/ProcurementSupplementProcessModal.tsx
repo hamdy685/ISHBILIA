@@ -119,48 +119,64 @@ export const ProcurementSupplementProcessModal: React.FC<ProcurementSupplementPr
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-4 backdrop-blur-sm">
-      <div className="relative w-full max-w-3xl rounded-2xl bg-white shadow-2xl transition-all dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-100 p-6 dark:border-slate-800">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/80 p-4 backdrop-blur-md animate-fade-in">
+      <div className="relative w-full max-w-3xl rounded-2xl bg-slate-950 shadow-2xl shadow-amber-900/20 transition-all border border-amber-500/30 ring-1 ring-amber-500/10">
+        {/* Header - Luxury Gold */}
+        <div className="flex items-center justify-between border-b border-amber-500/20 bg-gradient-to-r from-slate-950 via-amber-950/20 to-slate-950 p-6 rounded-t-2xl">
           <div>
-            <div className="flex items-center gap-2">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold">
-                🏢
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500/20 to-amber-700/20 border border-amber-500/40 text-amber-400 font-bold text-lg shadow-inner">
+                ⚡
               </span>
-              <h3 className="text-xl font-bold text-slate-800 dark:text-white">
-                توجيه وتسعير الكمالة (دفعة #{supplement.batch_number})
+              <h3 className="text-xl font-black text-amber-100">
+                إصدار ملحق توريد سريع — دفعة #{supplement.batch_number}
               </h3>
             </div>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              تحديد المورد (نفس المورد أو مورد مختلف) وإصدار أمر الشراء التكميلي
+            <p className="mt-2 text-sm text-slate-400 leading-relaxed">
+              تحديد المورد المنفذ وتسعير بنود الكمالة التكميلية لإصدار أمر شراء سريع مرتبط بالطلب الأصلي.
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+            className="rounded-xl p-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 border border-slate-800 transition-all cursor-pointer"
           >
             ✕
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6">
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          {/* Contextual UX Banner */}
+          <div className="rounded-xl border border-amber-600/30 bg-gradient-to-r from-amber-950/30 via-slate-900 to-amber-950/20 p-4 text-right">
+            <p className="text-sm text-amber-200 leading-7 font-medium">
+              هذه الكمية تكميلية لطلب معتمد مسبقاً، سيتم إصدار أمر التوريد لنفس المورد{' '}
+              {originalSupplier ? (
+                <strong className="text-amber-100 bg-amber-500/10 px-1.5 py-0.5 rounded-md border border-amber-500/30">
+                  {originalSupplier.company_name}
+                </strong>
+              ) : (
+                <span className="text-slate-400">(سيتم اختياره أدناه)</span>
+              )}{' '}
+              لتسريع العمل بالموقع.
+            </p>
+          </div>
+
           {error && (
-            <div className="mb-4 rounded-lg bg-rose-50 p-4 text-sm text-rose-600 dark:bg-rose-950/30 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50">
-              {error}
+            <div className="rounded-xl bg-rose-950/40 p-4 text-sm text-rose-300 border border-rose-700/50 shadow-inner">
+              ⚠️ {error}
             </div>
           )}
 
           {/* Supplier Selection Strategy */}
-          <div className="mb-6 rounded-xl border border-blue-100 bg-blue-50/50 p-4 dark:border-blue-900/30 dark:bg-blue-950/20">
-            <h4 className="text-sm font-bold text-slate-800 dark:text-white mb-3">
+          <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-5">
+            <h4 className="text-sm font-black text-slate-100 mb-4 flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
               خيار إسناد المورد للكمالة:
             </h4>
 
             <div className="flex flex-col sm:flex-row gap-4 mb-4">
               {originalSupplier && (
-                <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
+                <label className="flex items-center gap-2.5 text-sm text-slate-300 cursor-pointer group">
                   <input
                     type="radio"
                     name="supplier_choice"
@@ -169,13 +185,16 @@ export const ProcurementSupplementProcessModal: React.FC<ProcurementSupplementPr
                       setUseDifferentSupplier(false);
                       setSelectedSupplierId(originalSupplier.id);
                     }}
-                    className="text-blue-600 focus:ring-blue-500"
+                    className="text-amber-500 focus:ring-amber-500 accent-amber-500"
                   />
-                  <span>نفس المورد الأصلي: <strong>{originalSupplier.company_name}</strong></span>
+                  <span className="group-hover:text-amber-200 transition-colors">
+                    نفس المورد الأصلي:{' '}
+                    <strong className="text-amber-300">{originalSupplier.company_name}</strong>
+                  </span>
                 </label>
               )}
 
-              <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
+              <label className="flex items-center gap-2.5 text-sm text-slate-300 cursor-pointer group">
                 <input
                   type="radio"
                   name="supplier_choice"
@@ -184,23 +203,25 @@ export const ProcurementSupplementProcessModal: React.FC<ProcurementSupplementPr
                     setUseDifferentSupplier(true);
                     setMergeToExistingPo(false);
                   }}
-                  className="text-blue-600 focus:ring-blue-500"
+                  className="text-amber-500 focus:ring-amber-500 accent-amber-500"
                 />
-                <span>إسناد الكمالة <strong>لمورد مختلف</strong></span>
+                <span className="group-hover:text-amber-200 transition-colors">
+                  إسناد الكمالة <strong className="text-slate-100">لمورد مختلف</strong>
+                </span>
               </label>
             </div>
 
             {/* Dropdown if different supplier selected */}
             {(useDifferentSupplier || !originalSupplier) && (
               <div>
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                <label className="block text-xs font-bold text-slate-400 mb-1.5">
                   اختر المورد المنفذ للكمالة:
                 </label>
                 <select
                   value={selectedSupplierId || ''}
                   onChange={(e) => setSelectedSupplierId(Number(e.target.value))}
                   required
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm text-white focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
                 >
                   <option value="">-- اختر المورد --</option>
                   {suppliers.map((sup) => (
@@ -209,7 +230,7 @@ export const ProcurementSupplementProcessModal: React.FC<ProcurementSupplementPr
                     </option>
                   ))}
                 </select>
-                <p className="mt-1.5 text-xs text-blue-700 dark:text-blue-300">
+                <p className="mt-1.5 text-xs text-amber-400/80">
                   ℹ️ سيتم إصدار أمر شراء تكميلي جديد لهذا المورد مرتبط بنفس الطلب ومسار الاستلام.
                 </p>
               </div>
@@ -217,14 +238,15 @@ export const ProcurementSupplementProcessModal: React.FC<ProcurementSupplementPr
           </div>
 
           {/* Pricing Table */}
-          <div className="mb-6">
-            <h4 className="text-sm font-bold text-slate-800 dark:text-white mb-2">
+          <div>
+            <h4 className="text-sm font-black text-slate-100 mb-3 flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
               تسعير بنود الكمالة (سعر الوحدة النهائي من المورد):
             </h4>
 
-            <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+            <div className="overflow-x-auto rounded-xl border border-slate-800">
               <table className="w-full text-right text-sm">
-                <thead className="bg-slate-50 dark:bg-slate-800/80 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                <thead className="bg-slate-900 text-xs font-bold text-slate-400 border-b border-slate-800">
                   <tr>
                     <th className="p-3">الصنف</th>
                     <th className="p-3">الكمية</th>
@@ -233,19 +255,19 @@ export const ProcurementSupplementProcessModal: React.FC<ProcurementSupplementPr
                     <th className="p-3">الإجمالي (ج.م)</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                <tbody className="divide-y divide-slate-800">
                   {(supplement.items || []).map((item) => {
                     const price = pricing[item.id] || 0;
                     const lineTotal = (Number(item.quantity) || 0) * price;
                     return (
-                      <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
-                        <td className="p-3 font-semibold text-slate-800 dark:text-slate-200">
+                      <tr key={item.id} className="hover:bg-slate-800/50 transition-colors">
+                        <td className="p-3 font-bold text-slate-200">
                           {item.item_description}
                         </td>
-                        <td className="p-3 text-slate-600 dark:text-slate-400">
+                        <td className="p-3 text-slate-400 font-mono">
                           {item.quantity}
                         </td>
-                        <td className="p-3 text-slate-500 dark:text-slate-400">
+                        <td className="p-3 text-slate-400">
                           {item.uom || '—'}
                         </td>
                         <td className="p-3 w-40">
@@ -257,10 +279,10 @@ export const ProcurementSupplementProcessModal: React.FC<ProcurementSupplementPr
                             value={price || ''}
                             onChange={(e) => handlePriceChange(item.id, Number(e.target.value))}
                             placeholder="0.00"
-                            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1 text-sm font-bold text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                            className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm font-bold text-amber-200 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/30 focus:outline-none placeholder-slate-600"
                           />
                         </td>
-                        <td className="p-3 font-bold text-slate-900 dark:text-white">
+                        <td className="p-3 font-bold text-amber-300 font-mono">
                           {lineTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                         </td>
                       </tr>
@@ -272,8 +294,8 @@ export const ProcurementSupplementProcessModal: React.FC<ProcurementSupplementPr
           </div>
 
           {/* Notes */}
-          <div className="mb-6">
-            <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+          <div>
+            <label className="block text-xs font-bold text-slate-400 mb-1.5">
               ملاحظات المشتريات / شروط التوريد للكمالة:
             </label>
             <input
@@ -281,15 +303,15 @@ export const ProcurementSupplementProcessModal: React.FC<ProcurementSupplementPr
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="مثال: التوريد خلال 48 ساعة بنفس شروط الدفع..."
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 focus:outline-none"
             />
           </div>
 
           {/* Footer */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-slate-100 pt-4 dark:border-slate-800">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-slate-800 pt-5">
             <div>
-              <span className="text-xs text-slate-500 dark:text-slate-400 block">إجمالي أمر التوريد للكمالة:</span>
-              <strong className="text-blue-600 dark:text-blue-400 font-bold text-lg">
+              <span className="text-xs text-slate-400 block">إجمالي أمر التوريد للكمالة:</span>
+              <strong className="text-amber-400 font-black text-xl font-mono">
                 {calculateTotal().toLocaleString('en-US', { minimumFractionDigits: 2 })} ج.م
               </strong>
             </div>
@@ -299,16 +321,16 @@ export const ProcurementSupplementProcessModal: React.FC<ProcurementSupplementPr
                 type="button"
                 onClick={onClose}
                 disabled={loading}
-                className="rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                className="rounded-xl border border-slate-700 bg-slate-800 px-5 py-2.5 text-sm font-bold text-slate-300 hover:bg-slate-700 hover:text-white transition-all disabled:opacity-50 cursor-pointer"
               >
                 إلغاء
               </button>
               <button
                 type="submit"
                 disabled={loading}
-                className="rounded-xl bg-blue-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-600/30 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                className="rounded-xl bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 hover:from-amber-400 hover:via-amber-500 hover:to-amber-600 px-6 py-2.5 text-sm font-black text-slate-950 shadow-lg shadow-amber-600/30 focus:outline-none focus:ring-2 focus:ring-amber-500/40 disabled:opacity-50 transition-all cursor-pointer hover:-translate-y-0.5 active:translate-y-0"
               >
-                {loading ? 'جارٍ المعالجة...' : 'تأكيد وإصدار أمر الشراء'}
+                {loading ? 'جارٍ المعالجة...' : '⚡ تأكيد وإصدار'}
               </button>
             </div>
           </div>

@@ -43,6 +43,9 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '.
 import { getDefaultDateFrom, getTodayInputDate, isDefaultTodayRange } from '../../utils/dateFilters';
 import { CurrencyDisplay } from '../../components/ui/CurrencyDisplay';
 import QuickLauncherBar from '../../components/dashboard/QuickLauncherBar';
+import { getSupplementsForPrApi, PrSupplementsResponse } from '../../api/supplements';
+import { PurchaseRequestSupplement } from '../../types/supplement';
+import { ProcurementSupplementProcessModal } from '../../components/supplements/ProcurementSupplementProcessModal';
 
 const STATUS_LABELS: Record<string, string> = {
   PO_DRAFT: 'مسودة',
@@ -156,6 +159,12 @@ export const ProcurementManagerPage: React.FC = () => {
   const [selectedPrForDetails, setSelectedPrForDetails] = useState<PurchaseRequest | null>(null);
   const [successBanner, setSuccessBanner] = useState<string | null>(null);
 
+  // ── Supplement Fast-Track Modal State ──
+  const [supplementModalOpen, setSupplementModalOpen] = useState(false);
+  const [supplementModalPr, setSupplementModalPr] = useState<PurchaseRequest | null>(null);
+  const [supplementModalData, setSupplementModalData] = useState<PurchaseRequestSupplement | null>(null);
+  const [supplementLoading, setSupplementLoading] = useState(false);
+
   useEffect(() => {
     if (location.state && (location.state as { successMessage?: string }).successMessage) {
       setSuccessBanner((location.state as { successMessage?: string }).successMessage || null);
@@ -179,6 +188,41 @@ export const ProcurementManagerPage: React.FC = () => {
     else if (path.includes('/reports')) setActiveTab(4);
     else setActiveTab(0);
   }, [location.pathname, searchParams]);
+
+  // ── Supplement Deep-Link Handler ──
+  // When navigating from notification with ?openSupplement=<prId>, auto-open the fast-track modal
+  useEffect(() => {
+    const openSupplementPrId = searchParams.get('openSupplement');
+    if (openSupplementPrId && !supplementModalOpen) {
+      const prId = Number(openSupplementPrId);
+      if (prId > 0) {
+        setSupplementLoading(true);
+        // Find the PR in pending queue, or use a minimal object
+        const targetPr = [...pendingPrs, ...quotePrs, ...approvedPrs].find(pr => pr.id === prId);
+        void (async () => {
+          try {
+            const supplementsResp = await getSupplementsForPrApi(prId);
+            const pendingSupplement = (supplementsResp.data || []).find(
+              (s) => s.status === 'REVIEWER_APPROVED' || s.status === 'SUBMITTED'
+            );
+            if (pendingSupplement && targetPr) {
+              setSupplementModalPr(targetPr);
+              setSupplementModalData(pendingSupplement);
+              setSupplementModalOpen(true);
+            }
+          } catch (err) {
+            console.error('Failed to load supplement for deep link:', err);
+          } finally {
+            setSupplementLoading(false);
+            // Clear the query param to prevent re-opening on refresh
+            const newParams = new URLSearchParams(searchParams);
+            newParams.delete('openSupplement');
+            setSearchParams(newParams, { replace: true });
+          }
+        })();
+      }
+    }
+  }, [searchParams, pendingPrs, quotePrs, approvedPrs]);
 
   const loadData = async () => {
     const isInitialLoad = !hasLoadedRef.current;
@@ -703,6 +747,12 @@ export const ProcurementManagerPage: React.FC = () => {
                             عاجل
                           </span>
                         )}
+                        {request.supplements && request.supplements.some((s: any) => s.status === 'REVIEWER_APPROVED' || s.status === 'SUBMITTED') && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 border border-amber-500/50 px-2.5 py-0.5 text-[11px] font-black text-amber-300 animate-pulse shadow-sm shadow-amber-500/20">
+                            <span>⚡</span>
+                            <span>كمالة معلقة</span>
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-2 self-start sm:self-auto">
@@ -781,26 +831,35 @@ export const ProcurementManagerPage: React.FC = () => {
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2">
-                        {stage === 'PENDING_ROUTE' && (
+                        {/* ── Supplement Fast-Track Button (replaces standard quote buttons) ── */}
+                        {(request.supplements && request.supplements.length > 0) ? (
                           <>
                             <Button
                               variant="primary"
                               size="sm"
-                              onClick={() => void handleStartQuotes(request)}
-                              className="font-bold shadow-md shadow-cyan-900/30"
-                            >
-                              🎯 بدء عروض الأسعار
-                            </Button>
-                            <Button
-                              variant="secondary"
-                              size="sm"
                               onClick={() => {
-                                setDirectAccountingError(null);
-                                setDirectAccountingRequest(request);
+                                setSupplementLoading(true);
+                                void (async () => {
+                                  try {
+                                    const resp = await getSupplementsForPrApi(request.id);
+                                    const pending = (resp.data || []).find(
+                                      (s) => s.status === 'REVIEWER_APPROVED' || s.status === 'SUBMITTED'
+                                    );
+                                    if (pending) {
+                                      setSupplementModalPr(request);
+                                      setSupplementModalData(pending);
+                                      setSupplementModalOpen(true);
+                                    }
+                                  } catch (err) {
+                                    console.error('Failed to load supplement:', err);
+                                  } finally {
+                                    setSupplementLoading(false);
+                                  }
+                                })();
                               }}
-                              className="font-bold border-amber-700/60 text-amber-200 hover:bg-amber-950/50"
+                              className="font-black bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 hover:from-amber-400 hover:to-amber-600 text-slate-950 shadow-lg shadow-amber-800/30 border border-amber-400/30"
                             >
-                              ⚡ إرسال للحسابات بدون عروض
+                              ⚡ إصدار ملحق توريد سريع
                             </Button>
                             <Button
                               variant="danger"
@@ -810,26 +869,59 @@ export const ProcurementManagerPage: React.FC = () => {
                               رفض
                             </Button>
                           </>
-                        )}
-                        {stage === 'QUOTE_SETUP' && (
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            onClick={() => setQuoteRequest(request)}
-                            className="font-bold bg-indigo-600 hover:bg-indigo-500 shadow-md shadow-indigo-900/30"
-                          >
-                            📝 إدخال عروض الأسعار
-                          </Button>
-                        )}
-                        {stage === 'READY_FOR_PO' && (
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            onClick={() => navigate(`/procurement/purchase-orders/create?pr=${request.id}${getSelectedQuote(request)?.id ? `&quote=${getSelectedQuote(request)?.id}` : ''}&returnUrl=${encodeURIComponent('/procurement')}`, { state: { returnTo: '/procurement' } })}
-                            className="font-bold bg-emerald-600 hover:bg-emerald-500 text-slate-950 shadow-md shadow-emerald-900/30"
-                          >
-                            📑 إنشاء أمر الشراء
-                          </Button>
+                        ) : (
+                          <>
+                            {stage === 'PENDING_ROUTE' && (
+                              <>
+                                <Button
+                                  variant="primary"
+                                  size="sm"
+                                  onClick={() => void handleStartQuotes(request)}
+                                  className="font-bold shadow-md shadow-cyan-900/30"
+                                >
+                                  🎯 بدء عروض الأسعار
+                                </Button>
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() => {
+                                    setDirectAccountingError(null);
+                                    setDirectAccountingRequest(request);
+                                  }}
+                                  className="font-bold border-amber-700/60 text-amber-200 hover:bg-amber-950/50"
+                                >
+                                  ⚡ إرسال للحسابات بدون عروض
+                                </Button>
+                                <Button
+                                  variant="danger"
+                                  size="sm"
+                                  onClick={() => void handleReject(request.id)}
+                                >
+                                  رفض
+                                </Button>
+                              </>
+                            )}
+                            {stage === 'QUOTE_SETUP' && (
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={() => setQuoteRequest(request)}
+                                className="font-bold bg-indigo-600 hover:bg-indigo-500 shadow-md shadow-indigo-900/30"
+                              >
+                                📝 إدخال عروض الأسعار
+                              </Button>
+                            )}
+                            {stage === 'READY_FOR_PO' && (
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={() => navigate(`/procurement/purchase-orders/create?pr=${request.id}${getSelectedQuote(request)?.id ? `&quote=${getSelectedQuote(request)?.id}` : ''}&returnUrl=${encodeURIComponent('/procurement')}`, { state: { returnTo: '/procurement' } })}
+                                className="font-bold bg-emerald-600 hover:bg-emerald-500 text-slate-950 shadow-md shadow-emerald-900/30"
+                              >
+                                📑 إنشاء أمر الشراء
+                              </Button>
+                            )}
+                          </>
                         )}
                         <Button
                           variant="secondary"
@@ -998,6 +1090,37 @@ export const ProcurementManagerPage: React.FC = () => {
           navigate(`/procurement/purchase-orders/create?pr=${prId}&returnUrl=${encodeURIComponent('/procurement')}`, { state: { returnTo: '/procurement' } });
         }}
       />
+
+      {/* ── Supplement Fast-Track Modal ── */}
+      {supplementModalOpen && supplementModalPr && supplementModalData && (
+        <ProcurementSupplementProcessModal
+          request={supplementModalPr}
+          supplement={supplementModalData}
+          isOpen={supplementModalOpen}
+          onClose={() => {
+            setSupplementModalOpen(false);
+            setSupplementModalPr(null);
+            setSupplementModalData(null);
+          }}
+          onSuccess={() => {
+            setSupplementModalOpen(false);
+            setSuccessBanner('✅ تم إصدار ملحق التوريد بنجاح وإنشاء أمر الشراء التكميلي.');
+            setSupplementModalPr(null);
+            setSupplementModalData(null);
+            void loadData();
+          }}
+        />
+      )}
+
+      {/* Supplement deep-link loading overlay */}
+      {supplementLoading && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-3 rounded-2xl border border-amber-500/30 bg-slate-950 p-8 shadow-2xl">
+            <span className="text-3xl animate-spin">⚡</span>
+            <span className="text-sm font-bold text-amber-300">جارٍ تحميل بيانات الكمالة...</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

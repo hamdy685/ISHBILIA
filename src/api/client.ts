@@ -1,5 +1,5 @@
 import axios, { AxiosRequestConfig } from 'axios';
-import { getToken, markSessionExpired, removeToken } from '../utils/authStorage';
+import { getToken, markSessionExpired, removeToken, getStoredUser } from '../utils/authStorage';
 
 const baseURL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
@@ -88,8 +88,54 @@ export const setOnUnauthenticated = (callback: () => void) => {
   onUnauthenticatedCallback = callback;
 };
 
+/**
+ * Strips sensitive commercial & financial data (supplier quotes, unit prices, total costs)
+ * from API responses when accessed by non-financial operational roles (e.g. Employee, Reviewer).
+ *
+ * CRITICAL SECURITY NOTE:
+ * Commercial confidentiality must be strictly enforced at the Backend layer via API Resources
+ * and Policy Authorization checks. This frontend sanitization provides defense-in-depth protection
+ * to guarantee that no financial or quote data is leaked into UI state or memory.
+ */
+export const stripFinancialData = (target: any): void => {
+  if (!target || typeof target !== 'object') return;
+
+  if (Array.isArray(target)) {
+    for (const item of target) {
+      stripFinancialData(item);
+    }
+    return;
+  }
+
+  // Strip specified sensitive financial fields
+  delete target.unit_price;
+  delete target.total_cost;
+  delete target.supplier_quotes;
+
+  for (const key of Object.keys(target)) {
+    if (target[key] && typeof target[key] === 'object') {
+      stripFinancialData(target[key]);
+    }
+  }
+};
+
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Defense-in-depth: strip sensitive financial data for operational roles (employee, reviewer)
+    const user = getStoredUser();
+    if (user && user.roles) {
+      const roleSlugs = Array.isArray(user.roles)
+        ? user.roles.map((r: any) => (typeof r === 'string' ? r : r.slug))
+        : [];
+      const isPrivilegedFinancialRole = roleSlugs.some((r: string) =>
+        ['procurement_manager', 'accountant', 'site_accountant', 'licenses_accountant', 'buffet_accountant', 'general_manager', 'admin'].includes(r)
+      );
+      if (!isPrivilegedFinancialRole && response.data) {
+        stripFinancialData(response.data);
+      }
+    }
+    return response;
+  },
   (error) => {
     const isLoginOrPublicEndpoint =
       error.config?.url?.includes('/auth/login') ||

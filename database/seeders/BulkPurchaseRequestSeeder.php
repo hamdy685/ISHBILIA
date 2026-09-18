@@ -3,12 +3,18 @@
 namespace Database\Seeders;
 
 use App\Models\ApprovalHistory;
-use App\Models\AuditLog;
-use App\Models\Category;
 use App\Models\Department;
 use App\Models\Item;
+use App\Models\Category;
+use App\Models\LandParcel;
+use App\Models\PurchaseOrder;
+use App\Models\PurchaseOrderItem;
+use App\Models\PurchaseReceipt;
+use App\Models\PurchaseReceiptItem;
 use App\Models\PurchaseRequest;
 use App\Models\PurchaseRequestItem;
+use App\Models\PurchaseRequestSupplement;
+use App\Models\Supplier;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -16,337 +22,337 @@ use Illuminate\Support\Facades\Schema;
 
 class BulkPurchaseRequestSeeder extends Seeder
 {
-    private array $regions = [
-        ['parcel' => 'قطعة 105 - حي النرجس', 'region' => 'القاهرة الجديدة'],
-        ['parcel' => 'قطعة B-24 - الحي المالي', 'region' => 'العاصمة الإدارية'],
-        ['parcel' => 'قطعة 412 - بيت الوطن', 'region' => 'التجمع الخامس'],
-        ['parcel' => 'قطعة C-18 - حي الياسمين', 'region' => 'الشيخ زايد'],
-        ['parcel' => 'قطعة 56 - منطقة المستثمرين', 'region' => '6 أكتوبر'],
-        ['parcel' => 'قطعة 89 - المنطقة الصناعية', 'region' => 'العبور'],
-        ['parcel' => 'قطعة 204 - كمبوند سراي', 'region' => 'القاهرة الجديدة'],
-        ['parcel' => 'قطعة A-31 - منطقة الفيلات', 'region' => 'الشروق'],
-        ['parcel' => 'قطعة 715 - المجاورة الثالثة', 'region' => 'الشروق'],
-        ['parcel' => 'قطعة 92 - جنوب الأكاديمية', 'region' => 'التجمع الأول'],
-        ['parcel' => 'قطعة D-15 - حدائق الأهرام', 'region' => 'الجيزة'],
-        ['parcel' => 'قطعة 330 - الامتداد الشرقي', 'region' => 'بدر'],
-        ['parcel' => 'قطعة M-45 - المستثمر الصغير', 'region' => 'العاشر من رمضان'],
-        ['parcel' => 'قطعة E-12 - منطقة النوادي', 'region' => 'التجمع الخامس'],
-    ];
-
-    private array $noteTemplates = [
-        'صب خرسانة مسلحة لأعمدة وسقف الدور الأول فوق الأرضي للمبنى الرئيسي',
-        'أعمال صب القواعد المسلحة والميدات الرابطة للقطعة والمباني الملحقة',
-        'استكمال حوائط المباني الداخلية والخارجية للدور الأرضي مع الشدات الخشبية',
-        'عزل رطوبة وحرارة للأسطح والقواعد وميدات الأساسات قبل الردم',
-        'تجهيز وتوريد حديد التسليح وشبكات الأرضيات لبلاطة السقف والجراج',
-        'توريد سقالات ومستلزمات شدات معدنية لأعمال الواجهات الخارجية',
-        'أعمال خرسانة النظافة وتأسيس الميدات الأرضية للمشروع',
-        'توريد مواد البناء الأساسية وأسمنت التشطيبات لأعمال الموقع',
-        'استكمال عزل الحمامات والمطابخ والسطح واختبار المياه',
-        'أعمال شدات وقوالب خشبية للأعمدة الدائرية والحوائط الخرسانية',
-        'توريد خامات ومستلزمات تأسيس الأعمال الإنشائية للمرحلة الحالية',
-        'تجهيز حديد كمرات وبلاطات السقف مع فواصل التمدد والهبوط',
-    ];
-
-    private array $specTemplates = [
-        'مطابق للمواصفات القياسية المصرية والكود المصري ECP 203، مع تقديم شهادة الاختبار الفني',
-        'حديد تسليح صلب عالي المقاومة رتبة 400/600 B من مصنع معتمد ومطابق للرسومات الإنشائية',
-        'خرسانة جاهزة رتبة C30 توريد محطة خلط معتمدة ومطابقة لمواصفات المشروع',
-        'أسمنت بورتلاندي عادي معبأ حديثاً ومطابق للمواصفة القياسية المصرية ES 4756-1',
-        'طوب أحمر مفرغ نخب أول مطابق للمقاسات الهندسية ومواصفات العزل',
-        'لفائف بيتومين مسلحة بالبوليستر سمك 4 مم مع ضمان 10 سنوات ضد التسريب',
-        'أخشاب بونتي وموسكي نخب أول مستوردة وخالية من العقد والتشوهات لأعمال القوالب',
-        'سقالات معدنية ثقيلة مطابقة لاشتراطات السلامة والصحة المهنية ومعتمدة',
-        'رمل مغسول خالي من الأملاح والشوائب الطينية ومطابق للتدرج الحبيبي القياسي',
-        'زلط سن 2 متدرج ونظيف مطابق للمواصفات ومعتمد لخلطات الخرسانة المسلحة',
-        'ملدنات وإضافات كيميائية معتمدة لزيادة قابلية التشغيل وتقليل نسبة الماء',
-        'سلك رباط صلب مجلفن نمرة 16 عالي المرونة والقوة للحدادة المسلحة',
-    ];
-
     public function run(): void
     {
-        // Skip if already seeded with at least 85 clean PRs to keep container restarts fast
-        $existingCount = PurchaseRequest::count();
-        if ($existingCount >= 85) {
-            $this->command?->info("Database already contains {$existingCount} purchase requests. Skipping seeder.");
+        if (app()->environment('testing')) {
             return;
         }
 
-        try {
-            Schema::disableForeignKeyConstraints();
-        } catch (\Throwable $e) {}
-
-        // Clean all PR-related tables
-        $tablesToClear = [
-            'purchase_receipt_items',
-            'purchase_receipts',
-            'purchase_order_items',
-            'purchase_orders',
-            'purchase_request_quote_recommendations',
-            'purchase_quote_recommendations',
-            'purchase_request_quotes',
-            'purchase_request_supplements',
-            'purchase_request_items',
-            'purchase_requests',
-            'approval_history',
-            'audit_logs',
-            'notifications',
-            'attachments',
-        ];
-
-        foreach ($tablesToClear as $table) {
-            if (Schema::hasTable($table)) {
-                DB::table($table)->delete();
+        // If already 36 PRs and 18 users with 2 PRs each, skip to avoid duplicate runs if not forced
+        $existingCount = PurchaseRequest::count();
+        if ($existingCount === 36) {
+            $userCounts = PurchaseRequest::select('user_id', DB::raw('count(*) as c'))->groupBy('user_id')->pluck('c')->all();
+            if (count($userCounts) === 18 && min($userCounts) === 2 && max($userCounts) === 2) {
+                $this->command?->info("Database already contains exactly 36 purchase requests (2 per user). Skipping seeder.");
+                return;
             }
         }
 
+        $driver = DB::getDriverName();
+        if ($driver === 'mysql') {
+            DB::statement('SET FOREIGN_KEY_CHECKS=0;');
+        } elseif ($driver === 'sqlite') {
+            DB::statement('PRAGMA foreign_keys = OFF;');
+        }
+
         try {
-            Schema::enableForeignKeyConstraints();
-        } catch (\Throwable $e) {}
+            $tablesToClear = [
+                'supplier_invoice_land_allocations',
+                'land_parcel_transactions',
+                'supplier_payment_allocations',
+                'supplier_payments',
+                'supplier_invoices',
+                'purchase_receipt_items',
+                'purchase_receipts',
+                'purchase_order_items',
+                'purchase_orders',
+                'purchase_request_quote_recommendations',
+                'purchase_quote_recommendations',
+                'purchase_request_quotes',
+                'purchase_request_supplements',
+                'purchase_request_items',
+                'purchase_requests',
+                'approval_history',
+                'audit_logs',
+                'system_events',
+                'notifications',
+            ];
 
-        DB::beginTransaction();
-
-        try {
-            $allItems = Item::with('category')->get();
-            $itemsByCategory = $allItems->groupBy(fn ($i) => $i->category_id);
-            $categoryIds = $itemsByCategory->keys()->toArray();
-
-            // Load real departments dynamically
-            $departments = Department::where('is_active', true)->get();
-            if ($departments->isEmpty()) {
-                $departments = Department::all();
+            foreach ($tablesToClear as $table) {
+                if (Schema::hasTable($table)) {
+                    DB::table($table)->truncate();
+                }
             }
 
-            $deptExecution = $departments->firstWhere('code', 'EXECUTION') ?? $departments->first();
-            $deptBuildings = $departments->firstWhere('code', 'BUILDINGS') ?? $departments->skip(1)->first() ?? $deptExecution;
-            $deptFinishing = $departments->firstWhere('code', 'FINISHING') ?? $departments->skip(2)->first() ?? $deptExecution;
-            $deptLicenses = $departments->firstWhere('code', 'LICENSES') ?? $departments->skip(3)->first() ?? $deptExecution;
-            $deptBuffet = $departments->firstWhere('code', 'BUFFET') ?? $departments->skip(4)->first() ?? $deptExecution;
-
-            // Load real site engineers dynamically
-            $siteEngineers = User::where('is_active', true)
-                ->whereHas('roles', fn ($q) => $q->where('slug', 'site_engineer'))
-                ->get();
-
-            if ($siteEngineers->isEmpty()) {
-                $siteEngineers = User::where('is_active', true)->get();
+            if (Schema::hasTable('supplier_balances')) {
+                DB::table('supplier_balances')->update([
+                    'total_invoiced' => 0,
+                    'total_paid' => 0,
+                    'balance' => 0,
+                    'last_activity_at' => null,
+                    'updated_at' => now(),
+                ]);
             }
-            $siteEngineerIds = $siteEngineers->pluck('id')->toArray();
-
-            // Load all real active users
-            $users = User::where('is_active', true)->with(['roles', 'department'])->get();
-            if ($users->isEmpty()) {
-                $users = User::all();
+        } finally {
+            if ($driver === 'mysql') {
+                DB::statement('SET FOREIGN_KEY_CHECKS=1;');
+            } elseif ($driver === 'sqlite') {
+                DB::statement('PRAGMA foreign_keys = ON;');
             }
+        }
 
-            $prCounter = 1;
-            $totalCreated = 0;
-            $totalItems = 0;
+        $parcelDefs = [
+            ['ref' => 'قطعة 105 - حي النرجس', 'region' => 'القاهرة الجديدة'],
+            ['ref' => 'قطعة B-24 - الحي المالي', 'region' => 'العاصمة الإدارية'],
+            ['ref' => 'قطعة 412 - بيت الوطن', 'region' => 'التجمع الخامس'],
+            ['ref' => 'قطعة C-18 - حي الياسمين', 'region' => 'الشيخ زايد'],
+            ['ref' => 'قطعة 56 - منطقة المستثمرين', 'region' => '6 أكتوبر'],
+            ['ref' => 'قطعة 89 - المنطقة الصناعية', 'region' => 'العبور'],
+            ['ref' => 'قطعة 204 - كمبوند سراي', 'region' => 'القاهرة الجديدة'],
+            ['ref' => 'قطعة A-31 - منطقة الفيلات', 'region' => 'الشروق'],
+        ];
 
-            foreach ($users as $user) {
-                // 5 request profiles per user
-                $requestProfiles = [
-                    [
-                        'status' => 'DRAFT',
-                        'priority' => 'NORMAL',
-                        'target_dept' => $deptExecution,
-                        'days_ahead' => 10,
-                        'num_items' => 7,
-                        'num_cats' => 4,
-                    ],
-                    [
-                        'status' => 'SUBMITTED',
-                        'priority' => 'URGENT',
-                        'target_dept' => $deptBuildings,
-                        'days_ahead' => 14,
-                        'num_items' => 9,
-                        'num_cats' => 4,
-                    ],
-                    [
-                        'status' => 'SUBMITTED',
-                        'priority' => 'NORMAL',
-                        'target_dept' => $deptFinishing,
-                        'days_ahead' => 18,
-                        'num_items' => 8,
-                        'num_cats' => 4,
-                    ],
-                    [
-                        'status' => 'SUBMITTED',
-                        'priority' => 'HIGH',
-                        'target_dept' => $deptExecution,
-                        'days_ahead' => 21,
-                        'num_items' => 10,
-                        'num_cats' => 5,
-                    ],
-                    [
-                        'status' => 'SUBMITTED',
-                        'priority' => 'URGENT',
-                        'target_dept' => ($user->id % 2 === 0 ? $deptLicenses : $deptBuffet),
-                        'days_ahead' => 25,
-                        'num_items' => 7,
-                        'num_cats' => 3,
-                    ],
-                ];
+        $parcels = [];
+        foreach ($parcelDefs as $pd) {
+            $parcels[] = LandParcel::firstOrCreate(
+                ['parcel_reference' => $pd['ref']],
+                [
+                    'region' => $pd['region'],
+                    'opening_balance' => 1000000,
+                    'balance' => 1000000,
+                    'is_active' => true,
+                ]
+            );
+        }
 
-                foreach ($requestProfiles as $pIdx => $profile) {
-                    $loc = $this->pick($this->regions);
-                    $parcel = $loc['parcel'];
-                    $region = $loc['region'];
+        $users = User::where('is_active', true)->orderBy('id')->get();
+        $departments = Department::with(['manager', 'siteEngineer'])->get()->keyBy('id');
+        $suppliers = Supplier::where('is_active', true)->get();
+        $catalogItems = Item::where('is_active', true)->get();
 
-                    /** @var Department $targetDept */
-                    $targetDept = $profile['target_dept'];
+        if ($catalogItems->isEmpty()) {
+            $cat = Category::firstOrCreate(['name' => 'مواد عامة'], ['code' => 'GEN', 'is_active' => true]);
+            $catalogItems = collect([
+                Item::create(['name' => 'حديد تسليح 12 مم', 'sku' => 'ITM-STEEL-12', 'category_id' => $cat->id, 'uom' => 'TON', 'is_active' => true]),
+                Item::create(['name' => 'خرسانة مسلحة C30', 'sku' => 'ITM-CONC-C30', 'category_id' => $cat->id, 'uom' => 'M3', 'is_active' => true]),
+                Item::create(['name' => 'أسمنت بورتلاندي 50 كجم', 'sku' => 'ITM-CEMT-50', 'category_id' => $cat->id, 'uom' => 'BAG', 'is_active' => true]),
+                Item::create(['name' => 'طوب أسمنتي مصمت', 'sku' => 'ITM-BRK-SOL', 'category_id' => $cat->id, 'uom' => 'PCS', 'is_active' => true]),
+            ]);
+        }
 
-                    // Determine manager dynamically
-                    $targetManagerId = $targetDept->manager_user_id;
-                    if (! $targetManagerId) {
-                        $reviewer = User::where('department_id', $targetDept->id)
-                            ->whereHas('roles', fn ($q) => $q->where('slug', 'reviewer'))
-                            ->first();
-                        $targetManagerId = $reviewer?->id;
-                    }
-                    if (! $targetManagerId) {
-                        $reviewer = User::whereHas('roles', fn ($q) => $q->where('slug', 'reviewer'))->first();
-                        $targetManagerId = $reviewer?->id ?? $user->id;
-                    }
+        $siteEngineers = User::whereHas('roles', fn($q) => $q->where('slug', 'site_engineer'))->get();
+        $warehouseKeepers = User::whereHas('roles', fn($q) => $q->where('slug', 'warehouse_keeper'))->get();
 
-                    $isGM = $user->hasRole('general_manager');
-                    $reviewerUserId = $isGM ? null : $targetManagerId;
-                    $siteEngId = ! empty($siteEngineerIds) ? $this->pick($siteEngineerIds) : null;
+        $prCounter = 1;
+        $poCounter = 1;
+        $receiptCounter = 1;
 
-                    $dateNeeded = now()->addDays($profile['days_ahead'])->format('Y-m-d');
-                    $notes = $this->pick($this->noteTemplates);
+        $noteTemplates = [
+            'توريد مواد تأسيس وأعمال إنشائية للمرحلة الحالية للمشروع حسب الرسومات الهندسية',
+            'استكمال أعمال العزل والصب للخرسانات المسلحة للأساسات والميدات الرابطة',
+            'توريد مستلزمات التشطيب ومواد البناء الدورية لموقع العمل لسرعة التنفيذ',
+            'أعمال صب الأعمدة وبلاطة السقف للدور المتكرر بمواصفات معتمدة هندسياً',
+            'توريد حديد تسليح ومستلزمات نجارة وحدادة مسلحة للشدات الموقعية',
+            'خامات ومستلزمات السباكة والكهرباء وتأسيس المرافق الحيوية للقطعة',
+            'أعمال محارة وبياض حوائط واجهات وداخلية مع التشوين المنظم في الموقع',
+            'توريد كمالة مواد عاجلة لاستكمال الأعمال دون تعطيل طاقم العمل',
+        ];
 
-                    $prNumber = sprintf('PR-2026-%05d', $prCounter);
-                    $prCounter++;
+        $specTemplates = [
+            'مطابق للمواصفات القياسية المصرية والكود المصري ECP 203، مع تسليم شهادات الاختبار الفني المعتمدة.',
+            'توريد نخب أول معتمد خالي من الشوائب ومطابق للمخططات التنفيذية المعتمدة.',
+            'صنف قياسي مطابق لاشتراطات الجودة والمواصفات المعتمدة من الاستشاري الهندسي.',
+            'عالي الجودة معتمد من المورد المباشر ومطابق لاشتراطات الأمن والمتانة.',
+        ];
 
-                    $status = $profile['status'];
-                    $submittedAt = ($status === 'SUBMITTED')
-                        ? now()->subDays(5 - $pIdx)->subHours(mt_rand(1, 12))
-                        : null;
+        foreach ($users as $userIndex => $user) {
+            for ($reqIndex = 1; $reqIndex <= 2; $reqIndex++) {
+                $prNum = sprintf('PR-2026-%04d', $prCounter++);
 
-                    $requiresWarehouseReceipt = ($targetDept->code !== 'BUILDINGS');
+                $userDeptId = $user->department_id ?: 1;
+                $targetDeptId = (($userIndex + $reqIndex) % 3) + 1;
+                $targetDept = $departments->get($targetDeptId) ?? $departments->first();
 
-                    $pr = PurchaseRequest::create([
-                        'request_number' => $prNumber,
-                        'request_type' => 'PROJECT',
-                        'parcel_reference' => $parcel,
-                        'region' => $region,
-                        'user_id' => $user->id,
-                        'department_id' => $user->department_id ?? $targetDept->id,
-                        'target_department_id' => $targetDept->id,
-                        'reviewer_user_id' => $reviewerUserId,
-                        'site_engineer_user_id' => $siteEngId,
-                        'priority' => $profile['priority'],
-                        'status' => $status,
-                        'procurement_route' => 'UNDECIDED',
-                        'total_estimated_cost' => 0, // STRICTLY ZERO
-                        'date_needed' => $dateNeeded,
-                        'notes' => $notes,
-                        'submitted_at' => $submittedAt,
-                        'requires_warehouse_receipt' => $requiresWarehouseReceipt,
+                $reviewer = $targetDept?->manager ?: User::where('department_id', $targetDeptId)->whereHas('roles', fn($q) => $q->where('slug', 'reviewer'))->first();
+                if (! $reviewer) {
+                    $reviewer = User::whereHas('roles', fn($q) => $q->where('slug', 'reviewer'))->first();
+                }
+
+                $siteEng = $siteEngineers->get(($userIndex + $reqIndex) % max(1, $siteEngineers->count()));
+                $warehouseKeeper = $warehouseKeepers->first();
+
+                $parcel = $parcels[($userIndex * 2 + $reqIndex) % count($parcels)];
+
+                if ($reqIndex === 1) {
+                    $statusOptions = ['SUBMITTED', 'UNDER_REVIEW', 'PENDING_EXECUTIVE_APPROVAL', 'DRAFT'];
+                    $status = $statusOptions[$userIndex % count($statusOptions)];
+                } else {
+                    $statusOptions = ['PENDING_PROCUREMENT_APPROVAL', 'APPROVED_BY_REVIEWER', 'PO_ISSUED', 'PO_ISSUED'];
+                    $status = $statusOptions[$userIndex % count($statusOptions)];
+                }
+
+                if ($user->hasRole('general_manager') && in_array($status, ['SUBMITTED', 'UNDER_REVIEW'])) {
+                    $status = 'PENDING_PROCUREMENT_APPROVAL';
+                }
+                if ($user->hasRole('reviewer') && (int) $userDeptId === (int) $targetDeptId && $status === 'SUBMITTED') {
+                    $status = 'PENDING_EXECUTIVE_APPROVAL';
+                }
+
+                $note = $noteTemplates[($userIndex * 2 + $reqIndex) % count($noteTemplates)];
+                $spec = $specTemplates[($userIndex + $reqIndex) % count($specTemplates)];
+
+                $pr = PurchaseRequest::create([
+                    'request_number' => $prNum,
+                    'request_type' => 'PROJECT',
+                    'parcel_reference' => $parcel->parcel_reference,
+                    'region' => $parcel->region,
+                    'land_parcel_id' => $parcel->id,
+                    'user_id' => $user->id,
+                    'department_id' => $userDeptId,
+                    'target_department_id' => $targetDeptId,
+                    'reviewer_user_id' => $user->hasRole('general_manager') ? null : $reviewer?->id,
+                    'site_engineer_user_id' => $siteEng?->id,
+                    'priority' => ($userIndex + $reqIndex) % 3 === 0 ? 'URGENT' : (($userIndex + $reqIndex) % 2 === 0 ? 'HIGH' : 'NORMAL'),
+                    'status' => $status,
+                    'requires_warehouse_receipt' => true,
+                    'date_needed' => now()->addDays(5 + ($reqIndex * 3))->toDateString(),
+                    'notes' => $note,
+                    'submitted_at' => $status !== 'DRAFT' ? now()->subDays(2) : null,
+                    'total_estimated_cost' => 0,
+                    'created_at' => now()->subDays(2),
+                    'updated_at' => now(),
+                ]);
+
+                $itemCount = ($userIndex + $reqIndex) % 2 === 0 ? 3 : 2;
+                $prTotal = 0;
+                $createdPrItems = [];
+
+                for ($it = 0; $it < $itemCount; $it++) {
+                    $catItem = $catalogItems[($userIndex * 4 + $reqIndex * 2 + $it) % $catalogItems->count()];
+                    $qty = 5 + (($userIndex + $it + 1) * 3);
+                    $estUnitPrice = 150 + (($it + 1) * 200);
+                    $lineTotal = $qty * $estUnitPrice;
+                    $prTotal += $lineTotal;
+
+                    $prItem = PurchaseRequestItem::create([
+                        'purchase_request_id' => $pr->id,
+                        'item_id' => $catItem->id,
+                        'item_description' => $catItem->name,
+                        'item_reference' => $parcel->parcel_reference,
+                        'region' => $parcel->region,
+                        'quantity' => $qty,
+                        'uom' => $catItem->uom ?: 'PCS',
+                        'estimated_unit_price' => $estUnitPrice,
+                        'estimated_line_total' => $lineTotal,
+                        'specifications' => $spec,
+                        'notes' => "بند توريد رقم " . ($it + 1),
+                    ]);
+                    $createdPrItems[] = $prItem;
+                }
+
+                $pr->update(['total_estimated_cost' => $prTotal]);
+
+                ApprovalHistory::create([
+                    'target_type' => PurchaseRequest::class,
+                    'target_id' => $pr->id,
+                    'actor_user_id' => $user->id,
+                    'action' => 'CREATED',
+                    'from_state' => null,
+                    'to_state' => $status,
+                    'comments' => "تم إنشاء طلب الشراء {$prNum} بواسطة {$user->name}",
+                    'created_at' => now()->subDays(2),
+                ]);
+
+                if ($status === 'PO_ISSUED') {
+                    $poNum = sprintf('PO-2026-%04d', $poCounter++);
+                    $supplier = $suppliers[($userIndex + $reqIndex) % max(1, $suppliers->count())];
+
+                    $po = PurchaseOrder::create([
+                        'po_number' => $poNum,
+                        'purchase_request_id' => $pr->id,
+                        'supplier_id' => $supplier->id,
+                        'created_by_user_id' => 6,
+                        'status' => 'ISSUED',
+                        'subtotal' => $prTotal,
+                        'grand_total' => $prTotal,
+                        'payment_terms' => 'نقداً عند التوريد والاستلام المعتمد',
+                        'notes' => "أمر شراء صادر للمورد {$supplier->company_name} على الطلب {$prNum}",
+                        'created_at' => now()->subDay(),
+                        'updated_at' => now(),
                     ]);
 
-                    // Pick diverse categories for this request
-                    $shuffledCats = $categoryIds;
-                    shuffle($shuffledCats);
-                    $selectedCats = array_slice($shuffledCats, 0, $profile['num_cats']);
+                    $createdPoItems = [];
+                    foreach ($createdPrItems as $pri) {
+                        $createdPoItems[] = PurchaseOrderItem::create([
+                            'purchase_order_id' => $po->id,
+                            'pr_item_id' => $pri->id,
+                            'item_id' => $pri->item_id,
+                            'item_description' => $pri->item_description,
+                            'item_reference' => $pri->item_reference,
+                            'region' => $pri->region,
+                            'quantity' => $pri->quantity,
+                            'uom' => $pri->uom,
+                            'unit_price' => $pri->estimated_unit_price,
+                            'line_total' => $pri->estimated_line_total,
+                            'specifications' => $pri->specifications,
+                        ]);
+                    }
 
-                    for ($itemIdx = 0; $itemIdx < $profile['num_items']; $itemIdx++) {
-                        $catId = ! empty($selectedCats) ? $selectedCats[$itemIdx % count($selectedCats)] : null;
-                        $catItems = $catId ? $itemsByCategory->get($catId) : null;
-                        if (! $catItems || $catItems->isEmpty()) {
-                            $item = $allItems->isNotEmpty() ? $allItems->random() : null;
-                        } else {
-                            $item = $catItems->random();
+                    if ($userIndex % 2 === 0) {
+                        $grnNum = sprintf('GRN-2026-%04d', $receiptCounter++);
+                        $receiptStatus = ($userIndex % 4 === 0) ? 'APPROVED' : 'PENDING_SITE_ENGINEER';
+
+                        $receipt = PurchaseReceipt::create([
+                            'purchase_order_id' => $po->id,
+                            'purchase_request_id' => $pr->id,
+                            'receipt_number' => $grnNum,
+                            'receipt_type' => 'WAREHOUSE',
+                            'status' => $receiptStatus,
+                            'warehouse_keeper_user_id' => $warehouseKeeper?->id ?: 10,
+                            'site_engineer_user_id' => $siteEng?->id ?: 11,
+                            'received_at' => now()->subHours(6),
+                            'warehouse_submitted_at' => now()->subHours(6),
+                            'warehouse_notes' => 'تم استلام وتفريغ الشحنة في المخزن بحالة ممتازة ومطابقة للأختام.',
+                            'site_engineer_notes' => $receiptStatus === 'APPROVED' ? 'تم الفحص الهندسي والمطابقة والاعتماد بالموقع.' : null,
+                            'created_at' => now()->subHours(6),
+                        ]);
+
+                        foreach ($createdPoItems as $poi) {
+                            PurchaseReceiptItem::create([
+                                'purchase_receipt_id' => $receipt->id,
+                                'purchase_order_item_id' => $poi->id,
+                                'ordered_quantity' => $poi->quantity,
+                                'received_quantity' => $poi->quantity,
+                                'notes' => 'مطابق للمواصفات',
+                            ]);
                         }
+                    }
 
-                        if (! $item) {
-                            continue;
-                        }
-
-                        $qty = $this->qtyForUom($item->uom);
-                        $spec = $this->pick($this->specTemplates);
+                    if ($userIndex % 3 === 0) {
+                        $suppItem = $createdPrItems[0];
+                        $supplement = PurchaseRequestSupplement::create([
+                            'purchase_request_id' => $pr->id,
+                            'batch_number' => 1,
+                            'requested_by_user_id' => $user->id,
+                            'reviewer_user_id' => $reviewer?->id,
+                            'reviewed_at' => now(),
+                            'status' => 'PENDING_PROCUREMENT_APPROVAL',
+                            'notes' => 'طلب كمالة إضافية لاستكمال صب باقي المساحة المطلوبة',
+                        ]);
 
                         PurchaseRequestItem::create([
                             'purchase_request_id' => $pr->id,
-                            'item_id' => $item->id,
-                            'item_description' => $item->name,
-                            'item_reference' => $parcel,
-                            'region' => $region,
-                            'quantity' => $qty,
-                            'uom' => $item->uom,
-                            'estimated_unit_price' => 0, // STRICTLY ZERO
-                            'estimated_line_total' => 0, // STRICTLY ZERO
-                            'specifications' => $spec,
-                            'notes' => null,
+                            'is_supplementary' => true,
+                            'supplement_id' => $supplement->id,
+                            'supplement_batch' => 1,
+                            'item_id' => $suppItem->item_id,
+                            'item_description' => $suppItem->item_description . ' (كمالة إضافية)',
+                            'item_reference' => $parcel->parcel_reference,
+                            'region' => $parcel->region,
+                            'quantity' => 5,
+                            'uom' => $suppItem->uom,
+                            'estimated_unit_price' => $suppItem->estimated_unit_price,
+                            'estimated_line_total' => 5 * $suppItem->estimated_unit_price,
+                            'specifications' => $suppItem->specifications,
+                            'notes' => 'كمالة إضافية تابعة لنفس المشروع',
                         ]);
-                        $totalItems++;
+
+                        $pr->increment('total_estimated_cost', 5 * $suppItem->estimated_unit_price);
                     }
-
-                    AuditLog::create([
-                        'user_id' => $user->id,
-                        'action' => 'CREATED',
-                        'entity_type' => PurchaseRequest::class,
-                        'entity_id' => $pr->id,
-                        'new_value' => json_encode([
-                            'request_number' => $pr->request_number,
-                            'status' => $status,
-                            'items_count' => $profile['num_items'],
-                        ], JSON_UNESCAPED_UNICODE),
-                        'created_at' => $submittedAt ?? now(),
-                    ]);
-
-                    if ($status === 'SUBMITTED') {
-                        ApprovalHistory::create([
-                            'target_type' => PurchaseRequest::class,
-                            'target_id' => $pr->id,
-                            'actor_user_id' => $user->id,
-                            'action' => 'SUBMITTED',
-                            'from_state' => 'DRAFT',
-                            'to_state' => 'SUBMITTED',
-                            'comments' => 'تم تقديم طلب الشراء وإحالته لمراجع القسم المختص.',
-                            'created_at' => $submittedAt,
-                        ]);
-                    }
-
-                    $totalCreated++;
                 }
-
-                $this->command?->info("✅ {$user->name}: 5 PRs created successfully.");
             }
-
-            DB::commit();
-            $this->command?->info("============================================");
-            $this->command?->info("SUCCESS: Created {$totalCreated} Purchase Requests with {$totalItems} total items across {$users->count()} users!");
-            $this->command?->info("============================================");
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            $this->command?->error("ERROR: {$e->getMessage()} in {$e->getFile()}:{$e->getLine()}");
-            throw $e;
         }
-    }
 
-    private function pick(array $arr): mixed
-    {
-        return $arr[array_rand($arr)];
-    }
-
-    private function qtyForUom(string $uom): float
-    {
-        return match ($uom) {
-            'M3' => round(mt_rand(15, 120) + mt_rand(0, 99) / 100, 2),
-            'BAG' => mt_rand(50, 400),
-            'TON' => round(mt_rand(2, 35) + mt_rand(0, 99) / 100, 2),
-            'KG' => mt_rand(50, 1500),
-            'M2' => round(mt_rand(50, 400) + mt_rand(0, 99) / 100, 2),
-            'ML' => round(mt_rand(20, 250) + mt_rand(0, 99) / 100, 2),
-            'PCS' => mt_rand(50, 800),
-            'SET' => mt_rand(2, 15),
-            'ROLL' => mt_rand(5, 40),
-            'DRUM' => mt_rand(2, 15),
-            'LITER' => mt_rand(20, 150),
-            default => mt_rand(10, 100),
-        };
+        $this->command?->info("Successfully seeded exactly 2 PRs per active user (Total 36 PRs)!");
     }
 }

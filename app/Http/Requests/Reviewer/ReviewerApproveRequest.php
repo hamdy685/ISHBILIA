@@ -12,11 +12,21 @@ class ReviewerApproveRequest extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        if ($this->filled('receiver_user_id') && ! $this->filled('site_engineer_user_id')) {
+            $this->merge([
+                'site_engineer_user_id' => $this->input('receiver_user_id'),
+            ]);
+        }
+    }
+
     public function rules(): array
     {
         return [
             'comment' => ['nullable', 'string', 'max:1000'],
             'requires_warehouse_receipt' => ['nullable', 'boolean'],
+            'receiver_user_id' => ['nullable', 'integer', 'exists:users,id'],
             'site_engineer_user_id' => [
                 'nullable',
                 'integer',

@@ -84,6 +84,8 @@ class PurchaseRequestSupplementController extends Controller
     public function approveReviewer(Request $request, int $supplementId): JsonResponse
     {
         $validated = $request->validate([
+            'receiver_user_id' => ['nullable', 'integer', 'exists:users,id'],
+            'site_engineer_user_id' => ['nullable', 'integer', 'exists:users,id'],
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
@@ -94,9 +96,23 @@ class PurchaseRequestSupplementController extends Controller
             return response()->json(['message' => 'غير مصرح لك باعتماد طلبات كمالة الأقسام.'], 403);
         }
 
+        $receiverUserId = $validated['receiver_user_id']
+            ?? $validated['site_engineer_user_id']
+            ?? $supplement->purchaseRequest->site_engineer_user_id;
+
+        if (! $receiverUserId) {
+            return response()->json([
+                'message' => 'يجب اختيار مهندس الموقع أو أمين المخزن المسؤول عن الاستلام قبل اعتماد طلب الكمالة.',
+                'errors' => [
+                    'receiver_user_id' => ['يجب اختيار جهة الاستلام قبل الاعتماد.'],
+                ],
+            ], 422);
+        }
+
         $result = $this->service->approveByReviewer(
             $supplement,
             $user,
+            (int) $receiverUserId,
             $validated['notes'] ?? null
         );
 

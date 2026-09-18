@@ -625,7 +625,7 @@ export const PurchaseQuotesDecisionPage: React.FC<PurchaseQuotesDecisionPageProp
                 <div className="p-2 overflow-auto max-h-[70vh] flex items-center justify-center w-full">
                   <img
                     src={previewBlobUrl}
-                    alt="معاينة عرض السعر"
+                    alt={previewQuote.supplier?.company_name ? `معاينة وثيقة عرض السعر من ${previewQuote.supplier.company_name}` : "معاينة وثيقة عرض السعر للمورد"}
                     className="max-h-[68vh] max-w-full object-contain rounded-xl border border-slate-800 shadow-inner"
                   />
                 </div>

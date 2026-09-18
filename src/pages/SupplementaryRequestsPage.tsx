@@ -9,6 +9,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { CreateSupplementModal } from '../components/supplements/CreateSupplementModal';
 import { ProcurementSupplementProcessModal } from '../components/supplements/ProcurementSupplementProcessModal';
+import { ApproveSupplementDialog } from '../components/supplements/ApproveSupplementDialog';
 import { PrDetailsModal } from '../components/procurement/PrDetailsModal';
 
 export const SupplementaryRequestsPage: React.FC = () => {
@@ -25,6 +26,10 @@ export const SupplementaryRequestsPage: React.FC = () => {
   const [selectedPrForCreate, setSelectedPrForCreate] = useState<PurchaseRequest | null>(null);
   const [previewPr, setPreviewPr] = useState<PurchaseRequest | null>(null);
   const [selectedForProcess, setSelectedForProcess] = useState<{
+    request: PurchaseRequest;
+    supplement: PurchaseRequestSupplement;
+  } | null>(null);
+  const [approvingSupplement, setApprovingSupplement] = useState<{
     request: PurchaseRequest;
     supplement: PurchaseRequestSupplement;
   } | null>(null);
@@ -89,12 +94,21 @@ export const SupplementaryRequestsPage: React.FC = () => {
     }
   };
 
-  const handleReviewerApprove = async (supplementId: number, prId: number) => {
-    if (!window.confirm('هل أنت متأكد من اعتماد بنود هذا الملحق وإرسالها للمشتريات؟')) return;
+  const handleReviewerApprove = (supplement: PurchaseRequestSupplement, request: PurchaseRequest) => {
+    setApprovingSupplement({ request, supplement });
+  };
+
+  const handleConfirmApproveSupplement = async (receiverUserId: number, notes?: string) => {
+    if (!approvingSupplement) return;
     try {
       setActionLoading(true);
-      await approveSupplementReviewerApi(supplementId);
-      setSuccessMessage('تم اعتماد طلب الكمالة بنجاح وتوجيهه لمدير المشتريات.');
+      await approveSupplementReviewerApi(approvingSupplement.supplement.id, {
+        receiver_user_id: receiverUserId,
+        notes,
+      });
+      setSuccessMessage('تم اعتماد طلب الكمالة وتحديد مسؤول الاستلام بنجاح وتوجيهه لمدير المشتريات.');
+      const prId = approvingSupplement.request.id;
+      setApprovingSupplement(null);
       void loadSupplementsForPr(prId);
       void loadRequests(page);
     } catch (err: any) {
@@ -241,7 +255,7 @@ export const SupplementaryRequestsPage: React.FC = () => {
                         {pr.request_number}
                       </span>
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                        جاهز للكمالة (لم يُستلم بعد)
+                        جاهز للكمالة (متاح دائماً)
                       </span>
                       {pr.purchase_orders && pr.purchase_orders.length > 0 && (
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-900/50">
@@ -302,7 +316,7 @@ export const SupplementaryRequestsPage: React.FC = () => {
                       onClick={() => setSelectedPrForCreate(pr)}
                       className="inline-flex items-center gap-1.5 rounded-xl bg-amber-600 px-4 py-2 text-xs font-extrabold text-white shadow-md shadow-amber-600/20 hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500"
                     >
-                      <span>➕</span> عمل طلب كمالة
+                      <span>➕</span> طلب كمية إضافية (كمالة)
                     </button>
                   </div>
                 </div>
@@ -326,7 +340,8 @@ export const SupplementaryRequestsPage: React.FC = () => {
                     ) : (
                       <div className="space-y-3">
                         {activeSupplements.map((supp) => {
-                          const isProcurementReady = supp.status === 'REVIEWER_APPROVED';
+                          const isProcurementReady =
+                            supp.status === 'REVIEWER_APPROVED' || supp.status === 'PENDING_PROCUREMENT_APPROVAL';
                           const isReviewerPending = supp.status === 'SUBMITTED';
 
                           return (
@@ -353,9 +368,9 @@ export const SupplementaryRequestsPage: React.FC = () => {
                                       بانتظار مراجعة القسم
                                     </span>
                                   )}
-                                  {supp.status === 'REVIEWER_APPROVED' && (
+                                  {(supp.status === 'REVIEWER_APPROVED' || supp.status === 'PENDING_PROCUREMENT_APPROVAL') && (
                                     <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
-                                      معتمد من المراجع ➜ بانتظار المشتريات
+                                      معتمد ➜ بانتظار المشتريات للتسعير
                                     </span>
                                   )}
                                   {supp.status === 'PROCUREMENT_PROCESSED' && (
@@ -369,7 +384,7 @@ export const SupplementaryRequestsPage: React.FC = () => {
                                     <button
                                       type="button"
                                       disabled={actionLoading}
-                                      onClick={() => handleReviewerApprove(supp.id, pr.id)}
+                                      onClick={() => handleReviewerApprove(supp, pr)}
                                       className="rounded-lg bg-emerald-600 px-3 py-1 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
                                     >
                                       اعتماد المراجع
@@ -498,6 +513,18 @@ export const SupplementaryRequestsPage: React.FC = () => {
               void loadSupplementsForPr(selectedForProcess.request.id);
             }
           }}
+        />
+      )}
+
+      {/* Modal: Reviewer Approve Supplement with Receiver Selection */}
+      {approvingSupplement && (
+        <ApproveSupplementDialog
+          isOpen={Boolean(approvingSupplement)}
+          request={approvingSupplement.request}
+          supplement={approvingSupplement.supplement}
+          isApproving={actionLoading}
+          onConfirm={handleConfirmApproveSupplement}
+          onClose={() => setApprovingSupplement(null)}
         />
       )}
 

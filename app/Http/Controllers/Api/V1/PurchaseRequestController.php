@@ -86,7 +86,8 @@ class PurchaseRequestController extends Controller
             ->get();
 
         $engineers = $allUsers->filter(fn (User $engineer) => $engineer->hasRole('site_engineer'))->values();
-        $otherUsers = $allUsers->filter(fn (User $user) => ! $user->hasRole('site_engineer'))->values();
+        $warehouseKeepers = $allUsers->filter(fn (User $keeper) => $keeper->hasRole('warehouse_keeper'))->values();
+        $otherUsers = $allUsers->filter(fn (User $user) => ! $user->hasRole('site_engineer') && ! $user->hasRole('warehouse_keeper'))->values();
 
         return response()->json([
             'data' => $allUsers->map(fn (User $user) => [
@@ -96,6 +97,7 @@ class PurchaseRequestController extends Controller
                 'department_id' => $user->department_id,
                 'department_name' => $user->department?->name,
                 'is_site_engineer' => $user->hasRole('site_engineer'),
+                'is_warehouse_keeper' => $user->hasRole('warehouse_keeper'),
                 'role_name' => $user->roles->first()?->name ?: 'مستخدم',
                 'roles' => $user->roles->map(fn ($r) => ['slug' => $r->slug, 'name' => $r->name]),
             ])->values(),
@@ -106,6 +108,14 @@ class PurchaseRequestController extends Controller
                 'department_id' => $engineer->department_id,
                 'department_name' => $engineer->department?->name,
                 'role_name' => 'مهندس موقع',
+            ])->values(),
+            'warehouse_keepers' => $warehouseKeepers->map(fn (User $keeper) => [
+                'id' => $keeper->id,
+                'name' => $keeper->name,
+                'email' => $keeper->email,
+                'department_id' => $keeper->department_id,
+                'department_name' => $keeper->department?->name,
+                'role_name' => 'أمين مخزن',
             ])->values(),
             'other_users' => $otherUsers->map(fn (User $user) => [
                 'id' => $user->id,

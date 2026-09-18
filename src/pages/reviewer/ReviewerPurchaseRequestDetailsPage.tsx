@@ -22,6 +22,7 @@ import { getUnitLabel } from '../../utils/units';
 import { getSummaryParcels, getSummaryRegions, getSummaryQuantities } from '../../utils/formatRequestSummary';
 import SystemEventTimeline from '../../components/ui/SystemEventTimeline';
 import { UnifiedNotesCard } from '../../components/common/UnifiedNotesCard';
+import { ForbiddenPage } from '../ErrorPages';
 
 const PRIORITY_LABELS: Record<string, string> = {
   LOW: 'منخفضة',
@@ -124,6 +125,9 @@ export const ReviewerPurchaseRequestDetailsPage: React.FC = () => {
   }
 
   if (error && !requestData) {
+    if (error.status === 403) {
+      return <ForbiddenPage />;
+    }
     return (
       <div className="space-y-4" dir="rtl">
         <ErrorMessage error={error} />

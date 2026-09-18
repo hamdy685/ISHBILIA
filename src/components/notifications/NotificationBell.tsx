@@ -495,13 +495,18 @@ export const NotificationBell: React.FC = () => {
                 const action = resolveNotificationAction(n, user);
                 const isUnread = !n.read_at;
                 const prId = n.data?.purchase_request_id || (n.notifiable_type?.includes('PurchaseRequest') ? n.notifiable_id : null);
+                const nType = (n.type || '').toLowerCase();
+                const isSupplementNotification = nType.includes('supplement') || nType.includes('pr_supplement') || n.data?.is_supplementary || n.data?.supplement_id;
+                const isUrgentSupplement = isSupplementNotification && (action.priority === 'URGENT' || isUnread);
 
                 return (
                   <div
                     key={n.id}
                     onClick={() => handleNotificationClick(n)}
                     className={`p-3.5 transition-all cursor-pointer space-y-2 border-b border-slate-800/60 ${
-                      isUnread
+                      isUrgentSupplement
+                        ? 'bg-gradient-to-r from-amber-950/40 via-slate-900 to-amber-950/20 border-r-4 border-amber-500 hover:bg-amber-900/30 shadow-inner ring-1 ring-amber-500/30 animate-pulse'
+                        : isUnread
                         ? 'bg-gradient-to-r from-cyan-950/50 via-slate-900 to-cyan-950/20 border-r-4 border-cyan-400 hover:bg-cyan-900/30 shadow-inner'
                         : 'bg-slate-950/70 border-r-4 border-slate-700/40 opacity-75 hover:opacity-100 hover:bg-slate-900/80'
                     }`}
@@ -522,6 +527,11 @@ export const NotificationBell: React.FC = () => {
                             ) : (
                               <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-slate-800/90 text-slate-400 border border-slate-700/50 shrink-0">
                                 ✓ مقروء
+                              </span>
+                            )}
+                            {isSupplementNotification && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/50 shrink-0 animate-pulse">
+                                <span>⚡</span> كمالة عاجلة
                               </span>
                             )}
                           </div>

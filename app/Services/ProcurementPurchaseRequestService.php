@@ -30,6 +30,7 @@ class ProcurementPurchaseRequestService
             'items.item',
             'items.supplier',
             'approvalHistory.actor',
+            'supplements',
         ])->withCount(['purchaseOrders as issued_purchase_orders_count' => function ($query) {
             $query->whereNotIn('status', ['REJECTED']);
         }])
@@ -58,6 +59,7 @@ class ProcurementPurchaseRequestService
             'items.supplier',
             'quotes.supplier',
             'quotes.recommendations.user',
+            'supplements',
         ]);
 
         if ($actor?->hasRole('procurement_manager')) {
@@ -122,6 +124,7 @@ class ProcurementPurchaseRequestService
             'selectedQuote.supplier',
             'quotes.supplier',
             'approvalHistory.actor',
+            'supplements',
         ])
             ->withCount(['purchaseOrders as issued_purchase_orders_count' => function ($query) {
                 $query->whereNotIn('status', ['REJECTED']);

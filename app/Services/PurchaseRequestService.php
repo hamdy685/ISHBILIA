@@ -499,11 +499,15 @@ class PurchaseRequestService
             $normalizedNeededDate = $this->normalizeNeededDate($request->date_needed?->toDateString());
             $isExecutiveRequester = $user->hasRole('general_manager');
             $isDepartmentManagerRequester = $user->hasRole('reviewer');
+            // مدير المشتريات والحسابات: يتجاوزان المراجع ويذهبان مباشرةً للمدير التنفيذي.
+            $isProcurementOrAccounting = $user->hasAnyRole(['procurement_manager', 'accountant']);
             $sameDepartment = (int) $request->department_id === (int) $request->target_department_id;
             $canSkipReviewer = $isDepartmentManagerRequester && $sameDepartment;
             $nextStatus = $isExecutiveRequester
                 ? 'PENDING_PROCUREMENT_APPROVAL'
-                : ($canSkipReviewer ? 'PENDING_EXECUTIVE_APPROVAL' : 'SUBMITTED');
+                : ($isProcurementOrAccounting || $canSkipReviewer
+                    ? 'PENDING_EXECUTIVE_APPROVAL'
+                    : 'SUBMITTED');
 
             $assignedSiteEngineerId = $request->site_engineer_user_id;
             if ($siteEngineerUserId) {
@@ -539,9 +543,10 @@ class PurchaseRequestService
                 'new_value' => json_encode(['status' => $nextStatus, 'target_department_id' => $request->target_department_id], JSON_UNESCAPED_UNICODE),
             ]);
 
-            $eventMessage = match ($nextStatus) {
-                'PENDING_PROCUREMENT_APPROVAL' => 'أنشأ المدير التنفيذي طلب شراء وأرسله مباشرة إلى مدير المشتريات.',
-                'PENDING_EXECUTIVE_APPROVAL' => 'أرسل مراجع القسم الطلب إلى المدير التنفيذي مباشرة لأن القسم المستهدف هو نفس قسمه.',
+            $eventMessage = match (true) {
+                $nextStatus === 'PENDING_PROCUREMENT_APPROVAL' => 'أنشأ المدير التنفيذي طلب شراء وأرسله مباشرة إلى مدير المشتريات.',
+                $nextStatus === 'PENDING_EXECUTIVE_APPROVAL' && $isProcurementOrAccounting => 'أنشأ مدير المشتريات / الحسابات طلب شراء وأرسله مباشرةً للمدير التنفيذي متجاوزاً مرحلة المراجع.',
+                $nextStatus === 'PENDING_EXECUTIVE_APPROVAL' => 'أرسل مراجع القسم الطلب إلى المدير التنفيذي مباشرة لأن القسم المستهدف هو نفس قسمه.',
                 default => 'أرسل الطلب إلى مدير القسم المستهدف للمراجعة.',
             };
             app(SystemEventService::class)->recordAction(

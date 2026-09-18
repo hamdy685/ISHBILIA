@@ -26,6 +26,15 @@ export const extractDocumentInfo = (notification: Notification & { data?: any })
   const invoiceId = data.invoice_id || (notifiableType.includes('SupplierInvoice') ? notification.notifiable_id : null);
   const supplierId = data.supplier_id;
   const quoteId = data.quote_id || data.purchase_request_quote_id;
+  const supplementId = data.supplement_id || data.purchase_request_supplement_id;
+
+  // Detect supplement notification types
+  const isSupplement = Boolean(
+    supplementId ||
+    type.includes('supplement') ||
+    type.includes('pr_supplement') ||
+    data.is_supplementary
+  );
 
   let docNumber = data.pr_number || data.po_number || data.receipt_number || data.invoice_number;
   let docType: NotificationActionRoute['docType'] = 'GENERAL';
@@ -56,6 +65,8 @@ export const extractDocumentInfo = (notification: Notification & { data?: any })
     invoiceId,
     supplierId,
     quoteId,
+    supplementId,
+    isSupplement,
     docType,
     docNumber,
   };
@@ -129,6 +140,9 @@ export const isActionRequiredForUser = (
     if (type.includes('approved') && !type.includes('po_issued') && (title.includes('معتمد') || message.includes('معتمد'))) return true;
     if (type.includes('quote_selected') || title.includes('تم اختيار عرض') || message.includes('إصدار أمر الشراء')) return true;
     if (type.includes('returned') || type.includes('rejected') || title.includes('إعادة') || message.includes('إرجاع')) return true;
+    // Supplement approved by reviewer → procurement must issue fast-track PO
+    if (type.includes('supplement_approved') || type.includes('pr_supplement_reviewer_approved') || type.includes('pr_supplement_submitted')) return true;
+    if (title.includes('كمالة') || title.includes('تكميلي') || message.includes('كمالة معتمدة')) return true;
   }
 
   // Accountant actions
@@ -178,8 +192,50 @@ export const resolveNotificationAction = (
   let priority: NotificationActionRoute['priority'] = 'NORMAL';
   if (data.priority === 'URGENT' || type.includes('urgent') || type.includes('returned') || type.includes('rejected')) {
     priority = 'URGENT';
+  } else if (info.isSupplement) {
+    priority = 'URGENT'; // Supplement notifications are always urgent
   } else if (data.priority === 'HIGH' || isActionable) {
     priority = 'HIGH';
+  }
+
+  // ── SUPPLEMENT FAST-TRACK ROUTING ──
+  // Route supplement notifications directly to the fast-track modal
+  if (info.isSupplement && info.prId) {
+    if (roleSlugs.includes('procurement_manager')) {
+      return {
+        url: `/procurement?openSupplement=${info.prId}&tab=0`,
+        actionLabel: 'إصدار ملحق توريد سريع',
+        icon: '⚡',
+        badgeLabel: 'طلب كمالة معتمد',
+        docType: 'PR',
+        docNumber: info.docNumber,
+        isActionable: true,
+        priority: 'URGENT',
+      };
+    }
+    if (roleSlugs.includes('reviewer')) {
+      return {
+        url: `/reviewer/requests/${info.prId}`,
+        actionLabel: 'مراجعة طلب الكمالة التكميلية',
+        icon: '📋',
+        badgeLabel: 'كمالة للمراجعة',
+        docType: 'PR',
+        docNumber: info.docNumber,
+        isActionable: true,
+        priority: 'HIGH',
+      };
+    }
+    // Requester / Employee fallback
+    return {
+      url: `/requests/${info.prId}`,
+      actionLabel: 'متابعة طلب الكمالة',
+      icon: '📦',
+      badgeLabel: 'طلب كمالة',
+      docType: 'PR',
+      docNumber: info.docNumber,
+      isActionable: false,
+      priority: 'NORMAL',
+    };
   }
 
   // 0. Dedicated check for PO & Receipt ready for accounting

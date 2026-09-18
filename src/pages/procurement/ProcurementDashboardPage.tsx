@@ -92,25 +92,32 @@ export const ProcurementDashboardPage: React.FC = () => {
 
       {/* ── صندوق المهام والإجراءات المطلوبة منك الآن (Action Inbox) ── */}
       {(() => {
+        // Detect PRs that have pending supplements awaiting procurement processing
+        const supplementPrs = prs.filter(pr =>
+          Array.isArray(pr.supplements) &&
+          pr.supplements.some((s: any) => s.status === 'REVIEWER_APPROVED' || s.status === 'SUBMITTED')
+        );
+
         const procurementActionItems: ActionInboxItem[] = [
-          ...prs.map((pr) => ({
-            id: `pr-${pr.id}`,
+          // ── Supplement Fast-Track Items (CRITICAL — appear first) ──
+          ...supplementPrs.map((pr) => ({
+            id: `supplement-pr-${pr.id}`,
             rawId: pr.id,
             type: 'PR' as const,
             code: pr.request_number,
-            title: pr.justification || (pr.request_type === 'OFFICE_SUPPLIES' ? 'طلب مستلزمات مكتبية' : 'طلب مواد مشروعات'),
-            subtitle: pr.justification ? (pr.request_type === 'OFFICE_SUPPLIES' ? 'مستلزمات مكتبية' : 'مشتريات مواقع') : undefined,
+            title: `⚡ كمالة تكميلية — ${pr.justification || pr.request_number}`,
+            subtitle: 'إصدار ملحق توريد سريع لنفس المورد',
             department: pr.department?.name,
             requester: pr.requester?.name,
             amount: pr.total_estimated_cost ? Number(pr.total_estimated_cost) : undefined,
-            urgency: pr.priority === 'HIGH' ? ('CRITICAL' as const) : ('NORMAL' as const),
-            reason: 'طلب معتمد جاهز للتسعير أو إصدار أمر الشراء فوراً',
-            actionUrl: `/procurement/purchase-orders/create?pr=${pr.id}`,
-            actionLabel: 'إصدار أمر الشراء',
+            urgency: 'CRITICAL' as const,
+            reason: 'طلب كمالة تكميلية معتمد من المراجع ينتظر إصدار أمر توريد سريع لنفس المورد — تأخيره يعطل العمل بالموقع.',
+            actionUrl: `/procurement?openSupplement=${pr.id}&tab=0`,
+            actionLabel: '⚡ إصدار ملحق توريد سريع',
             timeAgo: pr.created_at ? pr.created_at.slice(0, 10) : undefined,
             request_type: pr.request_type,
             date_needed: pr.date_needed || undefined,
-            priority: pr.priority,
+            priority: 'URGENT' as const,
             parcel_number: pr.items?.[0]?.item_reference || undefined,
             region: pr.items?.[0]?.region || undefined,
             items_count: pr.items?.length || 0,
@@ -124,6 +131,40 @@ export const ProcurementDashboardPage: React.FC = () => {
               line_total: it.estimated_line_total,
             })),
           })),
+          // ── Normal Approved PRs (excluding supplement ones already shown) ──
+          ...prs
+            .filter(pr => !supplementPrs.find(sp => sp.id === pr.id))
+            .map((pr) => ({
+              id: `pr-${pr.id}`,
+              rawId: pr.id,
+              type: 'PR' as const,
+              code: pr.request_number,
+              title: pr.justification || (pr.request_type === 'OFFICE_SUPPLIES' ? 'طلب مستلزمات مكتبية' : 'طلب مواد مشروعات'),
+              subtitle: pr.justification ? (pr.request_type === 'OFFICE_SUPPLIES' ? 'مستلزمات مكتبية' : 'مشتريات مواقع') : undefined,
+              department: pr.department?.name,
+              requester: pr.requester?.name,
+              amount: pr.total_estimated_cost ? Number(pr.total_estimated_cost) : undefined,
+              urgency: pr.priority === 'HIGH' ? ('CRITICAL' as const) : ('NORMAL' as const),
+              reason: 'طلب معتمد جاهز للتسعير أو إصدار أمر الشراء فوراً',
+              actionUrl: `/procurement/purchase-orders/create?pr=${pr.id}`,
+              actionLabel: 'إصدار أمر الشراء',
+              timeAgo: pr.created_at ? pr.created_at.slice(0, 10) : undefined,
+              request_type: pr.request_type,
+              date_needed: pr.date_needed || undefined,
+              priority: pr.priority,
+              parcel_number: pr.items?.[0]?.item_reference || undefined,
+              region: pr.items?.[0]?.region || undefined,
+              items_count: pr.items?.length || 0,
+              items_list: pr.items?.map((it) => ({
+                description: it.item_description || it.item?.name || 'صنف',
+                quantity: it.quantity,
+                uom: it.uom,
+                parcel: it.item_reference,
+                region: it.region,
+                unit_price: it.estimated_unit_price,
+                line_total: it.estimated_line_total,
+              })),
+            })),
           ...pos
             .filter((p) => p.status === 'RETURNED_TO_PROCUREMENT')
             .map((po) => ({

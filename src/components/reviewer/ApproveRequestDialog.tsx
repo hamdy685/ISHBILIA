@@ -32,6 +32,7 @@ export const ApproveRequestDialog: React.FC<Props> = ({
     initialRequiresWarehouseReceipt ?? true
   );
   const [siteEngineers, setSiteEngineers] = useState<SiteEngineerReceiverOption[]>([]);
+  const [warehouseKeepers, setWarehouseKeepers] = useState<SiteEngineerReceiverOption[]>([]);
   const [otherUsers, setOtherUsers] = useState<SiteEngineerReceiverOption[]>([]);
   const [isLoadingOptions, setIsLoadingOptions] = useState(false);
   const [selectionError, setSelectionError] = useState<string | null>(null);
@@ -45,6 +46,7 @@ export const ApproveRequestDialog: React.FC<Props> = ({
       getSiteEngineerReceiverOptionsApi()
         .then((res) => {
           setSiteEngineers(res.site_engineers || []);
+          setWarehouseKeepers(res.warehouse_keepers || []);
           setOtherUsers(res.other_users || []);
         })
         .catch(() => {
@@ -64,7 +66,7 @@ export const ApproveRequestDialog: React.FC<Props> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedEngineerId) {
-      setSelectionError('يرجى اختيار مهندس الموقع / مسؤول الاستلام أولاً قبل اعتماد الطلب.');
+      setSelectionError('يرجى اختيار المسؤول عن الاستلام (مهندس الموقع أو أمين المخزن) أولاً قبل اعتماد الطلب.');
       return;
     }
     setSelectionError(null);
@@ -100,11 +102,11 @@ export const ApproveRequestDialog: React.FC<Props> = ({
         </p>
 
         <FormField
-          label="مهندس الموقع / مسؤول استلام المواد بالموقع (مطلوب)"
+          label="المسؤول عن استلام المواد (مهندس الموقع أو أمين المخزن) *"
           error={selectionError || undefined}
         >
           {isLoadingOptions ? (
-            <div className="text-slate-400 text-xs py-2">جاري تحميل قائمة المهندسين والمستلمين...</div>
+            <div className="text-slate-400 text-xs py-2">جاري تحميل قائمة المهندسين وأمناء المخازن...</div>
           ) : (
             <Select
               value={selectedEngineerId}
@@ -114,12 +116,21 @@ export const ApproveRequestDialog: React.FC<Props> = ({
               }}
               className={`font-bold text-slate-100 bg-slate-900 ${selectionError ? 'border-rose-500' : 'border-slate-700'}`}
             >
-              <option value="">-- اختر مهندس الموقع --</option>
+              <option value="">-- اختر المسؤول عن الاستلام (مهندس الموقع أو أمين المخزن) --</option>
               {siteEngineers.length > 0 && (
                 <optgroup label="👷 مهندسو الموقع الأساسيون">
                   {siteEngineers.map((eng) => (
                     <option key={`se-${eng.id}`} value={eng.id}>
                       {eng.name} {eng.department_name ? `(${eng.department_name})` : ''}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {warehouseKeepers.length > 0 && (
+                <optgroup label="🏬 أمناء المخازن (مسؤولو الاستلام بالمخزن)">
+                  {warehouseKeepers.map((wh) => (
+                    <option key={`wh-${wh.id}`} value={wh.id}>
+                      {wh.name} {wh.department_name ? `(${wh.department_name})` : ''}
                     </option>
                   ))}
                 </optgroup>
@@ -136,7 +147,7 @@ export const ApproveRequestDialog: React.FC<Props> = ({
             </Select>
           )}
           <p className="mt-1 text-[11px] text-slate-400">
-            الشخص المختار سيتولى مراجعة إذن الاستلام واعتماده بالموقع فور توريد الأصناف من المورد.
+            الشخص المختار سيتولى مراجعة إذن الاستلام واعتماده فور توريد الأصناف من المورد.
           </p>
         </FormField>
 

@@ -12,6 +12,7 @@ import {
   getPurchaseRequestApi,
   submitPurchaseRequestApi,
 } from '../../api/purchaseRequests';
+import { ForbiddenPage } from '../ErrorPages';
 import { ApiError } from '../../types/api';
 import {
   PR_STATUS_LABELS,
@@ -106,6 +107,9 @@ export const PurchaseRequestDetailsPage: React.FC = () => {
   if (isLoading) return <LoadingSpinner fullScreen message="تحميل تفاصيل طلب الشراء..." />;
 
   if (error && !requestData) {
+    if (error.status === 403) {
+      return <ForbiddenPage />;
+    }
     return (
       <div className="space-y-4" dir="rtl">
         <ErrorMessage error={error} />
@@ -128,6 +132,14 @@ export const PurchaseRequestDetailsPage: React.FC = () => {
   const issuedPos = requestData.purchase_orders || [];
   const activeOfficePo = isOffice && issuedPos.length > 0 ? issuedPos[0] : null;
   const isOfficeReceiptConfirmed = activeOfficePo?.has_approved_receipt || false;
+  const canRequestSupplement =
+    [
+      'APPROVED_BY_REVIEWER',
+      'APPROVED_BY_GM',
+      'PO_ISSUED',
+      'ACCOUNTING_APPROVED',
+      'APPROVED_BY_PROCUREMENT',
+    ].includes(requestData.status) || Boolean(issuedPos.length > 0);
 
   const itemNames = requestData.items?.map((item) => item.item_description || item.item?.name).filter(Boolean) || [];
   const itemsDisplay = itemNames.length === 0
@@ -243,6 +255,17 @@ export const PurchaseRequestDetailsPage: React.FC = () => {
             className="bg-cyan-950/60 text-cyan-300 border-cyan-800/60 hover:bg-cyan-900/60 flex items-center gap-1.5">
             🖨️ طباعة
           </Button>
+          {canRequestSupplement && (
+            <Link to="/supplementary-requests">
+              <Button
+                variant="primary"
+                size="sm"
+                className="bg-amber-600 hover:bg-amber-500 text-white font-bold flex items-center gap-1.5 shadow-md shadow-amber-900/30"
+              >
+                <span>➕</span> طلب كمية إضافية (كمالة)
+              </Button>
+            </Link>
+          )}
           {canEdit && (
             <Link to={`/requests/${requestData.id}/edit`}>
               <Button variant="warning" size="sm">تعديل</Button>
@@ -430,7 +453,7 @@ export const PurchaseRequestDetailsPage: React.FC = () => {
       <SystemEventTimeline entity="purchase_request" entityId={requestData.id} defaultCollapsed={true} />
 
       {/* Mobile Sticky Action Bar */}
-      {(canSubmit || canEdit || canDelete) && (
+      {(canSubmit || canEdit || canDelete || canRequestSupplement) && (
         <div className="fixed bottom-0 inset-x-0 z-30 flex items-center justify-between gap-2 border-t border-slate-800 bg-slate-950/95 p-3 shadow-2xl backdrop-blur sm:hidden">
           {canSubmit && (
             <Button
@@ -441,6 +464,17 @@ export const PurchaseRequestDetailsPage: React.FC = () => {
             >
               🚀 إرسال للمراجعة
             </Button>
+          )}
+          {canRequestSupplement && (
+            <Link to="/supplementary-requests" className="flex-1">
+              <Button
+                variant="primary"
+                size="md"
+                className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs min-h-10 flex items-center justify-center gap-1"
+              >
+                <span>➕</span> طلب كمية إضافية
+              </Button>
+            </Link>
           )}
           {canEdit && (
             <Link to={`/requests/${requestData.id}/edit`} className="flex-1">

@@ -215,6 +215,18 @@ class PurchaseRequestResource extends JsonResource
                         : [],
                 ])->values();
             }),
+            'supplements' => $this->whenLoaded('supplements', function () {
+                return $this->supplements->map(fn ($supp) => [
+                    'id' => $supp->id,
+                    'purchase_request_id' => $supp->purchase_request_id,
+                    'supplement_number' => $supp->batch_number ? 'SUPP-' . $supp->batch_number : null,
+                    'batch_number' => $supp->batch_number,
+                    'status' => $supp->status,
+                    'notes' => $supp->notes,
+                    'rejection_reason' => $supp->rejection_reason,
+                    'created_at' => $supp->created_at?->toIso8601String(),
+                ])->values();
+            }),
         ];
     }
 }

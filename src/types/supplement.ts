@@ -3,7 +3,12 @@ import { Supplier } from './purchaseOrder';
 import { User } from './auth';
 import { PurchaseOrder } from './purchaseOrder';
 
-export type SupplementStatus = 'SUBMITTED' | 'REVIEWER_APPROVED' | 'PROCUREMENT_PROCESSED' | 'REJECTED';
+export type SupplementStatus =
+  | 'SUBMITTED'
+  | 'REVIEWER_APPROVED'
+  | 'PENDING_PROCUREMENT_APPROVAL'
+  | 'PROCUREMENT_PROCESSED'
+  | 'REJECTED';
 
 export interface PurchaseRequestSupplement {
   id: number;

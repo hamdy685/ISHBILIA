@@ -14,10 +14,13 @@ export const getUnreadNotificationCountApi = async (): Promise<number> => {
 export const getUnreadCountApi = getUnreadNotificationCountApi;
 
 export const markNotificationAsReadApi = async (id: number): Promise<Notification> => {
-  const response = await apiClient.post<Notification>(
+  const response = await apiClient.post<{ data: Notification } | Notification>(
     '/notifications/' + id + '/read'
   );
-  return response.data;
+  const data = response.data;
+  return (data && typeof data === 'object' && 'data' in data && (data as any).data)
+    ? (data as { data: Notification }).data
+    : (data as Notification);
 };
 
 export const markAllNotificationsAsReadApi = async (): Promise<void> => {
