@@ -65,6 +65,7 @@ export const ApproveRequestDialog: React.FC<Props> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isApproving) return;
     if (!selectedEngineerId) {
       setSelectionError('يرجى اختيار المسؤول عن الاستلام (مهندس الموقع أو أمين المخزن) أولاً قبل اعتماد الطلب.');
       return;
@@ -90,6 +91,7 @@ export const ApproveRequestDialog: React.FC<Props> = ({
             size="sm"
             onClick={handleSubmit}
             isLoading={isApproving}
+            disabled={isApproving}
           >
             اعتماد الطلب
           </Button>

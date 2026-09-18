@@ -29,6 +29,7 @@ import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
 import { useAuth } from '../../context/AuthContext';
 import { emitAppDataUpdated } from '../../hooks/useRealtimeRefresh';
 import { SearchableSelect } from '../../components/ui/FormField';
+import { toast } from '../../utils/toast';
 
 const UNIT_OPTIONS = getUnitOptions(DEFAULT_PR_UNIT_CODES);
 
@@ -398,21 +399,26 @@ const CreatePurchaseRequestPage: React.FC = () => {
   };
 
   const handleSaveDraft = async () => {
+    if (isSubmitting || isSavingDraft) return;
     setError(null);
     setIsSavingDraft(true);
     try {
       const draft = await ensureServerDraft();
       setDraftMessage('تم حفظ المسودة بنجاح.');
+      toast.success('تم حفظ المسودة بنجاح.');
       emitAppDataUpdated();
       setTimeout(() => setDraftMessage(null), 4000);
     } catch (err) {
-      setError(parseApiError(err).message);
+      const msg = parseApiError(err).message;
+      setError(msg);
+      toast.error(msg || 'حدث خطأ أثناء حفظ المسودة');
     } finally {
       setIsSavingDraft(false);
     }
   };
 
   const handleSubmit = async (saveToFavorites = false) => {
+    if (isSubmitting || isSavingDraft) return;
     setShowValidation(true);
     if (data.items.length === 0) {
       setError('يجب إضافة صنف واحد على الأقل لطلب الشراء.');
@@ -458,17 +464,21 @@ const CreatePurchaseRequestPage: React.FC = () => {
       });
       window.localStorage.removeItem(DRAFT_STORAGE_KEY);
       emitAppDataUpdated();
+      const successMsg = saveToFavorites
+        ? 'تم إرسال طلب الشراء وحفظه في الطلبات المفضلة بنجاح! ⭐'
+        : isGeneralManager
+          ? 'تم إرسال طلب الشراء مباشرة إلى مدير المشتريات بنجاح بعد تحديد مسؤول الاستلام.'
+          : 'تم إرسال طلب الشراء للمراجعة بنجاح.';
+      toast.success(successMsg);
       navigate(`/requests/${draft.id}`, {
         state: {
-          message: saveToFavorites
-            ? 'تم إرسال طلب الشراء وحفظه في الطلبات المفضلة بنجاح! ⭐'
-            : isGeneralManager
-              ? 'تم إرسال طلب الشراء مباشرة إلى مدير المشتريات بنجاح بعد تحديد مسؤول الاستلام.'
-              : 'تم إرسال طلب الشراء للمراجعة بنجاح.',
+          message: successMsg,
         },
       });
     } catch (err) {
-      setError(parseApiError(err).message);
+      const msg = parseApiError(err).message;
+      setError(msg);
+      toast.error(msg || 'حدث خطأ أثناء إرسال طلب الشراء');
     } finally {
       setIsSubmitting(false);
     }

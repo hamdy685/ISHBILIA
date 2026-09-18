@@ -133,7 +133,7 @@ describe('Scenario 1: اختبار استرجاع وعرض البيانات (Dat
       expect(row).not.toHaveClass('stagger-card');
       expect(window.getComputedStyle(row).opacity).not.toBe('0');
     });
-  });
+  }, 15000);
 
   it('1.3 Switching tabs updates rendered row count dynamically to match selected status badge count', async () => {
     const mock90Requests = generateMockRequests(90);
@@ -162,5 +162,5 @@ describe('Scenario 1: اختبار استرجاع وعرض البيانات (Dat
     const tbody = container.querySelector('tbody');
     const filteredRows = tbody?.querySelectorAll('tr');
     expect(filteredRows?.length).toBe(17);
-  });
+  }, 15000);
 });

@@ -21,8 +21,22 @@ export const RejectRequestDialog: React.FC<Props> = ({
   const [comment, setComment] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
 
+  React.useEffect(() => {
+    if (!isOpen) {
+      setComment('');
+      setValidationError(null);
+    }
+  }, [isOpen]);
+
+  const handleCancel = () => {
+    setComment('');
+    setValidationError(null);
+    onCancel();
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isRejecting) return;
     if (!comment.trim() || comment.trim().length < 3) {
       setValidationError('يرجى إدخال سبب الرفض (3 حروف على الأقل)(min 3 chars).');
       return;
@@ -34,12 +48,12 @@ export const RejectRequestDialog: React.FC<Props> = ({
   return (
     <Modal
       isOpen={isOpen}
-      onClose={onCancel}
+      onClose={handleCancel}
       title="رفض طلب الشراء"
       subtitle={`طلب رقم ${requestNumber}`}
       footer={
         <>
-          <Button variant="secondary" size="sm" onClick={onCancel} disabled={isRejecting}>
+          <Button variant="secondary" size="sm" onClick={handleCancel} disabled={isRejecting}>
             إلغاء
           </Button>
           <Button
@@ -48,6 +62,7 @@ export const RejectRequestDialog: React.FC<Props> = ({
             size="sm"
             onClick={handleSubmit}
             isLoading={isRejecting}
+            disabled={isRejecting}
           >
             تأكيد الرفض
           </Button>

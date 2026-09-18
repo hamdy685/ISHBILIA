@@ -3,8 +3,11 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
+  esbuild: mode === 'production' ? {
+    drop: ['console', 'debugger'],
+  } : undefined,
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -40,7 +43,8 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
-    include: ['src/**/*.test.{ts,tsx}', 'src/**/*.spec.{ts,tsx}'],
+    include: ['src/**/*.test.{ts,tsx}', 'src/**/*.spec.{ts,tsx}', 'tests/qa/**/*.test.{ts,tsx}'],
     exclude: ['node_modules', 'dist', 'tests/e2e/**', '**/*.e2e.*'],
   },
-});
+}));
+

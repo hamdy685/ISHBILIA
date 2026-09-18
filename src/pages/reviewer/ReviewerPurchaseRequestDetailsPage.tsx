@@ -23,6 +23,7 @@ import { getSummaryParcels, getSummaryRegions, getSummaryQuantities } from '../.
 import SystemEventTimeline from '../../components/ui/SystemEventTimeline';
 import { UnifiedNotesCard } from '../../components/common/UnifiedNotesCard';
 import { ForbiddenPage } from '../ErrorPages';
+import { toast } from '../../utils/toast';
 
 const PRIORITY_LABELS: Record<string, string> = {
   LOW: 'منخفضة',
@@ -83,7 +84,7 @@ export const ReviewerPurchaseRequestDetailsPage: React.FC = () => {
     siteEngineerUserId?: number | null,
     requiresWarehouseReceipt?: boolean
   ) => {
-    if (!requestData) return;
+    if (!requestData || isMutating) return;
     setIsMutating(true);
     setError(null);
     try {
@@ -95,26 +96,32 @@ export const ReviewerPurchaseRequestDetailsPage: React.FC = () => {
       );
       setIsApproveModalOpen(false);
       setSuccessMessage('تم اعتماد طلب الشراء بنجاح وإرساله للمدير العام.');
+      toast.success('تم اعتماد طلب الشراء بنجاح وإرساله للمدير العام.');
       await fetchRequest();
     } catch (err) {
-      setError(parseApiError(err));
+      const parsed = parseApiError(err);
+      setError(parsed);
+      toast.error(parsed.message || 'حدث خطأ في الخادم أثناء اعتماد الطلب (500 Server Error)');
     } finally {
       setIsMutating(false);
     }
   };
 
   const handleConfirmReject = async (comments: string) => {
-    if (!requestData) return;
+    if (!requestData || isMutating) return;
     setIsMutating(true);
     setError(null);
     try {
       await rejectPurchaseRequestApi(requestData.id, comments);
       setIsRejectModalOpen(false);
+      toast.success('تم رفض طلب الشراء.');
       navigate('/reviewer/requests', {
         state: { message: 'تم رفض طلب الشراء.' },
       });
     } catch (err) {
-      setError(parseApiError(err));
+      const parsed = parseApiError(err);
+      setError(parsed);
+      toast.error(parsed.message || 'حدث خطأ في الخادم أثناء رفض الطلب (500 Server Error)');
     } finally {
       setIsMutating(false);
     }

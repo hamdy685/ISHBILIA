@@ -6,6 +6,7 @@ import QuickPeekDrawer, { PeekType } from '../ui/QuickPeekDrawer';
 import { getSiteEngineerReceiverOptionsApi } from '../../api/purchaseRequests';
 import { useAuth } from '../../context/AuthContext';
 import { getUnitLabel } from '../../utils/units';
+import { toast } from '../../utils/toast';
 
 export interface ActionInboxItemDetail {
   description: string;
@@ -208,11 +209,14 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
     setDirectApprovingId(item.id);
     try {
       await item.onDirectApprove(item);
-      showToast(`تم اعتماد ${item.code} بنجاح ✅`, 'success');
+      const msg = `تم اعتماد ${item.code} بنجاح ✅`;
+      toast.success(msg);
+      showToast(msg, 'success');
       onItemActionComplete?.();
     } catch (err: any) {
-      console.error(err);
-      showToast(err?.response?.data?.message || err?.message || 'حدث خطأ أثناء اعتماد الطلب', 'error');
+      const msg = err?.response?.data?.message || err?.message || 'حدث خطأ أثناء اعتماد الطلب';
+      toast.error(msg);
+      showToast(msg, 'error');
     } finally {
       setDirectApprovingId(null);
     }
@@ -231,7 +235,7 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
   };
 
   const handleConfirmDirectApprove = async () => {
-    if (!approveModal.item?.onDirectApprove) return;
+    if (!approveModal.item?.onDirectApprove || approveModal.isSubmitting) return;
     if (approveModal.item.type === 'PR' && isReviewer && !selectedEngineerId) {
       setReceiverError('يرجى اختيار مهندس الموقع / مسؤول الاستلام أولاً قبل تأكيد الاعتماد.');
       return;
@@ -245,12 +249,15 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
         isReviewer && selectedEngineerId ? Number(selectedEngineerId) : undefined,
         isReviewer ? requiresWarehouseReceipt : undefined
       );
-      showToast(`تم اعتماد ${approveModal.item.code} وتحديد مسار الاستلام بنجاح ✅`, 'success');
+      const msg = `تم اعتماد ${approveModal.item.code} وتحديد مسار الاستلام بنجاح ✅`;
+      toast.success(msg);
+      showToast(msg, 'success');
       setApproveModal({ isOpen: false, item: null, comment: '', isSubmitting: false });
       onItemActionComplete?.();
     } catch (err: any) {
-      console.error(err);
-      showToast(err?.response?.data?.message || err?.message || 'حدث خطأ أثناء اعتماد الطلب', 'error');
+      const msg = err?.response?.data?.message || err?.message || 'حدث خطأ أثناء اعتماد الطلب';
+      toast.error(msg);
+      showToast(msg, 'error');
       setApproveModal((prev) => ({ ...prev, isSubmitting: false }));
     }
   };
@@ -268,7 +275,6 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
       setRejectModal({ isOpen: false, item: null, reason: '', isSubmitting: false });
       onItemActionComplete?.();
     } catch (err: any) {
-      console.error(err);
       setRejectModal((prev) => ({
         ...prev,
         isSubmitting: false,
@@ -285,7 +291,6 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
       showToast(`تم إرسال الطلب ${item.code} للمراجعة بنجاح 🚀`, 'success');
       onItemActionComplete?.();
     } catch (err: any) {
-      console.error(err);
       showToast(err?.response?.data?.message || err?.message || 'حدث خطأ أثناء إرسال الطلب', 'error');
     } finally {
       setDirectSubmittingId(null);

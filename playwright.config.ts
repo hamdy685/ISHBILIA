@@ -21,10 +21,10 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  webServer: process.env.PLAYWRIGHT_BASE_URL ? undefined : {
-    command: process.platform === 'win32' ? 'npm.cmd run dev -- --host 127.0.0.1 --port 5173' : 'npm run dev -- --host 127.0.0.1 --port 5173',
+  webServer: {
+    command: 'node node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 5173',
     url: 'http://127.0.0.1:5173',
     reuseExistingServer: true,
-    timeout: 60000,
+    timeout: 30000,
   },
 });
