@@ -1,18 +1,16 @@
 <?php
 
-namespace Database\Seeders;
-
-use Illuminate\Database\Seeder;
+use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
-class BulkPurchaseRequestSeeder extends Seeder
+return new class extends Migration
 {
     /**
-     * Run the database seeds.
-     * System requests have been zeroed out for production.
+     * Run the migrations.
+     * Cleanly zeroes out all purchase requests and related transactions for a clean system.
      */
-    public function run(): void
+    public function up(): void
     {
         $driver = DB::getDriverName();
         if ($driver === 'mysql') {
@@ -64,6 +62,8 @@ class BulkPurchaseRequestSeeder extends Seeder
                     'updated_at' => now(),
                 ]);
             }
+        } catch (\Throwable $e) {
+            logger()->error('Zero-out migration error: ' . $e->getMessage());
         } finally {
             try {
                 Schema::enableForeignKeyConstraints();
@@ -75,7 +75,13 @@ class BulkPurchaseRequestSeeder extends Seeder
                 DB::statement('PRAGMA foreign_keys = ON;');
             }
         }
-
-        $this->command?->info("All requests and transactions have been zeroed out successfully.");
     }
-}
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        //
+    }
+};
