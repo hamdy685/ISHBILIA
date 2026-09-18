@@ -114,7 +114,7 @@ describe('Scenario 5: سلامة القيود والـ Validation (Integrity Tes
 
       // Verify that validation warning appears
       await waitFor(() => {
-        expect(screen.getByText(/الكمية مطلوبة/i)).toBeInTheDocument();
+        expect(screen.getAllByText(/الكمية مطلوبة/i).length).toBeGreaterThanOrEqual(1);
       });
 
       // The overall form error banner should appear
@@ -128,7 +128,7 @@ describe('Scenario 5: سلامة القيود والـ Validation (Integrity Tes
       fireEvent.change(quantityInput, { target: { value: '' } });
       fireEvent.click(submitBtn);
 
-      expect(screen.getByText(/الكمية مطلوبة/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/الكمية مطلوبة/i).length).toBeGreaterThanOrEqual(1);
       expect(submitSpy).not.toHaveBeenCalled();
     });
   });

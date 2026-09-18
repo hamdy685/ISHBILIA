@@ -78,6 +78,7 @@ type ValidationResult = {
   dateNeeded?: string;
   parcelReference?: string;
   region?: string;
+  emptyItems?: string;
   items: ItemErrors;
 };
 
@@ -92,7 +93,16 @@ const validateRequest = (
   data.items.forEach((item, index) => {
     const errors: ItemErrors[number] = {};
     if (!item.item_description.trim()) errors.description = 'اكتب وصف الصنف المطلوب.';
-    if (Number(item.quantity) <= 0 || Number.isNaN(Number(item.quantity))) errors.quantity = 'أدخل كمية أكبر من صفر.';
+    const qty = Number(item.quantity);
+    if (qty <= 0 || Number.isNaN(qty)) {
+      errors.quantity = 'الكمية مطلوبة (أدخل كمية أكبر من صفر).';
+    } else {
+      const uom = (item.uom || '').toUpperCase();
+      const isIntegerOnlyUnit = ['PCS', 'EA', 'NO', 'قطعة', 'قطع', 'عدد'].includes(uom);
+      if (isIntegerOnlyUnit && !Number.isInteger(qty)) {
+        errors.quantity = 'لا يمكن إدخال كمية كسرية لوحدة (قطعة). أدخل رقماً صحيحاً.';
+      }
+    }
     if (Object.keys(errors).length) itemErrors[index] = errors;
   });
 
@@ -117,6 +127,7 @@ const validateRequest = (
     region: !isOffice && !data.region?.trim()
       ? 'المنطقة مطلوبة للطلب.'
       : undefined,
+    emptyItems: data.items.length === 0 ? 'يجب إضافة صنف واحد على الأقل لطلب الشراء.' : undefined,
     items: itemErrors,
   };
 };
@@ -129,6 +140,7 @@ const hasValidationErrors = (validation: ValidationResult): boolean =>
     validation.dateNeeded ||
     validation.parcelReference ||
     validation.region ||
+    validation.emptyItems ||
     Object.keys(validation.items).length
   );
 
@@ -397,8 +409,13 @@ const CreatePurchaseRequestPage: React.FC = () => {
 
   const handleSubmit = async (saveToFavorites = false) => {
     setShowValidation(true);
+    if (data.items.length === 0) {
+      setError('يجب إضافة صنف واحد على الأقل لطلب الشراء.');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
     if (requestHasErrors) {
-      setError('يرجى تصحيح الأخطاء المحددة في النموذج وإدخال رقم القطعة والمنطقة أولاً.');
+      setError(validation.emptyItems || 'يرجى تصحيح الأخطاء المحددة في النموذج وإدخال رقم القطعة والمنطقة أولاً.');
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
@@ -990,7 +1007,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
                     />
                     {itemErr?.quantity && showValidation && (
                       <span className="text-[10px] text-rose-400 block font-semibold">
-                        ⚠️ الكمية مطلوبة
+                        ⚠️ {itemErr.quantity}
                       </span>
                     )}
                   </div>
@@ -1109,7 +1126,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
                         />
                         {itemErr?.quantity && showValidation && (
                           <span className="text-[10px] text-rose-400 block font-semibold text-center leading-tight">
-                            ⚠️ خطأ
+                            ⚠️ {itemErr.quantity}
                           </span>
                         )}
                       </div>
