@@ -45,8 +45,8 @@ export const PurchaseRequestsPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const todayInputDate = getTodayInputDate();
   const defaultDateFrom = getDefaultDateFrom();
-  const [dateFrom, setDateFrom] = useState<string>('');
-  const [dateTo, setDateTo] = useState<string>('');
+  const [dateFrom, setDateFrom] = useState<string>(() => isProcurementOrAdmin ? '' : defaultDateFrom);
+  const [dateTo, setDateTo] = useState<string>(() => isProcurementOrAdmin ? '' : todayInputDate);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<ApiError | null>(null);
 

@@ -551,19 +551,20 @@ export const resolveNotificationAction = (
     }
 
     // Default Requester / Employee / Site Engineer PR
+    const needsEdit = isReturned || isRejected || data?.status === 'REJECTED' || data?.can_edit;
     return {
-      url: isReturned
-        ? `/employee/requests/${info.prId}/edit`
+      url: needsEdit
+        ? `/requests/${info.prId}/edit`
         : (roleSlugs.includes('employee') && !roleSlugs.some((r) => ['reviewer', 'general_manager', 'accountant', 'procurement_manager', 'admin'].includes(r))
             ? `/employee/requests/${info.prId}`
             : `/requests/${info.prId}`),
-      actionLabel: isReturned ? 'تعديل الطلب المعاد للتعديل' : (isRejected ? 'معاينة الطلب المرفوض' : 'عرض ومتابعة الطلب'),
+      actionLabel: needsEdit ? 'تعديل الطلب' : 'عرض ومتابعة الطلب',
       icon: isReturned ? '✏️' : (isRejected ? '🚫' : '📋'),
       badgeLabel: isReturned ? 'معاد للتعديل' : (isRejected ? 'طلب مرفوض' : 'طلبي'),
       docType: 'PR',
       docNumber: info.docNumber,
-      isActionable: isReturned,
-      priority: isReturned ? 'URGENT' : priority,
+      isActionable: isReturned || isRejected,
+      priority: (isReturned || isRejected) ? 'URGENT' : priority,
     };
   }
 
