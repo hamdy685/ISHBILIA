@@ -12,6 +12,7 @@ use App\Models\PurchaseRequestItem;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class BulkPurchaseRequestSeeder extends Seeder
 {
@@ -64,119 +65,121 @@ class BulkPurchaseRequestSeeder extends Seeder
 
     public function run(): void
     {
-        $allItems = Item::with('category')->get();
-        $itemsByCategory = $allItems->groupBy(fn ($i) => $i->category_id);
-        $categoryIds = $itemsByCategory->keys()->toArray();
-        $users = User::with(['roles', 'department'])->get();
-
-        // Department managers mapping
-        $deptManagers = [
-            1 => 1, // التنفيذ -> م. أيمن ماهر
-            2 => 2, // المباني -> المهندس حاتم
-            3 => 3, // التشطيبات -> المهندس مصطفى الخشن
-            4 => 4, // التراخيص -> م. مصطفى
-            5 => 5, // البوفيه -> أ. عمرو
-        ];
-
-        // Site engineers
-        $siteEngineerIds = [11, 12, 13, 14];
-
-        // If database is already seeded with at least 90 PRs, skip re-seeding to keep startup fast
+        // Skip if already seeded with at least 90 clean PRs to keep subsequent container restarts fast
         $existingCount = PurchaseRequest::count();
         if ($existingCount >= 90) {
             $this->command->info("Database already contains {$existingCount} purchase requests. Skipping seeder.");
             return;
         }
 
+        $driver = DB::getDriverName();
+        if ($driver === 'mysql') {
+            DB::statement('SET FOREIGN_KEY_CHECKS=0;');
+        } elseif ($driver === 'sqlite') {
+            DB::statement('PRAGMA foreign_keys = OFF;');
+        }
+
+        // Clean all PR-related tables
+        $tablesToClear = [
+            'purchase_receipt_items',
+            'purchase_receipts',
+            'purchase_order_items',
+            'purchase_orders',
+            'purchase_request_quote_recommendations',
+            'purchase_quote_recommendations',
+            'purchase_request_quotes',
+            'purchase_request_supplements',
+            'purchase_request_items',
+            'purchase_requests',
+            'approval_history',
+            'audit_logs',
+            'system_events',
+            'notifications',
+            'attachments',
+        ];
+
+        foreach ($tablesToClear as $table) {
+            if (Schema::hasTable($table)) {
+                DB::table($table)->delete();
+            }
+        }
+
+        if ($driver === 'mysql') {
+            DB::statement('SET FOREIGN_KEY_CHECKS=1;');
+        } elseif ($driver === 'sqlite') {
+            DB::statement('PRAGMA foreign_keys = ON;');
+        }
+
         DB::beginTransaction();
 
         try {
-            // Find all PR IDs that are protected (referenced by orders, receipts, supplements, quotes)
-            $protectedPrIds = array_unique(array_filter(array_merge(
-                DB::table('purchase_orders')->whereNotNull('purchase_request_id')->pluck('purchase_request_id')->toArray(),
-                DB::table('purchase_receipts')->whereNotNull('purchase_request_id')->pluck('purchase_request_id')->toArray(),
-                DB::table('purchase_request_supplements')->pluck('purchase_request_id')->toArray(),
-                DB::table('purchase_request_quotes')->pluck('purchase_request_id')->toArray(),
-                [18]
-            )));
+            $allItems = Item::with('category')->get();
+            $itemsByCategory = $allItems->groupBy(fn ($i) => $i->category_id);
+            $categoryIds = $itemsByCategory->keys()->toArray();
+            $users = User::with(['roles', 'department'])->get();
 
-            $deletablePrIds = PurchaseRequest::whereNotIn('id', $protectedPrIds)->pluck('id')->toArray();
-            if (!empty($deletablePrIds)) {
-                $driver = DB::getDriverName();
-                if ($driver === 'mysql') {
-                    DB::statement('SET FOREIGN_KEY_CHECKS=0;');
-                } elseif ($driver === 'sqlite') {
-                    DB::statement('PRAGMA foreign_keys = OFF;');
-                }
+            // Department managers mapping
+            $deptManagers = [
+                1 => 1, // التنفيذ -> م. أيمن ماهر
+                2 => 2, // المباني -> المهندس حاتم
+                3 => 3, // التشطيبات -> المهندس مصطفى الخشن
+                4 => 4, // التراخيص -> م. مصطفى
+                5 => 5, // البوفيه -> أ. عمرو
+            ];
 
-                PurchaseRequestItem::whereIn('purchase_request_id', $deletablePrIds)->delete();
-                ApprovalHistory::where('target_type', PurchaseRequest::class)
-                    ->whereIn('target_id', $deletablePrIds)
-                    ->delete();
-                AuditLog::where('entity_type', PurchaseRequest::class)
-                    ->whereIn('entity_id', $deletablePrIds)
-                    ->delete();
-                PurchaseRequest::whereIn('id', $deletablePrIds)->forceDelete();
-
-                if ($driver === 'mysql') {
-                    DB::statement('SET FOREIGN_KEY_CHECKS=1;');
-                } elseif ($driver === 'sqlite') {
-                    DB::statement('PRAGMA foreign_keys = ON;');
-                }
-            }
-
-            // Ensure any protected PRs have 0 estimated cost
-            PurchaseRequest::whereIn('id', $protectedPrIds)->update(['total_estimated_cost' => 0]);
-            PurchaseRequestItem::whereIn('purchase_request_id', $protectedPrIds)->update([
-                'estimated_unit_price' => 0,
-                'estimated_line_total' => 0,
-            ]);
+            // Site engineers
+            $siteEngineerIds = [11, 12, 13, 14];
 
             $prCounter = 1;
             $totalCreated = 0;
             $totalItems = 0;
 
-            // Define the 5 request profiles for each user
+            // 5 request profiles per user
             $requestProfiles = [
                 [
                     'status' => 'DRAFT',
-                    'priority' => 'normal',
+                    'priority' => 'NORMAL',
                     'target_dept' => 1, // التنفيذ
-                    'days_ahead' => 7,
-                    'num_items' => 8,
+                    'days_ahead' => 10,
+                    'num_items' => 7,
                     'num_cats' => 4,
+                    'is_office' => false,
                 ],
                 [
                     'status' => 'SUBMITTED',
-                    'priority' => 'urgent',
+                    'priority' => 'URGENT',
                     'target_dept' => 2, // المباني
-                    'days_ahead' => 12,
-                    'num_items' => 10,
-                    'num_cats' => 4,
-                ],
-                [
-                    'status' => 'UNDER_REVIEW',
-                    'priority' => 'normal',
-                    'target_dept' => 3, // التشطيبات
-                    'days_ahead' => 15,
+                    'days_ahead' => 14,
                     'num_items' => 9,
-                    'num_cats' => 3,
+                    'num_cats' => 4,
+                    'is_office' => false,
                 ],
                 [
-                    'status' => 'APPROVED_BY_REVIEWER',
-                    'priority' => 'critical',
-                    'target_dept' => 1, // التنفيذ
+                    'status' => 'SUBMITTED',
+                    'priority' => 'NORMAL',
+                    'target_dept' => 3, // التشطيبات
                     'days_ahead' => 18,
-                    'num_items' => 11,
-                    'num_cats' => 5,
+                    'num_items' => 8,
+                    'num_cats' => 4,
+                    'is_office' => false,
                 ],
                 [
-                    'status' => 'APPROVED_BY_GM',
-                    'priority' => 'urgent',
+                    'status' => 'SUBMITTED',
+                    'priority' => 'HIGH',
+                    'target_dept' => 1, // التنفيذ
+                    'days_ahead' => 21,
+                    'num_items' => 10,
+                    'num_cats' => 5,
+                    'is_office' => false,
+                ],
+                [
+                    'status' => 'SUBMITTED',
+                    'priority' => 'URGENT',
                     'target_dept' => 4, // التراخيص
-                    'days_ahead' => 22,
-                    'num_items' => 8,
+                    'days_ahead' => 25,
+                    'num_items' => 7,
                     'num_cats' => 3,
+                    'is_office' => false,
                 ],
             ];
 
@@ -187,10 +190,13 @@ class BulkPurchaseRequestSeeder extends Seeder
                     $region = $loc['region'];
 
                     $targetDeptId = $profile['target_dept'];
-                    $targetManagerId = $deptManagers[$targetDeptId] ?? 1;
+                    if ($pIdx === 4 && ($user->id % 2 === 1)) {
+                        $targetDeptId = 5; // البوفيه for alternate users
+                    }
 
-                    // If user is GM, no reviewer
-                    $reviewerUserId = $user->hasRole('general_manager') ? null : $targetManagerId;
+                    $targetManagerId = $deptManagers[$targetDeptId] ?? 1;
+                    $isGM = $user->hasRole('general_manager');
+                    $reviewerUserId = $isGM ? null : $targetManagerId;
                     $siteEngId = $this->pick($siteEngineerIds);
 
                     $dateNeeded = now()->addDays($profile['days_ahead'])->format('Y-m-d');
@@ -200,13 +206,15 @@ class BulkPurchaseRequestSeeder extends Seeder
                     $prCounter++;
 
                     $status = $profile['status'];
-                    $submittedAt = in_array($status, ['SUBMITTED', 'UNDER_REVIEW', 'APPROVED_BY_REVIEWER', 'APPROVED_BY_GM'])
-                        ? now()->subDays(mt_rand(1, 5))
+                    $submittedAt = ($status === 'SUBMITTED')
+                        ? now()->subDays(5 - $pIdx)->subHours(mt_rand(1, 12))
                         : null;
+
+                    $requiresWarehouseReceipt = ($targetDeptId !== 2);
 
                     $pr = PurchaseRequest::create([
                         'request_number' => $prNumber,
-                        'request_type' => 'purchase',
+                        'request_type' => 'PROJECT',
                         'parcel_reference' => $parcel,
                         'region' => $region,
                         'user_id' => $user->id,
@@ -216,11 +224,12 @@ class BulkPurchaseRequestSeeder extends Seeder
                         'site_engineer_user_id' => $siteEngId,
                         'priority' => $profile['priority'],
                         'status' => $status,
+                        'procurement_route' => 'UNDECIDED',
                         'total_estimated_cost' => 0, // STRICTLY ZERO
                         'date_needed' => $dateNeeded,
                         'notes' => $notes,
                         'submitted_at' => $submittedAt,
-                        'requires_warehouse_receipt' => true,
+                        'requires_warehouse_receipt' => $requiresWarehouseReceipt,
                     ]);
 
                     // Pick diverse categories for this request
@@ -228,7 +237,6 @@ class BulkPurchaseRequestSeeder extends Seeder
                     shuffle($shuffledCats);
                     $selectedCats = array_slice($shuffledCats, 0, $profile['num_cats']);
 
-                    // Distribute items across selected categories
                     for ($itemIdx = 0; $itemIdx < $profile['num_items']; $itemIdx++) {
                         $catId = $selectedCats[$itemIdx % count($selectedCats)];
                         $catItems = $itemsByCategory->get($catId);
@@ -257,7 +265,6 @@ class BulkPurchaseRequestSeeder extends Seeder
                         $totalItems++;
                     }
 
-                    // Create AuditLog & ApprovalHistory according to status
                     AuditLog::create([
                         'user_id' => $user->id,
                         'action' => 'CREATED',
@@ -265,12 +272,13 @@ class BulkPurchaseRequestSeeder extends Seeder
                         'entity_id' => $pr->id,
                         'new_value' => json_encode([
                             'request_number' => $pr->request_number,
-                            'status' => 'DRAFT',
+                            'status' => $status,
                             'items_count' => $profile['num_items'],
                         ], JSON_UNESCAPED_UNICODE),
+                        'created_at' => $submittedAt ?? now(),
                     ]);
 
-                    if ($status === 'SUBMITTED' || $status === 'UNDER_REVIEW' || $status === 'APPROVED_BY_REVIEWER' || $status === 'APPROVED_BY_GM') {
+                    if ($status === 'SUBMITTED') {
                         ApprovalHistory::create([
                             'target_type' => PurchaseRequest::class,
                             'target_id' => $pr->id,
@@ -279,54 +287,19 @@ class BulkPurchaseRequestSeeder extends Seeder
                             'from_state' => 'DRAFT',
                             'to_state' => 'SUBMITTED',
                             'comments' => 'تم تقديم طلب الشراء وإحالته لمراجع القسم المختص.',
-                        ]);
-                    }
-
-                    if ($status === 'UNDER_REVIEW' || $status === 'APPROVED_BY_REVIEWER' || $status === 'APPROVED_BY_GM') {
-                        ApprovalHistory::create([
-                            'target_type' => PurchaseRequest::class,
-                            'target_id' => $pr->id,
-                            'actor_user_id' => $reviewerUserId ?? 1,
-                            'action' => 'START_REVIEW',
-                            'from_state' => 'SUBMITTED',
-                            'to_state' => 'UNDER_REVIEW',
-                            'comments' => 'بدأ مراجع القسم بمراجعة البنود والمواصفات الفنية للطلب.',
-                        ]);
-                    }
-
-                    if ($status === 'APPROVED_BY_REVIEWER' || $status === 'APPROVED_BY_GM') {
-                        ApprovalHistory::create([
-                            'target_type' => PurchaseRequest::class,
-                            'target_id' => $pr->id,
-                            'actor_user_id' => $reviewerUserId ?? 1,
-                            'action' => 'APPROVED_BY_REVIEWER',
-                            'from_state' => 'UNDER_REVIEW',
-                            'to_state' => 'PENDING_EXECUTIVE_APPROVAL',
-                            'comments' => 'اعتمد مراجع القسم بنود وكميات الطلب وتم رفعه للإدارة العامة للموافقة والتوجيه.',
-                        ]);
-                    }
-
-                    if ($status === 'APPROVED_BY_GM') {
-                        ApprovalHistory::create([
-                            'target_type' => PurchaseRequest::class,
-                            'target_id' => $pr->id,
-                            'actor_user_id' => 8, // المهندس محمد عبدالكريم (المدير العام)
-                            'action' => 'APPROVED_BY_GM',
-                            'from_state' => 'PENDING_EXECUTIVE_APPROVAL',
-                            'to_state' => 'PENDING_PROCUREMENT_APPROVAL',
-                            'comments' => 'وافق المدير العام على الطلب وأحاله لإدارة المشتريات للبدء في إجراءات الشراء والتسعير.',
+                            'created_at' => $submittedAt,
                         ]);
                     }
 
                     $totalCreated++;
                 }
 
-                $this->command->info("✅ {$user->name}: 5 PRs created with diverse categories & 8-11 items each.");
+                $this->command->info("✅ {$user->name}: 5 PRs created successfully.");
             }
 
             DB::commit();
             $this->command->info("============================================");
-            $this->command->info("SUCCESS: Created {$totalCreated} Purchase Requests with {$totalItems} total items across 18 users!");
+            $this->command->info("SUCCESS: Created {$totalCreated} Purchase Requests with {$totalItems} total items across {$users->count()} users!");
             $this->command->info("============================================");
 
         } catch (\Exception $e) {
