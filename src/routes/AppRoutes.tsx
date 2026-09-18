@@ -60,7 +60,16 @@ import { ForbiddenPage, NotFoundPage, ServerErrorPage } from "../pages/ErrorPage
 export const AppRoutes: React.FC = () => {
     return (
         <React.Suspense fallback={
-            <div className="min-h-[40vh] flex items-center justify-center text-cyan-300" dir="rtl">جاري تحميل الصفحة...</div>
+            <div className="min-h-[50vh] flex flex-col items-center justify-center p-8" dir="rtl">
+                <div className="relative flex items-center justify-center">
+                    <div className="w-14 h-14 rounded-full border-2 border-gold-500/20 border-t-gold-400 animate-spin" />
+                    <span className="absolute text-base select-none">🏢</span>
+                </div>
+                <p className="mt-4 text-xs font-black tracking-wider text-gold-300/90 animate-pulse">
+                    جاري تحميل الصفحة...
+                </p>
+                <span className="text-[10px] text-slate-500 mt-1 font-mono">منظومة المشتريات التشغيلية</span>
+            </div>
         }>
             <Routes>
             {/* Public Routes */}

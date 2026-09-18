@@ -7,6 +7,7 @@ import { getPrimaryRoleSlug, getRoleLabel } from "../routes/roleRouting";
 import PageHeader from "../components/ui/PageHeader";
 import InstallPrompt from "../components/pwa/InstallPrompt";
 import { useNotificationCount } from "../utils/notificationBadge";
+import NetworkStatusToast from "../components/common/NetworkStatusToast";
 
 export const AuthenticatedLayout: React.FC = () => {
     const { user, logout, sessionExpired, hasPermission } = useAuth();
@@ -607,6 +608,9 @@ export const AuthenticatedLayout: React.FC = () => {
 
             {/* PWA Install Banner */}
             <InstallPrompt />
+
+            {/* Network Resilience Offline/Online Toast */}
+            <NetworkStatusToast />
 
             <footer className="hidden sm:block mx-auto w-full max-w-[1800px] px-2 pb-3 text-center text-[10px] text-slate-500 sm:px-3 lg:px-4">
                 شركة اشبيلية للتطوير العقاري والمقاولات · منظومة المشتريات التشغيلية · <a href="https://ishbilia.dev" target="_blank" rel="noreferrer" className="text-[#d4b36a] hover:text-[#f0d695]">الموقع الرسمي</a> · <a href="https://web.facebook.com/Ishbilia.realestate?locale=ar_AR" target="_blank" rel="noreferrer" className="text-[#d4b36a] hover:text-[#f0d695]">صفحة Facebook</a>

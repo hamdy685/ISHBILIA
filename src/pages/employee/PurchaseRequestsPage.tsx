@@ -105,39 +105,49 @@ export const PurchaseRequestsPage: React.FC = () => {
     }
   };
 
-  const requestNeedsAction = (request: PurchaseRequest) => {
+  const handleOpenSubmitModal = React.useCallback((pr: PurchaseRequest) => {
+    setSelectedSubmitPr(pr);
+  }, []);
+
+  const handleOpenDeleteModal = React.useCallback((pr: PurchaseRequest) => {
+    setSelectedDeletePr(pr);
+  }, []);
+
+  const requestNeedsAction = React.useCallback((request: PurchaseRequest) => {
     const canEdit = EMPLOYEE_EDITABLE_STATUSES.has(request.status) && hasPermission('purchase_request.edit_own');
     const canDelete = request.status === 'DRAFT' && hasPermission('purchase_request.edit_own');
     const canSubmit = request.status === 'DRAFT' && hasPermission('purchase_request.submit');
     return canEdit || canDelete || canSubmit;
-  };
+  }, [hasPermission]);
 
-  const filteredRequests = requests.filter((r) => {
-    const matchesNeedsAction = !needsActionOnly || requestNeedsAction(r);
-    const matchesFilter =
-      activeFilter === 'ALL' ? true :
-      activeFilter === 'PENDING' ? EMPLOYEE_REVIEW_STATUSES.has(r.status) :
-      activeFilter === 'SUBMITTED' ? EMPLOYEE_SUBMITTED_STATUSES.has(r.status) :
-      activeFilter === 'APPROVED' ? EMPLOYEE_APPROVED_STATUSES.has(r.status) :
-      r.status === activeFilter;
-    const searchableText = [
-      r.request_number,
-      r.department?.name,
-      r.department?.code,
-      r.target_department?.name,
-      r.target_department?.code,
-      r.requester?.name,
-      r.assigned_reviewer?.name,
-      r.status,
-      ...(r.items || []).flatMap((item) => [item.item_reference, item.region, item.item_description]),
-    ].filter(Boolean).join(' ').toLocaleLowerCase('ar-EG');
-    const normalizedSearch = searchQuery.trim().toLocaleLowerCase('ar-EG');
-    const matchesSearch = !normalizedSearch || searchableText.includes(normalizedSearch);
-    const neededDate = r.date_needed || (r.created_at ? r.created_at.slice(0, 10) : '');
-    const matchesFrom = !dateFrom || neededDate >= dateFrom;
-    const matchesTo = !dateTo || neededDate <= dateTo;
-    return matchesNeedsAction && matchesFilter && matchesSearch && matchesFrom && matchesTo;
-  });
+  const filteredRequests = React.useMemo(() => {
+    return requests.filter((r) => {
+      const matchesNeedsAction = !needsActionOnly || requestNeedsAction(r);
+      const matchesFilter =
+        activeFilter === 'ALL' ? true :
+        activeFilter === 'PENDING' ? EMPLOYEE_REVIEW_STATUSES.has(r.status) :
+        activeFilter === 'SUBMITTED' ? EMPLOYEE_SUBMITTED_STATUSES.has(r.status) :
+        activeFilter === 'APPROVED' ? EMPLOYEE_APPROVED_STATUSES.has(r.status) :
+        r.status === activeFilter;
+      const searchableText = [
+        r.request_number,
+        r.department?.name,
+        r.department?.code,
+        r.target_department?.name,
+        r.target_department?.code,
+        r.requester?.name,
+        r.assigned_reviewer?.name,
+        r.status,
+        ...(r.items || []).flatMap((item) => [item.item_reference, item.region, item.item_description]),
+      ].filter(Boolean).join(' ').toLocaleLowerCase('ar-EG');
+      const normalizedSearch = searchQuery.trim().toLocaleLowerCase('ar-EG');
+      const matchesSearch = !normalizedSearch || searchableText.includes(normalizedSearch);
+      const neededDate = r.date_needed || (r.created_at ? r.created_at.slice(0, 10) : '');
+      const matchesFrom = !dateFrom || neededDate >= dateFrom;
+      const matchesTo = !dateTo || neededDate <= dateTo;
+      return matchesNeedsAction && matchesFilter && matchesSearch && matchesFrom && matchesTo;
+    });
+  }, [requests, needsActionOnly, requestNeedsAction, activeFilter, searchQuery, dateFrom, dateTo]);
 
   if (isLoading) {
     return <TableSkeleton rows={6} columns={5} className="min-h-[260px]" />;
@@ -242,8 +252,8 @@ export const PurchaseRequestsPage: React.FC = () => {
         requests={filteredRequests}
         emptyMessage={hasResultFilters ? 'لا توجد طلبات مطابقة للفلاتر الحالية' : 'لا توجد طلبات شراء حالياً'}
         emptyDescription={hasResultFilters ? 'غيّر كلمة البحث أو التاريخ أو تبويب الحالة، أو استخدم «مسح كل الفلاتر» لعرض الطلبات.' : 'ابدأ بإنشاء أول طلب شراء جديد لمؤسستك.'}
-        onOpenSubmitModal={(pr) => setSelectedSubmitPr(pr)}
-        onOpenDeleteModal={(pr) => setSelectedDeletePr(pr)}
+        onOpenSubmitModal={handleOpenSubmitModal}
+        onOpenDeleteModal={handleOpenDeleteModal}
       />
 
       {/* Dialog Modals */}

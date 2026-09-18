@@ -39,6 +39,8 @@ yarn-error.log
 # Temporary files
 *.zip
 *.phar
+/test-results
+/playwright-report
 /php_bin
 /php82.zip
 /composer.phar

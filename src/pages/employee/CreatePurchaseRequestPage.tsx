@@ -89,10 +89,11 @@ const validateRequest = (
 ): ValidationResult => {
   const itemErrors: ItemErrors = {};
   const isOffice = (data.request_type || 'PROJECT') === 'OFFICE_SUPPLIES';
+  const safeItems = Array.isArray(data.items) ? data.items : [];
 
-  data.items.forEach((item, index) => {
+  safeItems.forEach((item, index) => {
     const errors: ItemErrors[number] = {};
-    if (!item.item_description.trim()) errors.description = 'اكتب وصف الصنف المطلوب.';
+    if (!item.item_description?.trim()) errors.description = 'اكتب وصف الصنف المطلوب.';
     const qty = Number(item.quantity);
     if (qty <= 0 || Number.isNaN(qty)) {
       errors.quantity = 'الكمية مطلوبة (أدخل كمية أكبر من صفر).';
@@ -106,7 +107,8 @@ const validateRequest = (
     if (Object.keys(errors).length) itemErrors[index] = errors;
   });
 
-  const targetDepartment = departmentOptions.find((department) => department.id === data.target_department_id);
+  const safeDeptOptions = Array.isArray(departmentOptions) ? departmentOptions : [];
+  const targetDepartment = safeDeptOptions.find((department) => department.id === data.target_department_id);
   const today = getTodayDateInputValue();
   return {
     targetDepartment: data.target_department_id ? undefined : 'اختر القسم الذي سيعالج الطلب.',
@@ -236,16 +238,14 @@ const CreatePurchaseRequestPage: React.FC = () => {
       const savedDraft = window.localStorage.getItem(DRAFT_STORAGE_KEY);
       if (savedDraft) {
         const parsed = JSON.parse(savedDraft) as Partial<CreatePurchaseRequestPayload>;
-        if (Array.isArray(parsed.items) && parsed.items.length > 0) {
-          // If stored date_needed is in the past or missing, dynamically update to today's date
-          const validDateNeeded = !parsed.date_needed || parsed.date_needed < todayStr ? todayStr : parsed.date_needed;
-          setData({
-            ...getInitialData(),
-            ...parsed,
-            date_needed: validDateNeeded,
-            items: parsed.items,
-          });
-        }
+        const validDateNeeded = !parsed.date_needed || parsed.date_needed < todayStr ? todayStr : parsed.date_needed;
+        const validItems = Array.isArray(parsed.items) && parsed.items.length > 0 ? parsed.items : [emptyItem()];
+        setData({
+          ...getInitialData(),
+          ...parsed,
+          date_needed: validDateNeeded,
+          items: validItems,
+        });
       }
     } catch {
       // Ignore corrupted draft
@@ -272,7 +272,8 @@ const CreatePurchaseRequestPage: React.FC = () => {
     let cancelled = false;
     getPurchaseRequestDepartmentOptionsApi()
       .then((options) => {
-        if (!cancelled) setDepartmentOptions(options);
+        const arr = Array.isArray(options) ? options : (options as any)?.data;
+        if (!cancelled) setDepartmentOptions(Array.isArray(arr) ? arr : []);
       })
       .catch(() => {
         if (!cancelled) setDepartmentOptions([]);
@@ -313,7 +314,8 @@ const CreatePurchaseRequestPage: React.FC = () => {
   }, [isGeneralManager]);
 
   const departmentSelectOptions = useMemo(() => {
-    return departmentOptions.map((d) => ({
+    const list = Array.isArray(departmentOptions) ? departmentOptions : [];
+    return list.map((d) => ({
       value: d.id,
       label: d.name,
       subLabel: d.code || undefined,
@@ -322,7 +324,8 @@ const CreatePurchaseRequestPage: React.FC = () => {
   }, [departmentOptions]);
 
   const catalogSelectOptions = useMemo(() => {
-    return catalogItems.map((c) => ({
+    const list = Array.isArray(catalogItems) ? catalogItems : [];
+    return list.map((c) => ({
       value: c.id,
       label: c.name,
       subLabel: c.sku ? `كود: ${c.sku} | ${getUnitLabel(c.uom)}` : getUnitLabel(c.uom),
@@ -336,7 +339,9 @@ const CreatePurchaseRequestPage: React.FC = () => {
   );
   const requestHasErrors = hasValidationErrors(validation);
   const isOffice = (data.request_type || 'PROJECT') === 'OFFICE_SUPPLIES';
-  const targetDepartment = departmentOptions.find((department) => department.id === data.target_department_id);
+  const targetDepartment = (Array.isArray(departmentOptions) ? departmentOptions : []).find(
+    (department) => department.id === data.target_department_id
+  );
 
   // Item Management Helpers
   const updateItem = (index: number, partial: Partial<PurchaseRequestItemFormInput>) => {
@@ -663,7 +668,7 @@ const CreatePurchaseRequestPage: React.FC = () => {
               value={data.target_department_id || ''}
               onChange={(e) => {
                 const deptId = e.target.value ? Number(e.target.value) : undefined;
-                const selectedDept = departmentOptions.find((d) => d.id === deptId);
+                const selectedDept = (Array.isArray(departmentOptions) ? departmentOptions : []).find((d) => d.id === deptId);
                 setData({
                   ...data,
                   target_department_id: deptId,
@@ -674,12 +679,12 @@ const CreatePurchaseRequestPage: React.FC = () => {
                       : data.site_engineer_user_id,
                 });
               }}
-              disabled={departmentLoading || departmentOptions.length === 0}
+              disabled={departmentLoading || (Array.isArray(departmentOptions) ? departmentOptions.length : 0) === 0}
               error={Boolean(showValidation && validation.targetDepartment)}
               className="font-bold text-slate-100 bg-slate-950 border-slate-700"
             >
               <option value="" disabled>-- اختر القسم المستهدف --</option>
-              {departmentOptions.map((dept) => {
+              {(Array.isArray(departmentOptions) ? departmentOptions : []).map((dept) => {
                 const icon =
                   dept.code === 'EXECUTION' ? '🏗️' :
                   dept.code === 'BUILDINGS' ? '🏢' :
