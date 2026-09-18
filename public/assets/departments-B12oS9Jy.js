@@ -1,0 +1,1 @@
+import{n as a}from"./index-Bkv5NMbN.js";const r=async()=>(await a.get("/admin/departments")).data.data,d=async t=>(await a.post("/admin/departments",t)).data.data,i=async(t,e)=>(await a.put(`/admin/departments/${t}`,e)).data.data,m=async t=>{await a.delete(`/admin/departments/${t}`)};export{d as c,m as d,r as g,i as u};

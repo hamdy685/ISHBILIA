@@ -212,20 +212,73 @@ textarea:focus {
   box-shadow: 0 0 20px rgba(234, 88, 12, 0.25);
 }
 
-/* Staggered Entrance Animations for Cards & Rows */
-.stagger-card {
-  opacity: 0;
-  animation: staggerFadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+@keyframes staggerFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.stagger-1 { animation-delay: 40ms; }
-.stagger-2 { animation-delay: 80ms; }
-.stagger-3 { animation-delay: 120ms; }
-.stagger-4 { animation-delay: 160ms; }
-.stagger-5 { animation-delay: 200ms; }
-.stagger-6 { animation-delay: 240ms; }
-.stagger-7 { animation-delay: 280ms; }
-.stagger-8 { animation-delay: 320ms; }
+@keyframes slideInRight {
+  0% {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes subtlePulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.85;
+  }
+}
+
+@keyframes glowPulse {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(212, 168, 78, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(212, 168, 78, 0.45);
+  }
+}
+
+.animate-subtle-pulse {
+  animation: subtlePulse 2.5s ease-in-out infinite;
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-glow-pulse {
+  animation: glowPulse 3s ease-in-out infinite;
+}
+
+/* Staggered Entrance Animations for Cards */
+.stagger-card {
+  animation: staggerFadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.stagger-1 { animation-delay: 25ms; }
+.stagger-2 { animation-delay: 50ms; }
+.stagger-3 { animation-delay: 75ms; }
+.stagger-4 { animation-delay: 100ms; }
+.stagger-5 { animation-delay: 125ms; }
+.stagger-6 { animation-delay: 150ms; }
+.stagger-7 { animation-delay: 175ms; }
+.stagger-8 { animation-delay: 200ms; }
 
 /* Smooth Accordion / Collapsible Transitions */
 .smooth-collapse {

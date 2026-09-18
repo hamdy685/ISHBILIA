@@ -114,10 +114,9 @@ export const PurchaseRequestTable: React.FC<Props> = ({
           const parcelsDisplay = getSummaryParcels(pr);
           const regionsDisplay = getSummaryRegions(pr);
           const quantitiesInfo = getSummaryQuantities(pr.items);
-          const staggerClass = `stagger-card stagger-${(index % 8) + 1}`;
 
           return (
-            <TableRow key={pr.id} className={`${staggerClass} border-b border-white/5 hover:bg-white/[0.03] transition-colors`}>
+            <TableRow key={pr.id} className="border-b border-white/5 hover:bg-white/[0.03] transition-colors">
               <TableCell className="font-mono font-bold text-[#d4a84e]">
                 <Link to={`/requests/${pr.id}`} className="hover:underline hover:text-gold-300">
                   {pr.request_number}
@@ -202,12 +201,11 @@ export const PurchaseRequestTable: React.FC<Props> = ({
           const quantitiesInfo = getSummaryQuantities(pr.items);
           const isOffice = pr.request_type === 'OFFICE_SUPPLIES';
           const primaryItemDesc = itemNames[0] || (isOffice ? 'مستلزمات مكتبية' : 'مواد مشروعات');
-          const staggerClass = `stagger-card stagger-${(index % 8) + 1}`;
 
           return (
             <article
               key={`mobile-card-${pr.id}`}
-              className={`rounded-2xl border border-white/10 bg-slate-900/80 backdrop-blur-xl p-4 space-y-3 shadow-xl shadow-black/50 hover:shadow-2xl hover:border-gold-500/40 hover:-translate-y-1 transition-all duration-300 ${staggerClass}`}
+              className="rounded-2xl border border-white/10 bg-slate-900/80 backdrop-blur-xl p-4 space-y-3 shadow-xl shadow-black/50 hover:shadow-2xl hover:border-gold-500/40 hover:-translate-y-1 transition-all duration-300"
             >
               {/* Row 1: Request Number, Status Badge, and Date */}
               <div className="flex items-center justify-between gap-2 border-b border-white/5 pb-2.5">
