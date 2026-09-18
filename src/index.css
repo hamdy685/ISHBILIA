@@ -33,24 +33,30 @@ body {
   font-family: var(--font-cairo) !important;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #0b1220;
+  background-color: #070a0f;
+  background-image: 
+    radial-gradient(circle at 15% 10%, rgba(212, 168, 78, 0.04) 0%, transparent 45%),
+    radial-gradient(circle at 85% 80%, rgba(197, 147, 61, 0.03) 0%, transparent 50%),
+    radial-gradient(circle at 50% 50%, rgba(17, 23, 34, 0.5) 0%, transparent 100%);
+  background-attachment: fixed;
   color: #f8fafc;
 }
 
-/* Custom Scrollbars */
+/* Custom Luxury Gold Scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #0f172a;
+  background: #080c14;
 }
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
-  border-radius: 4px;
+  background: #1c2637;
+  border-radius: 6px;
+  border: 1px solid rgba(212, 168, 78, 0.15);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: #c5933d;
 }
 
 .custom-select-scrollbar {
@@ -166,7 +172,92 @@ textarea:focus {
 }
 
 .animate-fade-in {
-  animation: fadeIn 0.2s ease-out forwards;
+  animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ── Luxury Real Estate Glassmorphism & Micro-interactions ── */
+.glass-card {
+  background: rgba(12, 18, 29, 0.8) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  box-shadow: 0 15px 35px -10px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  border-radius: 1rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card:hover {
+  border-color: rgba(212, 168, 78, 0.35) !important;
+  box-shadow: 0 22px 45px -10px rgba(0, 0, 0, 0.85), 0 0 25px rgba(212, 168, 78, 0.08);
+  transform: translateY(-2px);
+}
+
+.glass-panel {
+  background: rgba(8, 12, 20, 0.88) !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(212, 168, 78, 0.18) !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.85);
+}
+
+.gold-glow {
+  box-shadow: 0 0 25px rgba(212, 168, 78, 0.25);
+}
+
+.gold-glow:hover {
+  box-shadow: 0 0 35px rgba(212, 168, 78, 0.4);
+}
+
+.copper-glow {
+  box-shadow: 0 0 20px rgba(234, 88, 12, 0.25);
+}
+
+/* Staggered Entrance Animations for Cards & Rows */
+.stagger-card {
+  opacity: 0;
+  animation: staggerFadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.stagger-1 { animation-delay: 40ms; }
+.stagger-2 { animation-delay: 80ms; }
+.stagger-3 { animation-delay: 120ms; }
+.stagger-4 { animation-delay: 160ms; }
+.stagger-5 { animation-delay: 200ms; }
+.stagger-6 { animation-delay: 240ms; }
+.stagger-7 { animation-delay: 280ms; }
+.stagger-8 { animation-delay: 320ms; }
+
+/* Smooth Accordion / Collapsible Transitions */
+.smooth-collapse {
+  transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease, padding 0.35s ease;
+  overflow: hidden;
+}
+
+/* Button Ripple & Press Micro-interaction */
+.btn-luxury-ripple {
+  position: relative;
+  overflow: hidden;
+  transform: translateZ(0);
+}
+
+.btn-luxury-ripple::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 140%;
+  height: 140%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.25) 10%, transparent 60%);
+  transform: translate(-50%, -50%) scale(0);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.45s ease-out, opacity 0.4s ease-out;
+}
+
+.btn-luxury-ripple:active::after {
+  transform: translate(-50%, -50%) scale(1);
+  opacity: 1;
+  transition: 0s;
 }
 
 /* جميع النوافذ والجداول المنبثقة: أعلى منتصف مساحة الشاشة الحالية فقط. */

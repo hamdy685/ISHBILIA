@@ -12,16 +12,16 @@ export interface CardProps {
 export const Card: React.FC<CardProps> = ({ children, className = '', onClick, to, isActive }) => {
   const isClickable = Boolean(onClick || to);
   const activeClasses = isActive
-    ? 'ring-2 ring-cyan-500/70 border-cyan-500/80 bg-slate-850 shadow-cyan-950/40'
+    ? 'ring-2 ring-gold-400/80 border-gold-400/80 bg-slate-850/90 shadow-gold-950/40'
     : '';
   const clickableClasses = isClickable
-    ? 'cursor-pointer hover:border-slate-600 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-cyan-950/30 active:scale-[0.98]'
+    ? 'cursor-pointer hover:border-gold-500/40 hover:-translate-y-1 hover:shadow-2xl hover:shadow-black/70 active:scale-[0.98]'
     : '';
 
   const content = (
     <div
       onClick={onClick}
-      className={`bg-slate-900/85 border border-slate-800/90 rounded-2xl p-4 sm:p-5 shadow-lg shadow-slate-950/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-md transition-all duration-200 ${clickableClasses} ${activeClasses} ${className}`}
+      className={`bg-slate-900/75 border border-white/10 rounded-2xl p-4 sm:p-5 shadow-xl shadow-black/50 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl transition-all duration-300 ${clickableClasses} ${activeClasses} ${className}`}
     >
       {children}
     </div>
@@ -47,7 +47,7 @@ export interface KpiCardProps {
     value: string;
     isPositive?: boolean;
   };
-  accentColor?: 'cyan' | 'emerald' | 'amber' | 'rose' | 'indigo' | 'purple' | 'slate' | 'orange' | 'violet';
+  accentColor?: 'gold' | 'copper' | 'cyan' | 'emerald' | 'amber' | 'rose' | 'indigo' | 'purple' | 'slate' | 'orange' | 'violet';
   className?: string;
   onClick?: () => void;
   to?: string;
@@ -61,7 +61,7 @@ export const KpiCard: React.FC<KpiCardProps> = ({
   icon,
   subtext,
   trend,
-  accentColor = 'cyan',
+  accentColor = 'gold',
   className = '',
   onClick,
   to,
@@ -71,6 +71,8 @@ export const KpiCard: React.FC<KpiCardProps> = ({
   const isInteractive = Boolean(onClick || to);
 
   const accentClasses: Record<string, { iconBg: string; text: string; glow: string; activeBorder: string }> = {
+    gold: { iconBg: 'bg-gold-950/80 text-gold-300 border-gold-500/40 shadow-inner', text: 'text-gold-400', glow: 'group-hover:border-gold-400/60', activeBorder: 'ring-2 ring-gold-400/80 border-gold-400/80' },
+    copper: { iconBg: 'bg-copper-950/80 text-copper-300 border-copper-500/40 shadow-inner', text: 'text-copper-400', glow: 'group-hover:border-copper-400/60', activeBorder: 'ring-2 ring-copper-400/80 border-copper-400/80' },
     cyan: { iconBg: 'bg-cyan-950/60 text-cyan-400 border-cyan-800/60', text: 'text-cyan-400', glow: 'group-hover:border-cyan-500/50', activeBorder: 'ring-2 ring-cyan-500/80 border-cyan-400/80' },
     emerald: { iconBg: 'bg-emerald-950/60 text-emerald-400 border-emerald-800/60', text: 'text-emerald-400', glow: 'group-hover:border-emerald-500/50', activeBorder: 'ring-2 ring-emerald-500/80 border-emerald-400/80' },
     amber: { iconBg: 'bg-amber-950/60 text-amber-400 border-amber-800/60', text: 'text-amber-400', glow: 'group-hover:border-amber-500/50', activeBorder: 'ring-2 ring-amber-500/80 border-amber-400/80' },
@@ -82,14 +84,14 @@ export const KpiCard: React.FC<KpiCardProps> = ({
     slate: { iconBg: 'bg-slate-800/80 text-slate-300 border-slate-700/60', text: 'text-slate-300', glow: 'group-hover:border-slate-600', activeBorder: 'ring-2 ring-slate-400/80 border-slate-300/80' },
   };
 
-  const accent = accentClasses[accentColor] || accentClasses.cyan;
+  const accent = accentClasses[accentColor] || accentClasses.gold;
 
   const cardElement = (
     <Card
       onClick={onClick}
       isActive={isActive}
       className={`relative overflow-hidden group select-none transition-all ${accent.glow} ${
-        isActive ? `${accent.activeBorder} shadow-lg shadow-cyan-950/40` : ''
+        isActive ? `${accent.activeBorder} shadow-lg shadow-gold-950/40` : ''
       } ${isInteractive ? 'hover:scale-[1.02] cursor-pointer' : ''} ${className}`}
     >
       <div className="flex items-start justify-between">
@@ -97,7 +99,7 @@ export const KpiCard: React.FC<KpiCardProps> = ({
           <div className="flex items-center gap-1.5">
             <p className="text-xs font-bold text-slate-400 group-hover:text-slate-200 transition-colors">{title}</p>
             {isInteractive && (
-              <span className="text-[10px] text-slate-500 group-hover:text-cyan-400 group-hover:translate-x-[-2px] transition-all opacity-0 group-hover:opacity-100">
+              <span className="text-[10px] text-slate-500 group-hover:text-gold-400 group-hover:translate-x-[-2px] transition-all opacity-0 group-hover:opacity-100">
                 ←
               </span>
             )}
@@ -112,7 +114,7 @@ export const KpiCard: React.FC<KpiCardProps> = ({
           </div>
           {subtext && <p className="text-[11px] text-slate-500 font-medium">{subtext}</p>}
           {clickableHint && (
-            <p className="text-[10px] text-cyan-400/80 font-semibold group-hover:text-cyan-300 transition-colors">
+            <p className="text-[10px] text-gold-400/90 font-semibold group-hover:text-gold-300 transition-colors">
               {clickableHint}
             </p>
           )}
@@ -141,7 +143,7 @@ export interface KpiPillProps {
   title: string;
   value: React.ReactNode;
   icon?: React.ReactNode;
-  accentColor?: 'cyan' | 'emerald' | 'amber' | 'rose' | 'indigo' | 'purple' | 'slate' | 'orange' | 'violet';
+  accentColor?: 'gold' | 'copper' | 'cyan' | 'emerald' | 'amber' | 'rose' | 'indigo' | 'purple' | 'slate' | 'orange' | 'violet';
   isActive?: boolean;
   onClick?: () => void;
   to?: string;
@@ -153,7 +155,7 @@ export const KpiPill: React.FC<KpiPillProps> = ({
   title,
   value,
   icon,
-  accentColor = 'cyan',
+  accentColor = 'gold',
   isActive = false,
   onClick,
   to,
@@ -163,6 +165,12 @@ export const KpiPill: React.FC<KpiPillProps> = ({
   const isInteractive = Boolean(onClick || to);
 
   const colorMap: Record<string, string> = {
+    gold: isActive
+      ? 'bg-gold-950/90 text-gold-200 border-gold-400 ring-2 ring-gold-500/40 shadow-md shadow-gold-950/50'
+      : 'bg-slate-900/90 text-slate-300 border-slate-700/80 hover:border-gold-500/60 hover:text-gold-300',
+    copper: isActive
+      ? 'bg-copper-950/90 text-copper-200 border-copper-400 ring-2 ring-copper-500/40 shadow-md shadow-copper-950/50'
+      : 'bg-slate-900/90 text-slate-300 border-slate-700/80 hover:border-copper-500/60 hover:text-copper-300',
     cyan: isActive
       ? 'bg-cyan-950/90 text-cyan-200 border-cyan-400 ring-2 ring-cyan-500/40 shadow-md shadow-cyan-950/50'
       : 'bg-slate-900/90 text-slate-300 border-slate-700/80 hover:border-cyan-500/60 hover:text-cyan-300',

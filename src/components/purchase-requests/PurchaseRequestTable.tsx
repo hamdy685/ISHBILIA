@@ -100,7 +100,7 @@ export const PurchaseRequestTable: React.FC<Props> = ({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {requests.map((pr) => {
+        {requests.map((pr, index) => {
           const isDraft = pr.status === 'DRAFT';
           const canEdit = REQUESTER_EDITABLE_STATUSES.includes(pr.status) && hasPermission('purchase_request.edit_own');
           const canDelete = REQUESTER_DELETABLE_STATUSES.includes(pr.status) && hasPermission('purchase_request.edit_own');
@@ -114,19 +114,20 @@ export const PurchaseRequestTable: React.FC<Props> = ({
           const parcelsDisplay = getSummaryParcels(pr);
           const regionsDisplay = getSummaryRegions(pr);
           const quantitiesInfo = getSummaryQuantities(pr.items);
+          const staggerClass = `stagger-card stagger-${(index % 8) + 1}`;
 
           return (
-            <TableRow key={pr.id}>
-              <TableCell className="font-mono font-bold text-cyan-400">
-                <Link to={`/requests/${pr.id}`} className="hover:underline">
+            <TableRow key={pr.id} className={`${staggerClass} border-b border-white/5 hover:bg-white/[0.03] transition-colors`}>
+              <TableCell className="font-mono font-bold text-[#d4a84e]">
+                <Link to={`/requests/${pr.id}`} className="hover:underline hover:text-gold-300">
                   {pr.request_number}
                 </Link>
               </TableCell>
               <TableCell className="font-semibold text-slate-100 max-w-[180px] truncate text-xs">
                 <span title={itemNames.join('، ')}>{itemsDisplay}</span>
               </TableCell>
-              <TableCell className="font-mono text-cyan-300 text-xs whitespace-nowrap">{parcelsDisplay}</TableCell>
-              <TableCell className="text-slate-300 text-xs whitespace-nowrap">{regionsDisplay}</TableCell>
+              <TableCell className="font-mono text-[#edd6a6] text-xs whitespace-nowrap">{parcelsDisplay}</TableCell>
+              <TableCell className="text-copper-300 text-xs whitespace-nowrap">{regionsDisplay}</TableCell>
               <TableCell className="text-xs whitespace-nowrap">
                 <div title={quantitiesInfo.tooltip}>
                   <div className="font-mono font-bold text-amber-300">{quantitiesInfo.display}</div>
@@ -189,8 +190,8 @@ export const PurchaseRequestTable: React.FC<Props> = ({
     </Table>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 xl:hidden">
-        {requests.map((pr) => {
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 xl:hidden">
+        {requests.map((pr, index) => {
           const isDraft = pr.status === 'DRAFT';
           const canEdit = REQUESTER_EDITABLE_STATUSES.includes(pr.status) && hasPermission('purchase_request.edit_own');
           const canDelete = REQUESTER_DELETABLE_STATUSES.includes(pr.status) && hasPermission('purchase_request.edit_own');
@@ -201,18 +202,19 @@ export const PurchaseRequestTable: React.FC<Props> = ({
           const quantitiesInfo = getSummaryQuantities(pr.items);
           const isOffice = pr.request_type === 'OFFICE_SUPPLIES';
           const primaryItemDesc = itemNames[0] || (isOffice ? 'مستلزمات مكتبية' : 'مواد مشروعات');
+          const staggerClass = `stagger-card stagger-${(index % 8) + 1}`;
 
           return (
             <article
               key={`mobile-card-${pr.id}`}
-              className="rounded-2xl border border-slate-800 bg-slate-900/90 p-3.5 space-y-2.5 shadow-md hover:border-slate-700 transition-all"
+              className={`rounded-2xl border border-white/10 bg-slate-900/80 backdrop-blur-xl p-4 space-y-3 shadow-xl shadow-black/50 hover:shadow-2xl hover:border-gold-500/40 hover:-translate-y-1 transition-all duration-300 ${staggerClass}`}
             >
               {/* Row 1: Request Number, Status Badge, and Date */}
-              <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2">
+              <div className="flex items-center justify-between gap-2 border-b border-white/5 pb-2.5">
                 <div className="flex items-center gap-2">
                   <Link
                     to={`/requests/${pr.id}`}
-                    className="font-mono text-sm font-black text-cyan-300 hover:text-cyan-200 hover:underline"
+                    className="font-mono text-sm font-black text-gold-400 hover:text-gold-200 hover:underline transition-colors"
                   >
                     {pr.request_number}
                   </Link>
@@ -224,7 +226,7 @@ export const PurchaseRequestTable: React.FC<Props> = ({
               </div>
 
               {/* Row 2: Mandatory Core Data Strip (المنطقة ورقم القطعة) */}
-              <div className="flex items-center gap-2 text-xs flex-wrap bg-slate-950/70 border border-slate-800/80 rounded-xl px-2.5 py-1.5">
+              <div className="flex items-center gap-2 text-xs flex-wrap bg-slate-950/80 border border-white/5 rounded-xl px-3 py-2 shadow-inner">
                 {isOffice ? (
                   <span className="font-bold text-indigo-300 flex items-center gap-1 text-[11px]">
                     <span>🏢</span> مستلزمات مكتبية للمقر
@@ -233,12 +235,12 @@ export const PurchaseRequestTable: React.FC<Props> = ({
                   <>
                     <div className="flex items-center gap-1 font-semibold text-slate-300">
                       <span className="text-slate-400">قطعة:</span>
-                      <strong className="font-mono font-bold text-cyan-300">{parcelsDisplay || '—'}</strong>
+                      <strong className="font-mono font-bold text-gold-300">{parcelsDisplay || '—'}</strong>
                     </div>
                     <span className="text-slate-600">•</span>
                     <div className="flex items-center gap-1 font-semibold text-slate-300">
                       <span className="text-slate-400">المنطقة:</span>
-                      <strong className="font-bold text-amber-300">{regionsDisplay || '—'}</strong>
+                      <strong className="font-bold text-copper-300">{regionsDisplay || '—'}</strong>
                     </div>
                   </>
                 )}
@@ -254,7 +256,7 @@ export const PurchaseRequestTable: React.FC<Props> = ({
               </div>
 
               {/* Row 3: Mandatory Core Data (الصنف والكمية) */}
-              <div className="rounded-xl border border-slate-800/90 bg-slate-950/90 p-2.5 space-y-1.5">
+              <div className="rounded-xl border border-white/5 bg-slate-950/90 p-3 space-y-2 shadow-inner">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <span className="text-[10px] font-bold text-slate-400 block">الصنف والمواد:</span>
@@ -275,11 +277,11 @@ export const PurchaseRequestTable: React.FC<Props> = ({
 
                 {/* If multiple items exist */}
                 {itemNames.length > 1 && (
-                  <div className="pt-1.5 border-t border-slate-800/60 text-[11px] text-slate-400 flex items-center justify-between">
-                    <span className="text-cyan-400 font-semibold">
+                  <div className="pt-2 border-t border-white/5 text-[11px] text-slate-400 flex items-center justify-between">
+                    <span className="text-gold-400/90 font-semibold">
                       +{itemNames.length - 1} أصناف أخرى مشمولة في هذا الطلب
                     </span>
-                    <Link to={`/requests/${pr.id}`} className="text-[10px] font-bold text-cyan-300 hover:underline">
+                    <Link to={`/requests/${pr.id}`} className="text-[10px] font-bold text-gold-300 hover:text-gold-200 hover:underline transition-colors">
                       عرض الكل ←
                     </Link>
                   </div>
@@ -287,7 +289,7 @@ export const PurchaseRequestTable: React.FC<Props> = ({
               </div>
 
               {/* Row 4: Actions Toolbar */}
-              <div className="flex items-center gap-1.5 pt-1">
+              <div className="flex items-center gap-2 pt-1">
                 <Link to={`/requests/${pr.id}`} className="flex-1">
                   <Button variant="secondary" size="sm" className="w-full text-xs font-bold py-1.5">
                     عرض التفاصيل
@@ -297,7 +299,7 @@ export const PurchaseRequestTable: React.FC<Props> = ({
                   <Button
                     variant="primary"
                     size="sm"
-                    className="flex-1 text-xs font-black py-1.5 shadow-sm"
+                    className="flex-1 text-xs font-black py-1.5"
                     onClick={() => onOpenSubmitModal(pr)}
                   >
                     تقديم الطلب

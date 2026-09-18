@@ -1,0 +1,1 @@
+import{n as t}from"./index-CLRkbbjA.js";const c="/accounting/purchase-orders",r=async()=>(await t.get(c)).data.data,e=async a=>(await t.get(`${c}/${a}`)).data.data,o=async(a,s={})=>(await t.post(`${c}/${a}/approve`,s)).data.data;export{o as a,e as b,r as g};

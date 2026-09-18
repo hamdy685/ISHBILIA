@@ -282,15 +282,23 @@ export const NotificationBell: React.FC = () => {
 
   return (
     <div className="relative" ref={dropdownRef}>
-      {/* Bell Button */}
+      {/* Bell Button with Subtle Pulse */}
       <button
         type="button"
         onClick={handleToggleDropdown}
-        className="relative flex min-h-11 min-w-11 items-center justify-center rounded-xl p-2 text-slate-400 hover:bg-slate-800/80 hover:text-cyan-300 transition-colors cursor-pointer"
+        className={`relative flex min-h-11 min-w-11 items-center justify-center rounded-xl p-2 text-slate-300 hover:bg-white/[0.06] hover:text-gold-300 transition-all cursor-pointer ${
+          count > 0 ? 'animate-subtle-pulse text-gold-400' : ''
+        }`}
         aria-label="الإشعارات"
         title="الإشعارات والتنبيهات"
       >
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+        <svg
+          className={`w-5 h-5 transition-transform duration-300 ${count > 0 ? 'text-gold-400' : ''}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          aria-hidden="true"
+        >
           <path
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -299,28 +307,28 @@ export const NotificationBell: React.FC = () => {
           />
         </svg>
         {count > 0 && (
-          <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center animate-pulse shadow-lg shadow-rose-600/40">
+          <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-gradient-to-r from-rose-500 via-rose-600 to-amber-600 text-white text-[10px] font-black flex items-center justify-center border border-white/20 shadow-lg shadow-rose-600/40">
             {count > 99 ? '99+' : count}
           </span>
         )}
       </button>
 
-      {/* Realtime Toast Popover */}
+      {/* Realtime Toast Popover with Smooth Slide-in & Luxury Frosted Glass */}
       {latestToast && !dropdownOpen && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setLatestToast(null)} />
           <div
-            className="fixed inset-x-3 top-14 sm:inset-auto sm:left-0 sm:top-12 z-50 sm:w-80 rounded-2xl border-2 border-cyan-500/80 bg-slate-950 p-4 text-right shadow-2xl animate-fade-in backdrop-blur-md"
+            className="fixed inset-x-3 top-14 sm:inset-auto sm:left-0 sm:top-12 z-50 sm:w-80 rounded-2xl border border-gold-500/50 bg-slate-950/90 p-4 text-right shadow-2xl animate-slide-in-right backdrop-blur-2xl gold-glow"
             dir="rtl"
           >
-            <div className="flex items-center justify-between border-b border-cyan-900/50 pb-2">
-              <span className="flex items-center gap-1.5 text-xs font-black text-cyan-300">
+            <div className="flex items-center justify-between border-b border-white/10 pb-2">
+              <span className="flex items-center gap-1.5 text-xs font-black text-gold-300">
                 <span>⚡</span> إشعار عاجل جديد
               </span>
               <button
                 type="button"
                 onClick={() => setLatestToast(null)}
-                className="flex items-center gap-1 text-slate-400 hover:text-rose-400 text-xs font-bold px-2 py-0.5 rounded-lg border border-slate-700 bg-slate-900 hover:bg-rose-950/40 transition-colors cursor-pointer"
+                className="flex items-center gap-1 text-slate-400 hover:text-rose-400 text-xs font-bold px-2 py-0.5 rounded-lg border border-white/10 bg-white/[0.04] hover:bg-rose-950/40 transition-colors cursor-pointer"
                 title="إغلاق الإشعار"
               >
                 <span>✕</span>
@@ -333,7 +341,7 @@ export const NotificationBell: React.FC = () => {
               <button
                 type="button"
                 onClick={() => handleNotificationClick(latestToast)}
-                className="flex-1 rounded-xl bg-cyan-600 px-3 py-2 text-xs font-black text-white hover:bg-cyan-500 transition-colors shadow-md shadow-cyan-900/30 text-center cursor-pointer"
+                className="flex-1 rounded-xl bg-gradient-to-r from-[#d4a84e] via-[#c5933d] to-[#a47430] hover:from-[#e2be76] hover:to-[#b88334] px-3 py-2 text-xs font-black text-slate-950 transition-all shadow-md shadow-gold-950/50 text-center cursor-pointer hover:-translate-y-0.5 active:translate-y-0"
               >
                 {resolveNotificationAction(latestToast, user).actionLabel} ←
               </button>
@@ -346,18 +354,18 @@ export const NotificationBell: React.FC = () => {
       {dropdownOpen && (
         <div
           onClick={() => setDropdownOpen(false)}
-          className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-40 sm:hidden animate-fade-in"
+          className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-40 sm:hidden animate-fade-in"
         />
       )}
 
-      {/* Interactive Notifications Dropdown */}
+      {/* Interactive Notifications Dropdown with Frosted Glass */}
       {dropdownOpen && (
         <div
-          className="fixed inset-x-3 top-[4.25rem] sm:inset-auto sm:left-0 sm:top-12 z-50 sm:w-96 max-h-[calc(100dvh-5rem)] rounded-2xl border border-slate-700/80 bg-slate-900 shadow-2xl shadow-black/90 overflow-hidden animate-fade-in text-right flex flex-col"
+          className="fixed inset-x-3 top-[4.25rem] sm:inset-auto sm:left-0 sm:top-12 z-50 sm:w-96 max-h-[calc(100dvh-5rem)] rounded-2xl border border-white/10 bg-slate-900/90 backdrop-blur-2xl shadow-2xl shadow-black/90 overflow-hidden animate-fade-in text-right flex flex-col"
           dir="rtl"
         >
           {/* Header with Close and Mark All buttons */}
-          <div className="flex items-center justify-between border-b border-slate-800 bg-slate-950/90 px-4 py-3">
+          <div className="flex items-center justify-between border-b border-white/5 bg-slate-950/90 px-4 py-3">
             <div className="flex items-center gap-2">
               <span className="text-sm font-black text-slate-100">الإشعارات والتنبيهات</span>
               {count > 0 && (

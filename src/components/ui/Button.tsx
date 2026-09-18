@@ -24,23 +24,23 @@ export const Button: React.FC<ButtonProps> = ({
   ...props
 }) => {
   const baseClasses =
-    'inline-flex min-h-[42px] lg:min-h-0 items-center justify-center font-bold rounded-xl transition-all duration-200 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/80 disabled:opacity-50 disabled:cursor-not-allowed select-none cursor-pointer';
+    'inline-flex min-h-[42px] lg:min-h-0 items-center justify-center font-bold rounded-xl transition-all duration-200 active:scale-[0.97] focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/80 disabled:opacity-50 disabled:cursor-not-allowed select-none cursor-pointer btn-luxury-ripple';
 
   const variantClasses: Record<ButtonVariant, string> = {
     primary:
-      'bg-gradient-to-b from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 active:from-cyan-600 active:to-cyan-700 text-white border border-cyan-400/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] shadow-md shadow-cyan-950/60 hover:shadow-lg hover:shadow-cyan-900/40',
+      'bg-gradient-to-r from-[#d4a84e] via-[#c5933d] to-[#a47430] hover:from-[#e2be76] hover:via-[#d4a84e] hover:to-[#b88334] text-slate-950 font-black border border-gold-300/40 shadow-lg shadow-gold-950/50 hover:shadow-xl hover:shadow-gold-500/25 hover:-translate-y-0.5 active:translate-y-0',
     secondary:
-      'bg-gradient-to-b from-slate-800 to-slate-850 hover:from-slate-750 hover:to-slate-800 text-slate-200 border border-slate-700/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] shadow-sm hover:border-slate-600 hover:text-white',
+      'bg-slate-900/70 hover:bg-slate-850/90 text-slate-200 hover:text-gold-200 border border-white/10 hover:border-gold-500/50 shadow-md shadow-black/40 hover:shadow-gold-950/30 backdrop-blur-md hover:-translate-y-0.5 active:translate-y-0',
     success:
-      'bg-gradient-to-b from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 active:from-emerald-600 active:to-emerald-700 text-white border border-emerald-400/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] shadow-md shadow-emerald-950/60 hover:shadow-lg hover:shadow-emerald-900/40',
+      'bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white border border-emerald-400/30 shadow-lg shadow-emerald-950/50 hover:shadow-emerald-900/30 hover:-translate-y-0.5 active:translate-y-0',
     warning:
-      'bg-gradient-to-b from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 active:from-amber-500 active:to-amber-600 text-slate-950 font-black border border-amber-300/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] shadow-md shadow-amber-950/60 hover:shadow-lg hover:shadow-amber-900/40',
+      'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black border border-amber-300/40 shadow-lg shadow-amber-950/50 hover:-translate-y-0.5 active:translate-y-0',
     danger:
-      'bg-gradient-to-b from-rose-500 to-rose-600 hover:from-rose-400 hover:to-rose-500 active:from-rose-600 active:to-rose-700 text-white border border-rose-400/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] shadow-md shadow-rose-950/60 hover:shadow-lg hover:shadow-rose-900/40',
+      'bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 text-white border border-rose-400/30 shadow-lg shadow-rose-950/50 hover:-translate-y-0.5 active:translate-y-0',
     ghost:
-      'bg-transparent hover:bg-slate-800/80 text-slate-300 hover:text-white border border-transparent hover:border-slate-700/60 transition-colors',
+      'bg-transparent hover:bg-white/[0.05] text-slate-300 hover:text-gold-300 border border-transparent hover:border-gold-500/30 transition-all hover:-translate-y-0.5 active:translate-y-0',
     outline:
-      'bg-slate-900/40 hover:bg-slate-800/80 border border-slate-700/80 hover:border-slate-600 text-slate-200 hover:text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]',
+      'bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-copper-400/50 text-slate-200 hover:text-copper-200 shadow-sm backdrop-blur-md hover:-translate-y-0.5 active:translate-y-0',
   };
 
   const sizeClasses: Record<ButtonSize, string> = {

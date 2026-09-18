@@ -89,15 +89,15 @@ export const TableFilterBar: React.FC<TableFilterBarProps> = ({
             onClick={() => setIsExpanded((prev) => !prev)}
             className={`inline-flex items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-xs font-black transition-all border shrink-0 ${
               isExpanded || activeFiltersCount > 0
-                ? 'bg-cyan-950/80 text-cyan-300 border-cyan-700/80 shadow-sm'
-                : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white'
+                ? 'bg-gold-950/80 text-gold-300 border-gold-500/60 shadow-md shadow-gold-950/30'
+                : 'bg-white/[0.04] text-slate-300 border-white/10 hover:border-gold-500/40 hover:bg-white/[0.08] hover:text-white'
             }`}
             aria-expanded={isExpanded}
           >
             <span>🎛️</span>
             <span>{isExpanded ? 'إخفاء الفلاتر' : 'خيارات الفلترة'}</span>
             {activeFiltersCount > 0 && (
-              <span className="rounded-full bg-cyan-500 px-1.5 py-0.2 text-[10px] font-black text-slate-950">
+              <span className="rounded-full bg-gold-400 px-1.5 py-0.2 text-[10px] font-black text-slate-950">
                 {activeFiltersCount}
               </span>
             )}
@@ -108,9 +108,15 @@ export const TableFilterBar: React.FC<TableFilterBarProps> = ({
         )}
       </div>
 
-      {/* Collapsible Advanced Filters Section */}
+      {/* Collapsible Advanced Filters Section with Smooth Height & Opacity Transition */}
       {hasExtraFilters && (
-        <div className={isExpanded ? 'pt-2 border-t border-slate-800/80 animate-fade-in block' : 'hidden'}>
+        <div
+          className={`transition-all duration-300 ease-in-out overflow-hidden ${
+            isExpanded
+              ? 'max-h-[600px] opacity-100 pt-3 border-t border-white/10'
+              : 'max-h-0 opacity-0 pt-0 border-t-0 pointer-events-none'
+          }`}
+        >
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {selects.map((filter) => (
               <label key={filter.label} className="flex min-w-0 flex-col gap-1.5 text-[11px] font-bold text-slate-400">

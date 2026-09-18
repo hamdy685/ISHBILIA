@@ -174,15 +174,15 @@ export const PurchaseRequestsPage: React.FC = () => {
 
       {/* البحث السريع + التصفية */}
       <div className="space-y-2.5">
-        <div className="rounded-2xl border border-cyan-500/30 bg-slate-900/80 p-2.5 shadow-md sm:p-3">
+        <div className="rounded-2xl border border-white/10 bg-slate-900/80 backdrop-blur-xl p-2.5 shadow-xl shadow-black/40 sm:p-3">
           <div className="mb-1.5 flex items-center justify-between gap-2">
             <label htmlFor="purchase-request-quick-search" className="text-xs font-black text-slate-100">بحث سريع في الطلبات</label>
             {searchQuery.trim() && (
-              <button type="button" onClick={() => setSearchQuery('')} className="min-h-7 shrink-0 rounded-lg px-2 text-xs font-bold text-cyan-300 hover:bg-cyan-500/10 cursor-pointer" aria-label="مسح البحث">مسح</button>
+              <button type="button" onClick={() => setSearchQuery('')} className="min-h-7 shrink-0 rounded-lg px-2 text-xs font-bold text-gold-400 hover:bg-gold-500/10 cursor-pointer transition-colors" aria-label="مسح البحث">مسح</button>
             )}
           </div>
           <div className="relative">
-            <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-base text-cyan-300" aria-hidden="true">⌕</span>
+            <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-base text-gold-400" aria-hidden="true">⌕</span>
             <input
               id="purchase-request-quick-search"
               type="search"
@@ -192,7 +192,7 @@ export const PurchaseRequestsPage: React.FC = () => {
               placeholder="ابحث برقم الطلب، الموظف، القسم، الصنف، قطعة الأرض أو المنطقة..."
               enterKeyHint="search"
               autoComplete="off"
-              className="min-h-10 w-full min-w-0 rounded-xl border border-cyan-500/40 bg-slate-950/80 pr-9 pl-4 py-2 text-xs text-slate-100 placeholder:text-xs placeholder:text-slate-500 focus:border-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
+              className="min-h-10 w-full min-w-0 rounded-xl border border-white/10 bg-slate-950/90 pr-9 pl-4 py-2 text-xs text-slate-100 placeholder:text-xs placeholder:text-slate-500 focus:border-gold-400 focus:outline-none focus:ring-2 focus:ring-gold-500/20 transition-all shadow-inner"
               aria-label="البحث السريع في طلبات الشراء"
             />
           </div>

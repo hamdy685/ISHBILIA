@@ -373,10 +373,10 @@ export const AuthenticatedLayout: React.FC = () => {
     return (
         <div
             dir="rtl"
-            className="min-h-screen flex flex-col font-sans bg-[#0b1220] text-slate-100"
+            className="min-h-screen flex flex-col font-sans bg-[#070a0f] text-slate-100"
         >
-            {/* Header */}
-            <header className="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md text-white shadow-xl border-b border-slate-800/80">
+            {/* Header with Luxury Glassmorphism & Gold Highlights */}
+            <header className="sticky top-0 z-40 bg-slate-950/85 backdrop-blur-2xl text-white shadow-2xl border-b border-white/10 shadow-black/60">
                 <div className="max-w-[1800px] mx-auto w-full px-3 sm:px-6 lg:px-8">
                     <div className="flex items-center justify-between min-h-16 py-2">
 
@@ -387,12 +387,12 @@ export const AuthenticatedLayout: React.FC = () => {
                                 onClick={() => { setSidebarOpen(current => !current); setMobileMenuOpen(false); }}
                                 aria-label={sidebarOpen ? 'إخفاء القائمة الجانبية' : 'إظهار القائمة الجانبية'}
                                 aria-expanded={sidebarOpen}
-                                className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-slate-700 bg-slate-800/80 px-2.5 text-lg text-cyan-300 shadow-inner hover:border-cyan-700 hover:bg-slate-800 active:scale-95 transition-transform"
+                                className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-white/10 bg-slate-900/80 px-2.5 text-lg text-gold-300 shadow-inner hover:border-gold-500/50 hover:bg-slate-800 active:scale-95 transition-all"
                             >
                                 {sidebarOpen ? '‹' : '☰'}
                             </button>
                             <div className="flex items-center space-x-3 space-x-reverse">
-                            <div className="w-10 h-10 rounded-xl bg-[#11100e] border border-[#b89552]/60 p-1.5 flex items-center justify-center shadow-inner shadow-black/30">
+                            <div className="w-10 h-10 rounded-xl bg-[#11100e] border border-gold-500/60 p-1.5 flex items-center justify-center shadow-inner shadow-black/30">
                                 <img src="/eshbelia-logo.png" alt="شعار شركة اشبيلية" className="h-full w-full object-contain" />
                             </div>
                             <div className="flex flex-col min-w-0">
@@ -400,10 +400,10 @@ export const AuthenticatedLayout: React.FC = () => {
                                     <span className="truncate">اشبيلية</span>
                                     <span className="hidden sm:inline truncate"> — شركة</span>
                                 </span>
-                                <span className="hidden sm:block text-[10px] font-bold tracking-wide text-[#d4b36a]">
+                                <span className="hidden sm:block text-[10px] font-bold tracking-wide text-gold-400">
                                     <span className="truncate">للتطوير العقاري والمقاولات</span>
                                 </span>
-                                <span className="hidden sm:block text-[9px] font-semibold text-slate-500">
+                                <span className="hidden sm:block text-[9px] font-semibold text-slate-400">
                                     <span className="truncate">نظام المشتريات التشغيلية</span>
                                 </span>
                             </div>
@@ -418,19 +418,19 @@ export const AuthenticatedLayout: React.FC = () => {
                         {/* User الملف الشخصي & الإجراءات */}
                         <div className="hidden md:flex items-center space-x-4 space-x-reverse">
                             <NotificationBell />
-                            <div className="h-6 w-px bg-slate-800"></div>
+                            <div className="h-6 w-px bg-white/10"></div>
                             <Link
                                 to="/profile"
-                                className="flex items-center gap-3 px-3 py-1.5 rounded-xl hover:bg-slate-800/80 transition-all border border-transparent hover:border-slate-700/60"
+                                className="flex items-center gap-3 px-3 py-1.5 rounded-xl hover:bg-white/[0.05] transition-all border border-transparent hover:border-gold-500/30"
                             >
-                                <div className="w-8 h-8 rounded-full bg-cyan-600/20 border border-cyan-500/40 text-cyan-300 font-bold flex items-center justify-center text-xs">
+                                <div className="w-8 h-8 rounded-full bg-gold-500/15 border border-gold-500/40 text-gold-300 font-bold flex items-center justify-center text-xs">
                                     {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
                                 </div>
                                 <div className="text-right">
                                     <div className="text-xs font-bold text-slate-100">
                                         {user?.name}
                                     </div>
-                                    <div className="text-[10px] text-cyan-400 font-medium">
+                                    <div className="text-[10px] text-gold-400 font-medium">
                                         {primaryRoleLabel}
                                     </div>
                                 </div>
@@ -438,7 +438,7 @@ export const AuthenticatedLayout: React.FC = () => {
                             <button
                                 type="button"
                                 onClick={() => logout()}
-                                className="bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 hover:text-rose-100 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border border-rose-800/50"
+                                className="bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 hover:text-rose-100 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border border-rose-800/50 hover:-translate-y-0.5 active:translate-y-0"
                             >
                                 تسجيل الخروج
                             </button>
@@ -502,18 +502,18 @@ export const AuthenticatedLayout: React.FC = () => {
                         className="fixed inset-0 z-30 bg-slate-950/70 backdrop-blur-[1px] xl:hidden"
                     />
                 )}
-                {/* Sidebar Nav */}
+                {/* Sidebar Nav with Luxury Frosted Glass */}
                 <aside
-                    className={`fixed inset-x-2 bottom-2 top-[4.75rem] z-40 max-h-[calc(100dvh-5.5rem)] w-auto sm:max-w-xs sm:right-3 sm:left-auto overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900/95 p-3 shadow-2xl backdrop-blur-md transition-all duration-200 xl:relative xl:inset-auto xl:bottom-auto xl:top-auto xl:max-h-none xl:w-64 xl:max-w-none xl:overflow-visible xl:p-4 xl:shadow-xl ${
+                    className={`fixed inset-x-2 bottom-2 top-[4.75rem] z-40 max-h-[calc(100dvh-5.5rem)] w-auto sm:max-w-xs sm:right-3 sm:left-auto overflow-y-auto rounded-2xl border border-white/10 bg-slate-900/90 p-3 shadow-2xl backdrop-blur-2xl transition-all duration-300 xl:relative xl:inset-auto xl:bottom-auto xl:top-auto xl:max-h-none xl:w-64 xl:max-w-none xl:overflow-visible xl:p-4 xl:shadow-2xl ${
                         sidebarOpen ? "block" : (mobileMenuOpen ? "block" : "hidden")
                     }`}
                 >
-                    <div className="px-3 py-2 mb-3 bg-slate-950/60 rounded-xl border border-slate-800/80 flex items-center justify-between">
+                    <div className="px-3 py-2 mb-3 bg-slate-950/80 rounded-xl border border-white/5 flex items-center justify-between shadow-inner">
                         <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider font-mono">
                             القائمة الرئيسية
                         </span>
                         <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800/60">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gold-950/80 text-gold-300 border border-gold-500/40">
                                 {primaryRoleLabel}
                             </span>
                             <button
