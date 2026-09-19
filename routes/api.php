@@ -22,6 +22,11 @@ use App\Http\Controllers\Api\V1\PurchaseRequestItemController;
 use App\Http\Controllers\Api\V1\PurchaseRequestSupplementController;
 use App\Http\Controllers\Api\V1\PurchasesReportController;
 use App\Http\Controllers\Api\V1\ReviewerPurchaseRequestController;
+use App\Http\Controllers\Api\Accounting\AccountController;
+use App\Http\Controllers\Api\Accounting\CostCenterController;
+use App\Http\Controllers\Api\Accounting\ContractorInvoiceController;
+use App\Http\Controllers\Api\Accounting\PettyCashSettlementController;
+use App\Http\Controllers\Api\Accounting\CostCenterReportController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -311,6 +316,36 @@ Route::middleware('auth:sanctum')->prefix('accounting')->group(function () {
     Route::post('/suppliers/{supplier}/opening-balance', [SupplierInvoiceController::class, 'setOpeningBalance'])
         ->middleware('permission:accounting.invoice.create');
 });
+
+// General Accounting Module (Isolated - Chart of Accounts & Cost Centers)
+Route::middleware(['auth:sanctum', 'permission:accounting.invoice.view|purchase_order.view_accounting|system.users.manage'])
+    ->prefix('accounting')
+    ->group(function () {
+        Route::get('/accounts', [AccountController::class, 'index']);
+        Route::get('/accounts/{account}', [AccountController::class, 'show']);
+        Route::get('/cost-centers', [CostCenterController::class, 'index']);
+        Route::get('/cost-centers/{costCenter}', [CostCenterController::class, 'show']);
+
+        // Contractor Invoices (مستخلصات المقاولين)
+        Route::get('/contractor-invoices', [ContractorInvoiceController::class, 'index']);
+        Route::post('/contractor-invoices', [ContractorInvoiceController::class, 'store']);
+        Route::get('/contractor-invoices/{contractorInvoice}', [ContractorInvoiceController::class, 'show']);
+        Route::put('/contractor-invoices/{contractorInvoice}', [ContractorInvoiceController::class, 'update']);
+        Route::delete('/contractor-invoices/{contractorInvoice}', [ContractorInvoiceController::class, 'destroy']);
+        Route::post('/contractor-invoices/{contractorInvoice}/approve', [ContractorInvoiceController::class, 'approve']);
+
+        // Petty Cash Settlements (تسويات العهد والمصروفات النثرية)
+        Route::get('/petty-cash-settlements', [PettyCashSettlementController::class, 'index']);
+        Route::post('/petty-cash-settlements', [PettyCashSettlementController::class, 'store']);
+        Route::get('/petty-cash-settlements/{pettyCashSettlement}', [PettyCashSettlementController::class, 'show']);
+        Route::put('/petty-cash-settlements/{pettyCashSettlement}', [PettyCashSettlementController::class, 'update']);
+        Route::delete('/petty-cash-settlements/{pettyCashSettlement}', [PettyCashSettlementController::class, 'destroy']);
+        Route::post('/petty-cash-settlements/{pettyCashSettlement}/approve', [PettyCashSettlementController::class, 'approve']);
+
+        // Cost Centers & Project Costs Reports (تقارير تكاليف المشاريع ومراكز التكلفة)
+        Route::get('/reports/cost-centers', [CostCenterReportController::class, 'summary']);
+        Route::get('/reports/cost-centers/{id}/statement', [CostCenterReportController::class, 'statement']);
+    });
 
 // General Manager / Executive Purchase Request Decision Routes
 Route::middleware('auth:sanctum')->prefix('general-manager/purchase-requests')->group(function () {

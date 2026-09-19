@@ -1,0 +1,1 @@
+import{t as s}from"./index-sMLItzEy.js";const e=async t=>(await s.get(t)).data.data||[],c=t=>e(`/activity/purchase-requests/${t}`),i=t=>e(`/activity/purchase-orders/${t}`),n=()=>e("/activity/my-archive");export{i as a,n as b,c as g};

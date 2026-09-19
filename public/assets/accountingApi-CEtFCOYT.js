@@ -1,0 +1,1 @@
+import{t as s}from"./index-BTFgGgth.js";const n=async t=>(await s.get("/accounting/accounts",{params:t})).data.data,o=async t=>(await s.get("/accounting/cost-centers",{params:t})).data.data;export{o as a,n as g};

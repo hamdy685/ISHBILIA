@@ -8,6 +8,7 @@ import PageHeader from "../components/ui/PageHeader";
 import InstallPrompt from "../components/pwa/InstallPrompt";
 import { useNotificationCount } from "../utils/notificationBadge";
 import NetworkStatusToast from "../components/common/NetworkStatusToast";
+import { hasAnyRole } from "../utils/permissions";
 
 export const AuthenticatedLayout: React.FC = () => {
     const { user, logout, sessionExpired, hasPermission } = useAuth();
@@ -18,6 +19,13 @@ export const AuthenticatedLayout: React.FC = () => {
 
     const primaryRoleSlug = getPrimaryRoleSlug(user);
     const primaryRoleLabel = getRoleLabel(primaryRoleSlug);
+    const canAccessAccounting = hasAnyRole(user, [
+        "accountant",
+        "site_accountant",
+        "licenses_accountant",
+        "buffet_accountant",
+        "admin",
+    ]);
 
     const isActivePath = (path: string): boolean => {
         return (
@@ -536,6 +544,57 @@ export const AuthenticatedLayout: React.FC = () => {
                         <Link to="/my-archive" className={linkClassName('/my-archive')} onClick={closeMobileMenu}>
                             <span className="ml-2.5 text-sm" aria-hidden="true">🗂️</span> أرشيف إجراءاتي
                         </Link>
+
+                        {/* Financial Management (Accounting Module) Section */}
+                        {canAccessAccounting && (
+                            <div className="pt-2">
+                                <div className="px-3 py-1.5 mb-1 text-[11px] font-bold text-amber-400/90 uppercase tracking-wider font-mono flex items-center justify-between border-t border-slate-800/80">
+                                    <span className="flex items-center gap-1.5">
+                                        <span aria-hidden="true">⚖️</span>
+                                        <span>الإدارة المالية</span>
+                                    </span>
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono">
+                                        MVP
+                                    </span>
+                                </div>
+                                <Link
+                                    to="/accounting/chart-of-accounts"
+                                    className={linkClassName("/accounting/chart-of-accounts")}
+                                    onClick={closeMobileMenu}
+                                >
+                                    <span className="ml-2.5 text-sm" aria-hidden="true">🌳</span> شجرة الحسابات
+                                </Link>
+                                <Link
+                                    to="/accounting/cost-centers"
+                                    className={linkClassName("/accounting/cost-centers")}
+                                    onClick={closeMobileMenu}
+                                >
+                                    <span className="ml-2.5 text-sm" aria-hidden="true">🏷️</span> مراكز التكلفة
+                                </Link>
+                                <Link
+                                    to="/accounting/contractor-invoices"
+                                    className={linkClassName("/accounting/contractor-invoices")}
+                                    onClick={closeMobileMenu}
+                                >
+                                    <span className="ml-2.5 text-sm" aria-hidden="true">👷</span> مستخلصات المقاولين
+                                </Link>
+                                <Link
+                                    to="/accounting/petty-cash"
+                                    className={linkClassName("/accounting/petty-cash")}
+                                    onClick={closeMobileMenu}
+                                >
+                                    <span className="ml-2.5 text-sm" aria-hidden="true">💵</span> تسويات العهد
+                                </Link>
+                                <Link
+                                    to="/accounting/reports/project-costs"
+                                    className={linkClassName("/accounting/reports/project-costs")}
+                                    onClick={closeMobileMenu}
+                                >
+                                    <span className="ml-2.5 text-sm" aria-hidden="true">📊</span> تقرير تكاليف المشاريع
+                                </Link>
+                            </div>
+                        )}
+
                         <div className="border-t border-slate-800/80 my-3 pt-3"></div>
                         <Link
                             to="/notifications"

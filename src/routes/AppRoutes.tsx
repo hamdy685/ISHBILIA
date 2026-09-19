@@ -40,6 +40,11 @@ const SupplierPaymentsPage = React.lazy(() => import("../pages/accounting/Suppli
 const SupplierAccountsPage = React.lazy(() => import("../pages/accounting/SupplierAccountsPage"));
 const SupplierFinanceWorkspacePage = React.lazy(() => import("../pages/accounting/SupplierFinanceWorkspacePage"));
 const LandParcelsPage = React.lazy(() => import("../pages/accounting/LandParcelsPage"));
+const ChartOfAccountsPage = React.lazy(() => import("../pages/accounting/ChartOfAccountsPage"));
+const CostCentersPage = React.lazy(() => import("../pages/accounting/CostCentersPage"));
+const ContractorInvoicesPage = React.lazy(() => import("../pages/accounting/ContractorInvoicesPage"));
+const PettyCashPage = React.lazy(() => import("../pages/accounting/PettyCashPage"));
+const ProjectCostsReportPage = React.lazy(() => import("../pages/accounting/ProjectCostsReportPage"));
 const NotificationsPage = React.lazy(() => import("../pages/NotificationsPage"));
 const RoleArchivePage = React.lazy(() => import("../pages/RoleArchivePage"));
 const ProfilePage = React.lazy(() => import("../pages/ProfilePage"));
@@ -164,6 +169,15 @@ export const AppRoutes: React.FC = () => {
                     <Route path="/accounting/supplier-payments" element={<SupplierFinanceWorkspacePage />} />
                     <Route path="/accounting/supplier-accounts" element={<SupplierFinanceWorkspacePage />} />
                     <Route path="/accounting/reports" element={<UniversalReportsPage />} />
+                </Route>
+
+                {/* ── Financial Management (Isolated MVP Accounting Module) ──────── */}
+                <Route element={<RoleRoute allowedRoles={["accountant", "site_accountant", "licenses_accountant", "buffet_accountant", "admin"]} />}>
+                    <Route path="/accounting/chart-of-accounts" element={<ChartOfAccountsPage />} />
+                    <Route path="/accounting/cost-centers" element={<CostCentersPage />} />
+                    <Route path="/accounting/contractor-invoices" element={<ContractorInvoicesPage />} />
+                    <Route path="/accounting/petty-cash" element={<PettyCashPage />} />
+                    <Route path="/accounting/reports/project-costs" element={<ProjectCostsReportPage />} />
                 </Route>
 
                 {/* ── Department Accountants Dedicated Dashboard ─────────────────────── */}
