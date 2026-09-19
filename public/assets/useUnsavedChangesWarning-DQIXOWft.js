@@ -1,0 +1,1 @@
+import{b as t}from"./react-vendor-X-qJRN-c.js";const a="لديك تعديلات غير محفوظة. هل تريد مغادرة الصفحة وفقد هذه التعديلات؟",d=(n,e=a)=>{t.useEffect(()=>{if(!n)return;const r=o=>(o.preventDefault(),o.returnValue=e,e);return window.addEventListener("beforeunload",r),()=>window.removeEventListener("beforeunload",r)},[n,e])};export{d as u};

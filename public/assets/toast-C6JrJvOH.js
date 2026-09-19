@@ -1,0 +1,1 @@
+const o=new Set,c={success:(r,s)=>{o.forEach(e=>e(r,"success",s))},error:(r,s)=>{o.forEach(e=>e(r,"error",s))},info:(r,s)=>{o.forEach(e=>e(r,"info",s))},warning:(r,s)=>{o.forEach(e=>e(r,"warning",s))},subscribe:r=>(o.add(r),()=>o.delete(r))};export{c as t};
