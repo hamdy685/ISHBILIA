@@ -70,3 +70,63 @@ export const submitPurchaseRequestApi = async (
   return response.data.data;
 };
 
+export interface AddPurchaseRequestItemPayload {
+  item_description: string;
+  item_id?: number | null;
+  supplier_id?: number | null;
+  item_reference?: string;
+  region?: string;
+  quantity: number;
+  uom?: string;
+  estimated_unit_price?: number | null;
+  specifications?: string;
+  notes?: string;
+}
+
+export interface UpdatePurchaseRequestItemPayload {
+  item_description?: string;
+  item_id?: number | null;
+  supplier_id?: number | null;
+  item_reference?: string;
+  region?: string;
+  quantity?: number;
+  uom?: string;
+  estimated_unit_price?: number | null;
+  specifications?: string;
+  notes?: string;
+}
+
+export const addPurchaseRequestItemApi = async (
+  prId: number,
+  payload: AddPurchaseRequestItemPayload
+): Promise<PurchaseRequest> => {
+  const response = await apiClient.post<{ message: string; data: PurchaseRequest }>(
+    `/purchase-requests/${prId}/items`,
+    payload
+  );
+  return response.data.data;
+};
+
+export const updatePurchaseRequestItemApi = async (
+  prId: number,
+  itemId: number,
+  payload: UpdatePurchaseRequestItemPayload
+): Promise<PurchaseRequest> => {
+  const response = await apiClient.put<{ message: string; data: PurchaseRequest }>(
+    `/purchase-requests/${prId}/items/${itemId}`,
+    payload
+  );
+  return response.data.data;
+};
+
+export const deletePurchaseRequestItemApi = async (
+  prId: number,
+  itemId: number
+): Promise<PurchaseRequest> => {
+  const response = await apiClient.delete<{ message: string; data: PurchaseRequest }>(
+    `/purchase-requests/${prId}/items/${itemId}`
+  );
+  return response.data.data;
+};
+
+

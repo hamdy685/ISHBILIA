@@ -1,0 +1,1 @@
+import{r as a}from"./index-8UaczEKg.js";const s=async()=>(await a.get("/admin/items")).data.data,r=s,m=async t=>(await a.post("/admin/items",t)).data.data,d=async(t,e)=>(await a.put(`/admin/items/${t}`,e)).data.data,c=async t=>(await a.delete(`/admin/items/${t}`)).data;export{r as a,m as c,s as g,c as t,d as u};

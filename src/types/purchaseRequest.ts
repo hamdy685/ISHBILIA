@@ -192,6 +192,7 @@ export const PR_TYPE_LABELS: Record<PurchaseRequestType, { label: string; icon: 
 export interface PurchaseRequest {
   id: number;
   request_number: string;
+  user_id?: number | null;
   request_type?: PurchaseRequestType;
   parcel_reference?: string | null;
   region?: string | null;

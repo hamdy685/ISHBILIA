@@ -18,6 +18,7 @@ use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\SystemEventController;
 use App\Http\Controllers\Api\V1\ProcurementPurchaseOrderController;
 use App\Http\Controllers\Api\V1\PurchaseRequestController;
+use App\Http\Controllers\Api\V1\PurchaseRequestItemController;
 use App\Http\Controllers\Api\V1\PurchaseRequestSupplementController;
 use App\Http\Controllers\Api\V1\PurchasesReportController;
 use App\Http\Controllers\Api\V1\ReviewerPurchaseRequestController;
@@ -103,6 +104,18 @@ Route::middleware('auth:sanctum')->prefix('purchase-requests')->group(function (
         ->whereNumber('id')
         ->whereNumber('attachmentId')
         ->middleware('permission:purchase_request.view_own');
+
+    // Purchase Request Line Items Management (Emp in DRAFT, Reviewer during review, Procurement in active procurement states, Admin)
+    Route::post('/{id}/items', [PurchaseRequestItemController::class, 'store'])
+        ->whereNumber('id');
+
+    Route::put('/{id}/items/{itemId}', [PurchaseRequestItemController::class, 'update'])
+        ->whereNumber('id')
+        ->whereNumber('itemId');
+
+    Route::delete('/{id}/items/{itemId}', [PurchaseRequestItemController::class, 'destroy'])
+        ->whereNumber('id')
+        ->whereNumber('itemId');
 });
 
 // Reviewer Purchase Request Routes

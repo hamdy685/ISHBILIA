@@ -13,6 +13,7 @@
 .env
 .env.backup
 .env.production
+.env.testing
 firebase-service-account.json
 .phpactor.json
 .phpunit.result.cache

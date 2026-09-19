@@ -1085,6 +1085,10 @@ export const ProcurementManagerPage: React.FC = () => {
         pr={selectedPrForDetails}
         isOpen={Boolean(selectedPrForDetails)}
         onClose={() => setSelectedPrForDetails(null)}
+        onPrUpdated={(updatedPr) => {
+          setSelectedPrForDetails(updatedPr);
+          void loadData();
+        }}
         onCreatePo={(prId) => {
           setSelectedPrForDetails(null);
           navigate(`/procurement/purchase-orders/create?pr=${prId}&returnUrl=${encodeURIComponent('/procurement')}`, { state: { returnTo: '/procurement' } });

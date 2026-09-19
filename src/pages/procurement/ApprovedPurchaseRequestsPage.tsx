@@ -252,6 +252,10 @@ export const ApprovedPurchaseRequestsPage: React.FC = () => {
         pr={selectedPr}
         isOpen={!!selectedPr}
         onClose={() => setSelectedPr(null)}
+        onPrUpdated={(updatedPr) => {
+          setSelectedPr(updatedPr);
+          void loadRequests();
+        }}
         onCreatePo={(prId) => navigate(`/procurement/purchase-orders/create?pr=${prId}`)}
       />
 
