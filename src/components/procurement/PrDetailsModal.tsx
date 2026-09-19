@@ -12,6 +12,7 @@ import AddEditPrItemModal from './AddEditPrItemModal';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import { deletePurchaseRequestItemApi } from '../../api/purchaseRequests';
 import { parseApiError } from '../../utils/apiError';
+import { SupplementItemBadge } from '../common/SupplementItemBadge';
 
 interface PrDetailsModalProps {
   pr: PurchaseRequest | null;
@@ -360,7 +361,13 @@ export const PrDetailsModal: React.FC<PrDetailsModalProps> = ({
                         {item.region || currentPr.region || '—'}
                       </td>
                       <td className="p-3 text-slate-100 font-semibold">
-                        <div>{item.item_description}</div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span>{item.item_description}</span>
+                          <SupplementItemBadge
+                            isSupplementary={item.is_supplementary}
+                            batchNumber={item.supplement_batch}
+                          />
+                        </div>
                         {item.specifications && (
                           <div className="text-[10px] text-slate-400 font-normal mt-0.5">
                             {item.specifications}
@@ -459,8 +466,12 @@ export const PrDetailsModal: React.FC<PrDetailsModalProps> = ({
                           {idx + 1}
                         </span>
                         <div className="flex-1 min-w-0">
-                          <h4 className="text-sm font-bold text-slate-100 break-words">
-                            {item.item_description}
+                          <h4 className="text-sm font-bold text-slate-100 break-words flex items-center gap-1.5 flex-wrap">
+                            <span>{item.item_description}</span>
+                            <SupplementItemBadge
+                              isSupplementary={item.is_supplementary}
+                              batchNumber={item.supplement_batch}
+                            />
                           </h4>
                           {item.specifications && (
                             <p className="text-[11px] text-slate-400 mt-0.5">

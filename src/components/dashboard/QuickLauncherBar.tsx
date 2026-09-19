@@ -188,7 +188,7 @@ export const QuickLauncherBar: React.FC<QuickLauncherBarProps> = ({
       items.push(
         { id: 'adm-users', label: 'إدارة المستخدمين', icon: '👥', to: '/admin/users', variant: 'primary' },
         { id: 'adm-roles', label: 'الأدوار والصلاحيات', icon: '🛡️', to: '/admin/roles', variant: 'amber' },
-        { id: 'adm-depts', label: 'الأقسام والتصنيفات', icon: '🏢', to: '/admin/departments', variant: 'indigo' },
+        { id: 'adm-depts', label: 'إدارة الأقسام', icon: '🏢', to: '/admin/departments', variant: 'indigo' },
         { id: 'adm-monitor', label: 'مراقبة النظام System Monitor', icon: '📡', to: '/admin/system-monitor', variant: 'rose' }
       );
       return items;

@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/storage/quotes/{filename}', [PurchaseQuoteController::class, 'viewFileByName']);
 Route::get('/purchase-quotes/{id}/file', [PurchaseQuoteController::class, 'viewFile']);
+Route::middleware('auth:sanctum')->get('/api/items/suggestions', [\App\Http\Controllers\Api\V1\CatalogItemController::class, 'suggestions']);
 
 Route::get('/{any}', function () {
     // Check if dist/index.html or public/index.html exists

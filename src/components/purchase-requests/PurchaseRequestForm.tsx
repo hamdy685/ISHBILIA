@@ -23,6 +23,7 @@ import { FormField, Input, Select, Textarea, SearchableSelect } from '../ui/Form
 import { DEFAULT_PR_UNIT_CODES, getUnitLabel, getUnitOptions } from '../../utils/units';
 import { useAuth } from '../../context/AuthContext';
 import { PurchaseRequestItemsSummaryTable } from './PurchaseRequestItemsSummaryTable';
+import { ItemAutocompleteInput } from '../common/ItemAutocompleteInput';
 
 const UNIT_OPTIONS = getUnitOptions(DEFAULT_PR_UNIT_CODES);
 
@@ -629,28 +630,14 @@ export const PurchaseRequestForm: React.FC<Props> = ({
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <FormField label="اختيار سريع من الكتالوج">
-                  <SearchableSelect
-                    options={catalogOptions}
-                    value={item.item_id || ''}
-                    onChange={(val) => handleItemChange(index, 'item_id', val ? String(val) : '')}
-                    disabled={isLoadingCatalog}
-                    clearable
-                    onClear={() => handleItemChange(index, 'item_id', '')}
-                    placeholder="-- ابحث في كتالوج الأصناف... --"
-                    searchPlaceholder="ابحث باسم الصنف أو الكود..."
-                    emptyMessage="لا يوجد صنف بهذا الاسم في الكتالوج"
-                  />
-                </FormField>
-
-                <div className={requestType === 'OFFICE_SUPPLIES' ? "md:col-span-1" : "md:col-span-2"}>
-                  <FormField label="الصنف" required error={fieldErrors[`item_${index}_description`]} >
-                    <Input
-                      type="text"
+                <div className={requestType === 'OFFICE_SUPPLIES' ? "md:col-span-2" : "md:col-span-3"}>
+                  <FormField label="الصنف" required error={fieldErrors[`item_${index}_description`]}>
+                    <ItemAutocompleteInput
+                      id={`pr-form-item-${index}-description`}
                       required
                       error={Boolean(fieldErrors[`item_${index}_description`])}
                       value={item.item_description}
-                      onChange={(e) => handleItemChange(index, 'item_description', e.target.value)}
+                      onChange={(val) => handleItemChange(index, 'item_description', val)}
                       placeholder={requestType === 'OFFICE_SUPPLIES' ? 'مثال: طابعة ليزر / كرتونة ورق تصوير A4 / أقلام' : 'اسم الصنف أو المادة المطلوبة بالتفصيل'}
                     />
                   </FormField>

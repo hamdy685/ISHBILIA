@@ -16,6 +16,7 @@ import { getSuppliersApi } from '../../api/suppliers';
 import { المورد as Supplier } from '../../types/purchaseOrder';
 import { DEFAULT_PR_UNIT_CODES, getUnitOptions } from '../../utils/units';
 import { parseApiError } from '../../utils/apiError';
+import { ItemAutocompleteInput } from '../common/ItemAutocompleteInput';
 
 const UNIT_OPTIONS = getUnitOptions(DEFAULT_PR_UNIT_CODES);
 
@@ -206,31 +207,33 @@ export const AddEditPrItemModal: React.FC<AddEditPrItemModalProps> = ({
           </div>
         )}
 
-        {/* Catalog Selector */}
-        <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 space-y-2">
-          <label className="text-xs font-bold text-slate-300 block">
-            اختيار صنف جاهز من الدليل (اختياري)
-          </label>
-          <select
-            value={itemId || ''}
-            onChange={(e) => handleCatalogSelect(e.target.value)}
-            disabled={loadingCatalog || isSubmitting}
-            className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-cyan-500 focus:outline-none"
-          >
-            <option value="">-- أو كتابة صنف مخصص بالأسفل --</option>
-            {catalogItems.map((cat) => (
-              <option key={cat.id} value={cat.id}>
-                {cat.name} {cat.code ? `(${cat.code})` : ''} - {cat.uom}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Catalog Selector (if catalog has items) */}
+        {catalogItems.length > 0 && (
+          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 space-y-2">
+            <label className="text-xs font-bold text-slate-300 block">
+              اختيار صنف جاهز من الدليل (اختياري)
+            </label>
+            <select
+              value={itemId || ''}
+              onChange={(e) => handleCatalogSelect(e.target.value)}
+              disabled={loadingCatalog || isSubmitting}
+              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-cyan-500 focus:outline-none"
+            >
+              <option value="">-- أو كتابة صنف مخصص بالأسفل --</option>
+              {catalogItems.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.name} {cat.code ? `(${cat.code})` : ''} - {cat.uom}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
-        {/* Item Description */}
+        {/* Item Description with Autocomplete */}
         <FormField label="وصف البند / المواد المطلوبة *" required>
-          <Input
+          <ItemAutocompleteInput
             value={itemDescription}
-            onChange={(e) => setItemDescription(e.target.value)}
+            onChange={setItemDescription}
             placeholder="مثال: أسمنت بورتلاندي عادي 50 كجم، حديد تسليح 12 مم..."
             disabled={isSubmitting}
             required

@@ -28,6 +28,8 @@ export interface ApprovedReceiptItem {
       notes?: string | null;
     } | null;
     item?: { id: number; name: string; sku?: string | null } | null;
+    is_supplementary?: boolean;
+    supplement_batch?: number | null;
   } | null;
 }
 

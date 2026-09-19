@@ -6,6 +6,7 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { FormField, Input, Select } from '../ui/FormField';
 import { DEFAULT_PR_UNIT_CODES, getUnitOptions } from '../../utils/units';
+import { ItemAutocompleteInput } from '../common/ItemAutocompleteInput';
 
 const UNIT_OPTIONS = getUnitOptions(DEFAULT_PR_UNIT_CODES);
 
@@ -122,26 +123,27 @@ export const AddReviewItemDialog: React.FC<Props> = ({
         )}
 
         <div className="space-y-3">
-          <FormField label="اختر من الكتالوج (اختياري)">
-            <Select
-              value={itemId || ''}
-              onChange={(e) => handleCatalogSelect(e.target.value)}
-            >
-              <option value="">-- بند مخصص</option>
-              {catalogItems.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.name}
-                </option>
-              ))}
-            </Select>
-          </FormField>
+          {catalogItems.length > 0 && (
+            <FormField label="اختر من الكتالوج (اختياري)">
+              <Select
+                value={itemId || ''}
+                onChange={(e) => handleCatalogSelect(e.target.value)}
+              >
+                <option value="">-- بند مخصص</option>
+                {catalogItems.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </option>
+                ))}
+              </Select>
+            </FormField>
+          )}
 
           <FormField label="وصف البند" required>
-            <Input
-              type="text"
+            <ItemAutocompleteInput
               required
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={setDescription}
               placeholder="وصف البند المطلوب..."
             />
           </FormField>

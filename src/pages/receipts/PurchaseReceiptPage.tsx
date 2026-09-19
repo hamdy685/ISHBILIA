@@ -20,6 +20,7 @@ import {
   getReceiptPhotoUrl,
 } from '../../api/purchaseReceipts';
 import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh';
+import { SupplementItemBadge } from '../../components/common/SupplementItemBadge';
 
 interface ReceiptColorTheme {
   border: string;
@@ -595,8 +596,12 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                       <span className={`flex h-8 w-8 items-center justify-center rounded-xl ${theme.badgeBg} ${theme.badgeText} font-black text-base shrink-0 shadow-md`}>
                                         {idx + 1}
                                       </span>
-                                      <h4 className="text-base sm:text-xl font-black text-white">
-                                        {item.item_description || item.item?.name}
+                                      <h4 className="text-base sm:text-xl font-black text-white flex items-center gap-2 flex-wrap">
+                                        <span>{item.item_description || item.item?.name}</span>
+                                        <SupplementItemBadge
+                                          isSupplementary={item.is_supplementary}
+                                          batchNumber={item.supplement_batch}
+                                        />
                                       </h4>
                                     </div>
                                     {item.specifications && (
@@ -1072,8 +1077,12 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                       <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-300 font-black text-sm border border-emerald-500/40 shrink-0">
                                         #{idx + 1}
                                       </span>
-                                      <h4 className="text-base sm:text-lg font-black text-slate-50 tracking-wide">
-                                        {item.purchase_order_item?.item_description || item.purchase_order_item?.item?.name}
+                                      <h4 className="text-base sm:text-lg font-black text-slate-50 tracking-wide flex items-center gap-2 flex-wrap">
+                                        <span>{item.purchase_order_item?.item_description || item.purchase_order_item?.item?.name}</span>
+                                        <SupplementItemBadge
+                                          isSupplementary={item.purchase_order_item?.is_supplementary}
+                                          batchNumber={item.purchase_order_item?.supplement_batch}
+                                        />
                                       </h4>
                                     </div>
                                   </div>
@@ -1357,8 +1366,12 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="font-mono text-cyan-400 font-bold text-xs">#{idx + 1}</span>
-                                <span className="font-black text-sm text-slate-100">
-                                  {item.purchase_order_item?.item_description || item.purchase_order_item?.item?.name}
+                                <span className="font-black text-sm text-slate-100 flex items-center gap-2 flex-wrap">
+                                  <span>{item.purchase_order_item?.item_description || item.purchase_order_item?.item?.name}</span>
+                                  <SupplementItemBadge
+                                    isSupplementary={item.purchase_order_item?.is_supplementary}
+                                    batchNumber={item.purchase_order_item?.supplement_batch}
+                                  />
                                 </span>
                               </div>
                             </div>

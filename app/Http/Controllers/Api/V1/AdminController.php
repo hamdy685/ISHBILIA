@@ -396,7 +396,7 @@ class AdminController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'sku' => 'required|string|max:50|unique:items,sku',
-            'category_id' => 'required|exists:categories,id',
+            'category_id' => 'nullable|exists:categories,id',
             'uom' => 'required|string|max:50',
             'description' => 'nullable|string',
             'is_active' => 'boolean',
@@ -405,7 +405,7 @@ class AdminController extends Controller
         $item = Item::create([
             'name' => $validated['name'],
             'sku' => $validated['sku'],
-            'category_id' => $validated['category_id'],
+            'category_id' => $validated['category_id'] ?? null,
             'uom' => $validated['uom'],
             'description' => $validated['description'] ?? null,
             'is_active' => $validated['is_active'] ?? true,
@@ -423,7 +423,7 @@ class AdminController extends Controller
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'sku' => ['sometimes', 'required', 'string', 'max:50', Rule::unique('items')->ignore($item->id)],
-            'category_id' => 'sometimes|required|exists:categories,id',
+            'category_id' => 'nullable|exists:categories,id',
             'uom' => 'sometimes|required|string|max:50',
             'description' => 'nullable|string',
             'is_active' => 'sometimes|boolean',

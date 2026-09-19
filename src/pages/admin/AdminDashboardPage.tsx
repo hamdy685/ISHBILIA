@@ -497,23 +497,6 @@ export const AdminDashboardPage: React.FC = () => {
 
           <Card className="space-y-3">
             <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-              <span className="font-bold text-slate-200 text-xs">📁 التصنيفات</span>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800">
-                متاح بالكامل
-              </span>
-            </div>
-            <p className="text-xs text-slate-400">
-              إدارة تصنيفات الأصناف والمواد التابعة لكتاب المشتريات.
-            </p>
-            <Link to="/admin/categories" className="block pt-2">
-              <Button variant="secondary" size="sm" className="w-full">
-                إدارة التصنيفات &rarr;
-              </Button>
-            </Link>
-          </Card>
-
-          <Card className="space-y-3">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-2">
               <span className="font-bold text-slate-200 text-xs">📦 الأصناف والكتالوج</span>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800">
                 متاح بالكامل

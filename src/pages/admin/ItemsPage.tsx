@@ -10,7 +10,6 @@ import {
   toggleItemActiveAdminApi,
   ItemInput,
 } from '../../api/admin/items';
-import { getCategoriesAdminApi, AdminCategory } from '../../api/admin/categories';
 import { parseApiError } from '../../utils/apiError';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -25,12 +24,10 @@ const UNIT_OPTIONS = getUnitOptions(DEFAULT_PR_UNIT_CODES);
 export const ItemsPage: React.FC = () => {
   const { hasPermission } = useAuth();
   const [items, setItems] = useState<AdminItem[]>([]);
-  const [categories, setCategories] = useState<AdminCategory[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [categoryFilter, setCategoryFilter] = useState('all');
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -38,7 +35,6 @@ export const ItemsPage: React.FC = () => {
   const [formData, setFormData] = useState<ItemInput>({
     name: '',
     sku: '',
-    category_id: 0,
     uom: 'UNIT',
     description: '',
     is_active: true,
@@ -51,7 +47,6 @@ export const ItemsPage: React.FC = () => {
     try {
       const iData = await getCatalogItemsAdminApi();
       setItems(iData || []);
-      getCategoriesAdminApi().then((cData) => setCategories(cData || [])).catch(() => {});
     } catch (err: unknown) {
       setError(parseApiError(err).message);
     } finally {
@@ -68,7 +63,6 @@ export const ItemsPage: React.FC = () => {
     setFormData({
       name: '',
       sku: `SKU-${Date.now().toString().slice(-4)}`,
-      category_id: categories.length > 0 ? categories[0].id : 0,
       uom: 'UNIT',
       description: '',
       is_active: true,
@@ -81,7 +75,6 @@ export const ItemsPage: React.FC = () => {
     setFormData({
       name: item.name,
       sku: item.sku,
-      category_id: item.category?.id || (categories.length > 0 ? categories[0].id : 0),
       uom: getUnitValue(item.uom),
       description: item.description || '',
       is_active: item.is_active,
@@ -130,10 +123,9 @@ export const ItemsPage: React.FC = () => {
 
   const normalizedSearch = searchTerm.trim().toLowerCase();
   const filteredItems = items.filter((item) => {
-    const matchesSearch = !normalizedSearch || [item.name, item.sku, item.description, item.category?.name].filter(Boolean).join(' ').toLowerCase().includes(normalizedSearch);
+    const matchesSearch = !normalizedSearch || [item.name, item.sku, item.description].filter(Boolean).join(' ').toLowerCase().includes(normalizedSearch);
     const matchesStatus = statusFilter === 'all' || (statusFilter === 'active' ? item.is_active : !item.is_active);
-    const matchesCategory = categoryFilter === 'all' || String(item.category?.id || '') === categoryFilter;
-    return matchesSearch && matchesStatus && matchesCategory;
+    return matchesSearch && matchesStatus;
   });
 
   return (
@@ -145,7 +137,7 @@ export const ItemsPage: React.FC = () => {
             <span>📦</span> الأصناف والكتالوج
           </h1>
           <p className="mt-1 text-xs text-slate-400">
-            إدارة وتحديث أصناف ومواد الشركة ووحدات القياس وحالتها
+            أصناف ومواد المشتريات المعتمدة ووحدات القياس وحالتها
           </p>
         </div>
 
@@ -159,17 +151,8 @@ export const ItemsPage: React.FC = () => {
       <TableFilterBar
         searchValue={searchTerm}
         onSearchChange={setSearchTerm}
-        searchPlaceholder="بحث باسم الصنف أو الرقم أو التصنيف..."
+        searchPlaceholder="بحث باسم الصنف أو الكود أو الوصف..."
         selects={[
-          {
-            label: 'التصنيف',
-            value: categoryFilter,
-            onChange: setCategoryFilter,
-            options: [
-              { value: 'all', label: 'كل التصنيفات' },
-              ...categories.map((category) => ({ value: String(category.id), label: category.name })),
-            ],
-          },
           {
             label: 'الحالة',
             value: statusFilter,
@@ -181,8 +164,8 @@ export const ItemsPage: React.FC = () => {
             ],
           },
         ]}
-        onClear={() => { setSearchTerm(''); setCategoryFilter('all'); setStatusFilter('all'); }}
-        hasActiveFilters={Boolean(searchTerm || categoryFilter !== 'all' || statusFilter !== 'all')}
+        onClear={() => { setSearchTerm(''); setStatusFilter('all'); }}
+        hasActiveFilters={Boolean(searchTerm || statusFilter !== 'all')}
         resultCount={filteredItems.length}
         totalCount={items.length}
         resultLabel="صنف"
@@ -194,7 +177,6 @@ export const ItemsPage: React.FC = () => {
           <TableHeader>
             <TableRow>
               <TableHead>اسم الصنف</TableHead>
-              <TableHead>التصنيف</TableHead>
               <TableHead>الوحدة</TableHead>
               <TableHead>الحالة</TableHead>
               <TableHead className="text-center">الإجراءات</TableHead>
@@ -203,8 +185,8 @@ export const ItemsPage: React.FC = () => {
           <TableBody>
             {filteredItems.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="p-8 text-center text-slate-400 text-xs">
-                  {items.length === 0 ? 'لا توجد أصناف مسجلة حتى الآن.' : 'لم نجد أصنافًا مطابقة للفلاتر الحالية.'}
+                <TableCell colSpan={4} className="p-8 text-center text-slate-400 text-xs">
+                  {items.length === 0 ? 'لا توجد أصناف مسجلة حتى الآن. ستضاف الأصناف تلقائياً عند إنشاء طلبات الشراء.' : 'لم نجد أصنافًا مطابقة للفلاتر الحالية.'}
                 </TableCell>
               </TableRow>
             ) : filteredItems.map((item) => (
@@ -213,7 +195,6 @@ export const ItemsPage: React.FC = () => {
                   <div>{item.name}</div>
                   {item.description && <div className="text-[11px] text-slate-400 font-normal">{item.description}</div>}
                 </TableCell>
-                <TableCell className="text-slate-300 font-bold">{item.category?.name || 'غير مصنف'}</TableCell>
                 <TableCell className="text-slate-400">{getUnitLabel(item.uom)}</TableCell>
                 <TableCell>
                   {item.is_active ? (
@@ -336,33 +317,16 @@ export const ItemsPage: React.FC = () => {
             />
           </FormField>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <FormField label="التصنيف">
-              <Select
-                value={formData.category_id}
-                onChange={(e) => setFormData({ ...formData, category_id: parseInt(e.target.value, 10) })}
-              >
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </option>
-                ))}
-              </Select>
-            </FormField>
-
-            <FormField label="الوحدة" required>
-              <Select
-                value={getUnitValue(formData.uom)}
-                onChange={(e) => setFormData({ ...formData, uom: e.target.value })}
-              >
-                {UNIT_OPTIONS.map((unit) => (
-                  <option key={unit.value} value={unit.value}>{unit.label}</option>
-                ))}
-              </Select>
-            </FormField>
-
-            
-          </div>
+          <FormField label="الوحدة" required>
+            <Select
+              value={getUnitValue(formData.uom)}
+              onChange={(e) => setFormData({ ...formData, uom: e.target.value })}
+            >
+              {UNIT_OPTIONS.map((unit) => (
+                <option key={unit.value} value={unit.value}>{unit.label}</option>
+              ))}
+            </Select>
+          </FormField>
 
           <FormField label="وصف الصنف والمواصفات الافتراضية">
             <Textarea

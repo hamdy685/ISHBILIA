@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { PurchaseRequest } from '../../types/purchaseRequest';
 import { CreateSupplementItemPayload, CreateSupplementPayload } from '../../types/supplement';
 import { createSupplementApi } from '../../api/supplements';
+import { ItemAutocompleteInput } from '../common/ItemAutocompleteInput';
 
 interface CreateSupplementModalProps {
   request: PurchaseRequest;
@@ -216,13 +217,11 @@ export const CreateSupplementModal: React.FC<CreateSupplementModalProps> = ({
                       <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
                         وصف الصنف *
                       </label>
-                      <input
-                        type="text"
+                      <ItemAutocompleteInput
                         required
                         value={item.item_description}
-                        onChange={(e) => handleItemChange(idx, 'item_description', e.target.value)}
+                        onChange={(val) => handleItemChange(idx, 'item_description', val)}
                         placeholder="اسم المادة أو الصنف"
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                       />
                     </div>
 

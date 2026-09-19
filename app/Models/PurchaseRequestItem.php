@@ -14,6 +14,51 @@ class PurchaseRequestItem extends Model
 
     protected $table = 'purchase_request_items';
 
+    protected static function booted(): void
+    {
+        static::creating(function (PurchaseRequestItem $item) {
+            if (!empty($item->item_description) && empty($item->item_id)) {
+                $name = trim($item->item_description);
+                if ($name !== '') {
+                    $catalogItem = Item::whereRaw('LOWER(TRIM(name)) = ?', [mb_strtolower($name)])->first();
+                    if (!$catalogItem) {
+                        $catalogItem = Item::create([
+                            'name' => $name,
+                            'sku' => 'SKU-' . strtoupper(substr(md5($name . microtime()), 0, 6)),
+                            'uom' => $item->uom ?: 'PCS',
+                            'category_id' => null,
+                            'description' => $item->specifications ?: null,
+                            'default_estimated_price' => $item->estimated_unit_price ?: 0.00,
+                            'is_active' => true,
+                        ]);
+                    }
+                    $item->item_id = $catalogItem->id;
+                }
+            }
+        });
+
+        static::updating(function (PurchaseRequestItem $item) {
+            if ($item->isDirty('item_description') && !empty($item->item_description)) {
+                $name = trim($item->item_description);
+                if ($name !== '') {
+                    $catalogItem = Item::whereRaw('LOWER(TRIM(name)) = ?', [mb_strtolower($name)])->first();
+                    if (!$catalogItem) {
+                        $catalogItem = Item::create([
+                            'name' => $name,
+                            'sku' => 'SKU-' . strtoupper(substr(md5($name . microtime()), 0, 6)),
+                            'uom' => $item->uom ?: 'PCS',
+                            'category_id' => null,
+                            'description' => $item->specifications ?: null,
+                            'default_estimated_price' => $item->estimated_unit_price ?: 0.00,
+                            'is_active' => true,
+                        ]);
+                    }
+                    $item->item_id = $catalogItem->id;
+                }
+            }
+        });
+    }
+
     protected $fillable = [
         'purchase_request_id',
         'item_id',

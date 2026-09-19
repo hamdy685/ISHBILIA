@@ -13,6 +13,7 @@ import PrintablePO from '../../components/procurement/PrintablePO';
 import { UnifiedNotesCard } from '../../components/common/UnifiedNotesCard';
 import { Modal } from '../../components/ui/Modal';
 import { useAuth } from '../../context/AuthContext';
+import { SupplementItemBadge } from '../../components/common/SupplementItemBadge';
 
 export const AccountingPurchaseOrderDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -232,7 +233,15 @@ export const AccountingPurchaseOrderDetailsPage: React.FC = () => {
                 po.items.map((item, index) => (
                   <TableRow key={item.id || index}>
                     <TableCell className="font-mono text-cyan-400">{index + 1}</TableCell>
-                    <TableCell className="font-bold text-slate-100">{item.item_name || item.item?.name || '—'}</TableCell>
+                    <TableCell className="font-bold text-slate-100">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span>{item.item_name || item.item?.name || '—'}</span>
+                        <SupplementItemBadge
+                          isSupplementary={item.is_supplementary}
+                          batchNumber={item.supplement_batch}
+                        />
+                      </div>
+                    </TableCell>
                     <TableCell className="font-mono text-slate-300">{item.region || '—'}</TableCell>
                     <TableCell className="text-slate-300">
                       {item.quantity} {getUnitLabel(item.uom || '')}
@@ -265,12 +274,18 @@ export const AccountingPurchaseOrderDetailsPage: React.FC = () => {
             po.items.map((item, index) => (
               <div key={`po-mob-${item.id || index}`} className="rounded-xl border border-slate-800 bg-slate-950/90 p-3.5 space-y-2.5 shadow-sm">
                 <div className="flex items-start justify-between gap-2 border-b border-slate-800/80 pb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs font-black px-2 py-0.5 rounded-md bg-cyan-950 text-cyan-300 border border-cyan-800/80">
-                      #{index + 1}
-                    </span>
-                    <h4 className="text-sm font-black text-slate-100">{item.item_name || item.item?.name || '—'}</h4>
-                  </div>
+                    <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+                      <span className="font-mono text-xs font-black px-2 py-0.5 rounded-md bg-cyan-950 text-cyan-300 border border-cyan-800/80">
+                        #{index + 1}
+                      </span>
+                      <h4 className="text-sm font-black text-slate-100 flex items-center gap-1.5 flex-wrap">
+                        <span>{item.item_name || item.item?.name || '—'}</span>
+                        <SupplementItemBadge
+                          isSupplementary={item.is_supplementary}
+                          batchNumber={item.supplement_batch}
+                        />
+                      </h4>
+                    </div>
                   {item.region && (
                     <span className="text-[11px] text-slate-300 bg-slate-900 px-2 py-0.5 rounded border border-slate-800 font-medium">
                       {item.region}

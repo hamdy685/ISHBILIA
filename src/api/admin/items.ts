@@ -17,7 +17,7 @@ export interface AdminItem {
 export interface ItemInput {
   name: string;
   sku: string;
-  category_id: number;
+  category_id?: number | null;
   uom: string;
   description?: string;
   is_active?: boolean;

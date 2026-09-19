@@ -52,6 +52,8 @@ export interface PurchaseOrderItem {
   unit_price: string;
   line_total: string;
   specifications?: string | null;
+  is_supplementary?: boolean;
+  supplement_batch?: number | null;
 }
 
 export interface PurchaseOrder {

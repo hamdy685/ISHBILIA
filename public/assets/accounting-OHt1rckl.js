@@ -1,0 +1,1 @@
+import{r as t}from"./index-DdhC5Ofs.js";const c="/accounting/purchase-orders",e=async()=>(await t.get(c)).data.data,n=async a=>(await t.get(`${c}/${a}`)).data.data,o=async(a,r={})=>(await t.post(`${c}/${a}/approve`,r)).data.data;export{o as a,n as b,e as g};

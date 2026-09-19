@@ -55,6 +55,7 @@ Route::prefix('auth')->group(function () {
 
 // Catalog Items Route
 Route::middleware('auth:sanctum')->get('/catalog-items', [\App\Http\Controllers\Api\V1\CatalogItemController::class, 'index']);
+Route::middleware('auth:sanctum')->get('/items/suggestions', [\App\Http\Controllers\Api\V1\CatalogItemController::class, 'suggestions']);
 Route::middleware('auth:sanctum')->get('/reports/purchases', [PurchasesReportController::class, 'index'])
     ->middleware('permission:purchase_order.view|purchase_order.view_gm|purchase_order.view_accounting');
 

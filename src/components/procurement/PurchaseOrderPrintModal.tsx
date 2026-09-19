@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { PurchaseOrder } from '../../types/purchaseOrder';
 import { getUnitLabel } from '../../utils/units';
 import { printDocumentOnly } from '../../utils/print';
+import { SupplementItemBadge } from '../common/SupplementItemBadge';
 
 interface PurchaseOrderPrintModalProps {
   po: PurchaseOrder;
@@ -101,7 +102,15 @@ export const PurchaseOrderPrintModal: React.FC<PurchaseOrderPrintModalProps> = (
                     <td className="border border-slate-900 p-2 text-center">{index + 1}</td>
                     <td className="border border-slate-900 p-2 font-mono">{item.item_reference || '—'}</td>
                     <td className="border border-slate-900 p-2">{item.region || '—'}</td>
-                    <td className="border border-slate-900 p-2 font-bold">{item.item_name || item.item_description}</td>
+                    <td className="border border-slate-900 p-2 font-bold">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span>{item.item_name || item.item_description}</span>
+                        <SupplementItemBadge
+                          isSupplementary={item.is_supplementary}
+                          batchNumber={item.supplement_batch}
+                        />
+                      </div>
+                    </td>
                     <td className="border border-slate-900 p-2 text-center">{getUnitLabel(item.uom || 'PCS')}</td>
                     <td className="border border-slate-900 p-2 text-center">{item.quantity}</td>
                     <td className="border border-slate-900 p-2 text-center">{Number(item.unit_price || 0).toFixed(2)}</td>

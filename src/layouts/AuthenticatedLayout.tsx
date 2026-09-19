@@ -319,7 +319,6 @@ export const AuthenticatedLayout: React.FC = () => {
                         <Link to="/admin/roles" className={linkClassName("/admin/roles")}><span className="ml-2.5 text-sm" aria-hidden="true">🛡️</span> الأدوار</Link>
                         <Link to="/admin/permissions" className={linkClassName("/admin/permissions")}><span className="ml-2.5 text-sm" aria-hidden="true">🔑</span> الصلاحيات</Link>
                         <Link to="/admin/departments" className={linkClassName("/admin/departments")}><span className="ml-2.5 text-sm" aria-hidden="true">🏢</span> الأقسام</Link>
-                        <Link to="/admin/categories" className={linkClassName("/admin/categories")}><span className="ml-2.5 text-sm" aria-hidden="true">📁</span> التصنيفات</Link>
                         <Link to="/admin/items" className={linkClassName("/admin/items")}><span className="ml-2.5 text-sm" aria-hidden="true">📦</span> الأصناف</Link>
                         <Link to="/admin/suppliers" className={linkClassName("/admin/suppliers")}><span className="ml-2.5 text-sm" aria-hidden="true">🏢</span> الموردين</Link>
                         <Link to="/requests/supplements" className={linkClassName("/requests/supplements")}><span className="ml-2.5 text-sm" aria-hidden="true">➕</span> طلب كمالة</Link>

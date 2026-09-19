@@ -9,6 +9,7 @@ import PurchaseOrderPrintModal from '../../components/procurement/PurchaseOrderP
 import TableFilterBar from '../../components/ui/TableFilterBar';
 import { getDefaultDateFrom, getTodayInputDate, isDefaultTodayRange } from '../../utils/dateFilters';
 import { parseApiError } from '../../utils/apiError';
+import { SupplementItemBadge } from '../../components/common/SupplementItemBadge';
 
 export const AccountingPurchaseOrdersPage: React.FC = () => {
   const [pos, setPos] = useState<PurchaseOrder[]>([]);
@@ -130,6 +131,9 @@ export const AccountingPurchaseOrdersPage: React.FC = () => {
               const parcelNumber = item ? ((item as any).item_reference || '—') : '—';
               const quantity = item ? `${(item as any).quantity || '—'} ${(item as any).uom || ''}` : '—';
 
+              const isSupplement = Boolean((item as any)?.is_supplementary || (x.items && x.items.some((it) => it.is_supplementary)));
+              const supplementBatch = (item as any)?.supplement_batch || x.items?.find((it) => it.is_supplementary)?.supplement_batch;
+
               return (
                 <TableRow key={x.id}>
                   <TableCell className="whitespace-nowrap font-mono font-bold text-cyan-400">{x.po_number}</TableCell>
@@ -138,7 +142,14 @@ export const AccountingPurchaseOrdersPage: React.FC = () => {
                   <TableCell className="max-w-[160px] text-slate-300">{x.department?.name || x.purchase_request?.department?.name || '—'}</TableCell>
                   <TableCell className="max-w-[160px] font-bold text-emerald-300">{x.department_approver?.name || x.purchase_request?.assigned_reviewer?.name || '—'}</TableCell>
                   <TableCell className="max-w-[180px] font-bold text-slate-100">{x.supplier?.company_name || '—'}</TableCell>
-                  <TableCell className="max-w-[180px] font-semibold text-slate-100 text-xs">{itemName}</TableCell>
+                  <TableCell className="max-w-[220px] font-semibold text-slate-100 text-xs">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span>{itemName}</span>
+                      {isSupplement && (
+                        <SupplementItemBadge isSupplementary={true} batchNumber={supplementBatch} />
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell className="font-mono text-cyan-300 text-xs whitespace-nowrap">{parcelNumber}</TableCell>
                   <TableCell className="font-mono font-bold text-amber-300 text-xs whitespace-nowrap">{quantity}</TableCell>
                   <TableCell className="whitespace-nowrap"><CurrencyDisplay amount={x.grand_total} amountClassName="font-mono font-bold text-emerald-400" /></TableCell>
@@ -160,6 +171,9 @@ export const AccountingPurchaseOrdersPage: React.FC = () => {
           const parcelNumber = item ? ((item as any).item_reference || '—') : '—';
           const quantity = item ? `${(item as any).quantity || '—'} ${(item as any).uom || ''}` : '—';
 
+          const isSupplement = Boolean((item as any)?.is_supplementary || (x.items && x.items.some((it) => it.is_supplementary)));
+          const supplementBatch = (item as any)?.supplement_batch || x.items?.find((it) => it.is_supplementary)?.supplement_batch;
+
           return (
             <article key={`mobile-${x.id}`} className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
               <div className="flex min-w-0 items-start justify-between gap-3"><span className="min-w-0 break-normal font-mono text-sm font-black text-cyan-300">{x.po_number}</span><div className="shrink-0"><Badge status={x.status} /></div></div>
@@ -168,7 +182,16 @@ export const AccountingPurchaseOrdersPage: React.FC = () => {
                 <div className="min-w-0"><dt className="text-slate-500">المورد</dt><dd className="mt-1 break-normal font-bold leading-6 text-slate-100">{x.supplier?.company_name || 'غير محدد'}</dd></div>
                 <div className="min-w-0"><dt className="text-slate-500">صاحب الطلب</dt><dd className="mt-1 break-normal leading-6 text-slate-300">{x.requested_by?.name || x.purchase_request?.requester?.name || 'غير محدد'}</dd></div>
                 <div className="min-w-0"><dt className="text-slate-500">القسم</dt><dd className="mt-1 break-normal leading-6 text-slate-300">{x.department?.name || x.purchase_request?.department?.name || 'غير محدد'}</dd></div>
-                <div className="min-w-0 min-[420px]:col-span-2"><dt className="text-slate-500">الصنف وقطعة الأرض</dt><dd className="mt-1 break-normal font-bold leading-6 text-slate-100">{itemName} <span className="font-mono text-cyan-300">({parcelNumber})</span></dd></div>
+                <div className="min-w-0 min-[420px]:col-span-2">
+                  <dt className="text-slate-500">الصنف وقطعة الأرض</dt>
+                  <dd className="mt-1 break-normal font-bold leading-6 text-slate-100 flex items-center gap-1.5 flex-wrap">
+                    <span>{itemName}</span>
+                    {isSupplement && (
+                      <SupplementItemBadge isSupplementary={true} batchNumber={supplementBatch} />
+                    )}
+                    <span className="font-mono text-cyan-300">({parcelNumber})</span>
+                  </dd>
+                </div>
                 <div className="min-w-0"><dt className="text-slate-500">الكمية / العدد</dt><dd className="mt-1 font-mono font-bold text-amber-300">{quantity}</dd></div>
                 <div className="min-w-0"><dt className="text-slate-500">رئيس القسم</dt><dd className="mt-1 break-normal leading-6 text-emerald-300">{x.department_approver?.name || x.purchase_request?.assigned_reviewer?.name || 'غير محدد'}</dd></div>
                 <div className="min-w-0 min-[420px]:col-span-2"><dt className="text-slate-500">الإجمالي الكلي</dt><dd className="mt-1 whitespace-nowrap"><CurrencyDisplay amount={x.grand_total} amountClassName="font-mono font-bold text-emerald-400" /></dd></div>

@@ -120,6 +120,8 @@ export interface PurchaseRequestItem {
   estimated_line_total?: string | number | null;
   specifications?: string | null;
   notes?: string | null;
+  is_supplementary?: boolean;
+  supplement_batch?: number | null;
 }
 
 export interface Attachment {

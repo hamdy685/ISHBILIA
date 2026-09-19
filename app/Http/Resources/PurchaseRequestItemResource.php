@@ -39,6 +39,8 @@ class PurchaseRequestItemResource extends JsonResource
             'estimated_line_total' => number_format((float) $this->estimated_line_total, 2, '.', ''),
             'specifications' => $this->specifications,
             'notes' => $this->notes,
+            'is_supplementary' => (bool) $this->is_supplementary,
+            'supplement_batch' => $this->supplement_batch ? (int) $this->supplement_batch : null,
         ];
     }
 }

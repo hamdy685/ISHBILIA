@@ -204,7 +204,6 @@ describe("Role-based navigation and redirect flow", () => {
             "الأدوار",
             "الصلاحيات",
             "الأقسام",
-            "التصنيفات",
             "الأصناف",
             "الموردين",
             "الإشعارات",
@@ -212,6 +211,7 @@ describe("Role-based navigation and redirect flow", () => {
         ]);
 
         assertHiddenLinks([
+            "التصنيفات",
             "لوحة الموظف",
             "طلباتي",
 

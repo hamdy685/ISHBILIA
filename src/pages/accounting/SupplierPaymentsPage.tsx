@@ -32,6 +32,7 @@ import TableColumnFilters from '../../components/ui/TableColumnFilters';
 import { getDefaultDateFrom, getTodayInputDate } from '../../utils/dateFilters';
 import { getUnitLabel } from '../../utils/units';
 import LandAllocationEditor, { LandAllocationDraft } from '../../components/accounting/LandAllocationEditor';
+import { SupplementItemBadge } from '../../components/common/SupplementItemBadge';
 
 const today = getTodayInputDate;
 const cleanDate = (d?: string | null) => d ? String(d).slice(0, 10) : '—';
@@ -633,7 +634,15 @@ export const SupplierPaymentsPage: React.FC = () => {
                       const poItem = item.purchase_order_item;
                       return (
                         <TableRow key={item.id}>
-                          <TableCell className="font-bold text-slate-100">{poItem?.item_name || poItem?.item_description || '—'}</TableCell>
+                          <TableCell className="font-bold text-slate-100">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span>{poItem?.item_name || poItem?.item_description || '—'}</span>
+                              <SupplementItemBadge
+                                isSupplementary={poItem?.is_supplementary}
+                                batchNumber={poItem?.supplement_batch}
+                              />
+                            </div>
+                          </TableCell>
                           <TableCell className="font-mono font-bold text-cyan-300">{poItem?.item_reference || '—'}</TableCell>
                           <TableCell className="text-slate-200">{poItem?.region || '—'}</TableCell>
                           <TableCell className="font-mono font-bold text-slate-200">{poItem?.pr_item?.quantity ?? '—'}</TableCell>
@@ -661,7 +670,13 @@ export const SupplierPaymentsPage: React.FC = () => {
                       <div className="flex items-start justify-between gap-2 border-b border-slate-800 pb-2">
                         <div className="min-w-0">
                           <span className="inline-block rounded bg-cyan-950 px-2 py-0.5 font-mono text-[10px] font-bold text-cyan-300 border border-cyan-800/60 mb-1">بند {idx + 1}</span>
-                          <h4 className="font-bold text-slate-100 text-xs truncate">{poItem?.item_name || poItem?.item_description || '—'}</h4>
+                          <h4 className="font-bold text-slate-100 text-xs flex items-center gap-1.5 flex-wrap">
+                            <span>{poItem?.item_name || poItem?.item_description || '—'}</span>
+                            <SupplementItemBadge
+                              isSupplementary={poItem?.is_supplementary}
+                              batchNumber={poItem?.supplement_batch}
+                            />
+                          </h4>
                         </div>
                         <span className="shrink-0 rounded bg-slate-800 px-2 py-0.5 text-[11px] text-slate-300 font-bold">{getUnitLabel(poItem?.uom)}</span>
                       </div>
@@ -818,9 +833,13 @@ export const SupplierPaymentsPage: React.FC = () => {
                         className="rounded-xl border border-slate-800 bg-slate-900/90 p-3.5 space-y-2.5 shadow-sm text-xs"
                       >
                         <div className="flex items-start justify-between gap-2 border-b border-slate-800 pb-2">
-                          <div className="font-bold text-slate-100 leading-snug">
+                          <div className="font-bold text-slate-100 leading-snug flex items-center gap-1.5 flex-wrap">
                             <span className="text-cyan-400 ml-1">#{idx + 1}</span>
-                            {poItem?.item_name || poItem?.item_description || '—'}
+                            <span>{poItem?.item_name || poItem?.item_description || '—'}</span>
+                            <SupplementItemBadge
+                              isSupplementary={poItem?.is_supplementary}
+                              batchNumber={poItem?.supplement_batch}
+                            />
                           </div>
                           <span className="shrink-0 rounded-lg bg-emerald-950/80 border border-emerald-700/60 px-2.5 py-1 font-mono font-black text-emerald-300 text-xs">
                             {money(lineTotal)}
@@ -877,7 +896,15 @@ export const SupplierPaymentsPage: React.FC = () => {
                         const lineTotal = Number(item.received_quantity || 0) * Number(poItem?.unit_price || 0);
                         return (
                           <TableRow key={item.id} className="border-slate-800/60">
-                            <TableCell className="font-bold text-slate-200">{poItem?.item_name || poItem?.item_description || '—'}</TableCell>
+                            <TableCell className="font-bold text-slate-200">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span>{poItem?.item_name || poItem?.item_description || '—'}</span>
+                                <SupplementItemBadge
+                                  isSupplementary={poItem?.is_supplementary}
+                                  batchNumber={poItem?.supplement_batch}
+                                />
+                              </div>
+                            </TableCell>
                             <TableCell className="font-mono text-cyan-300 font-bold">{poItem?.item_reference || '—'}</TableCell>
                             <TableCell className="text-slate-300">{poItem?.region || '—'}</TableCell>
                             <TableCell className="font-mono font-bold text-emerald-300">{item.received_quantity} {getUnitLabel(poItem?.uom)}</TableCell>

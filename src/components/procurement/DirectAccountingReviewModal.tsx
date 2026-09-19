@@ -6,6 +6,7 @@ import { المورد } from '../../types/purchaseOrder';
 import { DirectAccountingFinancialData } from '../../api/procurement';
 import { getUnitLabel } from '../../utils/units';
 import { SupplierSelectWithQuickAdd } from '../common/SupplierSelectWithQuickAdd';
+import { SupplementItemBadge } from '../common/SupplementItemBadge';
 
 interface DirectAccountingReviewModalProps {
   request: PurchaseRequest | null;
@@ -28,6 +29,8 @@ type EditableFinancialItem = {
   uom?: string | null;
   quantity: number | string;
   unit_price: number | string;
+  is_supplementary?: boolean;
+  supplement_batch?: number | null;
 };
 
 
@@ -84,6 +87,8 @@ export const DirectAccountingReviewModal: React.FC<DirectAccountingReviewModalPr
       uom: item.uom,
       quantity: Number(item.quantity) || 1,
       unit_price: Number(item.estimated_unit_price) > 0 ? Number(item.estimated_unit_price) : '',
+      is_supplementary: Boolean(item.is_supplementary),
+      supplement_batch: item.supplement_batch,
     })));
     setNotes(request.notes || '');
     setValidationError(null);
@@ -319,7 +324,15 @@ export const DirectAccountingReviewModal: React.FC<DirectAccountingReviewModalPr
                 ) : items.map((item, index) => (
                   <tr key={item.pr_item_id || index} className="bg-slate-900 even:bg-slate-950/70 hover:bg-slate-800/40 transition-colors">
                     <td className="border-t border-slate-800 px-3 py-3 text-center font-mono text-slate-400">{index + 1}</td>
-                    <td className="border-t border-slate-800 px-3 py-3 font-bold text-slate-100">{item.item_description || '—'}</td>
+                    <td className="border-t border-slate-800 px-3 py-3 font-bold text-slate-100">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span>{item.item_description || '—'}</span>
+                        <SupplementItemBadge
+                          isSupplementary={item.is_supplementary}
+                          batchNumber={item.supplement_batch}
+                        />
+                      </div>
+                    </td>
                     <td className="border-t border-slate-800 px-2 py-2">
                       {item.one_time_supplier_name ? (
                         <div className="flex items-center gap-1.5">
@@ -416,7 +429,13 @@ export const DirectAccountingReviewModal: React.FC<DirectAccountingReviewModalPr
                 <div className="flex items-start justify-between gap-3 border-b border-slate-800 pb-2">
                   <div className="min-w-0">
                     <p className="text-[10px] font-bold text-cyan-300">بند #{index + 1}</p>
-                    <p className="mt-0.5 break-words text-sm font-black text-slate-100">{item.item_description || 'بدون وصف'}</p>
+                    <p className="mt-0.5 break-words text-sm font-black text-slate-100 flex items-center gap-1.5 flex-wrap">
+                      <span>{item.item_description || 'بدون وصف'}</span>
+                      <SupplementItemBadge
+                        isSupplementary={item.is_supplementary}
+                        batchNumber={item.supplement_batch}
+                      />
+                    </p>
                   </div>
                   <span className="text-[11px] font-bold bg-amber-950/50 text-amber-300 border border-amber-800/50 px-2 py-0.5 rounded shrink-0">
                     {getUnitLabel(item.uom)}

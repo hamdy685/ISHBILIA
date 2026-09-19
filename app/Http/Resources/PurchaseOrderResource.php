@@ -124,6 +124,8 @@ class PurchaseOrderResource extends JsonResource
                                     'item_name' => $item->purchaseOrderItem->item_name,
                                     'uom' => $item->purchaseOrderItem->uom,
                                     'unit_price' => (string) $item->purchaseOrderItem->unit_price,
+                                    'is_supplementary' => (bool) $item->purchaseOrderItem->is_supplementary,
+                                    'supplement_batch' => $item->purchaseOrderItem->supplement_batch ? (int) $item->purchaseOrderItem->supplement_batch : null,
                                 ] : null,
                             ];
                         }) : [],

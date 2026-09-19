@@ -35,6 +35,8 @@ class PurchaseOrderItemResource extends JsonResource
             'unit_price'       => number_format((float) $this->unit_price,  2, '.', ''),
             'line_total'       => number_format((float) $this->line_total,  2, '.', ''),
             'specifications'   => $this->specifications,
+            'is_supplementary' => (bool) $this->is_supplementary,
+            'supplement_batch' => $this->supplement_batch ? (int) $this->supplement_batch : null,
         ];
     }
 }
