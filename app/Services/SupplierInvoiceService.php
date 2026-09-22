@@ -2,7 +2,10 @@
 
 namespace App\Services;
 
-use App\Services\LandParcelService;
+use App\Models\Accounting\Account;
+use App\Models\Accounting\CostCenter;
+use App\Models\Accounting\JournalEntry;
+use App\Models\Accounting\JournalEntryLine;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseReceipt;
 use App\Models\Supplier;
@@ -10,7 +13,9 @@ use App\Models\SupplierBalance;
 use App\Models\SupplierInvoice;
 use App\Models\SupplierPayment;
 use App\Models\User;
+use App\Services\LandParcelService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 class SupplierInvoiceService
@@ -107,6 +112,7 @@ class SupplierInvoiceService
             'purchaseReceipt',
             'paymentAllocations.payment',
             'landAllocations.parcel',
+            'journalEntry.lines.account',
         ])
             ->when($supplierId, fn ($query) => $query->where('supplier_id', $supplierId))
             ->when($this->getAllowedDepartmentCodesForAccountant($user), function ($query, $allowedCodes) {
@@ -227,6 +233,7 @@ class SupplierInvoiceService
         ]);
 
         $this->refreshSupplierBalance($invoice->supplier_id);
+        $this->generateSupplierInvoiceJournalEntry($invoice);
 
         return $invoice->fresh([
             'supplier',
@@ -234,6 +241,7 @@ class SupplierInvoiceService
             'purchaseReceipt',
             'paymentAllocations.payment',
             'landAllocations.parcel',
+            'journalEntry.lines.account',
         ]);
     }
 
@@ -334,9 +342,10 @@ class SupplierInvoiceService
             ]);
 
             $this->refreshSupplierBalance($supplierId);
+            $this->generateSupplierPaymentJournalEntry($payment);
 
             return [
-                'payment' => $payment->fresh(['supplier', 'accountant', 'allocations.invoice.purchaseOrder']),
+                'payment' => $payment->fresh(['supplier', 'accountant', 'allocations.invoice.purchaseOrder', 'journalEntry.lines.account']),
                 'supplier_balance' => $this->getSupplierBalance($supplierId),
                 'overpayment_warning' => $remaining > 0,
                 'message' => $remaining > 0
@@ -514,5 +523,189 @@ class SupplierInvoiceService
         return round($receipt->items->sum(function ($receiptItem): float {
             return (float) $receiptItem->received_quantity * (float) ($receiptItem->purchaseOrderItem?->unit_price ?? 0);
         }), 2);
+    }
+
+    /**
+     * Intelligently resolve the most relevant Cost Center for a supplier invoice.
+     */
+    public function resolveCostCenterForInvoice(SupplierInvoice $invoice): ?int
+    {
+        // 1. Direct attribute on invoice if present
+        if (!empty($invoice->cost_center_id)) {
+            return (int) $invoice->cost_center_id;
+        }
+
+        // 2. Check land allocations
+        $firstAllocation = $invoice->landAllocations()->with('parcel')->first();
+        if ($firstAllocation && $firstAllocation->parcel) {
+            $parcel = $firstAllocation->parcel;
+            $matched = CostCenter::where('is_active', true)
+                ->where(function ($q) use ($parcel) {
+                    $q->where('name', 'like', "%{$parcel->parcel_reference}%")
+                      ->orWhere('name', 'like', "%{$parcel->region}%")
+                      ->orWhere('code', 'like', "%{$parcel->parcel_reference}%");
+                })->first();
+            if ($matched) {
+                return $matched->id;
+            }
+        }
+
+        // 3. Check purchase order -> purchase request
+        $pr = $invoice->purchaseOrder?->purchaseRequest;
+        if ($pr) {
+            if (!empty($pr->parcel_reference)) {
+                $matched = CostCenter::where('is_active', true)
+                    ->where(function ($q) use ($pr) {
+                        $q->where('name', 'like', "%{$pr->parcel_reference}%")
+                          ->orWhere('name', 'like', "%{$pr->region}%")
+                          ->orWhere('code', 'like', "%{$pr->parcel_reference}%");
+                    })->first();
+                if ($matched) {
+                    return $matched->id;
+                }
+            }
+        }
+
+        // 4. Default cost center code from config
+        $defaultCode = config('accounting.default_cost_center_code', 'CC-101');
+        $defaultCc = CostCenter::where('code', $defaultCode)->where('is_active', true)->first();
+        if ($defaultCc) {
+            return $defaultCc->id;
+        }
+
+        // 5. Any active cost center
+        return CostCenter::where('is_active', true)->value('id');
+    }
+
+    /**
+     * Automatically generate a balanced Journal Entry when a supplier invoice is matched/approved.
+     */
+    public function generateSupplierInvoiceJournalEntry(SupplierInvoice $invoice): ?JournalEntry
+    {
+        if ($invoice->journal_entry_id) {
+            return JournalEntry::find($invoice->journal_entry_id);
+        }
+
+        $expenseCode = (string) config('accounting.material_expense_account_code', '511');
+        $payableCode = (string) config('accounting.supplier_payable_account_code', '2111');
+
+        $expenseAccount = Account::where('code', $expenseCode)->first();
+        $payableAccount = Account::where('code', $payableCode)->first();
+
+        // If GL accounts are not set up in current environment, gracefully skip
+        if (!$expenseAccount || !$payableAccount) {
+            Log::info("Journal entry skipped for supplier invoice {$invoice->invoice_number}: Accounts {$expenseCode} or {$payableCode} not found in chart of accounts.");
+            return null;
+        }
+
+        $costCenterId = $this->resolveCostCenterForInvoice($invoice);
+
+        $invoice->loadMissing(['supplier', 'purchaseOrder']);
+        $supplierName = $invoice->supplier?->company_name ?? 'مورد';
+        $poNumber = $invoice->purchaseOrder?->po_number ?? '';
+
+        $desc = "فاتورة مشتريات مورد: {$supplierName} - رقم: {$invoice->invoice_number}";
+        if ($poNumber) {
+            $desc .= " (أمر شراء {$poNumber})";
+        }
+
+        $journalEntry = JournalEntry::create([
+            'date' => $invoice->invoice_date ?: now()->toDateString(),
+            'description' => $desc,
+            'reference_number' => $invoice->invoice_number,
+            'status' => 'POSTED',
+        ]);
+
+        // Debit: Material Expense Account (charged to Cost Center)
+        JournalEntryLine::create([
+            'journal_entry_id' => $journalEntry->id,
+            'account_id' => $expenseAccount->id,
+            'cost_center_id' => $costCenterId,
+            'debit' => $invoice->amount,
+            'credit' => 0,
+            'description' => "تكلفة مواد وخامات - مورد: {$supplierName} - فاتورة: {$invoice->invoice_number}",
+        ]);
+
+        // Credit: Supplier Payable Account
+        JournalEntryLine::create([
+            'journal_entry_id' => $journalEntry->id,
+            'account_id' => $payableAccount->id,
+            'cost_center_id' => null,
+            'debit' => 0,
+            'credit' => $invoice->amount,
+            'description' => "استحقاق فاتورة مورد - {$supplierName} - فاتورة: {$invoice->invoice_number}",
+        ]);
+
+        $invoice->update(['journal_entry_id' => $journalEntry->id]);
+
+        return $journalEntry;
+    }
+
+    /**
+     * Automatically generate a balanced Journal Entry when a supplier payment is recorded.
+     */
+    public function generateSupplierPaymentJournalEntry(SupplierPayment $payment): ?JournalEntry
+    {
+        if ($payment->journal_entry_id) {
+            return JournalEntry::find($payment->journal_entry_id);
+        }
+
+        $payableCode = (string) config('accounting.supplier_payable_account_code', '2111');
+        $bankCode    = (string) config('accounting.bank_account_code', '1112');
+        $cashCode    = (string) config('accounting.treasury_cash_account_code', '1111');
+
+        $isCash = strtoupper((string) $payment->payment_method) === 'CASH';
+        $creditAccountCode = $isCash ? $cashCode : $bankCode;
+
+        $payableAccount = Account::where('code', $payableCode)->first();
+        $creditAccount  = Account::where('code', $creditAccountCode)->first();
+
+        if (!$payableAccount || !$creditAccount) {
+            Log::info("Journal entry skipped for payment {$payment->payment_number}: Accounts {$payableCode} or {$creditAccountCode} not found in chart of accounts.");
+            return null;
+        }
+
+        $payment->loadMissing('supplier');
+        $supplierName = $payment->supplier?->company_name ?? 'مورد';
+
+        $methodLabel = match (strtoupper((string) $payment->payment_method)) {
+            'CASH' => 'نقدي من الخزينة',
+            'BANK_TRANSFER' => 'تحويل بنكي',
+            'CHEQUE' => 'شيك مصرفي',
+            default => (string) $payment->payment_method,
+        };
+
+        $desc = "سداد دفعة للمورد: {$supplierName} - رقم السند: {$payment->payment_number} ({$methodLabel})";
+
+        $journalEntry = JournalEntry::create([
+            'date' => $payment->payment_date ?: now()->toDateString(),
+            'description' => $desc,
+            'reference_number' => $payment->reference_number ?: $payment->payment_number,
+            'status' => 'POSTED',
+        ]);
+
+        // Debit: Supplier Payable (reduce liability)
+        JournalEntryLine::create([
+            'journal_entry_id' => $journalEntry->id,
+            'account_id' => $payableAccount->id,
+            'cost_center_id' => null,
+            'debit' => $payment->amount,
+            'credit' => 0,
+            'description' => "سداد مديونية للمورد: {$supplierName} - سند: {$payment->payment_number}",
+        ]);
+
+        // Credit: Bank or Cash Treasury (reduce asset cash)
+        JournalEntryLine::create([
+            'journal_entry_id' => $journalEntry->id,
+            'account_id' => $creditAccount->id,
+            'cost_center_id' => null,
+            'debit' => 0,
+            'credit' => $payment->amount,
+            'description' => "صرف دفعة للمورد {$supplierName} ({$methodLabel})",
+        ]);
+
+        $payment->update(['journal_entry_id' => $journalEntry->id]);
+
+        return $journalEntry;
     }
 }

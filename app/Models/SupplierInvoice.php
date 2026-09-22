@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Accounting\JournalEntry;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -27,6 +28,7 @@ class SupplierInvoice extends \Illuminate\Database\Eloquent\Model
         'outstanding_amount',
         'matching_notes',
         'notes',
+        'journal_entry_id',
     ];
 
     protected function casts(): array
@@ -75,4 +77,10 @@ class SupplierInvoice extends \Illuminate\Database\Eloquent\Model
     {
         return $this->hasMany(SupplierInvoiceLandAllocation::class);
     }
+
+    public function journalEntry(): BelongsTo
+    {
+        return $this->belongsTo(JournalEntry::class, 'journal_entry_id');
+    }
 }
+

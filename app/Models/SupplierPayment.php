@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Accounting\JournalEntry;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -21,6 +22,7 @@ class SupplierPayment extends \Illuminate\Database\Eloquent\Model
         'allocated_amount',
         'overpayment_amount',
         'notes',
+        'journal_entry_id',
     ];
 
     protected function casts(): array
@@ -47,4 +49,10 @@ class SupplierPayment extends \Illuminate\Database\Eloquent\Model
     {
         return $this->hasMany(SupplierPaymentAllocation::class);
     }
+
+    public function journalEntry(): BelongsTo
+    {
+        return $this->belongsTo(JournalEntry::class, 'journal_entry_id');
+    }
 }
+
