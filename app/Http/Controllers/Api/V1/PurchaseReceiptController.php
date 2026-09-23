@@ -63,7 +63,7 @@ class PurchaseReceiptController extends Controller
             return response()->json(['message' => $exception->getMessage()], 409);
         }
 
-        return response()->json(['message' => 'تم تسجيل الاستلام وإرساله إلى مهندس الموقع.', 'data' => $receipt], 201);
+        return response()->json(['message' => 'تم تسجيل الاستلام واعتماده نهائياً ونقله للحسابات.', 'data' => $receipt], 201);
     }
 
     public function indexAssigned(Request $request)

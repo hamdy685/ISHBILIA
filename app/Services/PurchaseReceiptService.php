@@ -117,10 +117,12 @@ class PurchaseReceiptService
                 'warehouse_keeper_user_id' => $warehouseKeeper->id,
                 'site_engineer_user_id' => $siteEngineerId,
                 'receipt_number' => 'GRN-' . now()->format('YmdHis') . '-' . $purchaseOrder->id,
-                'status' => 'PENDING_SITE_ENGINEER',
+                'status' => 'APPROVED',
                 'received_at' => $receivedAt ?: now()->toDateString(),
                 'warehouse_submitted_at' => now(),
+                'site_engineer_approved_at' => now(),
                 'warehouse_notes' => $notes,
+                'site_engineer_notes' => $notes,
                 'photo_path' => $photoData['path'] ?? null,
                 'photo_name' => $photoData['name'] ?? null,
                 'photo_size' => $photoData['size'] ?? null,
@@ -146,29 +148,75 @@ class PurchaseReceiptService
                 ]);
             }
 
-            $purchaseOrder->update(['delivery_status' => 'IN_RECEIPT']);
+            $purchaseOrder->update([
+                'delivery_status' => 'DELIVERED',
+                'actual_delivery_date' => $receivedAt ?: now()->toDateString(),
+            ]);
+
             ApprovalHistory::create([
                 'target_type' => PurchaseReceipt::class,
                 'target_id' => $receipt->id,
                 'actor_user_id' => $warehouseKeeper->id,
-                'action' => 'WAREHOUSE_RECEIPT_SUBMITTED',
-                'from_state' => 'PENDING_WAREHOUSE',
-                'to_state' => 'PENDING_SITE_ENGINEER',
-                'comments' => 'سجل أمين المخزن الكميات المستلمة وأرسل إذن الاستلام لمهندس الموقع.',
+                'action' => 'SITE_RECEIPT_APPROVED',
+                'from_state' => 'PENDING_RECEIPT',
+                'to_state' => 'APPROVED',
+                'comments' => $notes ?: 'سجل أمين المخزن / المستلم الكميات الفعلية المستلمة واعتمد إذن الاستلام نهائياً ونقله للحسابات.',
             ]);
 
+            $notificationService = app(NotificationService::class);
+            $accountants = $notificationService->resolveUsersWithPermission('purchase_order.view_accounting');
+
+            $purchaseOrder->loadMissing('purchaseRequest.department');
+            $deptCode = $purchaseOrder->purchaseRequest?->department?->code;
+            $deptAccountants = collect();
+            if ($deptCode) {
+                foreach (\App\Services\SupplierInvoiceService::ACCOUNTANT_DEPARTMENT_MAPPINGS as $roleSlug => $deptCodes) {
+                    if (in_array($deptCode, $deptCodes, true)) {
+                        $deptAccountants = User::whereHas('roles', fn ($q) => $q->where('slug', $roleSlug))
+                            ->where('is_active', true)
+                            ->get();
+                        break;
+                    }
+                }
+            }
+
+            $targetAccountants = $deptAccountants->isNotEmpty() ? $deptAccountants : $accountants;
+
+            $notificationService->queueAccountingWithPurchaseOrderAndReceipt(
+                $targetAccountants,
+                $purchaseOrder,
+                $receipt
+            );
+
+            // Notify Financial Director for informational awareness only
+            if ($deptAccountants->isNotEmpty()) {
+                $financialDirectors = $accountants->reject(function ($u) {
+                    return $u->hasRole('site_accountant') || $u->hasRole('licenses_accountant') || $u->hasRole('buffet_accountant');
+                });
+                foreach ($financialDirectors as $director) {
+                    $notificationService->queueNotification(
+                        $director,
+                        'purchase_order_and_receipt_approved_info',
+                        'إشعار للعلم: إذن استلام معتمد جاهز للفوترة',
+                        "تم اعتماد إذن الاستلام {$receipt->receipt_number} لأمر الشراء {$purchaseOrder->po_number}، وهو بانتظار تسجيل الفاتورة من قِبل محاسب القسم المختص (للعلم فقط).",
+                        $purchaseOrder
+                    );
+                }
+            }
+
+            // Notify site engineer for informational awareness if different from keeper
             $siteEngineer = User::find($siteEngineerId);
-            if ($siteEngineer) {
-                app(NotificationService::class)->queueNotification(
+            if ($siteEngineer && (int) $siteEngineer->id !== (int) $warehouseKeeper->id) {
+                $notificationService->queueNotification(
                     $siteEngineer,
-                    'purchase_receipt_pending_site_engineer',
-                    'إذن استلام بانتظار اعتمادك',
-                    "إذن الاستلام {$receipt->receipt_number} لأمر الشراء {$purchaseOrder->po_number} بانتظار مراجعتك.",
+                    'purchase_receipt_approved_site_engineer',
+                    'تم تسجيل واعتماد استلام بالموقع',
+                    "تم تسجيل واعتماد إذن الاستلام {$receipt->receipt_number} لأمر الشراء {$purchaseOrder->po_number} بعد انتهاء الصبة ونقله للحسابات.",
                     $receipt
                 );
             }
 
-            app(NotificationService::class)->markEntityNotificationsAsRead($purchaseOrder, $warehouseKeeper);
+            $notificationService->markEntityNotificationsAsRead($purchaseOrder, $warehouseKeeper);
 
             return $receipt->fresh(['purchaseOrder.supplier', 'purchaseOrder.items.item', 'purchaseRequest', 'warehouseKeeper', 'siteEngineer', 'items.purchaseOrderItem']);
         });

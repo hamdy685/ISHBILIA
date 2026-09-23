@@ -20,7 +20,6 @@ import {
   getReceiptPhotoUrl,
 } from '../../api/purchaseReceipts';
 import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh';
-import { SupplementItemBadge } from '../../components/common/SupplementItemBadge';
 
 interface ReceiptColorTheme {
   border: string;
@@ -218,30 +217,6 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
     ),
   );
 
-  const setAllReceivedFull = (order: ReceiptPurchaseOrder) => {
-    const updated: Record<string, string> = { ...quantities };
-    (order.items || []).forEach((item) => {
-      updated[`${order.id}-${item.id}`] = String(item.quantity);
-    });
-    setQuantities(updated);
-  };
-
-  const handlePhotoFile = (orderId: number, file: File) => {
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = reader.result as string;
-      setReceiptPhotos((prev) => ({
-        ...prev,
-        [orderId]: {
-          base64,
-          name: file.name || `photo_${Date.now()}.jpg`,
-        },
-      }));
-    };
-    reader.readAsDataURL(file);
-  };
-
   const submitWarehouseReceipt = async (order: ReceiptPurchaseOrder) => {
     const hasUnentered = (order.items || []).some((item) => {
       const q = quantities[`${order.id}-${item.id}`];
@@ -275,7 +250,7 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
         photo_base64: photo?.base64,
         photo_name: photo?.name,
       });
-      setSuccessMessage(`تم تسجيل استلام أمر الشراء ${order.po_number} وإرساله لمهندس الموقع بنجاح!`);
+      setSuccessMessage(`تم تسجيل استلام أمر الشراء ${order.po_number} واعتماده نهائياً ونقله للحسابات بنجاح!`);
       await load();
     } catch (err) {
       setError(parseApiError(err).message);
@@ -484,15 +459,12 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                             )}
                           </div>
 
-                          {/* Quick 1-Click Fill All Button */}
-                          <button
-                            type="button"
-                            onClick={() => setAllReceivedFull(order)}
-                            className="text-xs sm:text-sm font-black text-emerald-300 hover:text-white bg-emerald-950/80 hover:bg-emerald-900 border-2 border-emerald-500/80 px-4 py-2 rounded-xl transition-all shadow-md cursor-pointer flex items-center gap-2"
-                          >
-                            <span>⚡</span>
-                            <span>استلمت كافة البضاعة بالكامل (ضغطة واحدة)</span>
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-950/80 border border-amber-600/70 text-amber-300 text-xs sm:text-sm font-black shadow-sm">
+                              <span>🔒</span>
+                              <span>استلام أعمى: يُسجل المستلم الكميات الفعلية بعد انتهاء الصبة والتوريد</span>
+                            </span>
+                          </div>
                         </div>
 
                         {/* Large Clear Info Callouts */}
@@ -598,10 +570,6 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                       </span>
                                       <h4 className="text-base sm:text-xl font-black text-white flex items-center gap-2 flex-wrap">
                                         <span>{item.item_description || item.item?.name}</span>
-                                        <SupplementItemBadge
-                                          isSupplementary={item.is_supplementary}
-                                          batchNumber={item.supplement_batch}
-                                        />
                                       </h4>
                                     </div>
                                     {item.specifications && (
@@ -628,31 +596,18 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                   </div>
                                 )}
 
-                                {/* Requested / Ordered Quantity Callout for Storekeeper */}
-                                <div className="rounded-2xl border-2 border-cyan-500/70 bg-gradient-to-r from-cyan-950/40 via-slate-900 to-slate-950 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
-                                  <div className="flex items-center gap-3">
-                                    <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-500/20 text-cyan-300 text-xl border border-cyan-500/40 shrink-0">
-                                      📋
+                                {/* Blind Receiving Callout (Ordered quantity is hidden for audit accuracy) */}
+                                <div className="rounded-2xl border border-slate-700/70 bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 p-3.5 flex items-center gap-3 shadow-md">
+                                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/20 text-amber-300 text-lg border border-amber-500/40 shrink-0">
+                                    📝
+                                  </span>
+                                  <div className="flex-1">
+                                    <span className="text-xs text-slate-300 block">
+                                      الوحدة المقررة: <strong className="text-white font-mono text-sm">{getUnitLabel(item.uom || '')}</strong>
                                     </span>
-                                    <div>
-                                      <span className="text-xs font-bold text-cyan-300 block">الكمية المطلوبة في أمر الشراء:</span>
-                                      <span className="text-xl sm:text-2xl font-black font-mono text-white flex items-baseline gap-1.5 mt-0.5">
-                                        <span>{item.quantity}</span>
-                                        <span className="text-sm font-bold text-cyan-200">{getUnitLabel(item.uom || '')}</span>
-                                      </span>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <button
-                                      type="button"
-                                      tabIndex={-1}
-                                      onClick={() => setQuantities({ ...quantities, [key]: String(item.quantity) })}
-                                      className="px-3 py-1.5 rounded-xl bg-cyan-900/60 hover:bg-cyan-800 text-cyan-200 border border-cyan-700/80 font-bold text-xs flex items-center gap-1.5 transition select-none active:scale-95 shadow-sm cursor-pointer"
-                                      title="تعبئة الكمية بالكامل كما في أمر الشراء"
-                                    >
-                                      <span>⚡</span>
-                                      <span>مطابقة واستلام كامل الكمية ({item.quantity})</span>
-                                    </button>
+                                    <span className="text-[11px] text-amber-300 font-bold block mt-0.5">
+                                      ⚠️ استلام أعمى: يرجى كتابة الكمية المستلمة فعلياً في الموقع بعد انتهاء الصبة من واقع بونات التوريد.
+                                    </span>
                                   </div>
                                 </div>
 
@@ -661,7 +616,7 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                   <div className="flex items-center justify-between">
                                     <label htmlFor={`qty-${key}`} className="text-sm sm:text-base font-black text-emerald-300 flex items-center gap-2">
                                       <span className="text-lg">📥</span>
-                                      <span>الكمية التي استلمتها فعلياً:</span>
+                                      <span>الكمية المستلمة فعلياً في الموقع بعد انتهاء الصبة:</span>
                                     </label>
                                     <span className="text-xs font-bold text-emerald-300 bg-emerald-950 border border-emerald-500/50 px-2.5 py-0.5 rounded-full">
                                       اكتب الرقم هنا 👇
@@ -675,7 +630,7 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                         type="number"
                                         min="0"
                                         step="any"
-                                        placeholder="أدخل الكمية المستلمة بالأرقام..."
+                                        placeholder="اكتب الكمية المستلمة بالأرقام..."
                                         value={val}
                                         onChange={(e) => setQuantities({ ...quantities, [key]: e.target.value })}
                                         className="w-full h-14 rounded-2xl border-2 border-emerald-400 bg-slate-900/95 pl-24 pr-4 text-xl sm:text-2xl font-black text-emerald-200 placeholder:text-slate-500 placeholder:text-sm sm:placeholder:text-base placeholder:font-normal focus:border-emerald-300 focus:bg-slate-900 focus:ring-4 focus:ring-emerald-500/30 focus:outline-none transition-all shadow-inner"
@@ -887,10 +842,10 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                             className="w-full font-black text-base sm:text-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 py-4 rounded-2xl shadow-2xl shadow-emerald-950/80 flex items-center justify-center gap-3 cursor-pointer active:scale-98 transition-all"
                           >
                             <span className="text-2xl">✅</span>
-                            <span>تأكيد وحفظ استلام البضاعة (أمر #{order.po_number}) وإرسالها للمهندس</span>
+                            <span>تأكيد واعتماد الاستلام النهائي للموقع (أمر #{order.po_number}) ونقله للحسابات</span>
                           </Button>
                           <p className="text-center text-xs sm:text-sm font-bold text-slate-400">
-                            💡 ضغطة واحدة لحفظ إذن الاستلام فوراً وإشعار مهندس الموقع لاعتماده.
+                            💡 ضغطة واحدة لحفظ إذن الاستلام نهائياً ونقله للإدارة المالية والحسابات للمطابقة والصرف فور انتهاء الصبة.
                           </p>
                         </div>
                       </div>
@@ -1079,10 +1034,6 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                       </span>
                                       <h4 className="text-base sm:text-lg font-black text-slate-50 tracking-wide flex items-center gap-2 flex-wrap">
                                         <span>{item.purchase_order_item?.item_description || item.purchase_order_item?.item?.name}</span>
-                                        <SupplementItemBadge
-                                          isSupplementary={item.purchase_order_item?.is_supplementary}
-                                          batchNumber={item.purchase_order_item?.supplement_batch}
-                                        />
                                       </h4>
                                     </div>
                                   </div>
@@ -1368,10 +1319,6 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                 <span className="font-mono text-cyan-400 font-bold text-xs">#{idx + 1}</span>
                                 <span className="font-black text-sm text-slate-100 flex items-center gap-2 flex-wrap">
                                   <span>{item.purchase_order_item?.item_description || item.purchase_order_item?.item?.name}</span>
-                                  <SupplementItemBadge
-                                    isSupplementary={item.purchase_order_item?.is_supplementary}
-                                    batchNumber={item.purchase_order_item?.supplement_batch}
-                                  />
                                 </span>
                               </div>
                             </div>

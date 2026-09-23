@@ -176,7 +176,12 @@ class PurchaseRequest extends Model
 
     public function canAcceptSupplement(): bool
     {
-        // Must be an approved/issued requisition
+        // 1. If any purchase order has an approved receipt (already received at site / warehouse), CANNOT accept supplements
+        if ($this->purchaseOrders()->whereHas('receipts', fn ($q) => $q->where('status', 'APPROVED'))->exists()) {
+            return false;
+        }
+
+        // 2. Must be an approved/issued requisition
         $validStatuses = ['APPROVED_BY_REVIEWER', 'APPROVED_BY_GM', 'PO_ISSUED', 'ACCOUNTING_APPROVED'];
         if (! in_array($this->status, $validStatuses, true) && $this->purchaseOrders()->count() === 0) {
             return false;

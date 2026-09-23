@@ -45,6 +45,10 @@ class PurchaseRequestSupplementService
             ->where(function ($q) {
                 $q->whereIn('status', ['APPROVED_BY_REVIEWER', 'APPROVED_BY_GM', 'PO_ISSUED', 'ACCOUNTING_APPROVED'])
                     ->orWhereHas('purchaseOrders');
+            })
+            // Exclude requests where materials have already been received at the site/warehouse
+            ->whereDoesntHave('purchaseOrders.receipts', function ($q) {
+                $q->where('status', 'APPROVED');
             });
 
         // Department and role scoping
@@ -92,8 +96,12 @@ class PurchaseRequestSupplementService
 
         // 2. Eligibility check
         if (! $pr->canAcceptSupplement()) {
+            $hasApprovedReceipt = $pr->purchaseOrders()->whereHas('receipts', fn ($q) => $q->where('status', 'APPROVED'))->exists();
+            $msg = $hasApprovedReceipt
+                ? 'لا يمكن إنشاء طلب كمالة لهذا الطلب؛ لقد تم استلام الكمية في الموقع واعتماد الإذن نهائياً بالفعل.'
+                : 'لا يمكن إنشاء طلب كمالة لهذا الطلب؛ الطلب غير معتمد أو غير سارٍ.';
             throw ValidationException::withMessages([
-                'eligibility' => ['لا يمكن إنشاء طلب كمالة لهذا الطلب؛ الطلب غير معتمد أو غير سارٍ.'],
+                'eligibility' => [$msg],
             ]);
         }
 
