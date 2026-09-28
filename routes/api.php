@@ -296,6 +296,10 @@ Route::middleware('auth:sanctum')->prefix('accounting')->group(function () {
         ->middleware('permission:accounting.invoice.view|purchase_order.view_gm');
     Route::post('/land-parcels/{landParcel}/fund', [LandParcelController::class, 'fund'])
         ->middleware('permission:accounting.invoice.create');
+    Route::delete('/land-parcels/wipe-all', [LandParcelController::class, 'wipeAll'])
+        ->middleware('permission:accounting.invoice.create');
+    Route::delete('/land-parcels/{landParcel}', [LandParcelController::class, 'destroy'])
+        ->middleware('permission:accounting.invoice.create');
 
     Route::get('/receipts/approved', [SupplierInvoiceController::class, 'approvedReceipts'])
         ->middleware('permission:accounting.invoice.view');

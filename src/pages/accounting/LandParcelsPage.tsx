@@ -7,6 +7,8 @@ import {
   LandParcelAccountDetails,
   addCustomerFundingApi,
   createLandParcelApi,
+  deleteLandParcelApi,
+  wipeAllLandParcelsApi,
   getLandParcelAccountApi,
   getLandParcelsApi,
 } from '../../api/supplierFinance';
@@ -136,6 +138,40 @@ const LandParcelsPage: React.FC = () => {
     }
   };
 
+  const handleDeleteParcel = async (parcel: LandParcel) => {
+    if (!window.confirm(`هل أنت متأكد من رغبتك في حذف قطعة الأرض (${parcel.parcel_reference} — ${parcel.region})؟`)) {
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await deleteLandParcelApi(parcel.id);
+      setNotice(`تم حذف قطعة الأرض (${parcel.parcel_reference}) بنجاح ✅`);
+      await refreshParcels();
+    } catch (err) {
+      setError(parseApiError(err).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleWipeAllParcels = async () => {
+    if (!window.confirm(`تحذير هام: هل أنت متأكد تماماً من رغبتك في حذف كافة قطع الأراضي المسجلة (${parcels.length} قطعة)؟ هذا الإجراء سيحذف كافة القطع التجريبية دفعة واحدة.`)) {
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await wipeAllLandParcelsApi();
+      setNotice(res.message || 'تم حذف كافة قطع الأراضي بنجاح ✅');
+      await refreshParcels();
+    } catch (err) {
+      setError(parseApiError(err).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const openParcelDetails = async (parcel: LandParcel) => {
     setError(null);
     setNotice(null);
@@ -229,9 +265,16 @@ const LandParcelsPage: React.FC = () => {
             متابعة المقدمات والتحصيلات، ونسب استهلاك الميزانيات، وتوريدات المواد والمصروفات المنفذة لكل موقع.
           </p>
         </div>
-        <Button size="sm" variant="primary" onClick={openParcelForm} className="font-bold flex items-center gap-1.5">
-          <span>➕</span> إضافة قطعة أرض / تسجيل المقدم
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {parcels.length > 0 && (
+            <Button size="sm" variant="danger" onClick={handleWipeAllParcels} disabled={saving} className="font-bold flex items-center gap-1.5 text-xs bg-rose-900/80 hover:bg-rose-800 text-rose-200 border border-rose-700/60">
+              <span>🗑️</span> حذف كافة القطع ({parcels.length})
+            </Button>
+          )}
+          <Button size="sm" variant="primary" onClick={openParcelForm} className="font-bold flex items-center gap-1.5">
+            <span>➕</span> إضافة قطعة أرض / تسجيل المقدم
+          </Button>
+        </div>
       </div>
 
       {error && <ErrorMessage error={error} />}
@@ -365,6 +408,16 @@ const LandParcelsPage: React.FC = () => {
                         >
                           <span>👁️</span> كشف الحساب
                         </Button>
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          onClick={() => handleDeleteParcel(parcel)}
+                          disabled={saving}
+                          className="font-bold text-xs bg-rose-950/70 text-rose-300 hover:bg-rose-900/80 border border-rose-800/60"
+                          title="حذف قطعة الأرض"
+                        >
+                          <span>🗑️</span>
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -436,6 +489,16 @@ const LandParcelsPage: React.FC = () => {
                     className="flex-1 font-bold"
                   >
                     <span>👁️</span> كشف الحساب
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    onClick={() => handleDeleteParcel(parcel)}
+                    disabled={saving}
+                    className="bg-rose-950/70 text-rose-300 hover:bg-rose-900/80 border border-rose-800/60 px-3"
+                    title="حذف قطعة الأرض"
+                  >
+                    <span>🗑️</span>
                   </Button>
                 </div>
               </article>

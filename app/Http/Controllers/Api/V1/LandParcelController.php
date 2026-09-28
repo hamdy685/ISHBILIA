@@ -62,5 +62,22 @@ class LandParcelController extends Controller
             'message' => 'تم تسجيل تمويل العميل وإضافة المبلغ إلى رصيد قطعة الأرض.',
         ], 201);
     }
+
+    public function destroy(LandParcel $landParcel): JsonResponse
+    {
+        $this->service->deleteParcel($landParcel);
+        return response()->json([
+            'message' => 'تم حذف قطعة الأرض بنجاح.',
+        ]);
+    }
+
+    public function wipeAll(): JsonResponse
+    {
+        $count = $this->service->wipeAllParcels();
+        return response()->json([
+            'message' => "تم حذف كافة قطع الأراضي ({$count} قطعة) من السيستم بنجاح.",
+            'deleted_count' => $count,
+        ]);
+    }
 }
 

@@ -457,10 +457,11 @@ class AdminController extends Controller
     {
         $updatedPrItems = [];
         $updatedPoItems = [];
+        $updatedReceiptItems = [];
         $recalculatedPrs = [];
         $recalculatedPos = [];
 
-        DB::transaction(function () use (&$updatedPrItems, &$updatedPoItems, &$recalculatedPrs, &$recalculatedPos) {
+        DB::transaction(function () use (&$updatedPrItems, &$updatedPoItems, &$updatedReceiptItems, &$recalculatedPrs, &$recalculatedPos) {
             // 1. Fix PR #6 Item 11: حديد 4 لنيه (133 bars -> 1.383 TON)
             $prItem11 = DB::table('purchase_request_items')->where('id', 11)->first();
             if ($prItem11 && ($prItem11->uom === 'BAR' || (float)$prItem11->quantity > 10)) {
@@ -657,10 +658,15 @@ class AdminController extends Controller
                 }
                 DB::table('purchase_orders')->where('id', $poId)->update($updateData);
             }
+
+            // 9. Wipe demo land parcels as requested by user
+            DB::table('supplier_invoice_land_allocations')->delete();
+            DB::table('land_parcel_transactions')->delete();
+            DB::table('land_parcels')->delete();
         });
 
         return response()->json([
-            'message' => 'تم تصحيح وتحديث كافة طلبات وأوامر وأذونات استلام الحديد بنجاح.',
+            'message' => 'تم تصحيح وتحديث كافة طلبات وأوامر وأذونات استلام الحديد وحذف كافة قطع الأراضي التجريبية بنجاح.',
             'updated_pr_items' => $updatedPrItems,
             'updated_po_items' => $updatedPoItems,
             'updated_receipt_items' => array_values(array_unique($updatedReceiptItems)),

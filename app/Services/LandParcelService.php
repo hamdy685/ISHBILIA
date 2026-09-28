@@ -213,5 +213,28 @@ class LandParcelService
             ]);
         }
     }
+
+    public function deleteParcel(LandParcel $parcel): bool
+    {
+        if ($parcel->invoiceAllocations()->exists()) {
+            throw ValidationException::withMessages([
+                'parcel' => ['لا يمكن حذف قطعة الأرض لوجود فواتير مصروفات مرحلة عليها.'],
+            ]);
+        }
+
+        return DB::transaction(function () use ($parcel): bool {
+            $parcel->transactions()->delete();
+            return (bool) $parcel->delete();
+        });
+    }
+
+    public function wipeAllParcels(): int
+    {
+        return DB::transaction(function (): int {
+            DB::table('supplier_invoice_land_allocations')->delete();
+            DB::table('land_parcel_transactions')->delete();
+            return DB::table('land_parcels')->delete();
+        });
+    }
 }
 

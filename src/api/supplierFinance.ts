@@ -277,6 +277,18 @@ export const addCustomerFundingApi = async (parcelId: number, payload: CreateLan
 export const getLandParcelAccountApi = async (parcelId: number): Promise<LandParcelAccountDetails> =>
   (await apiClient.get<{ data: LandParcelAccountDetails }>(`${accountingBase}/land-parcels/${parcelId}`)).data.data;
 
+export const deleteLandParcelApi = async (parcelId: number): Promise<{ message: string }> => {
+  const response = await apiClient.delete<{ message: string }>(`${accountingBase}/land-parcels/${parcelId}`);
+  invalidateCachedGet(`${accountingBase}/land-parcels`);
+  return response.data;
+};
+
+export const wipeAllLandParcelsApi = async (): Promise<{ message: string; deleted_count?: number }> => {
+  const response = await apiClient.delete<{ message: string; deleted_count?: number }>(`${accountingBase}/land-parcels/wipe-all`);
+  invalidateCachedGet(`${accountingBase}/land-parcels`);
+  return response.data;
+};
+
 export const getApprovedReceiptsForAccountingApi = async () =>
   (await apiClient.get<{ data: ApprovedReceipt[] }>(`${accountingBase}/receipts/approved`)).data.data;
 
