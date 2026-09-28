@@ -14,6 +14,7 @@ import { deletePurchaseRequestItemApi } from '../../api/purchaseRequests';
 import { parseApiError } from '../../utils/apiError';
 import { SupplementItemBadge } from '../common/SupplementItemBadge';
 import { formatCleanNumber, formatCleanQty } from '../../utils/numberFormat';
+import { formatRebarDisplay } from '../../utils/rebar';
 
 interface PrDetailsModalProps {
   pr: PurchaseRequest | null;
@@ -379,7 +380,9 @@ export const PrDetailsModal: React.FC<PrDetailsModalProps> = ({
                         </td>
                       )}
                       <td className="p-3 text-center font-mono text-slate-200 whitespace-nowrap">
-                        {formatCleanQty(item.quantity)} {getUnitLabel(item.uom)}
+                        {formatRebarDisplay(item.quantity, item.uom, item.specifications) || (
+                          <>{formatCleanQty(item.quantity)} {getUnitLabel(item.uom)}</>
+                        )}
                       </td>
                       {isDirect && (
                         <td className="p-3 text-center font-mono text-emerald-300 whitespace-nowrap">
@@ -491,7 +494,9 @@ export const PrDetailsModal: React.FC<PrDetailsModalProps> = ({
                           الكمية المطلوبة
                         </span>
                         <span className="font-mono font-bold text-slate-200">
-                          {formatCleanQty(item.quantity)} {getUnitLabel(item.uom)}
+                          {formatRebarDisplay(item.quantity, item.uom, item.specifications) || (
+                            <>{formatCleanQty(item.quantity)} {getUnitLabel(item.uom)}</>
+                          )}
                         </span>
                       </div>
                       {isDirect && (

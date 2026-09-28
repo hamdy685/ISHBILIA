@@ -27,6 +27,9 @@ export const UNIT_LABELS: Record<string, string> = {
   PALLET: 'طبالي',
   DRUM: 'برميل',
   SHEET: 'لوح',
+  BAR_3LINIA: 'سيخ 3 لينية',
+  BAR_4LINIA: 'سيخ 4 لينية',
+  BAR_5LINIA: 'سيخ 5 لينية',
   BAR: 'سيخ',
   GALLON: 'جالون',
   JERRICAN: 'جركن',
@@ -188,6 +191,30 @@ const UNIT_ALIASES: Record<string, string> = {
   'قضيب': 'BAR',
   'BAR': 'BAR',
   'BARS': 'BAR',
+  'سيخ 3 لينية': 'BAR_3LINIA',
+  '3 لينية': 'BAR_3LINIA',
+  'سيخ 3 لنية': 'BAR_3LINIA',
+  '3 لنية': 'BAR_3LINIA',
+  'سيخ 3 ملل': 'BAR_3LINIA',
+  '3 ملل': 'BAR_3LINIA',
+  'BAR_3LINIA': 'BAR_3LINIA',
+  'BAR_3MM': 'BAR_3LINIA',
+  'سيخ 4 لينية': 'BAR_4LINIA',
+  '4 لينية': 'BAR_4LINIA',
+  'سيخ 4 لنية': 'BAR_4LINIA',
+  '4 لنية': 'BAR_4LINIA',
+  'سيخ 4 ملل': 'BAR_4LINIA',
+  '4 ملل': 'BAR_4LINIA',
+  'BAR_4LINIA': 'BAR_4LINIA',
+  'BAR_4MM': 'BAR_4LINIA',
+  'سيخ 5 لينية': 'BAR_5LINIA',
+  '5 لينية': 'BAR_5LINIA',
+  'سيخ 5 لنية': 'BAR_5LINIA',
+  '5 لنية': 'BAR_5LINIA',
+  'سيخ 5 ملل': 'BAR_5LINIA',
+  '5 ملل': 'BAR_5LINIA',
+  'BAR_5LINIA': 'BAR_5LINIA',
+  'BAR_5MM': 'BAR_5LINIA',
   'لوط': 'LOT',
   'دفعة': 'LOT',
   'LOT': 'LOT',
@@ -263,7 +290,12 @@ export const getUnitValue = (unit?: string | null): string => {
 };
 
 export const getUnitOptions = (units: string[]): Array<{ value: string; label: string }> =>
-  units.map((value) => ({ value, label: getUnitLabel(value) }));
+  units.map((value) => {
+    if (value === 'BAR_3LINIA') return { value, label: 'سيخ 3 لينية (7.4 كجم)' };
+    if (value === 'BAR_4LINIA') return { value, label: 'سيخ 4 لينية (10.4 كجم)' };
+    if (value === 'BAR_5LINIA') return { value, label: 'سيخ 5 لينية (19 كجم)' };
+    return { value, label: getUnitLabel(value) };
+  });
 
 export const DEFAULT_PR_UNIT_CODES = [
   'PCS',
@@ -284,7 +316,9 @@ export const DEFAULT_PR_UNIT_CODES = [
   'ROLL',
   'SPOOL',
   'DOZEN',
-  'BAR',
+  'BAR_3LINIA',
+  'BAR_4LINIA',
+  'BAR_5LINIA',
   'SET',
   'PAIR',
   'UNIT',

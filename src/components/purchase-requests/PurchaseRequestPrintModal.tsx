@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { PurchaseRequest } from '../../types/purchaseRequest';
 import { getUnitLabel } from '../../utils/units';
 import { printDocumentOnly } from '../../utils/print';
+import { formatCleanQty } from '../../utils/numberFormat';
+import { extractRebarInfo } from '../../utils/rebar';
 
 interface PurchaseRequestPrintModalProps {
   pr: PurchaseRequest;
@@ -102,8 +104,15 @@ export const PurchaseRequestPrintModal: React.FC<PurchaseRequestPrintModalProps>
                     <td className="border border-slate-900 p-2 font-mono">{item.item_reference || pr.parcel_reference || '—'}</td>
                     <td className="border border-slate-900 p-2">{item.region || pr.region || '—'}</td>
                     <td className="border border-slate-900 p-2 font-bold">{item.item_description}</td>
-                    <td className="border border-slate-900 p-2 text-center">{getUnitLabel(item.uom)}</td>
-                    <td className="border border-slate-900 p-2 text-center">{item.quantity}</td>
+                    <td className="border border-slate-900 p-2 text-center">
+                      <div>{getUnitLabel(item.uom)}</div>
+                      {extractRebarInfo(item.specifications) && (
+                        <div className="text-[9px] font-bold text-slate-800">
+                          ({extractRebarInfo(item.specifications)?.barCount} سيخ {extractRebarInfo(item.specifications)?.linia})
+                        </div>
+                      )}
+                    </td>
+                    <td className="border border-slate-900 p-2 text-center">{formatCleanQty(item.quantity)}</td>
                     <td className="border border-slate-900 p-2">{item.specifications || '—'}</td>
                   </tr>
                 ))}

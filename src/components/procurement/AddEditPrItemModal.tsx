@@ -17,7 +17,8 @@ import { المورد as Supplier } from '../../types/purchaseOrder';
 import { DEFAULT_PR_UNIT_CODES, getUnitOptions } from '../../utils/units';
 import { parseApiError } from '../../utils/apiError';
 import { ItemAutocompleteInput } from '../common/ItemAutocompleteInput';
-import { formatCleanNumber } from '../../utils/numberFormat';
+import { formatCleanNumber, formatCleanQty } from '../../utils/numberFormat';
+import { isRebarUnit, getRebarType, calculateRebarTons } from '../../utils/rebar';
 
 const UNIT_OPTIONS = getUnitOptions(DEFAULT_PR_UNIT_CODES);
 
@@ -142,17 +143,30 @@ export const AddEditPrItemModal: React.FC<AddEditPrItemModalProps> = ({
     setIsSubmitting(true);
 
     try {
+      let finalQuantity = Number(quantity);
+      let finalUom = uom || 'PCS';
+      let finalSpecs = specifications.trim() || undefined;
+
+      if (isRebarUnit(uom)) {
+        const spec = getRebarType(uom)!;
+        const barCount = finalQuantity;
+        finalQuantity = calculateRebarTons(barCount, uom);
+        finalUom = 'TON';
+        const rebarNote = `${formatCleanQty(barCount)} سيخ ${spec.linia}`;
+        finalSpecs = finalSpecs ? `${rebarNote} — ${finalSpecs}` : rebarNote;
+      }
+
       const payload = {
         item_id: itemId || null,
         item_description: itemDescription.trim(),
         item_reference: itemReference.trim() || undefined,
         region: region.trim() || undefined,
-        quantity: Number(quantity),
-        uom: uom || 'PCS',
+        quantity: finalQuantity,
+        uom: finalUom,
         supplier_id: supplierId ? Number(supplierId) : null,
         estimated_unit_price:
           estimatedUnitPrice !== '' ? Number(estimatedUnitPrice) : null,
-        specifications: specifications.trim() || undefined,
+        specifications: finalSpecs,
         notes: notes.trim() || undefined,
       };
 
@@ -290,6 +304,20 @@ export const AddEditPrItemModal: React.FC<AddEditPrItemModalProps> = ({
             </Select>
           </FormField>
         </div>
+
+        {/* Live Rebar Calculation Badge */}
+        {isRebarUnit(uom) && Number(quantity) > 0 && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200">
+            <span className="text-amber-400 font-bold">⚖️ الحسبة التلقائية:</span>
+            <span>
+              {formatCleanQty(quantity)} سيخ × {getRebarType(uom)?.weightKg} كجم ÷ 1000 ={' '}
+              <strong className="text-amber-300 font-mono text-sm underline">
+                {calculateRebarTons(quantity, uom)} طن
+              </strong>{' '}
+              (سيتم اعتماد الوزن بالطن مع حفظ تفاصيل عدد الأسياخ)
+            </span>
+          </div>
+        )}
 
         {/* Pricing and Supplier (Shown for direct route or if pricing enabled) */}
         <div className="rounded-xl border border-cyan-900/30 bg-cyan-950/10 p-3.5 space-y-3">

@@ -5,6 +5,7 @@ import { getUnitLabel } from '../../utils/units';
 import { printDocumentOnly } from '../../utils/print';
 import { SupplementItemBadge } from '../common/SupplementItemBadge';
 import { formatCleanNumber, formatCleanQty } from '../../utils/numberFormat';
+import { extractRebarInfo } from '../../utils/rebar';
 
 interface PurchaseOrderPrintModalProps {
   po: PurchaseOrder;
@@ -112,7 +113,14 @@ export const PurchaseOrderPrintModal: React.FC<PurchaseOrderPrintModalProps> = (
                         />
                       </div>
                     </td>
-                    <td className="border border-slate-900 p-2 text-center">{getUnitLabel(item.uom || 'PCS')}</td>
+                    <td className="border border-slate-900 p-2 text-center">
+                      <div>{getUnitLabel(item.uom || 'PCS')}</div>
+                      {extractRebarInfo(item.specifications) && (
+                        <div className="text-[9px] font-bold text-slate-800">
+                          ({extractRebarInfo(item.specifications)?.barCount} سيخ {extractRebarInfo(item.specifications)?.linia})
+                        </div>
+                      )}
+                    </td>
                     <td className="border border-slate-900 p-2 text-center">{formatCleanQty(item.quantity)}</td>
                     <td className="border border-slate-900 p-2 text-center">{formatCleanNumber(item.unit_price)}</td>
                     <td className="border border-slate-900 p-2 text-center">{formatCleanNumber(item.line_total)}</td>

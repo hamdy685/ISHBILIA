@@ -20,6 +20,8 @@ import { Card } from '../../components/ui/Card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/ui/Table';
 import { getUnitLabel } from '../../utils/units';
 import { getSummaryParcels, getSummaryRegions, getSummaryQuantities } from '../../utils/formatRequestSummary';
+import { formatCleanQty } from '../../utils/numberFormat';
+import { formatRebarDisplay, extractRebarInfo } from '../../utils/rebar';
 import SystemEventTimeline from '../../components/ui/SystemEventTimeline';
 import { UnifiedNotesCard } from '../../components/common/UnifiedNotesCard';
 import { ForbiddenPage } from '../ErrorPages';
@@ -343,11 +345,25 @@ export const ReviewerPurchaseRequestDetailsPage: React.FC = () => {
                   <TableCell className="font-bold text-slate-400">{index + 1}</TableCell>
                   <TableCell className="font-mono text-cyan-300">{item.item_reference || '—'}</TableCell>
                   <TableCell className="text-amber-300">{item.region || '—'}</TableCell>
-                  <TableCell className="font-bold text-slate-100">{item.item_description}</TableCell>
-                  <TableCell className="font-mono font-bold text-slate-200">
-                    {parseFloat(item.quantity).toLocaleString()}
+                  <TableCell className="font-bold text-slate-100">
+                    <div>{item.item_description}</div>
+                    {item.specifications && (
+                      <div className="text-xs text-slate-400 font-normal mt-0.5">{item.specifications}</div>
+                    )}
                   </TableCell>
-                  <TableCell className="text-slate-400">{getUnitLabel(item.uom)}</TableCell>
+                  <TableCell className="font-mono font-bold text-slate-200">
+                    {formatCleanQty(item.quantity)}
+                  </TableCell>
+                  <TableCell className="text-slate-400">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span>{getUnitLabel(item.uom)}</span>
+                      {extractRebarInfo(item.specifications) && (
+                        <span className="px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono font-medium">
+                          ({extractRebarInfo(item.specifications)?.barCount} سيخ {extractRebarInfo(item.specifications)?.linia})
+                        </span>
+                      )}
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -366,10 +382,13 @@ export const ReviewerPurchaseRequestDetailsPage: React.FC = () => {
                 </span>
               </div>
               <p className="font-bold text-xs text-slate-100">{item.item_description}</p>
+              {item.specifications && (
+                <p className="text-[11px] text-slate-400">{item.specifications}</p>
+              )}
               <div className="flex items-center justify-between text-xs pt-1">
                 <span className="text-amber-300">📍 {item.region || 'غير محددة'}</span>
                 <span className="font-mono font-bold text-emerald-300">
-                  ⚖️ {parseFloat(item.quantity).toLocaleString()} {getUnitLabel(item.uom)}
+                  ⚖️ {formatRebarDisplay(item.quantity, item.uom, item.specifications) || `${formatCleanQty(item.quantity)} ${getUnitLabel(item.uom)}`}
                 </span>
               </div>
             </article>

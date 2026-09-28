@@ -30,6 +30,8 @@ import { useAuth } from '../../context/AuthContext';
 import { emitAppDataUpdated } from '../../hooks/useRealtimeRefresh';
 import { SearchableSelect } from '../../components/ui/FormField';
 import { toast } from '../../utils/toast';
+import { isRebarUnit, getRebarType, calculateRebarTons } from '../../utils/rebar';
+import { formatCleanNumber, formatCleanQty } from '../../utils/numberFormat';
 
 const UNIT_OPTIONS = getUnitOptions(DEFAULT_PR_UNIT_CODES);
 
@@ -160,13 +162,31 @@ const normalizeRequestData = (data: CreatePurchaseRequestPayload): CreatePurchas
     land_parcel_id: isOffice ? undefined : data.land_parcel_id,
     site_engineer_user_id: isOffice ? undefined : data.site_engineer_user_id,
     notes: data.notes?.trim(),
-    items: data.items.map((item) => ({
-      ...item,
-      item_description: item.item_description.trim(),
-      item_reference: defaultParcel,
-      region: defaultRegion,
-      specifications: item.specifications?.trim(),
-    })),
+    items: data.items.map((item) => {
+      let quantity = Number(item.quantity) || 0;
+      let uom = item.uom;
+      let specifications = item.specifications?.trim();
+
+      if (isRebarUnit(item.uom)) {
+        const spec = getRebarType(item.uom)!;
+        const barCount = quantity;
+        const tons = calculateRebarTons(barCount, item.uom);
+        quantity = tons;
+        uom = 'TON';
+        const rebarNote = `${formatCleanQty(barCount)} سيخ ${spec.linia}`;
+        specifications = specifications ? `${rebarNote} — ${specifications}` : rebarNote;
+      }
+
+      return {
+        ...item,
+        quantity,
+        uom,
+        item_description: item.item_description.trim(),
+        item_reference: defaultParcel,
+        region: defaultRegion,
+        specifications,
+      };
+    }),
   };
 };
 
@@ -1043,6 +1063,21 @@ const CreatePurchaseRequestPage: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Rebar live weight calculation badge */}
+                {isRebarUnit(item.uom) && Number(item.quantity) > 0 && (
+                  <div className="rounded-lg bg-amber-950/40 border border-amber-600/40 p-2 text-xs flex items-center justify-between text-amber-200">
+                    <span className="font-bold flex items-center gap-1.5">
+                      <span>⚖️</span> الوزن المحسوب:{' '}
+                      <strong className="font-mono text-emerald-300 text-sm">
+                        {formatCleanNumber(calculateRebarTons(item.quantity, item.uom), 3)} طن
+                      </strong>
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      ({formatCleanQty(item.quantity)} سيخ × {getRebarType(item.uom)?.weightKg} كجم ÷ 1000)
+                    </span>
+                  </div>
+                )}
+
                 {/* Technical Specifications */}
                 <div className="space-y-1">
                   <label className="text-[11px] font-bold text-slate-400">
@@ -1160,6 +1195,14 @@ const CreatePurchaseRequestPage: React.FC = () => {
                           </option>
                         ))}
                       </select>
+                      {isRebarUnit(item.uom) && Number(item.quantity) > 0 && (
+                        <div className="mt-1 text-[11px] font-bold text-amber-300 bg-amber-950/60 border border-amber-600/40 rounded px-2 py-1 text-center shadow-sm">
+                          ⚖️ {formatCleanNumber(calculateRebarTons(item.quantity, item.uom), 3)} طن
+                          <span className="block text-[9px] text-slate-400 font-mono font-normal">
+                            ({formatCleanQty(item.quantity)} سيخ × {getRebarType(item.uom)?.weightKg} كجم)
+                          </span>
+                        </div>
+                      )}
                     </td>
 
                     {/* Specifications */}

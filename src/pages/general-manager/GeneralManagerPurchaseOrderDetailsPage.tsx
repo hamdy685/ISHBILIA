@@ -11,6 +11,7 @@ import { getUnitLabel } from '../../utils/units';
 import PrintablePO from '../../components/procurement/PrintablePO';
 import { UnifiedNotesCard } from '../../components/common/UnifiedNotesCard';
 import { formatCleanNumber, formatCleanQty } from '../../utils/numberFormat';
+import { formatRebarDisplay, extractRebarInfo } from '../../utils/rebar';
 
 export const GeneralManagerPurchaseOrderDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -149,7 +150,16 @@ export const GeneralManagerPurchaseOrderDetailsPage: React.FC = () => {
                   <TableCell className="text-slate-300">{item.region || '—'}</TableCell>
                   <TableCell className="font-bold text-slate-100">{item.item_name || item.item_description}</TableCell>
                   <TableCell className="text-slate-400 text-[11px]">{item.specifications || '-'}</TableCell>
-                  <TableCell className="text-slate-300">{getUnitLabel(item.uom)}</TableCell>
+                  <TableCell className="text-slate-300">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span>{getUnitLabel(item.uom)}</span>
+                      {extractRebarInfo(item.specifications) && (
+                        <span className="px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono font-medium">
+                          ({extractRebarInfo(item.specifications)?.barCount} سيخ {extractRebarInfo(item.specifications)?.linia})
+                        </span>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell className="font-mono">{formatCleanQty(item.quantity)}</TableCell>
                   <TableCell>
                     <CurrencyDisplay amount={item.unit_price} amountClassName="font-mono text-slate-200" />
@@ -188,7 +198,7 @@ export const GeneralManagerPurchaseOrderDetailsPage: React.FC = () => {
                 <div>
                   <dt className="text-slate-500">الكمية والوحدة</dt>
                   <dd className="mt-1 whitespace-nowrap font-mono text-slate-200">
-                    {formatCleanQty(item.quantity)} {getUnitLabel(item.uom)}
+                    {formatRebarDisplay(item.quantity, item.uom, item.specifications) || `${formatCleanQty(item.quantity)} ${getUnitLabel(item.uom)}`}
                   </dd>
                 </div>
                 <div>

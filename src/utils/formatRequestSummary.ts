@@ -1,4 +1,5 @@
 import { getUnitLabel } from './units';
+import { formatRebarDisplay } from './rebar';
 
 export interface SummaryItem {
   item_description?: string | null;
@@ -7,6 +8,7 @@ export interface SummaryItem {
   region?: string | null;
   quantity?: number | string | null;
   uom?: string | null;
+  specifications?: string | null;
 }
 
 export interface SummaryRequest {
@@ -67,17 +69,29 @@ export function getSummaryQuantities(items?: SummaryItem[] | null): QuantitySumm
   };
 
   if (cleanItems.length === 1) {
-    const it = cleanItems[0];
-    const qtyStr = formatNum(it.qty);
+    const it = items[0];
+    const cleanIt = cleanItems[0];
+    const rebarText = formatRebarDisplay(it.quantity || 0, it.uom, it.specifications);
+    if (rebarText) {
+      return {
+        display: rebarText,
+        tooltip: `${cleanIt.name}: ${rebarText}`
+      };
+    }
+    const qtyStr = formatNum(cleanIt.qty);
     return {
-      display: `${qtyStr} ${it.unit}`,
-      tooltip: `${it.name}: ${qtyStr} ${it.unit}`
+      display: `${qtyStr} ${cleanIt.unit}`,
+      tooltip: `${cleanIt.name}: ${qtyStr} ${cleanIt.unit}`
     };
   }
 
   // عدة أصناف
-  const detailedTooltip = cleanItems
-    .map((it) => `${it.name}: ${formatNum(it.qty)} ${it.unit}`)
+  const detailedTooltip = items
+    .map((it, idx) => {
+      const cleanIt = cleanItems[idx];
+      const rebar = formatRebarDisplay(it.quantity || 0, it.uom, it.specifications);
+      return `${cleanIt.name}: ${rebar || `${formatNum(cleanIt.qty)} ${cleanIt.unit}`}`;
+    })
     .join(' | ');
 
   // فحص هل كل الأصناف تشترك في نفس وحدة القياس

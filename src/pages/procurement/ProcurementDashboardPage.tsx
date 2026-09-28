@@ -129,6 +129,7 @@ export const ProcurementDashboardPage: React.FC = () => {
               region: it.region,
               unit_price: it.estimated_unit_price,
               line_total: it.estimated_line_total,
+              specifications: it.specifications,
             })),
           })),
           // ── Normal Approved PRs (excluding supplement ones already shown) ──
@@ -163,6 +164,7 @@ export const ProcurementDashboardPage: React.FC = () => {
                 region: it.region,
                 unit_price: it.estimated_unit_price,
                 line_total: it.estimated_line_total,
+                specifications: it.specifications,
               })),
             })),
           ...pos

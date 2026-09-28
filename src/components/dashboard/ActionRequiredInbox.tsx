@@ -8,6 +8,7 @@ import { useAuth } from '../../context/AuthContext';
 import { getUnitLabel } from '../../utils/units';
 import { toast } from '../../utils/toast';
 import { formatCleanNumber, formatCleanQty } from '../../utils/numberFormat';
+import { formatRebarDisplay } from '../../utils/rebar';
 
 export interface ActionInboxItemDetail {
   description: string;
@@ -17,6 +18,7 @@ export interface ActionInboxItemDetail {
   region?: string | null;
   unit_price?: number | string | null;
   line_total?: number | string | null;
+  specifications?: string | null;
 }
 
 export interface ActionInboxItem {
@@ -519,7 +521,7 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                                 {/* السطر الثاني: شارات الكمية والوحدة وسعر الوحدة بشكل متناسق */}
                                 <div className="flex items-center gap-1.5 text-[11px] flex-wrap pr-3 text-slate-400">
                                   <span className="font-mono font-bold text-amber-300 bg-amber-950/40 border border-amber-800/50 px-1.5 py-0.5 rounded">
-                                    الكمية: {formatCleanQty(it.quantity)} {unitLabel}
+                                    الكمية: {formatRebarDisplay(it.quantity, it.uom, it.specifications || it.description) || `${formatCleanQty(it.quantity)} ${unitLabel}`}
                                   </span>
 
                                   {hasPrice && (

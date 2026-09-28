@@ -29,6 +29,8 @@ import OfficeReceiptModal from '../../components/purchase-requests/OfficeReceipt
 import { getUnitLabel } from '../../utils/units';
 import { getSummaryParcels, getSummaryRegions, getSummaryQuantities } from '../../utils/formatRequestSummary';
 import { UnifiedNotesCard } from '../../components/common/UnifiedNotesCard';
+import { formatCleanQty } from '../../utils/numberFormat';
+import { formatRebarDisplay, extractRebarInfo } from '../../utils/rebar';
 
 const REQUESTER_EDITABLE_STATUSES = ['DRAFT', 'SUBMITTED', 'UNDER_REVIEW'];
 const REVIEWER_DECISION_STATUSES = ['REJECTED', 'APPROVED_BY_REVIEWER', 'PENDING_PROCUREMENT_APPROVAL', 'APPROVED_BY_PROCUREMENT', 'PO_DRAFT', 'ISSUED'];
@@ -410,9 +412,18 @@ export const PurchaseRequestDetailsPage: React.FC = () => {
                   {!isOffice && <TableCell className="text-amber-300">{item.region || requestData.region || '—'}</TableCell>}
                   <TableCell className="font-bold text-slate-100">{item.item_description}</TableCell>
                   <TableCell className="font-bold font-mono text-slate-200">
-                    {parseFloat(item.quantity).toLocaleString()}
+                    {formatCleanQty(item.quantity)}
                   </TableCell>
-                  <TableCell className="text-slate-400">{getUnitLabel(item.uom)}</TableCell>
+                  <TableCell className="text-slate-400">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span>{getUnitLabel(item.uom)}</span>
+                      {extractRebarInfo(item.specifications) && (
+                        <span className="px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono font-medium">
+                          ({extractRebarInfo(item.specifications)?.barCount} سيخ {extractRebarInfo(item.specifications)?.linia})
+                        </span>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell className="text-xs text-slate-300">{item.specifications || '-'}</TableCell>
                 </TableRow>
               ))}
@@ -432,7 +443,7 @@ export const PurchaseRequestDetailsPage: React.FC = () => {
               <div className="flex items-center justify-between text-xs pt-0.5">
                 {!isOffice && <span className="text-amber-300 font-bold">📍 {item.region || '—'}</span>}
                 <span className="font-bold text-emerald-300 font-mono">
-                  ⚖️ {parseFloat(item.quantity).toLocaleString()} {getUnitLabel(item.uom)}
+                  ⚖️ {formatRebarDisplay(item.quantity, item.uom, item.specifications) || `${formatCleanQty(item.quantity)} ${getUnitLabel(item.uom)}`}
                 </span>
               </div>
               {item.specifications && (

@@ -209,6 +209,7 @@ export const GeneralManagerDashboardPage: React.FC = () => {
                 region: it.region,
                 unit_price: isReturnedFromProcurement ? it.estimated_unit_price : undefined,
                 line_total: isReturnedFromProcurement ? it.estimated_line_total : undefined,
+                specifications: it.specifications,
               })),
               onDirectApprove: async (_item: any, comment?: string) => {
                 await approveGeneralManagerPurchaseRequestApi(req.id, comment);
