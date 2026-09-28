@@ -570,6 +570,64 @@ class AdminController extends Controller
                 $recalculatedPos[7] = true;
             }
 
+            // 8. Fix Receipt #7 items:
+            // Item 11: حديد 4 لنيه (was 40.000 -> 0.416 TON)
+            $rcptItem11 = DB::table('purchase_receipt_items')->where('id', 11)->first();
+            if ($rcptItem11 && (float)$rcptItem11->received_quantity > 5) {
+                DB::table('purchase_receipt_items')->where('id', 11)->update([
+                    'ordered_quantity' => 0.416,
+                    'received_quantity' => 0.416,
+                ]);
+                $updatedReceiptItems[] = 11;
+            }
+
+            // Item 12: حديد 5 لنيه (was 35.000 -> 0.665 TON)
+            $rcptItem12 = DB::table('purchase_receipt_items')->where('id', 12)->first();
+            if ($rcptItem12 && (float)$rcptItem12->received_quantity > 5) {
+                DB::table('purchase_receipt_items')->where('id', 12)->update([
+                    'ordered_quantity' => 0.665,
+                    'received_quantity' => 0.665,
+                ]);
+                $updatedReceiptItems[] = 12;
+            }
+
+            // Safety scan for all other receipt items linked to rebar with TON UOM where bars were entered as received_quantity
+            $allRcptItems = DB::table('purchase_receipt_items')
+                ->join('purchase_order_items', 'purchase_receipt_items.purchase_order_item_id', '=', 'purchase_order_items.id')
+                ->where('purchase_order_items.uom', 'TON')
+                ->select('purchase_receipt_items.id', 'purchase_receipt_items.received_quantity', 'purchase_order_items.specifications as po_specs')
+                ->get();
+
+            foreach ($allRcptItems as $ri) {
+                if ((float)$ri->received_quantity > 10 && !empty($ri->po_specs)) {
+                    if (preg_match('/(\d+)\s*سيخ\s*4/u', $ri->po_specs, $m)) {
+                        $bars = (float)$m[1];
+                        $tons = round($bars * 10.4 / 1000, 3);
+                        DB::table('purchase_receipt_items')->where('id', $ri->id)->update([
+                            'ordered_quantity' => $tons,
+                            'received_quantity' => $tons,
+                        ]);
+                        $updatedReceiptItems[] = $ri->id;
+                    } elseif (preg_match('/(\d+)\s*سيخ\s*5/u', $ri->po_specs, $m)) {
+                        $bars = (float)$m[1];
+                        $tons = round($bars * 19.0 / 1000, 3);
+                        DB::table('purchase_receipt_items')->where('id', $ri->id)->update([
+                            'ordered_quantity' => $tons,
+                            'received_quantity' => $tons,
+                        ]);
+                        $updatedReceiptItems[] = $ri->id;
+                    } elseif (preg_match('/(\d+)\s*سيخ\s*3/u', $ri->po_specs, $m)) {
+                        $bars = (float)$m[1];
+                        $tons = round($bars * 7.4 / 1000, 3);
+                        DB::table('purchase_receipt_items')->where('id', $ri->id)->update([
+                            'ordered_quantity' => $tons,
+                            'received_quantity' => $tons,
+                        ]);
+                        $updatedReceiptItems[] = $ri->id;
+                    }
+                }
+            }
+
             // Recalculate PR totals
             foreach (array_keys($recalculatedPrs) as $prId) {
                 $total = DB::table('purchase_request_items')
@@ -602,9 +660,10 @@ class AdminController extends Controller
         });
 
         return response()->json([
-            'message' => 'تم تصحيح وتحديث كافة طلبات وأوامر الشراء التاريخية للحديد بنجاح.',
+            'message' => 'تم تصحيح وتحديث كافة طلبات وأوامر وأذونات استلام الحديد بنجاح.',
             'updated_pr_items' => $updatedPrItems,
             'updated_po_items' => $updatedPoItems,
+            'updated_receipt_items' => array_values(array_unique($updatedReceiptItems)),
             'recalculated_prs' => array_keys($recalculatedPrs),
             'recalculated_pos' => array_keys($recalculatedPos),
         ]);

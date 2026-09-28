@@ -605,9 +605,15 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                     <span className="text-xs text-slate-300 block">
                                       الوحدة المقررة: <strong className="text-white font-mono text-sm">{getUnitLabel(item.uom || '')}</strong>
                                     </span>
-                                    <span className="text-[11px] text-amber-300 font-bold block mt-0.5">
-                                      ⚠️ استلام أعمى: يرجى كتابة الكمية المستلمة فعلياً في الموقع بعد انتهاء الصبة من واقع بونات التوريد.
-                                    </span>
+                                    {item.uom === 'TON' && (item.specifications?.includes('سيخ') || item.item_description?.includes('حديد')) ? (
+                                      <span className="text-[11px] text-amber-300 font-bold block mt-0.5">
+                                        ⚠️ تنبيه هام: الوحدة المعتمدة هي <strong>الطن</strong>. برجاء إدخال الوزن الإجمالي بالطن (وليس عدد الأسياخ).
+                                      </span>
+                                    ) : (
+                                      <span className="text-[11px] text-amber-300 font-bold block mt-0.5">
+                                        ⚠️ استلام أعمى: يرجى كتابة الكمية المستلمة فعلياً في الموقع بعد انتهاء الصبة من واقع بونات التوريد.
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
 
