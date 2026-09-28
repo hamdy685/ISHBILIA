@@ -62,7 +62,7 @@ export const PurchasesReportView: React.FC = () => {
   const [fromDate, setFromDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [toDate, setToDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [selectedDepartment, setSelectedDepartment] = useState<string>('ALL');
-  const [accountingFilter, setAccountingFilter] = useState<'ALL' | 'VERIFIED_ONLY' | 'PENDING'>('ALL');
+  const [accountingFilter, setAccountingFilter] = useState<'ALL' | 'VERIFIED_ONLY' | 'PENDING'>('VERIFIED_ONLY');
 
   // Column search filters
   const [colFilters, setColFilters] = useState<ColumnFilters>(initialFilters);
@@ -462,7 +462,7 @@ export const PurchasesReportView: React.FC = () => {
                   <span>ورقة إكسيل: {dynamicReportTitle}.xlsx</span>
                 </h1>
                 <span className="text-[10px] text-emerald-100 opacity-90 block">
-                  جدول بيانات مسقط محاسبياً • 12 عموداً • إمكانية التصفية والفرز والتصدير
+                  تقرير المشتريات المسقطة محاسبياً (بعد تسجيل فاتورة المورد في المرحلة النهائية) • 12 عموداً • إمكانية التصفية والفرز والتصدير
                 </span>
               </div>
             </div>
@@ -538,20 +538,9 @@ export const PurchasesReportView: React.FC = () => {
               </div>
             </div>
 
-            {/* Accounting Mode Toggle (All Orders vs Verified Only vs Pending) */}
+            {/* Accounting Mode Toggle (Verified Only vs All Invoiced vs Pending) */}
             <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
               <span className="text-[10px] font-bold text-slate-400 px-2">عرض:</span>
-              <button
-                type="button"
-                onClick={() => setAccountingFilter('ALL')}
-                className={`px-2.5 py-1 text-[11px] font-bold rounded transition ${
-                  accountingFilter === 'ALL'
-                    ? 'bg-emerald-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                الكل ({data?.rows?.length || 0})
-              </button>
               <button
                 type="button"
                 onClick={() => setAccountingFilter('VERIFIED_ONLY')}
@@ -565,6 +554,17 @@ export const PurchasesReportView: React.FC = () => {
               </button>
               <button
                 type="button"
+                onClick={() => setAccountingFilter('ALL')}
+                className={`px-2.5 py-1 text-[11px] font-bold rounded transition ${
+                  accountingFilter === 'ALL'
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                جميع المشتريات المعتمدة ({data?.rows?.length || 0})
+              </button>
+              <button
+                type="button"
                 onClick={() => setAccountingFilter('PENDING')}
                 className={`px-2.5 py-1 text-[11px] font-bold rounded transition ${
                   accountingFilter === 'PENDING'
@@ -572,7 +572,7 @@ export const PurchasesReportView: React.FC = () => {
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                بانتظار تسجيل الحسابات
+                بانتظار تسجيل الفاتورة
               </button>
             </div>
           </div>

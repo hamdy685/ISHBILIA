@@ -398,7 +398,7 @@ export const UniversalReportsPage: React.FC = () => {
             }`}
           >
             <span>📑</span>
-            <span>تقرير المشتريات المحاسبي (12 عموداً مسقطاً)</span>
+            <span>تقرير المشتريات المحاسبي المعتمد (12 عموداً بعد تسجيل الفاتورة)</span>
           </button>
 
           <button
@@ -411,7 +411,7 @@ export const UniversalReportsPage: React.FC = () => {
             }`}
           >
             <span>📊</span>
-            <span>سجل أوامر الشراء ومؤشرات التحليلات</span>
+            <span>تحليلات المشتريات ومؤشرات الأوامر المفوترة</span>
           </button>
         </div>
 

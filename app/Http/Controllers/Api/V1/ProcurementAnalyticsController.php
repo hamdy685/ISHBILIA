@@ -41,7 +41,7 @@ class ProcurementAnalyticsController extends Controller
             return response()->json(Cache::get($cacheKey));
         }
 
-        // الاستعلام الأساسي للتحليلات يقرأ الحقول التجميعية وفق النطاق الزمني المحدد
+        // الاستعلام الأساسي لتتبع مسار أوامر الشراء (Funnel)
         $basePurchaseOrderQuery = PurchaseOrder::query()
             ->select(['id', 'po_number', 'purchase_request_id', 'supplier_id', 'created_by_user_id', 'status', 'grand_total', 'delivery_status', 'delivery_date', 'actual_delivery_date', 'created_at', 'updated_at'])
             ->when($startDate !== null, fn ($query) => $query->where('created_at', '>=', $startDate))
@@ -52,13 +52,41 @@ class ProcurementAnalyticsController extends Controller
                 });
             });
 
-        $filteredPurchaseOrderQuery = clone $basePurchaseOrderQuery;
-        if (is_string($status) && in_array($status, self::ORDER_STATUSES, true)) {
-            $filteredPurchaseOrderQuery->where('status', $status);
-        }
+        // استعلام المشتريات المعتمدة والمفوترة بالحسابات في المرحلة النهائية
+        $invoicedPurchaseOrderQuery = PurchaseOrder::query()
+            ->select(['id', 'po_number', 'purchase_request_id', 'supplier_id', 'created_by_user_id', 'status', 'grand_total', 'delivery_status', 'delivery_date', 'actual_delivery_date', 'created_at', 'updated_at'])
+            ->whereHas('supplierInvoices', function ($q) use ($startDate, $endDate) {
+                $q->whereNotIn('status', ['VOIDED', 'CANCELLED'])
+                    ->when($startDate !== null, function ($sq) use ($startDate) {
+                        $sq->where(function ($sub) use ($startDate) {
+                            $sub->whereNotNull('invoice_date')->where('invoice_date', '>=', $startDate->toDateString())
+                                ->orWhere(function ($fb) use ($startDate) {
+                                    $fb->whereNull('invoice_date')->where('created_at', '>=', $startDate);
+                                });
+                        });
+                    })
+                    ->when($endDate !== null, function ($sq) use ($endDate) {
+                        $sq->where(function ($sub) use ($endDate) {
+                            $sub->whereNotNull('invoice_date')->where('invoice_date', '<=', $endDate->toDateString())
+                                ->orWhere(function ($fb) use ($endDate) {
+                                    $fb->whereNull('invoice_date')->where('created_at', '<=', $endDate);
+                                });
+                        });
+                    });
+            })
+            ->whereNotIn('status', ['REJECTED', 'PO_DRAFT'])
+            ->when($allowedDepartmentCodes !== null, function ($q) use ($allowedDepartmentCodes) {
+                $q->whereHas('purchaseRequest.department', function ($dq) use ($allowedDepartmentCodes) {
+                    $dq->whereIn('code', $allowedDepartmentCodes);
+                });
+            });
+
+        $filteredPurchaseOrderQuery = is_string($status) && in_array($status, self::ORDER_STATUSES, true)
+            ? (clone $basePurchaseOrderQuery)->where('status', $status)
+            : (clone $invoicedPurchaseOrderQuery);
 
         $filteredPurchaseOrders = $filteredPurchaseOrderQuery
-            ->with(['purchaseRequest.department', 'supplier', 'createdBy.department', 'items'])
+            ->with(['purchaseRequest.department', 'supplier', 'createdBy.department', 'items', 'supplierInvoices'])
             ->orderByDesc('created_at')
             ->limit(500)
             ->get();
@@ -87,10 +115,37 @@ class ProcurementAnalyticsController extends Controller
             ->when($startDate !== null, fn ($query) => $query->where('created_at', '>=', $startDate))
             ->when($endDate !== null, fn ($query) => $query->where('created_at', '<=', $endDate));
 
-        $orderTotals = (clone $basePurchaseOrderQuery)
+        // حساب إجمالي المشتريات وقيمها المالية بناءً على الفواتير المعتمدة بالحسابات
+        $invoicedOrderTotals = (clone $invoicedPurchaseOrderQuery)
             ->select([])
             ->selectRaw('COUNT(*) as purchase_orders_count, COALESCE(SUM(grand_total), 0) as total_value')
             ->first();
+
+        $totalInvoicedAmount = (float) DB::table('supplier_invoices as si')
+            ->join('purchase_orders as po', 'po.id', '=', 'si.purchase_order_id')
+            ->leftJoin('purchase_requests as pr', 'pr.id', '=', 'po.purchase_request_id')
+            ->leftJoin('departments as d', 'd.id', '=', 'pr.department_id')
+            ->whereNotIn('si.status', ['VOIDED', 'CANCELLED'])
+            ->whereNotIn('po.status', ['REJECTED', 'PO_DRAFT'])
+            ->when($startDate !== null, function ($q) use ($startDate) {
+                $q->where(function ($sub) use ($startDate) {
+                    $sub->whereNotNull('si.invoice_date')->where('si.invoice_date', '>=', $startDate->toDateString())
+                        ->orWhere(function ($fb) use ($startDate) {
+                            $fb->whereNull('si.invoice_date')->where('si.created_at', '>=', $startDate);
+                        });
+                });
+            })
+            ->when($endDate !== null, function ($q) use ($endDate) {
+                $q->where(function ($sub) use ($endDate) {
+                    $sub->whereNotNull('si.invoice_date')->where('si.invoice_date', '<=', $endDate->toDateString())
+                        ->orWhere(function ($fb) use ($endDate) {
+                            $fb->whereNull('si.invoice_date')->where('si.created_at', '<=', $endDate);
+                        });
+                });
+            })
+            ->when($allowedDepartmentCodes !== null, fn ($q) => $q->whereIn('d.code', $allowedDepartmentCodes))
+            ->sum('si.amount');
+
         $statusMetrics = (clone $basePurchaseOrderQuery)
             ->select('status')
             ->selectRaw('COUNT(*) as row_count, COALESCE(SUM(grand_total), 0) as total_value')
@@ -117,20 +172,21 @@ class ProcurementAnalyticsController extends Controller
             ])
             ->values();
 
-        $deliveryMetrics = (clone $basePurchaseOrderQuery)
+        $deliveryMetrics = (clone $invoicedPurchaseOrderQuery)
             ->select('delivery_status')
             ->selectRaw('COUNT(*) as row_count, COALESCE(SUM(grand_total), 0) as total_value')
             ->groupBy('delivery_status')
             ->get();
         $deliveryBreakdown = $deliveryMetrics
             ->map(fn ($row) => [
-                'status' => $row->delivery_status ?: 'PENDING',
+                'status' => $row->delivery_status ?: 'COMPLETE',
                 'count' => (int) $row->row_count,
                 'total_value' => number_format((float) $row->total_value, 2, '.', ''),
             ])
             ->values();
 
-        $supplierMetrics = (clone $basePurchaseOrderQuery)
+        // توزيع المشتريات على الموردين يقتصر على المشتريات المعتمدة محاسبياً
+        $supplierMetrics = (clone $invoicedPurchaseOrderQuery)
             ->select('supplier_id')
             ->selectRaw('COUNT(*) as row_count, COALESCE(SUM(grand_total), 0) as total_value')
             ->whereNotNull('supplier_id')
@@ -157,14 +213,32 @@ class ProcurementAnalyticsController extends Controller
             })
             ->values();
 
-        $departmentMetrics = DB::table('purchase_orders as po')
+        // توزيع المشتريات على الأقسام يقتصر على الفواتير المعتمدة محاسبياً
+        $departmentMetrics = DB::table('supplier_invoices as si')
+            ->join('purchase_orders as po', 'po.id', '=', 'si.purchase_order_id')
             ->leftJoin('purchase_requests as pr', 'pr.id', '=', 'po.purchase_request_id')
             ->leftJoin('departments as d', 'd.id', '=', 'pr.department_id')
             ->leftJoin('users as creator', 'creator.id', '=', 'po.created_by_user_id')
-            ->when($startDate !== null, fn ($query) => $query->where('po.created_at', '>=', $startDate))
-            ->when($endDate !== null, fn ($query) => $query->where('po.created_at', '<=', $endDate))
+            ->whereNotIn('si.status', ['VOIDED', 'CANCELLED'])
+            ->whereNotIn('po.status', ['REJECTED', 'PO_DRAFT'])
+            ->when($startDate !== null, function ($q) use ($startDate) {
+                $q->where(function ($sub) use ($startDate) {
+                    $sub->whereNotNull('si.invoice_date')->where('si.invoice_date', '>=', $startDate->toDateString())
+                        ->orWhere(function ($fb) use ($startDate) {
+                            $fb->whereNull('si.invoice_date')->where('si.created_at', '>=', $startDate);
+                        });
+                });
+            })
+            ->when($endDate !== null, function ($q) use ($endDate) {
+                $q->where(function ($sub) use ($endDate) {
+                    $sub->whereNotNull('si.invoice_date')->where('si.invoice_date', '<=', $endDate->toDateString())
+                        ->orWhere(function ($fb) use ($endDate) {
+                            $fb->whereNull('si.invoice_date')->where('si.created_at', '<=', $endDate);
+                        });
+                });
+            })
             ->when($allowedDepartmentCodes !== null, fn ($query) => $query->whereIn('d.code', $allowedDepartmentCodes))
-            ->selectRaw('COALESCE(pr.department_id, creator.department_id, 0) as department_id, COUNT(*) as row_count, COALESCE(SUM(po.grand_total), 0) as total_value')
+            ->selectRaw('COALESCE(pr.department_id, creator.department_id, 0) as department_id, COUNT(DISTINCT po.id) as row_count, COALESCE(SUM(si.amount), 0) as total_value')
             ->groupByRaw('COALESCE(pr.department_id, creator.department_id, 0)')
             ->get();
         $departmentLookup = Department::query()
@@ -211,8 +285,8 @@ class ProcurementAnalyticsController extends Controller
         // not valid for PostgreSQL boolean columns.
         $supplierCount = Supplier::query()->count();
         $activeSupplierCount = Supplier::query()->where('is_active', true)->count();
-        $totalOrderCount = (int) ($orderTotals?->purchase_orders_count ?? 0);
-        $totalValue = (float) ($orderTotals?->total_value ?? 0);
+        $totalOrderCount = (int) ($invoicedOrderTotals?->purchase_orders_count ?? 0);
+        $totalValue = $totalInvoicedAmount > 0 ? $totalInvoicedAmount : (float) ($invoicedOrderTotals?->total_value ?? 0);
         $orderCountByStatus = $statusMetrics->keyBy('status');
         $requestCountByStatus = $requestStatusMetrics->keyBy('status');
         $pendingProcurementCount = (int) ($requestCountByStatus->get('PENDING_PROCUREMENT_APPROVAL')?->row_count ?? 0);
@@ -264,11 +338,17 @@ class ProcurementAnalyticsController extends Controller
             'supplier_breakdown' => $supplierBreakdown,
             'department_breakdown' => $departmentBreakdown,
             'recent_purchase_orders' => $filteredPurchaseOrders->map(function (PurchaseOrder $po) {
+                $firstInvoice = $po->supplierInvoices->first();
+                $displayTotal = $firstInvoice ? (float) $firstInvoice->amount : (float) $po->grand_total;
+
                 return [
                     'id' => $po->id,
                     'po_number' => $po->po_number,
                     'status' => $po->status,
-                    'grand_total' => number_format((float) $po->grand_total, 2, '.', ''),
+                    'grand_total' => number_format($displayTotal, 2, '.', ''),
+                    'invoice_number' => $firstInvoice?->invoice_number,
+                    'invoice_date' => $firstInvoice?->invoice_date?->format('Y-m-d'),
+                    'accounting_status' => $firstInvoice !== null ? 'VERIFIED' : 'PENDING',
                     'supplier_name' => $po->supplier?->company_name ?? 'غير محدد',
                     'supplier_phone' => $po->supplier?->phone ?? null,
                     'payment_terms' => $po->supplier?->payment_terms ?? null,
