@@ -440,6 +440,9 @@ Route::middleware('auth:sanctum')->prefix('notifications')->group(function () {
 
 // Admin System Management Routes
 Route::middleware(['auth:sanctum', 'permission:system.users.manage'])->prefix('admin')->group(function () {
+    // One-time historical data fixes
+    Route::post('/fix-rebar-quantities', [AdminController::class, 'fixHistoricalRebar']);
+
     // Users
     Route::get('/users', [AdminController::class, 'indexUsers']);
     Route::post('/users', [AdminController::class, 'storeUser']);

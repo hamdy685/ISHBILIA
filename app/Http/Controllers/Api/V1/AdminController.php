@@ -11,6 +11,7 @@ use App\Models\Role;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 
@@ -446,6 +447,166 @@ class AdminController extends Controller
         return response()->json([
             'message' => 'Item status toggled successfully',
             'is_active' => (bool) $item->is_active,
+        ]);
+    }
+
+    /**
+     * Fix historical rebar items across PRs, POs, and financial totals.
+     */
+    public function fixHistoricalRebar(): JsonResponse
+    {
+        $updatedPrItems = [];
+        $updatedPoItems = [];
+        $recalculatedPrs = [];
+        $recalculatedPos = [];
+
+        DB::transaction(function () use (&$updatedPrItems, &$updatedPoItems, &$recalculatedPrs, &$recalculatedPos) {
+            // 1. Fix PR #6 Item 11: حديد 4 لنيه (133 bars -> 1.383 TON)
+            $prItem11 = DB::table('purchase_request_items')->where('id', 11)->first();
+            if ($prItem11 && ($prItem11->uom === 'BAR' || (float)$prItem11->quantity > 10)) {
+                $tons = 1.383;
+                $lineTotal = round(1.3832 * 41000, 2); // 56711.20
+                DB::table('purchase_request_items')->where('id', 11)->update([
+                    'quantity' => $tons,
+                    'uom' => 'TON',
+                    'specifications' => '133 سيخ 4 لينية',
+                    'estimated_unit_price' => 41000.00,
+                    'estimated_line_total' => $lineTotal,
+                ]);
+                $updatedPrItems[] = 11;
+                $recalculatedPrs[6] = true;
+            }
+
+            // 2. Fix PR #8 Item 18: حديد 4 لنيه (40 bars -> 0.416 TON)
+            $prItem18 = DB::table('purchase_request_items')->where('id', 18)->first();
+            if ($prItem18 && ($prItem18->uom === 'BAR' || (float)$prItem18->quantity > 10)) {
+                $tons = 0.416;
+                $lineTotal = round($tons * 41000, 2); // 17056.00
+                DB::table('purchase_request_items')->where('id', 18)->update([
+                    'quantity' => $tons,
+                    'uom' => 'TON',
+                    'specifications' => '40 سيخ 4 لينية',
+                    'estimated_unit_price' => 41000.00,
+                    'estimated_line_total' => $lineTotal,
+                ]);
+                $updatedPrItems[] = 18;
+                $recalculatedPrs[8] = true;
+            }
+
+            // 3. Fix PR #8 Item 19: حديد 5 لنيه (35 bars -> 0.665 TON)
+            $prItem19 = DB::table('purchase_request_items')->where('id', 19)->first();
+            if ($prItem19 && ($prItem19->uom === 'BAR' || (float)$prItem19->quantity > 10)) {
+                $tons = 0.665;
+                $lineTotal = round($tons * 42000, 2); // 27930.00
+                DB::table('purchase_request_items')->where('id', 19)->update([
+                    'quantity' => $tons,
+                    'uom' => 'TON',
+                    'specifications' => '35 سيخ 5 لينية',
+                    'estimated_unit_price' => 42000.00,
+                    'estimated_line_total' => $lineTotal,
+                ]);
+                $updatedPrItems[] = 19;
+                $recalculatedPrs[8] = true;
+            }
+
+            // 4. Fix PR #11 Item 28: حديد ١٠ مم (40 bars -> 0.296 TON)
+            $prItem28 = DB::table('purchase_request_items')->where('id', 28)->first();
+            if ($prItem28 && ($prItem28->uom === 'BAR' || (float)$prItem28->quantity > 10)) {
+                $tons = 0.296;
+                DB::table('purchase_request_items')->where('id', 28)->update([
+                    'quantity' => $tons,
+                    'uom' => 'TON',
+                    'specifications' => '40 سيخ 3 لينية (10 مم)',
+                ]);
+                $updatedPrItems[] = 28;
+                $recalculatedPrs[11] = true;
+            }
+
+            // 5. Fix PO #6 Item 9: حديد 4 لنيه (133 bars -> 1.383 TON)
+            $poItem9 = DB::table('purchase_order_items')->where('id', 9)->first();
+            if ($poItem9 && ($poItem9->uom === 'BAR' || (float)$poItem9->quantity > 10)) {
+                $tons = 1.383;
+                $lineTotal = round(1.3832 * 41000, 2); // 56711.20
+                DB::table('purchase_order_items')->where('id', 9)->update([
+                    'quantity' => $tons,
+                    'uom' => 'TON',
+                    'specifications' => '133 سيخ 4 لينية',
+                    'unit_price' => 41000.00,
+                    'line_total' => $lineTotal,
+                ]);
+                $updatedPoItems[] = 9;
+                $recalculatedPos[6] = true;
+            }
+
+            // 6. Fix PO #7 Item 11: حديد 4 لنيه (40 bars -> 0.416 TON)
+            $poItem11 = DB::table('purchase_order_items')->where('id', 11)->first();
+            if ($poItem11 && ($poItem11->uom === 'BAR' || (float)$poItem11->quantity > 10)) {
+                $tons = 0.416;
+                $lineTotal = round($tons * 41000, 2); // 17056.00
+                DB::table('purchase_order_items')->where('id', 11)->update([
+                    'quantity' => $tons,
+                    'uom' => 'TON',
+                    'specifications' => '40 سيخ 4 لينية',
+                    'unit_price' => 41000.00,
+                    'line_total' => $lineTotal,
+                ]);
+                $updatedPoItems[] = 11;
+                $recalculatedPos[7] = true;
+            }
+
+            // 7. Fix PO #7 Item 12: حديد 5 لنيه (35 bars -> 0.665 TON)
+            $poItem12 = DB::table('purchase_order_items')->where('id', 12)->first();
+            if ($poItem12 && ($poItem12->uom === 'BAR' || (float)$poItem12->quantity > 10)) {
+                $tons = 0.665;
+                $lineTotal = round($tons * 42000, 2); // 27930.00
+                DB::table('purchase_order_items')->where('id', 12)->update([
+                    'quantity' => $tons,
+                    'uom' => 'TON',
+                    'specifications' => '35 سيخ 5 لينية',
+                    'unit_price' => 42000.00,
+                    'line_total' => $lineTotal,
+                ]);
+                $updatedPoItems[] = 12;
+                $recalculatedPos[7] = true;
+            }
+
+            // Recalculate PR totals
+            foreach (array_keys($recalculatedPrs) as $prId) {
+                $total = DB::table('purchase_request_items')
+                    ->where('purchase_request_id', $prId)
+                    ->sum('estimated_line_total');
+                DB::table('purchase_requests')->where('id', $prId)->update([
+                    'total_estimated_cost' => $total,
+                ]);
+            }
+
+            // Recalculate PO totals
+            foreach (array_keys($recalculatedPos) as $poId) {
+                $subtotal = DB::table('purchase_order_items')
+                    ->where('purchase_order_id', $poId)
+                    ->sum('line_total');
+                $po = DB::table('purchase_orders')->where('id', $poId)->first();
+                $discount = (float)($po->discount_amount ?? 0);
+                $tax = (float)($po->tax_amount ?? 0);
+                $grandTotal = max(0, $subtotal - $discount + $tax);
+                
+                $updateData = [
+                    'subtotal' => $subtotal,
+                    'grand_total' => $grandTotal,
+                ];
+                if (DB::getSchemaBuilder()->hasColumn('purchase_orders', 'total_amount')) {
+                    $updateData['total_amount'] = $grandTotal;
+                }
+                DB::table('purchase_orders')->where('id', $poId)->update($updateData);
+            }
+        });
+
+        return response()->json([
+            'message' => 'تم تصحيح وتحديث كافة طلبات وأوامر الشراء التاريخية للحديد بنجاح.',
+            'updated_pr_items' => $updatedPrItems,
+            'updated_po_items' => $updatedPoItems,
+            'recalculated_prs' => array_keys($recalculatedPrs),
+            'recalculated_pos' => array_keys($recalculatedPos),
         ]);
     }
 }
