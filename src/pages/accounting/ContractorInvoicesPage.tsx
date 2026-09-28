@@ -45,11 +45,10 @@ const STATUS_CONFIG: Record<
     },
 };
 
-const money = (val: string | number | undefined | null) =>
-    `${Number(val || 0).toLocaleString("ar-EG", {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    })} ج.م`;
+const money = (val: string | number | undefined | null) => {
+    const num = typeof val === 'string' ? parseFloat(val) : Number(val || 0);
+    return `${(isNaN(num) ? 0 : num).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ج.م`;
+};
 
 export const ContractorInvoicesPage: React.FC = () => {
     const [invoices, setInvoices] = useState<ContractorInvoice[]>([]);

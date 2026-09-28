@@ -13,6 +13,7 @@ import ConfirmDialog from '../ui/ConfirmDialog';
 import { deletePurchaseRequestItemApi } from '../../api/purchaseRequests';
 import { parseApiError } from '../../utils/apiError';
 import { SupplementItemBadge } from '../common/SupplementItemBadge';
+import { formatCleanNumber, formatCleanQty } from '../../utils/numberFormat';
 
 interface PrDetailsModalProps {
   pr: PurchaseRequest | null;
@@ -229,9 +230,7 @@ export const PrDetailsModal: React.FC<PrDetailsModalProps> = ({
                 <div className="flex justify-between gap-3 bg-slate-900/40 p-2.5 rounded-lg border border-slate-800/60">
                   <span className="text-slate-400">الإجمالي المقترح:</span>
                   <span className="font-mono font-bold text-emerald-300">
-                    {estimatedTotal.toLocaleString('ar-EG', {
-                      minimumFractionDigits: 2,
-                    })}{' '}
+                    {formatCleanNumber(estimatedTotal)}{' '}
                     ج.م
                   </span>
                 </div>
@@ -273,9 +272,7 @@ export const PrDetailsModal: React.FC<PrDetailsModalProps> = ({
                 {isDirect && (
                   <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-950/40 border border-emerald-800/50 px-2.5 py-1 rounded-lg">
                     الإجمالي:{' '}
-                    {estimatedTotal.toLocaleString('ar-EG', {
-                      minimumFractionDigits: 2,
-                    })}{' '}
+                    {formatCleanNumber(estimatedTotal)}{' '}
                     ج.م
                   </span>
                 )}
@@ -382,26 +379,21 @@ export const PrDetailsModal: React.FC<PrDetailsModalProps> = ({
                         </td>
                       )}
                       <td className="p-3 text-center font-mono text-slate-200 whitespace-nowrap">
-                        {item.quantity} {getUnitLabel(item.uom)}
+                        {formatCleanQty(item.quantity)} {getUnitLabel(item.uom)}
                       </td>
                       {isDirect && (
                         <td className="p-3 text-center font-mono text-emerald-300 whitespace-nowrap">
-                          {Number(item.estimated_unit_price || 0).toLocaleString(
-                            'ar-EG',
-                            { minimumFractionDigits: 2 }
-                          )}{' '}
+                          {formatCleanNumber(item.estimated_unit_price)}{' '}
                           ج.م
                         </td>
                       )}
                       {isDirect && (
                         <td className="p-3 text-center font-mono font-bold text-emerald-300 whitespace-nowrap">
-                          {Number(
+                          {formatCleanNumber(
                             item.estimated_line_total ||
                               Number(item.quantity || 0) *
                                 Number(item.estimated_unit_price || 0)
-                          ).toLocaleString('ar-EG', {
-                            minimumFractionDigits: 2,
-                          })}{' '}
+                          )}{' '}
                           ج.م
                         </td>
                       )}
@@ -440,9 +432,7 @@ export const PrDetailsModal: React.FC<PrDetailsModalProps> = ({
                         الإجمالي الكلي:
                       </td>
                       <td className="p-3 text-center font-mono font-black text-emerald-400 whitespace-nowrap text-sm">
-                        {estimatedTotal.toLocaleString('ar-EG', {
-                          minimumFractionDigits: 2,
-                        })}{' '}
+                        {formatCleanNumber(estimatedTotal)}{' '}
                         ج.م
                       </td>
                       {canEditItems && <td />}
@@ -501,7 +491,7 @@ export const PrDetailsModal: React.FC<PrDetailsModalProps> = ({
                           الكمية المطلوبة
                         </span>
                         <span className="font-mono font-bold text-slate-200">
-                          {item.quantity} {getUnitLabel(item.uom)}
+                          {formatCleanQty(item.quantity)} {getUnitLabel(item.uom)}
                         </span>
                       </div>
                       {isDirect && (
@@ -522,10 +512,7 @@ export const PrDetailsModal: React.FC<PrDetailsModalProps> = ({
                             سعر الوحدة
                           </span>
                           <span className="font-mono font-bold text-emerald-300">
-                            {Number(item.estimated_unit_price || 0).toLocaleString(
-                              'ar-EG',
-                              { minimumFractionDigits: 2 }
-                            )}{' '}
+                            {formatCleanNumber(item.estimated_unit_price)}{' '}
                             ج.م
                           </span>
                         </div>
@@ -536,13 +523,11 @@ export const PrDetailsModal: React.FC<PrDetailsModalProps> = ({
                             الإجمالي
                           </span>
                           <span className="font-mono font-black text-emerald-400">
-                            {Number(
+                            {formatCleanNumber(
                               item.estimated_line_total ||
                                 Number(item.quantity || 0) *
                                   Number(item.estimated_unit_price || 0)
-                            ).toLocaleString('ar-EG', {
-                              minimumFractionDigits: 2,
-                            })}{' '}
+                            )}{' '}
                             ج.م
                           </span>
                         </div>

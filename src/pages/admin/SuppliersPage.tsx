@@ -11,6 +11,7 @@ import { TableSkeleton } from '../../components/ui/StateFeedback';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import ErrorMessage from '../../components/ErrorMessage';
 import { parseApiError } from '../../utils/apiError';
+import { formatCleanNumber } from '../../utils/numberFormat';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -239,7 +240,7 @@ export const SuppliersPage: React.FC = () => {
                 <TableCell>
                   {Number(sup.opening_balance || 0) > 0 ? (
                     <div className="font-mono font-bold text-amber-300">
-                      {Number(sup.opening_balance).toLocaleString('ar-EG', { minimumFractionDigits: 2 })} ج.م
+                      {formatCleanNumber(sup.opening_balance)} ج.م
                       {sup.opening_balance_notes && (
                         <div className="text-[10px] text-slate-400 font-normal truncate max-w-[140px]" title={sup.opening_balance_notes}>
                           {sup.opening_balance_notes}
@@ -247,7 +248,7 @@ export const SuppliersPage: React.FC = () => {
                       )}
                     </div>
                   ) : (
-                    <span className="text-slate-500 font-mono">0.00 ج.م</span>
+                    <span className="text-slate-500 font-mono">0 ج.م</span>
                   )}
                 </TableCell>
                 <TableCell>
@@ -324,7 +325,7 @@ export const SuppliersPage: React.FC = () => {
                 <div>
                   <dt className="text-slate-500">الرصيد الافتتاحي</dt>
                   <dd className="mt-1 font-mono font-bold text-amber-300">
-                    {Number(sup.opening_balance || 0).toLocaleString('ar-EG', { minimumFractionDigits: 2 })} ج.م
+                    {formatCleanNumber(sup.opening_balance)} ج.م
                   </dd>
                 </div>
                 <div>

@@ -22,6 +22,7 @@ import { getDefaultDateFrom, getTodayInputDate, isDefaultTodayRange } from '../.
 import { useRealtimeRefresh, emitAppDataUpdated } from '../../hooks/useRealtimeRefresh';
 import { getUnitLabel } from '../../utils/units';
 import { getSummaryParcels, getSummaryRegions, getSummaryQuantities } from '../../utils/formatRequestSummary';
+import { formatCleanNumber } from '../../utils/numberFormat';
 
 const AccountingPurchaseRequestsPage: React.FC = () => {
   const [requests, setRequests] = useState<PurchaseRequest[]>([]);
@@ -196,7 +197,7 @@ const AccountingPurchaseRequestsPage: React.FC = () => {
                       <TableCell className="whitespace-nowrap font-mono font-bold text-amber-300">
                         <span title={quantitiesInfo.tooltip}>{quantitiesInfo.display}</span>
                       </TableCell>
-                      <TableCell className="whitespace-nowrap font-mono font-bold text-emerald-300">{estimatedTotal.toLocaleString('ar-EG', { minimumFractionDigits: 2 })} ج.م</TableCell>
+                      <TableCell className="whitespace-nowrap font-mono font-bold text-emerald-300">{formatCleanNumber(estimatedTotal)} ج.م</TableCell>
                       <TableCell className="min-w-[190px]"><div className="flex flex-wrap justify-center gap-2"><Button size="sm" variant="secondary" className="whitespace-nowrap" onClick={() => setSelectedRequest(request)}>عرض التفاصيل</Button><Button size="sm" variant="success" className="whitespace-nowrap" disabled={actionId === request.id} onClick={() => setReviewingRequest(request)}>مراجعة وإرسال</Button><Button size="sm" variant="danger" className="whitespace-nowrap" disabled={actionId === request.id} onClick={() => void reject(request)}>رفض الطلب</Button></div></TableCell>
                     </TableRow>
                   );
@@ -224,7 +225,7 @@ const AccountingPurchaseRequestsPage: React.FC = () => {
                     <div className="min-w-0 min-[420px]:col-span-2"><dt className="text-slate-500">الصنف وقطعة الأرض</dt><dd className="mt-1 break-normal font-bold leading-6 text-slate-200">{itemNames.join('، ') || 'غير محدد'} <span className="font-mono text-cyan-300">({parcelsDisplay})</span></dd></div>
                     <div className="min-w-0"><dt className="text-slate-500">المنطقة</dt><dd className="mt-1 break-normal text-slate-300">{regionsDisplay}</dd></div>
                     <div className="min-w-0"><dt className="text-slate-500">الكمية / العدد</dt><dd className="mt-1 font-mono font-bold text-amber-300">{quantitiesInfo.display}</dd></div>
-                    <div className="min-w-0 min-[420px]:col-span-2"><dt className="text-slate-500">الإجمالي المقترح</dt><dd className="mt-1 whitespace-nowrap font-mono font-bold text-emerald-300">{estimatedTotal.toLocaleString('ar-EG', { minimumFractionDigits: 2 })} ج.م</dd></div>
+                    <div className="min-w-0 min-[420px]:col-span-2"><dt className="text-slate-500">الإجمالي المقترح</dt><dd className="mt-1 whitespace-nowrap font-mono font-bold text-emerald-300">{formatCleanNumber(estimatedTotal)} ج.م</dd></div>
                   </dl>
                   <div className="mt-4 grid grid-cols-1 gap-2 min-[420px]:grid-cols-3"><Button size="sm" variant="secondary" className="w-full whitespace-nowrap" onClick={() => setSelectedRequest(request)}>عرض التفاصيل</Button><Button size="sm" variant="success" className="w-full whitespace-nowrap" disabled={actionId === request.id} onClick={() => setReviewingRequest(request)}>مراجعة وإرسال</Button><Button size="sm" variant="danger" className="w-full whitespace-nowrap" disabled={actionId === request.id} onClick={() => void reject(request)}>رفض الطلب</Button></div>
                 </article>

@@ -17,6 +17,7 @@ import { getUnitLabel } from '../../utils/units';
 import { tafqeetCurrency } from '../../utils/tafqeet';
 import { UnifiedNotesCard } from '../../components/common/UnifiedNotesCard';
 import { SupplierSelectWithQuickAdd } from '../../components/common/SupplierSelectWithQuickAdd';
+import { formatCleanNumber } from '../../utils/numberFormat';
 
 const getLocalDateIso = () => {
   const now = new Date();
@@ -618,7 +619,7 @@ export const CreatePurchaseOrderPage: React.FC = () => {
                         <td className="p-3 font-mono font-bold text-xs">
                           {isQtyChanged ? (
                             <span className={diff > 0 ? 'text-amber-400' : 'text-rose-400'}>
-                              {diff > 0 ? `+${diff.toFixed(2)}` : diff.toFixed(2)}
+                              {diff > 0 ? `+${formatCleanNumber(diff)}` : formatCleanNumber(diff)}
                             </span>
                           ) : (
                             <span className="text-slate-500">0</span>
@@ -715,7 +716,7 @@ export const CreatePurchaseOrderPage: React.FC = () => {
                           <label className="text-[10px] text-slate-400 font-semibold">السعر (ج.م)</label>
                           {isQtyChanged && (
                             <span className={`text-[10px] font-mono font-bold ${diff > 0 ? 'text-amber-400' : 'text-rose-400'}`}>
-                              {diff > 0 ? `+${diff.toFixed(2)}` : diff.toFixed(2)}
+                              {diff > 0 ? `+${formatCleanNumber(diff)}` : formatCleanNumber(diff)}
                             </span>
                           )}
                         </div>

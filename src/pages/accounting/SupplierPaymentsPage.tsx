@@ -33,10 +33,11 @@ import { getDefaultDateFrom, getTodayInputDate } from '../../utils/dateFilters';
 import { getUnitLabel } from '../../utils/units';
 import LandAllocationEditor, { LandAllocationDraft } from '../../components/accounting/LandAllocationEditor';
 import { SupplementItemBadge } from '../../components/common/SupplementItemBadge';
+import { formatCleanNumber } from '../../utils/numberFormat';
 
 const today = getTodayInputDate;
 const cleanDate = (d?: string | null) => d ? String(d).slice(0, 10) : '—';
-const money = (value: string | number | null | undefined) => `${Number(value || 0).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م`;
+const money = (value: string | number | null | undefined) => `${formatCleanNumber(value)} ج.م`;
 const paymentMethods: Record<string, string> = { BANK_TRANSFER: 'تحويل بنكي', CASH: 'نقدي', CHEQUE: 'شيك' };
 const parcelTransactionLabels: Record<string, string> = { OPENING_BALANCE: 'رصيد افتتاحي من العميل', CUSTOMER_FUNDING: 'تمويل عميل', INVOICE_EXPENSE: 'مصروف فاتورة مورد' };
 
@@ -127,7 +128,8 @@ export const SupplierPaymentsPage: React.FC = () => {
     setInvoiceReceipt(receipt);
     setInvoiceAllocationError(null);
     setInvoiceModalError(null);
-    const receiptTotal = receiptValue(receipt).toFixed(2);
+    const rawVal = receiptValue(receipt);
+    const receiptTotal = Number.isInteger(rawVal) ? rawVal.toString() : parseFloat(rawVal.toFixed(2)).toString();
     const defaultDeptId = receipt.purchase_order?.purchase_request?.department?.id || (currentDepts.length ? currentDepts[0].id : '');
     // #3 — Smart auto-fill: if only one parcel exists, auto-select it and fill amount
     const defaultAllocations: LandAllocationDraft[] = currentParcels.length === 1
@@ -967,7 +969,8 @@ export const SupplierPaymentsPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => {
-                      const total = receiptValue(invoiceReceipt).toFixed(2);
+                      const rawVal = receiptValue(invoiceReceipt);
+                      const total = Number.isInteger(rawVal) ? rawVal.toString() : parseFloat(rawVal.toFixed(2)).toString();
                       setInvoiceForm({ ...invoiceForm, amount: total });
                     }}
                     className="text-[11px] font-bold text-cyan-400 hover:text-cyan-300 underline"

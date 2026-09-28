@@ -66,8 +66,10 @@ const STATUS_LABELS: Record<string, string> = {
   DRAFT: 'مسودة طلب',
 };
 
+import { formatCleanNumber } from '../../utils/numberFormat';
+
 const fmtDate = (value?: string | null) => value ? new Date(value).toLocaleDateString('ar-EG') : '—';
-const fmtAmount = (value?: string | number | null) => Number(value || 0).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtAmount = (value?: string | number | null) => formatCleanNumber(value);
 const statusLabel = (status: string) => STATUS_LABELS[status] || status;
 const reviewerName = (request: PurchaseRequest, departments: ProcurementDepartmentOption[]) => request.approval_history?.find((entry) => entry.action === 'APPROVED_BY_REVIEWER')?.actor?.name || request.assigned_reviewer?.name || departments.find((department) => department.id === request.department?.id || department.name === request.department?.name)?.manager?.name || '—';
 

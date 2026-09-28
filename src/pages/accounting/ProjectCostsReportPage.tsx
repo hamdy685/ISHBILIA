@@ -153,8 +153,8 @@ export const ProjectCostsReportPage: React.FC = () => {
 
     const formatCurrency = (val: number | string | undefined | null): string => {
         const num = Number(val || 0);
-        return new Intl.NumberFormat('ar-EG', {
-            minimumFractionDigits: 2,
+        return new Intl.NumberFormat('en-US', {
+            minimumFractionDigits: 0,
             maximumFractionDigits: 2,
         }).format(num);
     };

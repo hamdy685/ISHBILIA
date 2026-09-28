@@ -11,6 +11,8 @@ import { LandParcel, SupplierAccountSummary, getLandParcelsApi, getSupplierAccou
 import { getPurchaseOrdersApi } from '../../api/purchaseOrders';
 import QuickPeekDrawer, { PeekType } from '../ui/QuickPeekDrawer';
 
+import { formatCleanNumber } from '../../utils/numberFormat';
+
 type SearchCategory = 'ALL' | 'PR' | 'PO' | 'SUPPLIER' | 'PARCEL' | 'PAGE';
 
 interface SearchResultItem {
@@ -26,7 +28,7 @@ interface SearchResultItem {
 }
 
 const money = (value: number | string | null | undefined) =>
-  `${Number(value || 0).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م`;
+  `${formatCleanNumber(value)} ج.م`;
 
 export const GlobalSearchBar: React.FC = () => {
   const { user } = useAuth();

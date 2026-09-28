@@ -1,5 +1,6 @@
 import React from 'react';
 import { PurchaseOrder } from '../../types/purchaseOrder';
+import { formatCleanNumber } from '../../utils/numberFormat';
 
 /**
  * Financial summary for a Purchase Order.
@@ -9,8 +10,7 @@ import { PurchaseOrder } from '../../types/purchaseOrder';
  * - Grand الإجمالي = SUM(quantity × unit_price)
  */
 export const FinancialSummary: React.FC<{ po: PurchaseOrder }> = ({ po }) => {
-  const fmt = (v: string | number) =>
-    Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmt = (v: string | number) => formatCleanNumber(v);
 
   return (
     <div className="grid grid-cols-2 gap-y-2.5 gap-x-4 bg-slate-950 border border-slate-850 p-5 rounded-xl text-xs max-w-sm mr-auto shadow-md">

@@ -22,10 +22,11 @@ import { getOwnPurchaseRequestsApi, submitPurchaseRequestApi } from '../../api/p
 import { PurchaseOrder } from '../../types/purchaseOrder';
 import { PurchaseRequest } from '../../types/purchaseRequest';
 import { getUnitLabel } from '../../utils/units';
+import { formatCleanNumber } from '../../utils/numberFormat';
 
 const cleanDate = (d?: string | null) => (d ? String(d).slice(0, 10) : '—');
 const money = (value: string | number | null | undefined) =>
-  `${Number(value || 0).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م`;
+  `${formatCleanNumber(value)} ج.م`;
 
 const receiptValue = (receipt: ApprovedReceipt) =>
   (receipt.items || []).reduce((sum, item) => {

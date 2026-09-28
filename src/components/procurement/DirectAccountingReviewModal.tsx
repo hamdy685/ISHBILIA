@@ -34,11 +34,10 @@ type EditableFinancialItem = {
 };
 
 
+import { formatCleanNumber } from '../../utils/numberFormat';
+
 const formatAmount = (value: number | string | null | undefined) =>
-  Number(value || 0).toLocaleString('ar-EG', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  formatCleanNumber(value, 2);
 
 const lineTotal = (quantity: number | string, unitPrice: number | string) => {
   const safeQuantity = Number.isFinite(Number(quantity)) ? Number(quantity) : 0;

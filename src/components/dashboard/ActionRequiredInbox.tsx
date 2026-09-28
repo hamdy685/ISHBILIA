@@ -7,6 +7,7 @@ import { getSiteEngineerReceiverOptionsApi } from '../../api/purchaseRequests';
 import { useAuth } from '../../context/AuthContext';
 import { getUnitLabel } from '../../utils/units';
 import { toast } from '../../utils/toast';
+import { formatCleanNumber, formatCleanQty } from '../../utils/numberFormat';
 
 export interface ActionInboxItemDetail {
   description: string;
@@ -510,7 +511,7 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                                   </div>
                                   {hasPrice && lineTotalNum > 0 && (
                                     <span className="font-mono font-black text-emerald-400 text-xs shrink-0 whitespace-nowrap bg-emerald-950/70 border border-emerald-800/60 px-1.5 py-0.5 rounded shadow-xs">
-                                      {lineTotalNum.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م
+                                      {formatCleanNumber(lineTotalNum)} ج.م
                                     </span>
                                   )}
                                 </div>
@@ -518,12 +519,12 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                                 {/* السطر الثاني: شارات الكمية والوحدة وسعر الوحدة بشكل متناسق */}
                                 <div className="flex items-center gap-1.5 text-[11px] flex-wrap pr-3 text-slate-400">
                                   <span className="font-mono font-bold text-amber-300 bg-amber-950/40 border border-amber-800/50 px-1.5 py-0.5 rounded">
-                                    الكمية: {it.quantity} {unitLabel}
+                                    الكمية: {formatCleanQty(it.quantity)} {unitLabel}
                                   </span>
 
                                   {hasPrice && (
                                     <span className="font-mono text-cyan-300 text-[10px] sm:text-[11px] bg-cyan-950/60 border border-cyan-800/50 px-1.5 py-0.5 rounded font-bold">
-                                      السعر: {unitPriceNum.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م / {unitLabel}
+                                      السعر: {formatCleanNumber(unitPriceNum)} ج.م / {unitLabel}
                                     </span>
                                   )}
 
@@ -551,7 +552,7 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                           </span>
                           {item.amount !== undefined && Number(item.amount) > 0 && (
                             <span className="font-mono font-bold text-emerald-300 text-xs shrink-0">
-                              {Number(item.amount).toLocaleString('ar-EG')} ج.م
+                              {formatCleanNumber(item.amount)} ج.م
                             </span>
                           )}
                         </div>
@@ -589,7 +590,7 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                       {item.amount !== undefined && Number(item.amount) > 0 && (
                         <div className="flex items-center gap-1.5 font-mono font-bold text-emerald-400">
                           <span className="text-slate-500 font-sans font-normal">💰 القيمة:</span>
-                          <span>{Number(item.amount).toLocaleString('ar-EG', { minimumFractionDigits: 2 })} ج.م</span>
+                          <span>{formatCleanNumber(item.amount)} ج.م</span>
                         </div>
                       )}
 

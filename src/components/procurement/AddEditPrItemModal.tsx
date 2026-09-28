@@ -17,6 +17,7 @@ import { المورد as Supplier } from '../../types/purchaseOrder';
 import { DEFAULT_PR_UNIT_CODES, getUnitOptions } from '../../utils/units';
 import { parseApiError } from '../../utils/apiError';
 import { ItemAutocompleteInput } from '../common/ItemAutocompleteInput';
+import { formatCleanNumber } from '../../utils/numberFormat';
 
 const UNIT_OPTIONS = getUnitOptions(DEFAULT_PR_UNIT_CODES);
 
@@ -298,7 +299,7 @@ export const AddEditPrItemModal: React.FC<AddEditPrItemModalProps> = ({
             </span>
             {lineTotal > 0 && (
               <span className="font-mono text-xs font-black text-emerald-400 bg-emerald-950/50 border border-emerald-800/40 px-2.5 py-0.5 rounded-md">
-                إجمالي البند: {lineTotal.toLocaleString('ar-EG', { minimumFractionDigits: 2 })} ج.م
+                إجمالي البند: {formatCleanNumber(lineTotal)} ج.م
               </span>
             )}
           </div>

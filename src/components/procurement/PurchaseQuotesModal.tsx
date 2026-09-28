@@ -7,6 +7,7 @@ import { Button } from '../ui/Button';
 import SupplierModal from './SupplierModal';
 import { parseApiError } from '../../utils/apiError';
 import { getUnitLabel } from '../../utils/units';
+import { formatCleanNumber, formatCleanQty } from '../../utils/numberFormat';
 
 type QuoteDraft = {
   supplier_id: string;
@@ -45,9 +46,7 @@ interface PurchaseQuotesModalProps {
 }
 
 const formatAmount = (amount: number): string =>
-  Number.isFinite(amount)
-    ? new Intl.NumberFormat('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)
-    : '—';
+  Number.isFinite(amount) ? formatCleanNumber(amount, 2) : '—';
 
 const formatDate = (value?: string | null): string => {
   if (!value) return '—';
@@ -312,7 +311,7 @@ export const PurchaseQuotesModal: React.FC<PurchaseQuotesModalProps> = ({
                     {item.item_description || item.item?.name || '—'}
                   </div>
                   <span className="shrink-0 rounded-lg bg-amber-500/20 border border-amber-500/40 px-2.5 py-1 font-mono font-black text-amber-300 text-xs">
-                    {item.quantity} {getUnitLabel(item.uom)}
+                    {formatCleanQty(item.quantity)} {getUnitLabel(item.uom)}
                   </span>
                 </div>
 
@@ -348,7 +347,7 @@ export const PurchaseQuotesModal: React.FC<PurchaseQuotesModalProps> = ({
                     <td className="px-3 py-2 font-bold">{item.item_description || item.item?.name || '—'}</td>
                     <td className="px-3 py-2 font-mono text-cyan-300">{item.item_reference || 'غير مكتمل'}</td>
                     <td className="px-3 py-2">{item.region || 'غير مكتملة'}</td>
-                    <td className="px-3 py-2 font-mono font-bold text-amber-300">{item.quantity || '—'}</td>
+                    <td className="px-3 py-2 font-mono font-bold text-amber-300">{formatCleanQty(item.quantity) || '—'}</td>
                     <td className="px-3 py-2">{getUnitLabel(item.uom)}</td>
                   </tr>
                 ))}

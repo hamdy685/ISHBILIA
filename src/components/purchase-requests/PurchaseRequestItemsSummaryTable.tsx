@@ -1,6 +1,7 @@
 import React from 'react';
 import { PurchaseRequestItemFormInput, PurchaseRequestType } from '../../types/purchaseRequest';
 import { getUnitLabel } from '../../utils/units';
+import { formatCleanQty } from '../../utils/numberFormat';
 
 interface Props {
   items: PurchaseRequestItemFormInput[];
@@ -67,7 +68,7 @@ export const PurchaseRequestItemsSummaryTable: React.FC<Props> = ({
           <div className="rounded-xl border border-slate-700/80 bg-slate-950/80 p-2 shadow-inner">
             <span className="block text-[10px] text-slate-400 font-bold truncate">إجمالي الكميات</span>
             <span className="font-mono text-xs sm:text-sm font-black text-amber-300">
-              {Number.isInteger(totalQuantity) ? totalQuantity : totalQuantity.toFixed(2)}
+              {formatCleanQty(totalQuantity)}
             </span>
           </div>
 
@@ -204,7 +205,7 @@ export const PurchaseRequestItemsSummaryTable: React.FC<Props> = ({
             <div className="rounded-xl border border-slate-800 bg-slate-950/90 p-3 flex items-center justify-between text-xs font-bold text-slate-300">
               <span>إجمالي بنود الطلب ({totalItemsCount}):</span>
               <span className="font-mono text-amber-300">
-                مجموع الكميات: {Number.isInteger(totalQuantity) ? totalQuantity : totalQuantity.toFixed(2)}
+                مجموع الكميات: {formatCleanQty(totalQuantity)}
               </span>
             </div>
           </div>
@@ -350,7 +351,7 @@ export const PurchaseRequestItemsSummaryTable: React.FC<Props> = ({
                   </td>
                   <td className="px-3 py-2.5 text-center">
                     <span className="font-mono font-black text-amber-300">
-                      {Number.isInteger(totalQuantity) ? totalQuantity : totalQuantity.toFixed(2)}
+                      {formatCleanQty(totalQuantity)}
                     </span>
                   </td>
                   <td colSpan={(onRemoveItem || onScrollToItem) ? 2 : 1} className="px-3 py-2.5 text-left text-slate-500 text-[11px]">

@@ -10,6 +10,7 @@ import { CurrencyDisplay } from '../../components/ui/CurrencyDisplay';
 import { getUnitLabel } from '../../utils/units';
 import PrintablePO from '../../components/procurement/PrintablePO';
 import { UnifiedNotesCard } from '../../components/common/UnifiedNotesCard';
+import { formatCleanNumber, formatCleanQty } from '../../utils/numberFormat';
 
 export const GeneralManagerPurchaseOrderDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -149,7 +150,7 @@ export const GeneralManagerPurchaseOrderDetailsPage: React.FC = () => {
                   <TableCell className="font-bold text-slate-100">{item.item_name || item.item_description}</TableCell>
                   <TableCell className="text-slate-400 text-[11px]">{item.specifications || '-'}</TableCell>
                   <TableCell className="text-slate-300">{getUnitLabel(item.uom)}</TableCell>
-                  <TableCell className="font-mono">{parseFloat(item.quantity as any || 0).toLocaleString()}</TableCell>
+                  <TableCell className="font-mono">{formatCleanQty(item.quantity)}</TableCell>
                   <TableCell>
                     <CurrencyDisplay amount={item.unit_price} amountClassName="font-mono text-slate-200" />
                   </TableCell>
@@ -187,7 +188,7 @@ export const GeneralManagerPurchaseOrderDetailsPage: React.FC = () => {
                 <div>
                   <dt className="text-slate-500">الكمية والوحدة</dt>
                   <dd className="mt-1 whitespace-nowrap font-mono text-slate-200">
-                    {parseFloat(item.quantity as any || 0).toLocaleString()} {getUnitLabel(item.uom)}
+                    {formatCleanQty(item.quantity)} {getUnitLabel(item.uom)}
                   </dd>
                 </div>
                 <div>
@@ -219,7 +220,7 @@ export const GeneralManagerPurchaseOrderDetailsPage: React.FC = () => {
         <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2 w-full max-w-xs text-xs">
           <div className="flex justify-between items-center text-slate-400">
             <span>إجمالي البنود:</span>
-            <span className="font-mono font-bold text-slate-200">{Number(po.grand_total || 0).toFixed(2)} ج.م</span>
+            <span className="font-mono font-bold text-slate-200">{formatCleanNumber(po.grand_total)} ج.م</span>
           </div>
           <div className="flex justify-between items-center text-slate-400">
             
@@ -227,7 +228,7 @@ export const GeneralManagerPurchaseOrderDetailsPage: React.FC = () => {
           </div>
           <div className="border-t border-slate-800 pt-2 flex justify-between items-center font-bold text-sm">
             <span className="text-cyan-400">المبلغ الكلي المعتمد:</span>
-            <span className="font-mono text-emerald-400">{Number(po.grand_total || 0).toFixed(2)} ج.م</span>
+            <span className="font-mono text-emerald-400">{formatCleanNumber(po.grand_total)} ج.م</span>
           </div>
         </div>
       </div>

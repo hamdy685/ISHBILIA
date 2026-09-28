@@ -22,6 +22,7 @@ import ErrorMessage from '../../components/ErrorMessage';
 import { getUnitLabel } from '../../utils/units';
 import { getSummaryParcels, getSummaryRegions, getSummaryQuantities } from '../../utils/formatRequestSummary';
 import { UnifiedNotesCard } from '../../components/common/UnifiedNotesCard';
+import { formatCleanNumber } from '../../utils/numberFormat';
 
 interface DraftItemState extends PurchaseRequestItemFormInput {
   isExcluded?: boolean;
@@ -407,9 +408,7 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
                       </td>
                       <td className="px-4 py-3 font-mono text-emerald-300 whitespace-nowrap">
                         {request.procurement_route === 'DIRECT'
-                           ? `${Number(request.total_estimated_cost || 0).toLocaleString('ar-EG', {
-                               minimumFractionDigits: 2,
-                             })} ج.م`
+                           ? `${formatCleanNumber(request.total_estimated_cost)} ج.م`
                            : '—'}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">{request.assigned_reviewer?.name || '—'}</td>

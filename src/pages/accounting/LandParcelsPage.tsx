@@ -18,10 +18,11 @@ import { parseApiError } from '../../utils/apiError';
 import { getTodayInputDate } from '../../utils/dateFilters';
 import { getUnitLabel } from '../../utils/units';
 import { tafqeetCurrency } from '../../utils/tafqeet';
+import { formatCleanNumber } from '../../utils/numberFormat';
 
 const today = getTodayInputDate;
 const money = (value: string | number | null | undefined) =>
-  `${Number(value || 0).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م`;
+  `${formatCleanNumber(value)} ج.م`;
 
 const cleanDate = (value: string | null | undefined): string => {
   if (!value) return '—';

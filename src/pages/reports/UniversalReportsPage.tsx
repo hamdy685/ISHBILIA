@@ -9,6 +9,7 @@ import { DashboardBars, DashboardDonut, DashboardChartSegment } from '../../comp
 import { getUnitLabel } from '../../utils/units';
 import { PurchasesReportView } from './PurchasesReportView';
 import { useAuth } from '../../context/AuthContext';
+import { formatCleanNumber, formatCleanQty } from '../../utils/numberFormat';
 
 const PURCHASE_ORDER_STATUS_LABELS: Record<string, string> = {
   PO_DRAFT: 'مسودة أمر شراء',
@@ -21,13 +22,10 @@ const PURCHASE_ORDER_STATUS_LABELS: Record<string, string> = {
 };
 
 const formatNumber = (value: number | string | null | undefined) =>
-  Math.abs(Number(value || 0)).toLocaleString('en-US', { maximumFractionDigits: 0 });
+  formatCleanNumber(value, 0);
 
 const formatCurrency = (value: number | string | null | undefined) =>
-  Math.abs(Number(value || 0)).toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  formatCleanNumber(value, 2);
 
 const formatDate = (value?: string | null) => {
   if (!value) return '—';
@@ -548,17 +546,17 @@ export const UniversalReportsPage: React.FC = () => {
                               )}
                             </td>
                             <td className="border border-black px-2 py-1 text-center font-mono">
-                              {item.quantity ?? '—'}
+                              {item.quantity !== undefined && item.quantity !== null ? formatCleanQty(item.quantity) : '—'}
                             </td>
                             <td className="border border-black px-1.5 py-1 text-center">
                               {getUnitLabel(item.uom) || '—'}
                             </td>
                             <td className="border border-black px-2 py-1 text-center font-mono">
-                              {item.unit_price ? Number(item.unit_price).toLocaleString('ar-EG', { minimumFractionDigits: 2 }) : '—'}
+                              {item.unit_price ? formatCleanNumber(item.unit_price) : '—'}
                             </td>
                             <td className="border border-black px-2 py-1 text-center font-mono font-bold">
                               {item.line_total || item.grand_total
-                                ? Number(item.line_total || item.grand_total).toLocaleString('ar-EG', { minimumFractionDigits: 2 })
+                                ? formatCleanNumber(item.line_total || item.grand_total)
                                 : '—'}
                             </td>
                             {itemIdx === 0 && (

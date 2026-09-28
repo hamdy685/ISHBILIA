@@ -1,5 +1,7 @@
 import React from 'react';
 
+import { formatCleanNumber } from '../../utils/numberFormat';
+
 export interface CurrencyDisplayProps {
   amount: number | string;
   currency?: string;
@@ -15,11 +17,7 @@ export const CurrencyDisplay: React.FC<CurrencyDisplayProps> = ({
   amountClassName = 'font-bold text-slate-100',
   currencyClassName = 'text-[11px] font-semibold text-cyan-400 mr-1',
 }) => {
-  const numericAmount = typeof amount === 'string' ? parseFloat(amount) || 0 : amount;
-  const formatted = new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(numericAmount);
+  const formatted = formatCleanNumber(amount, 2);
 
   return (
     <span className={`inline-flex items-baseline font-mono dir-ltr ${className}`}>

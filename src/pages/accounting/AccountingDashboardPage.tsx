@@ -13,6 +13,7 @@ import PurchaseOrderPrintModal from '../../components/procurement/PurchaseOrderP
 import { DashboardBars, DashboardDonut } from '../../components/ui/DashboardCharts';
 import ActionRequiredInbox, { ActionInboxItem } from '../../components/dashboard/ActionRequiredInbox';
 import QuickLauncherBar from '../../components/dashboard/QuickLauncherBar';
+import { formatCleanNumber } from '../../utils/numberFormat';
 
 import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh';
 
@@ -280,7 +281,7 @@ export const AccountingDashboardPage: React.FC = () => {
                 <span className="text-slate-400 mr-3">{p.supplier?.company_name || 'مورد'}</span>
               </div>
               <div className="font-mono font-bold text-emerald-400">
-                {Number(p.grand_total || 0).toFixed(2)} ج.م
+                {formatCleanNumber(p.grand_total)} ج.م
               </div>
             </div>
           ))}

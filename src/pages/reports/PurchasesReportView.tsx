@@ -38,18 +38,18 @@ const initialFilters: ColumnFilters = {
 };
 
 // Clean number formatting without any RTL reversing bugs or minus signs
-const formatCleanNumber = (val: number | string | null | undefined, decimals = 2) => {
+const formatCleanNumber = (val: number | string | null | undefined, maxDecimals = 2) => {
   const num = Math.abs(Number(val || 0));
   return num.toLocaleString('en-US', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: maxDecimals,
   });
 };
 
 const formatCleanQty = (val: number | string | null | undefined) => {
   const num = Math.abs(Number(val || 0));
   return num.toLocaleString('en-US', {
-    minimumFractionDigits: Number.isInteger(num) ? 0 : 2,
+    minimumFractionDigits: 0,
     maximumFractionDigits: 3,
   });
 };

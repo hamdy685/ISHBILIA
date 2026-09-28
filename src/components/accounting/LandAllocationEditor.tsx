@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Button } from '../ui/Button';
 import { LandParcel, createLandParcelApi } from '../../api/supplierFinance';
 import { parseApiError } from '../../utils/apiError';
+import { formatCleanNumber } from '../../utils/numberFormat';
 
 export interface LandAllocationDraft {
   land_parcel_id: number | '';
@@ -21,7 +22,7 @@ interface LandAllocationEditorProps {
   onParcelCreated?: (newParcel: LandParcel) => void;
 }
 
-const money = (value: number) => `${value.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م`;
+const money = (value: number) => `${formatCleanNumber(value)} ج.م`;
 
 export const LandAllocationEditor: React.FC<LandAllocationEditorProps> = ({
   parcels,

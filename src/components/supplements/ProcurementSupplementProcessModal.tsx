@@ -3,6 +3,7 @@ import { PurchaseRequest } from '../../types/purchaseRequest';
 import { PurchaseRequestSupplement } from '../../types/supplement';
 import { getSuppliersAdminApi, SupplierAdmin } from '../../api/admin/suppliers';
 import { processSupplementProcurementApi } from '../../api/supplements';
+import { formatCleanNumber, formatCleanQty } from '../../utils/numberFormat';
 
 interface ProcurementSupplementProcessModalProps {
   request: PurchaseRequest;
@@ -265,7 +266,7 @@ export const ProcurementSupplementProcessModal: React.FC<ProcurementSupplementPr
                           {item.item_description}
                         </td>
                         <td className="p-3 text-slate-400 font-mono">
-                          {item.quantity}
+                          {formatCleanQty(item.quantity)}
                         </td>
                         <td className="p-3 text-slate-400">
                           {item.uom || '—'}
@@ -283,7 +284,7 @@ export const ProcurementSupplementProcessModal: React.FC<ProcurementSupplementPr
                           />
                         </td>
                         <td className="p-3 font-bold text-amber-300 font-mono">
-                          {lineTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          {formatCleanNumber(lineTotal)}
                         </td>
                       </tr>
                     );
@@ -312,7 +313,7 @@ export const ProcurementSupplementProcessModal: React.FC<ProcurementSupplementPr
             <div>
               <span className="text-xs text-slate-400 block">إجمالي أمر التوريد للكمالة:</span>
               <strong className="text-amber-400 font-black text-xl font-mono">
-                {calculateTotal().toLocaleString('en-US', { minimumFractionDigits: 2 })} ج.م
+                {formatCleanNumber(calculateTotal())} ج.م
               </strong>
             </div>
 

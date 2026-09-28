@@ -21,9 +21,10 @@ import { PurchaseRequestQuote } from '../../types/purchaseRequest';
 import { useAuth } from '../../context/AuthContext';
 
 import { getToken } from '../../utils/authStorage';
+import { formatCleanNumber } from '../../utils/numberFormat';
 
 const today = getTodayInputDate;
-const money = (value: string | number | null | undefined) => `${Number(value || 0).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م`;
+const money = (value: string | number | null | undefined) => `${formatCleanNumber(value)} ج.م`;
 const paymentMethods: Record<string, string> = { BANK_TRANSFER: 'تحويل بنكي', CASH: 'نقدي', CHEQUE: 'شيك' };
 
 const getQuoteFileUrl = (quote: { id: number; file_url?: string | null; file_path?: string | null; file_name?: string | null }) => {

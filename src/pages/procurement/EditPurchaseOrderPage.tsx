@@ -14,6 +14,7 @@ import LoadingSpinner from '../../components/LoadingSpinner';
 import ErrorMessage from '../../components/ErrorMessage';
 import { parseApiError } from '../../utils/apiError';
 import { SupplierSelectWithQuickAdd } from '../../components/common/SupplierSelectWithQuickAdd';
+import { formatCleanNumber } from '../../utils/numberFormat';
 
 export const EditPurchaseOrderPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -427,7 +428,7 @@ export const EditPurchaseOrderPage: React.FC = () => {
                       className="w-24 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs font-mono text-slate-200"
                     />
                   </td>
-                  <td className="p-3 font-mono font-bold text-cyan-400">{Number(item.line_total).toFixed(2)} ج.م</td>
+                  <td className="p-3 font-mono font-bold text-cyan-400">{formatCleanNumber(item.line_total)} ج.م</td>
                   {isEditable && (
                     <td className="p-3 text-center">
                       <button
@@ -517,7 +518,7 @@ export const EditPurchaseOrderPage: React.FC = () => {
                 </div>
                 <div className="flex justify-between items-center bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/80">
                   <span className="text-xs text-slate-400">الإجمالي:</span>
-                  <span className="font-mono font-bold text-cyan-400 text-sm">{Number(item.line_total).toFixed(2)} ج.م</span>
+                  <span className="font-mono font-bold text-cyan-400 text-sm">{formatCleanNumber(item.line_total)} ج.م</span>
                 </div>
               </div>
             </article>
@@ -528,7 +529,7 @@ export const EditPurchaseOrderPage: React.FC = () => {
         <div className="flex justify-between items-center bg-slate-900 p-4 rounded-xl border border-slate-800 mt-4">
           <div className="text-xs text-slate-400">الإجمالي الكلي المحسوب:</div>
           <div className="text-lg font-extrabold text-cyan-400 font-mono">
-            {Number(po.grand_total || 0).toFixed(2)} ج.م
+            {formatCleanNumber(po.grand_total)} ج.م
           </div>
         </div>
       </div>

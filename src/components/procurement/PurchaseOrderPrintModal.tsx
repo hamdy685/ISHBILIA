@@ -4,6 +4,7 @@ import { PurchaseOrder } from '../../types/purchaseOrder';
 import { getUnitLabel } from '../../utils/units';
 import { printDocumentOnly } from '../../utils/print';
 import { SupplementItemBadge } from '../common/SupplementItemBadge';
+import { formatCleanNumber, formatCleanQty } from '../../utils/numberFormat';
 
 interface PurchaseOrderPrintModalProps {
   po: PurchaseOrder;
@@ -43,7 +44,7 @@ export const PurchaseOrderPrintModal: React.FC<PurchaseOrderPrintModalProps> = (
       'رئيس القسم المعتمد: ' + (po.department_approver?.name || po.purchase_request?.assigned_reviewer?.name || '—'),
       'اعتماد المدير التنفيذي: ' + (po.executive_approver?.name || 'المهندس محمد عبدالكريم'),
       'البنود: ' + (po.items || []).map((item) => item.item_name || item.item_description).join('، '),
-      'الإجمالي: ' + Number(po.grand_total || 0).toFixed(2) + ' ج.م',
+      'الإجمالي: ' + formatCleanNumber(po.grand_total) + ' ج.م',
     ].join('\\n');
     window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
   };
@@ -112,9 +113,9 @@ export const PurchaseOrderPrintModal: React.FC<PurchaseOrderPrintModalProps> = (
                       </div>
                     </td>
                     <td className="border border-slate-900 p-2 text-center">{getUnitLabel(item.uom || 'PCS')}</td>
-                    <td className="border border-slate-900 p-2 text-center">{item.quantity}</td>
-                    <td className="border border-slate-900 p-2 text-center">{Number(item.unit_price || 0).toFixed(2)}</td>
-                    <td className="border border-slate-900 p-2 text-center">{Number(item.line_total || 0).toFixed(2)}</td>
+                    <td className="border border-slate-900 p-2 text-center">{formatCleanQty(item.quantity)}</td>
+                    <td className="border border-slate-900 p-2 text-center">{formatCleanNumber(item.unit_price)}</td>
+                    <td className="border border-slate-900 p-2 text-center">{formatCleanNumber(item.line_total)}</td>
                     <td className="border border-slate-900 p-2">{item.specifications || '—'}</td>
                   </tr>
                 ))}
@@ -140,7 +141,7 @@ export const PurchaseOrderPrintModal: React.FC<PurchaseOrderPrintModalProps> = (
 
             <div className="mt-2 mr-auto w-48 border-2 border-slate-900 bg-yellow-300 text-center font-black">
               <div className="border-b border-slate-900 p-1.5">الإجمالي الكلي</div>
-              <div className="border-b border-slate-900 p-1.5">{Number(po.grand_total || 0).toFixed(2)}</div>
+              <div className="border-b border-slate-900 p-1.5">{formatCleanNumber(po.grand_total)}</div>
               <div className="p-1.5">ج.م</div>
             </div>
 
