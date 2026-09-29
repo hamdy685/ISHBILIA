@@ -902,3 +902,25 @@ th {
     overflow-wrap: anywhere;
   }
 }
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 4mm 5mm !important;
+  }
+  .three-way-single-page {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    max-height: 285mm !important;
+    overflow: hidden !important;
+  }
+  .three-way-single-page table {
+    font-size: 8.5px !important;
+    line-height: 1.25 !important;
+  }
+  .three-way-single-page th,
+  .three-way-single-page td {
+    padding: 2px 4px !important;
+  }
+}
+

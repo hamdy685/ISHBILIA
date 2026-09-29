@@ -418,12 +418,24 @@ export const SupplierPaymentsPage: React.FC = () => {
                   </button>
                 </div>
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 bg-slate-950/90 p-3 rounded-xl border border-slate-800">
-                  <img
-                    src={getReceiptPhotoUrl(documentPreview)}
-                    alt="صورة بون الميزان"
-                    onClick={() => setPreviewPhotoUrl(getReceiptPhotoUrl(documentPreview))}
-                    className="h-20 w-20 sm:h-24 sm:w-24 rounded-xl object-cover border-2 border-cyan-500/70 cursor-pointer hover:scale-105 transition-transform shrink-0 shadow-md"
-                  />
+                  <div className="relative h-20 w-20 sm:h-24 sm:w-24 rounded-xl border-2 border-cyan-500/70 overflow-hidden bg-slate-900 shrink-0 flex items-center justify-center">
+                    <img
+                      src={getReceiptPhotoUrl(documentPreview)}
+                      alt="صورة بون الميزان"
+                      onClick={() => setPreviewPhotoUrl(getReceiptPhotoUrl(documentPreview))}
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        const fallback = e.currentTarget.parentElement?.querySelector('.photo-fallback');
+                        if (fallback) fallback.classList.remove('hidden');
+                      }}
+                      className="h-full w-full object-cover cursor-pointer hover:scale-105 transition-transform"
+                    />
+                    <div className="photo-fallback hidden flex flex-col items-center justify-center p-1 text-center">
+                      <span className="text-xl">📷</span>
+                      <span className="text-[9px] text-slate-400 mt-1">غير متوفرة حالياً</span>
+                    </div>
+                  </div>
+
                   <div className="text-xs space-y-1.5 flex-1">
                     <p className="font-bold text-slate-100 text-sm">صورة وزنة الحديد / بون الميزان الفعلي الموثق من أمين المخزن</p>
                     <p className="text-slate-300">
