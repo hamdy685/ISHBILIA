@@ -58,6 +58,14 @@ export const ThreeWayMatchPrintModal: React.FC<ThreeWayMatchPrintModalProps> = (
   const poItems = po?.items || [];
   const receiptItems = receipt.items || [];
 
+  const itemSuppliers = poItems
+    .map((item: any) => item.supplier?.company_name || item.pr_item?.supplier?.company_name)
+    .filter(Boolean);
+  const distinctSuppliers = Array.from(new Set(itemSuppliers));
+  const poSupplierDisplay = distinctSuppliers.length > 1
+    ? 'موردون متعددون (حسب البند)'
+    : (po?.supplier?.company_name || distinctSuppliers[0] || '—');
+
   const handlePrint = () => {
     printDocumentOnly('.three-way-print-container .print-document');
   };
@@ -162,6 +170,7 @@ export const ThreeWayMatchPrintModal: React.FC<ThreeWayMatchPrintModalProps> = (
                   <tr className="bg-slate-100 font-extrabold border-b-2 border-black">
                     <th className="border border-black p-1 text-center w-8">م</th>
                     <th className="border border-black p-1">الصنف</th>
+                    <th className="border border-black p-1 text-center w-28">المورد المعتمد</th>
                     <th className="border border-black p-1 text-center w-14">الوحدة</th>
                     <th className="border border-black p-1 text-center w-16">الكمية</th>
                     <th className="border border-black p-1 text-center w-24">تاريخ التوريد</th>
@@ -173,6 +182,9 @@ export const ThreeWayMatchPrintModal: React.FC<ThreeWayMatchPrintModalProps> = (
                     <tr key={item.id || idx} className="border-b border-black">
                       <td className="border border-black p-1 text-center font-bold">{idx + 1}</td>
                       <td className="border border-black p-1 font-bold">{item.item_description || item.item_name}</td>
+                      <td className="border border-black p-1 text-center font-bold">
+                        {item.supplier?.company_name || '—'}
+                      </td>
                       <td className="border border-black p-1 text-center font-bold">{getUnitLabel(item.uom || '')}</td>
                       <td className="border border-black p-1 text-center font-mono font-black">{item.quantity}</td>
                       <td className="border border-black p-1 text-center font-mono">{formatDate(item.date_needed || pr?.date_needed)}</td>
@@ -193,7 +205,7 @@ export const ThreeWayMatchPrintModal: React.FC<ThreeWayMatchPrintModalProps> = (
                 <div className="text-[10px] space-x-3 rtl:space-x-reverse text-black font-semibold">
                   <span><strong>رقم أمر الشراء:</strong> <span className="font-mono">{po?.po_number || '—'}</span></span>
                   <span><strong>التاريخ:</strong> {formatDate(po?.created_at)}</span>
-                  <span><strong>المورد:</strong> {po?.supplier?.company_name || '—'}</span>
+                  <span><strong>المورد:</strong> {poSupplierDisplay}</span>
                   <span><strong>شروط الدفع:</strong> {po?.payment_terms || 'حسب الاتفاق'}</span>
                 </div>
               </div>
@@ -203,6 +215,7 @@ export const ThreeWayMatchPrintModal: React.FC<ThreeWayMatchPrintModalProps> = (
                   <tr className="bg-slate-100 font-extrabold border-b-2 border-black">
                     <th className="border border-black p-1 text-center w-8">م</th>
                     <th className="border border-black p-1">الصنف</th>
+                    <th className="border border-black p-1 text-center w-28">المورد المعتمد</th>
                     <th className="border border-black p-1 text-center w-14">الوحدة</th>
                     <th className="border border-black p-1 text-center w-16">الكمية</th>
                     <th className="border border-black p-1 text-center w-20">السعر</th>
@@ -215,6 +228,9 @@ export const ThreeWayMatchPrintModal: React.FC<ThreeWayMatchPrintModalProps> = (
                     <tr key={item.id || idx} className="border-b border-black">
                       <td className="border border-black p-1 text-center font-bold">{idx + 1}</td>
                       <td className="border border-black p-1 font-bold">{item.item_name || item.item_description}</td>
+                      <td className="border border-black p-1 text-center font-bold">
+                        {item.supplier?.company_name || (item as any).pr_item?.supplier?.company_name || po?.supplier?.company_name || '—'}
+                      </td>
                       <td className="border border-black p-1 text-center font-bold">{getUnitLabel(item.uom || '')}</td>
                       <td className="border border-black p-1 text-center font-mono font-black">{item.quantity}</td>
                       <td className="border border-black p-1 text-center font-mono">{money(item.unit_price)}</td>
@@ -225,7 +241,7 @@ export const ThreeWayMatchPrintModal: React.FC<ThreeWayMatchPrintModalProps> = (
                     </tr>
                   ))}
                   <tr className="bg-slate-100 font-black border-t-2 border-black">
-                    <td colSpan={5} className="border border-black p-1.5 text-left font-black">
+                    <td colSpan={6} className="border border-black p-1.5 text-left font-black">
                       إجمالي أمر الشراء (بدون ضرائب أو خصومات):
                     </td>
                     <td className="border border-black p-1.5 text-center font-mono font-black text-xs">
@@ -257,6 +273,7 @@ export const ThreeWayMatchPrintModal: React.FC<ThreeWayMatchPrintModalProps> = (
                   <tr className="bg-slate-100 font-extrabold border-b-2 border-black">
                     <th className="border border-black p-1 text-center w-8">م</th>
                     <th className="border border-black p-1">الصنف</th>
+                    <th className="border border-black p-1 text-center w-28">المورد المعتمد</th>
                     <th className="border border-black p-1 text-center w-14">الوحدة</th>
                     <th className="border border-black p-1 text-center w-16">الكمية المستلمة</th>
                     <th className="border border-black p-1">ملاحظات الاستلام وبون الميزان</th>
@@ -274,6 +291,9 @@ export const ThreeWayMatchPrintModal: React.FC<ThreeWayMatchPrintModalProps> = (
                           {poItem?.item_name || poItem?.item_description || '—'}
                         </td>
                         <td className="border border-black p-1 text-center font-bold">
+                          {poItem?.supplier?.company_name || (poItem as any)?.pr_item?.supplier?.company_name || po?.supplier?.company_name || '—'}
+                        </td>
+                        <td className="border border-black p-1 text-center font-bold">
                           {getUnitLabel(itemUom)}
                         </td>
                         <td className="border border-black p-1 text-center font-mono font-black">
@@ -288,6 +308,7 @@ export const ThreeWayMatchPrintModal: React.FC<ThreeWayMatchPrintModalProps> = (
                 </tbody>
               </table>
             </div>
+
 
             {/* SECTION 4: UNIFIED SIGNATURES & APPROVALS BLOCK (EXCEL SPREADSHEET TABLE ONCE AT BOTTOM) */}
             <div className="pt-1">

@@ -52,8 +52,20 @@ export interface PurchaseOrderItem {
   unit_price: string;
   line_total: string;
   specifications?: string | null;
+  supplier_id?: number | null;
+  supplier?: {
+    id: number;
+    company_name: string;
+    code?: string | null;
+  } | null;
   pr_item?: {
     id: number;
+    supplier_id?: number | null;
+    supplier?: {
+      id: number;
+      company_name: string;
+      code?: string | null;
+    } | null;
     item_description?: string | null;
     quantity?: string | number | null;
     uom?: string | null;
@@ -65,6 +77,7 @@ export interface PurchaseOrderItem {
   is_supplementary?: boolean;
   supplement_batch?: number | null;
 }
+
 
 export interface PurchaseOrder {
   id: number;
@@ -185,7 +198,23 @@ export interface LinkedReceiptItem {
     item_name?: string | null;
     uom?: string | null;
     unit_price?: string | number;
+    supplier_id?: number | null;
+    supplier?: {
+      id: number;
+      company_name: string;
+      code?: string | null;
+    } | null;
+    pr_item?: {
+      id: number;
+      supplier_id?: number | null;
+      supplier?: {
+        id: number;
+        company_name: string;
+        code?: string | null;
+      } | null;
+    } | null;
   } | null;
+
 }
 
 export interface LinkedReceiptSummary {
@@ -227,7 +256,9 @@ export interface PurchaseOrderPayload {
     uom?: string;
     unit_price?: number;
     specifications?: string;
+    supplier_id?: number;
   }>;
+
 }
 
 export interface PurchaseOrderItemPayload {

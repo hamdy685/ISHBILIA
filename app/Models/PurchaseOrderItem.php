@@ -27,6 +27,7 @@ class PurchaseOrderItem extends Model
         'is_supplementary',
         'supplement_batch',
         'specifications',
+        'supplier_id',
     ];
 
     protected function casts(): array
@@ -54,4 +55,10 @@ class PurchaseOrderItem extends Model
     {
         return $this->belongsTo(Item::class, 'item_id');
     }
+
+    public function supplier(): BelongsTo
+    {
+        return $this->belongsTo(Supplier::class, 'supplier_id');
+    }
 }
+

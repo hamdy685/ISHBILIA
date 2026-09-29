@@ -374,10 +374,11 @@ export const AuthenticatedLayout: React.FC = () => {
     return (
         <div
             dir="rtl"
-            className="min-h-screen flex flex-col font-sans bg-[#070a0f] text-slate-100"
+            className="min-h-screen flex flex-col font-sans bg-[#070a0f] text-slate-100 print:bg-white print:text-black print:min-h-0 print:p-0"
         >
             {/* Header with Luxury Glassmorphism & Gold Highlights */}
-            <header className="sticky top-0 z-40 bg-slate-950/85 backdrop-blur-2xl text-white shadow-2xl border-b border-white/10 shadow-black/60">
+            <header className="sticky top-0 z-40 bg-slate-950/85 backdrop-blur-2xl text-white shadow-2xl border-b border-white/10 shadow-black/60 print:hidden">
+
                 <div className="max-w-[1800px] mx-auto w-full px-3 sm:px-6 lg:px-8">
                     <div className="flex items-center justify-between min-h-16 py-2">
 
@@ -505,7 +506,7 @@ export const AuthenticatedLayout: React.FC = () => {
                 )}
                 {/* Sidebar Nav with Luxury Frosted Glass */}
                 <aside
-                    className={`fixed inset-x-2 bottom-2 top-[4.75rem] z-40 max-h-[calc(100dvh-5.5rem)] w-auto sm:max-w-xs sm:right-3 sm:left-auto overflow-y-auto rounded-2xl border border-white/10 bg-slate-900/90 p-3 shadow-2xl backdrop-blur-2xl transition-all duration-300 xl:relative xl:inset-auto xl:bottom-auto xl:top-auto xl:max-h-none xl:w-64 xl:max-w-none xl:overflow-visible xl:p-4 xl:shadow-2xl ${
+                    className={`print:hidden fixed inset-x-2 bottom-2 top-[4.75rem] z-40 max-h-[calc(100dvh-5.5rem)] w-auto sm:max-w-xs sm:right-3 sm:left-auto overflow-y-auto rounded-2xl border border-white/10 bg-slate-900/90 p-3 shadow-2xl backdrop-blur-2xl transition-all duration-300 xl:relative xl:inset-auto xl:bottom-auto xl:top-auto xl:max-h-none xl:w-64 xl:max-w-none xl:overflow-visible xl:p-4 xl:shadow-2xl ${
                         sidebarOpen ? "block" : (mobileMenuOpen ? "block" : "hidden")
                     }`}
                 >
@@ -578,14 +579,14 @@ export const AuthenticatedLayout: React.FC = () => {
                 </aside>
 
                 {/* Main Content Area */}
-                <main className="flex-1 min-w-0 w-full bg-slate-900/70 border border-slate-800/80 rounded-2xl shadow-2xl p-3 sm:p-5 lg:p-6 pb-24 sm:pb-8 min-h-[calc(100dvh-6rem)] backdrop-blur-sm overflow-visible flex flex-col">
+                <main className="flex-1 min-w-0 w-full bg-slate-900/70 border border-slate-800/80 rounded-2xl shadow-2xl p-3 sm:p-5 lg:p-6 pb-24 sm:pb-8 min-h-[calc(100dvh-6rem)] backdrop-blur-sm overflow-visible flex flex-col print:bg-white print:border-none print:shadow-none print:p-0 print:m-0 print:min-h-0 print:rounded-none">
                     {sessionExpired && (
-                        <div className="mb-4 flex flex-col gap-2 rounded-xl border border-amber-700/70 bg-amber-950/30 px-4 py-3 text-xs text-amber-200 sm:flex-row sm:items-center sm:justify-between" role="alert" aria-live="assertive">
+                        <div className="mb-4 flex flex-col gap-2 rounded-xl border border-amber-700/70 bg-amber-950/30 px-4 py-3 text-xs text-amber-200 sm:flex-row sm:items-center sm:justify-between print:hidden" role="alert" aria-live="assertive">
                             <span>انتهت جلسة الدخول. احفظ أي بيانات محلية، ثم سجّل الدخول مرة أخرى للمتابعة.</span>
                             <Link to="/login" className="font-bold text-amber-100 underline underline-offset-4 hover:text-white">إعادة تسجيل الدخول</Link>
                         </div>
                     )}
-                    <PageHeader />
+                    <div className="print:hidden"><PageHeader /></div>
                     <Outlet />
                 </main>
             </div>
@@ -594,7 +595,7 @@ export const AuthenticatedLayout: React.FC = () => {
             {primaryRoleSlug !== 'admin' && location.pathname !== '/requests/create' && location.pathname !== '/employee/requests/create' && (
                 <Link
                     to={primaryRoleSlug === 'employee' ? '/employee/requests/create' : '/requests/create'}
-                    className="group fixed bottom-6 left-6 z-50 flex items-center gap-2.5 rounded-full bg-gradient-to-r from-cyan-500 to-teal-400 p-3.5 sm:px-5 sm:py-3.5 text-slate-950 font-black shadow-2xl shadow-cyan-500/40 hover:shadow-cyan-400/60 border border-cyan-200/50 hover:scale-105 active:scale-95 transition-all duration-200 select-none"
+                    className="print:hidden group fixed bottom-6 left-6 z-50 flex items-center gap-2.5 rounded-full bg-gradient-to-r from-cyan-500 to-teal-400 p-3.5 sm:px-5 sm:py-3.5 text-slate-950 font-black shadow-2xl shadow-cyan-500/40 hover:shadow-cyan-400/60 border border-cyan-200/50 hover:scale-105 active:scale-95 transition-all duration-200 select-none"
                     aria-label="إنشاء طلب شراء جديد"
                     title="إنشاء طلب شراء جديد"
                 >
@@ -608,15 +609,16 @@ export const AuthenticatedLayout: React.FC = () => {
             )}
 
             {/* PWA Install Banner */}
-            <InstallPrompt />
+            <div className="print:hidden"><InstallPrompt /></div>
 
             {/* Network Resilience Offline/Online Toast */}
-            <NetworkStatusToast />
+            <div className="print:hidden"><NetworkStatusToast /></div>
 
-            <footer className="hidden sm:block mx-auto w-full max-w-[1800px] px-2 pb-3 text-center text-[10px] text-slate-500 sm:px-3 lg:px-4">
+            <footer className="print:hidden hidden sm:block mx-auto w-full max-w-[1800px] px-2 pb-3 text-center text-[10px] text-slate-500 sm:px-3 lg:px-4">
                 شركة اشبيلية للتطوير العقاري والمقاولات · منظومة المشتريات التشغيلية · <a href="https://ishbilia.dev" target="_blank" rel="noreferrer" className="text-[#d4b36a] hover:text-[#f0d695]">الموقع الرسمي</a> · <a href="https://web.facebook.com/Ishbilia.realestate?locale=ar_AR" target="_blank" rel="noreferrer" className="text-[#d4b36a] hover:text-[#f0d695]">صفحة Facebook</a>
             </footer>
         </div>
+
     );
 };
 

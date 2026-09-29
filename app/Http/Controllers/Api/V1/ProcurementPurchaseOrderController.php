@@ -223,6 +223,7 @@ class ProcurementPurchaseOrderController extends Controller
                 'supplier',
                 'createdBy',
                 'items.item',
+                'items.supplier',
             ])
             ->when($status !== '', fn ($query) => $query->where('status', $status))
             ->when($supplierId > 0, fn ($query) => $query->where('supplier_id', $supplierId))
@@ -261,13 +262,15 @@ class ProcurementPurchaseOrderController extends Controller
             'supplier',
             'createdBy',
             'items.item',
-            'receipts.items.purchaseOrderItem',
+            'items.supplier',
+            'receipts.items.purchaseOrderItem.supplier',
             'receipts.warehouseKeeper',
             'receipts.siteEngineer',
             'receipts.receiver',
         ])->findOrFail((int) $id);
         return new PurchaseOrderResource($po);
     }
+
 
     /**
      * Create a new draft Purchase Order from a procurement-approved Purchase Request.

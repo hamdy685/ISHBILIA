@@ -17,8 +17,12 @@ export interface ApprovedReceiptItem {
     unit_price: string | number;
     line_total?: string | number;
     specifications?: string | null;
+    supplier_id?: number | null;
+    supplier?: { id: number; company_name: string; code?: string | null } | null;
     pr_item?: {
       id: number;
+      supplier_id?: number | null;
+      supplier?: { id: number; company_name: string; code?: string | null } | null;
       item_description?: string | null;
       item_reference?: string | null;
       region?: string | null;
@@ -31,6 +35,7 @@ export interface ApprovedReceiptItem {
     is_supplementary?: boolean;
     supplement_batch?: number | null;
   } | null;
+
 }
 
 export interface ApprovedReceipt {

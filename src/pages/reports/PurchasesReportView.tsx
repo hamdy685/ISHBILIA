@@ -6,6 +6,7 @@ import {
 } from '../../api/reports';
 import { parseApiError } from '../../utils/apiError';
 import { getUnitLabel } from '../../utils/units';
+import { printDocumentOnly } from '../../utils/print';
 
 interface ColumnFilters {
   delivery_date: string;
@@ -311,29 +312,32 @@ export const PurchasesReportView: React.FC = () => {
   return (
     <div className="space-y-4" dir="rtl">
       {/* ========================================================================= */}
-      {/* ── 1. OFFICIAL PRINT VIEW (Visible ONLY during window.print()) ─────────── */}
+      {/* ── 1. OFFICIAL PRINT VIEW (Pure Clean White Paper Document) ─────────────── */}
       {/* ========================================================================= */}
-      <div className="hidden print:block font-sans text-black bg-white p-0 m-0">
+      <div className="hidden print:block font-sans text-black bg-white p-0 m-0 purchases-report-print-target">
         {/* Company Header */}
-        <div className="border-b-2 border-slate-900 pb-3 mb-3 flex items-start justify-between">
-          <div>
-            <div className="text-xs font-bold text-slate-600 tracking-wider">نظام المشتريات والحسابات المعتمد</div>
-            <h1 className="text-xl font-black text-black mt-0.5 tracking-tight">
-              شركة اشبيلية للتطوير العقاري والمقاولات
-            </h1>
-            <h2 className="text-base font-extrabold text-slate-800 mt-1">
-              {dynamicReportTitle}
-            </h2>
+        <div className="border-b-2 border-black pb-3 mb-3 flex items-start justify-between bg-white text-black">
+          <div className="flex items-center gap-3">
+            <img src="/eshbelia-logo.png" alt="شعار شركة اشبيلية" className="h-14 w-auto object-contain" />
+            <div>
+              <div className="text-[10px] text-slate-800 font-bold">نظام المشتريات والحسابات المعتمد</div>
+              <h1 className="text-lg font-black text-black mt-0.5">
+                شركة إشبيلية للتطوير العقاري والمقاولات
+              </h1>
+              <h2 className="text-xs font-bold text-slate-800 mt-0.5">
+                {dynamicReportTitle}
+              </h2>
+            </div>
           </div>
-          <div className="text-left text-[11px] font-mono border border-slate-800 p-2 rounded bg-slate-50">
-            <div>تاريخ الطباعة: {new Date().toLocaleDateString('ar-EG')}</div>
-            <div>الوقت: {new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</div>
-            <div>الحالة: معتمد نهائي</div>
+          <div className="text-left text-[10.5px] font-mono border border-black p-2 rounded bg-white text-black" dir="rtl">
+            <div><strong>تاريخ الطباعة:</strong> {new Date().toLocaleDateString('ar-EG')}</div>
+            <div><strong>الوقت:</strong> {new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</div>
+            <div><strong>الحالة:</strong> معتمد نهائي</div>
           </div>
         </div>
 
-        {/* Excel Summary Metadata Box */}
-        <div className="grid grid-cols-4 gap-2 mb-3 text-xs border border-slate-800 bg-slate-100 p-2 font-semibold">
+        {/* Summary Metadata Box */}
+        <div className="grid grid-cols-4 gap-2 mb-3 text-xs border border-black bg-white p-2 font-semibold text-black">
           <div>
             <span className="text-slate-600 block text-[10px]">القسم المحدد:</span>
             <span className="font-bold text-black">{activeDepartmentName || 'كافة الأقسام'}</span>
@@ -357,66 +361,66 @@ export const PurchasesReportView: React.FC = () => {
         </div>
 
         {/* 12-Column Official Excel Table */}
-        <table className="w-full border-collapse border-2 border-slate-900 text-[10.5px] text-right">
+        <table className="w-full border-collapse border border-black text-[10px] text-right">
           <thead>
-            <tr className="bg-slate-200 border-b-2 border-slate-900 font-black text-black">
-              <th className="border border-slate-900 px-1 py-1.5 text-center w-7">م</th>
-              <th className="border border-slate-900 px-2 py-1.5 text-center whitespace-nowrap">تاريخ التوريد</th>
-              <th className="border border-slate-900 px-2 py-1.5 text-center whitespace-nowrap">رقم أمر الشراء</th>
-              <th className="border border-slate-900 px-2 py-1.5">الصنف</th>
-              <th className="border border-slate-900 px-1.5 py-1.5 text-center">الوحدة</th>
-              <th className="border border-slate-900 px-2 py-1.5 text-center">الكمية</th>
-              <th className="border border-slate-900 px-2 py-1.5 text-center">سعر الوحدة</th>
-              <th className="border border-slate-900 px-2 py-1.5 text-center font-bold bg-slate-300">سعر الكمية</th>
-              <th className="border border-slate-900 px-2 py-1.5">أسم المورد</th>
-              <th className="border border-slate-900 px-1.5 py-1.5 text-center">رقم القطعة</th>
-              <th className="border border-slate-900 px-2 py-1.5 text-center">إسم المنطقة</th>
-              <th className="border border-slate-900 px-2 py-1.5 text-center">القسم</th>
-              <th className="border border-slate-900 px-2 py-1.5">الاعمال</th>
+            <tr className="bg-slate-100 border-b border-black font-black text-black">
+              <th className="border border-black px-1 py-1.5 text-center w-7">م</th>
+              <th className="border border-black px-2 py-1.5 text-center whitespace-nowrap">تاريخ التوريد</th>
+              <th className="border border-black px-2 py-1.5 text-center whitespace-nowrap">رقم أمر الشراء</th>
+              <th className="border border-black px-2 py-1.5">الصنف</th>
+              <th className="border border-black px-1.5 py-1.5 text-center">الوحدة</th>
+              <th className="border border-black px-2 py-1.5 text-center">الكمية</th>
+              <th className="border border-black px-2 py-1.5 text-center">سعر الوحدة</th>
+              <th className="border border-black px-2 py-1.5 text-center font-bold bg-slate-200">سعر الكمية</th>
+              <th className="border border-black px-2 py-1.5">أسم المورد</th>
+              <th className="border border-black px-1.5 py-1.5 text-center">رقم القطعة</th>
+              <th className="border border-black px-2 py-1.5 text-center">إسم المنطقة</th>
+              <th className="border border-black px-2 py-1.5 text-center">القسم</th>
+              <th className="border border-black px-2 py-1.5">الاعمال</th>
             </tr>
           </thead>
           <tbody>
             {filteredRows.map((row, idx) => (
-              <tr key={row.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                <td className="border border-slate-800 px-1 py-1.5 text-center font-bold font-mono">{idx + 1}</td>
-                <td className="border border-slate-800 px-2 py-1.5 text-center font-mono whitespace-nowrap">
+              <tr key={row.id} className="border-b border-black bg-white">
+                <td className="border border-black px-1 py-1 text-center font-bold font-mono">{idx + 1}</td>
+                <td className="border border-black px-2 py-1 text-center font-mono whitespace-nowrap">
                   {row.delivery_date_formatted || row.delivery_date}
                 </td>
-                <td className="border border-slate-800 px-2 py-1.5 text-center font-mono font-bold whitespace-nowrap">
+                <td className="border border-black px-2 py-1 text-center font-mono font-bold whitespace-nowrap">
                   {row.po_number_short || row.po_number}
                 </td>
-                <td className="border border-slate-800 px-2 py-1.5 font-bold text-black">{row.item_name}</td>
-                <td className="border border-slate-800 px-1.5 py-1.5 text-center">{getUnitLabel(row.uom) || row.uom}</td>
-                <td className="border border-slate-800 px-2 py-1.5 text-center font-mono font-bold" dir="ltr">
+                <td className="border border-black px-2 py-1 font-bold text-black">{row.item_name}</td>
+                <td className="border border-black px-1.5 py-1 text-center">{getUnitLabel(row.uom) || row.uom}</td>
+                <td className="border border-black px-2 py-1 text-center font-mono font-bold" dir="ltr">
                   {formatCleanQty(row.quantity)}
                 </td>
-                <td className="border border-slate-800 px-2 py-1.5 text-center font-mono" dir="ltr">
+                <td className="border border-black px-2 py-1 text-center font-mono" dir="ltr">
                   {formatCleanNumber(row.unit_price)}
                 </td>
-                <td className="border border-slate-800 px-2 py-1.5 text-center font-mono font-black bg-slate-100" dir="ltr">
+                <td className="border border-black px-2 py-1 text-center font-mono font-black bg-slate-100" dir="ltr">
                   {formatCleanNumber(row.total_price)}
                 </td>
-                <td className="border border-slate-800 px-2 py-1.5">{row.supplier_name}</td>
-                <td className="border border-slate-800 px-1.5 py-1.5 text-center font-mono font-bold">{row.parcel_reference}</td>
-                <td className="border border-slate-800 px-2 py-1.5 text-center">{row.region}</td>
-                <td className="border border-slate-800 px-2 py-1.5 text-center">{row.department_name}</td>
-                <td className="border border-slate-800 px-2 py-1.5">{row.works}</td>
+                <td className="border border-black px-2 py-1">{row.supplier_name}</td>
+                <td className="border border-black px-1.5 py-1 text-center font-mono font-bold">{row.parcel_reference}</td>
+                <td className="border border-black px-2 py-1 text-center">{row.region}</td>
+                <td className="border border-black px-2 py-1 text-center">{row.department_name}</td>
+                <td className="border border-black px-2 py-1">{row.works}</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
-            <tr className="bg-slate-200 border-t-2 border-slate-900 font-black text-black">
-              <td colSpan={5} className="border border-slate-900 px-2 py-2 text-center text-xs font-bold">
+            <tr className="bg-slate-100 border-t-2 border-black font-black text-black">
+              <td colSpan={5} className="border border-black px-2 py-1.5 text-center text-xs font-bold">
                 الإجمالي العام ({filteredRows.length} بند مسجل)
               </td>
-              <td className="border border-slate-900 px-2 py-2 text-center font-mono font-bold" dir="ltr">
+              <td className="border border-black px-2 py-1.5 text-center font-mono font-bold" dir="ltr">
                 {formatCleanQty(liveTotals.totalQty)}
               </td>
-              <td className="border border-slate-900 px-2 py-2 text-center">—</td>
-              <td className="border border-slate-900 px-2 py-2 text-center font-mono font-black text-xs bg-slate-300" dir="ltr">
+              <td className="border border-black px-2 py-1.5 text-center">—</td>
+              <td className="border border-black px-2 py-1.5 text-center font-mono font-black text-xs bg-slate-200" dir="ltr">
                 {formatCleanNumber(liveTotals.totalAmount)} ج.م
               </td>
-              <td colSpan={5} className="border border-slate-900 px-2 py-2 text-left text-[10px] text-slate-700">
+              <td colSpan={5} className="border border-black px-2 py-1.5 text-left text-[10px] text-slate-700">
                 أوامر الشراء: {liveTotals.uniqueOrders} | الموردين: {liveTotals.uniqueSuppliers}
               </td>
             </tr>
@@ -424,21 +428,21 @@ export const PurchasesReportView: React.FC = () => {
         </table>
 
         {/* Signatures */}
-        <div className="mt-8 pt-4 border-t-2 border-slate-900 grid grid-cols-3 gap-6 text-center text-xs">
-          <div className="space-y-4">
+        <div className="mt-6 pt-3 border-t-2 border-black grid grid-cols-3 gap-6 text-center text-xs bg-white text-black">
+          <div className="space-y-3">
             <div className="font-bold">إعداد الحسابات</div>
-            <div className="border-b border-dashed border-slate-900 h-8 w-44 mx-auto" />
-            <div className="text-[10px] text-slate-500">التوقيع والتاريخ</div>
+            <div className="border-b border-dashed border-black h-7 w-44 mx-auto" />
+            <div className="text-[10px] text-slate-600">التوقيع والتاريخ</div>
           </div>
-          <div className="space-y-4">
+          <div className="space-y-3">
             <div className="font-bold">مراجعة مدير المشتريات</div>
-            <div className="border-b border-dashed border-slate-900 h-8 w-44 mx-auto" />
-            <div className="text-[10px] text-slate-500">التوقيع والتاريخ</div>
+            <div className="border-b border-dashed border-black h-7 w-44 mx-auto" />
+            <div className="text-[10px] text-slate-600">التوقيع والتاريخ</div>
           </div>
-          <div className="space-y-4">
+          <div className="space-y-3">
             <div className="font-bold">اعتماد المدير التنفيذي</div>
-            <div className="border-b border-dashed border-slate-900 h-8 w-44 mx-auto" />
-            <div className="text-[10px] text-slate-500">التوقيع والتاريخ</div>
+            <div className="border-b border-dashed border-black h-7 w-44 mx-auto" />
+            <div className="text-[10px] text-slate-600">التوقيع والتاريخ</div>
           </div>
         </div>
       </div>
@@ -491,13 +495,14 @@ export const PurchasesReportView: React.FC = () => {
 
               <button
                 type="button"
-                onClick={() => window.print()}
+                onClick={() => printDocumentOnly('.purchases-report-print-target', { orientation: 'landscape', title: dynamicReportTitle })}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-800 hover:bg-emerald-900 px-3.5 py-1.5 text-xs font-extrabold text-white transition border border-emerald-600 shadow"
                 title="طباعة تقرير إكسل مسطر"
               >
                 <span>🖨️</span>
                 <span>طباعة الورقة</span>
               </button>
+
 
               <button
                 type="button"

@@ -37,6 +37,17 @@ class PurchaseOrderItemResource extends JsonResource
             'specifications'   => $this->specifications,
             'is_supplementary' => (bool) $this->is_supplementary,
             'supplement_batch' => $this->supplement_batch ? (int) $this->supplement_batch : null,
+            'supplier_id'      => $this->supplier_id,
+            'supplier'         => $this->relationLoaded('supplier') && $this->supplier ? [
+                'id'           => $this->supplier->id,
+                'company_name' => $this->supplier->company_name,
+                'code'         => $this->supplier->code,
+            ] : ($this->supplier_id ? [
+                'id'           => $this->supplier_id,
+                'company_name' => $this->supplier?->company_name,
+                'code'         => $this->supplier?->code,
+            ] : null),
         ];
     }
 }
+

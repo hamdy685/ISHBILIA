@@ -36,6 +36,7 @@ interface PoItemInput {
   uom: string;
   unit_price: number | string;
   specifications: string;
+  supplier_id?: number | null;
 }
 
 export const CreatePurchaseOrderPage: React.FC = () => {
@@ -83,16 +84,9 @@ export const CreatePurchaseOrderPage: React.FC = () => {
           setSupplierId(initialSupplierId);
 
           if (prData && prData.items) {
-            let relevantItems = prData.items;
-            if (prData.procurement_route === 'DIRECT' && initialSupplierId) {
-              const sId = Number(initialSupplierId);
-              const matching = prData.items.filter((i) => (i.supplier_id || prData.direct_supplier_id) === sId);
-              if (matching.length > 0) {
-                relevantItems = matching;
-              }
-            }
+            // Keep ALL approved PR items in the unified Purchase Order
             setPoItems(
-              relevantItems.map((i) => ({
+              prData.items.map((i) => ({
                 pr_item_id: i.id,
                 item_id: i.item_id || null,
                 item_description: i.item_description,
@@ -103,6 +97,7 @@ export const CreatePurchaseOrderPage: React.FC = () => {
                 uom: i.uom || 'PCS',
                 unit_price: Number(prData.selected_quote?.unit_price || i.estimated_unit_price || 0),
                 specifications: i.specifications || '',
+                supplier_id: i.supplier_id ? Number(i.supplier_id) : (initialSupplierId ? Number(initialSupplierId) : null),
               }))
             );
           }
@@ -119,31 +114,23 @@ export const CreatePurchaseOrderPage: React.FC = () => {
 
   const syncPoItemsForSupplier = (targetSupplierId: string, currentPr: PurchaseRequest) => {
     if (!currentPr.items) return;
-    let relevantItems = currentPr.items;
-    if (currentPr.procurement_route === 'DIRECT' && targetSupplierId) {
-      const sId = Number(targetSupplierId);
-      const matching = currentPr.items.filter(
-        (i) => (i.supplier_id || currentPr.direct_supplier_id) === sId
-      );
-      if (matching.length > 0) {
-        relevantItems = matching;
-      }
-    }
-    setPoItems(
-      relevantItems.map((i) => ({
-        pr_item_id: i.id,
-        item_id: i.item_id || null,
-        item_description: i.item_description,
-        item_reference: i.item_reference || '',
-        region: i.region || '',
-        original_quantity: parseFloat(i.quantity) || 1,
-        quantity: parseFloat(i.quantity) || 1,
-        uom: i.uom || 'PCS',
-        unit_price: Number(currentPr.selected_quote?.unit_price || i.estimated_unit_price || 0),
-        specifications: i.specifications || '',
+    const targetNum = targetSupplierId ? Number(targetSupplierId) : null;
+    setPoItems((prev) =>
+      prev.map((item) => ({
+        ...item,
+        supplier_id: item.supplier_id || targetNum,
       }))
     );
   };
+
+  const handleItemSupplierChange = (index: number, val: number | null) => {
+    setPoItems((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], supplier_id: val };
+      return updated;
+    });
+  };
+
 
   const handleItemQuantityChange = (index: number, val: string) => {
     setPoItems((prev) => {
@@ -216,8 +203,10 @@ export const CreatePurchaseOrderPage: React.FC = () => {
           uom: item.uom,
           unit_price: Number(item.unit_price) || 0,
           specifications: item.specifications,
+          supplier_id: item.supplier_id || (supplierId ? Number(supplierId) : undefined),
         })),
       });
+
 
       if (po?.status === 'PO_DRAFT' || po?.status === 'RETURNED_TO_PROCUREMENT') {
         await submitPurchaseOrderApi(po.id);
@@ -514,28 +503,12 @@ export const CreatePurchaseOrderPage: React.FC = () => {
                 <span className="text-base">ℹ️</span>
                 <div>
                   <p className="font-bold text-violet-100">
-                    طلب شراء مباشر مقسّم على موردين متعددين ({directPrSuppliers.length} موردين)
+                    طلب شراء مباشر يضم موردين متعددين ({directPrSuppliers.length} موردين)
                   </p>
                   <p className="text-[11px] text-violet-300/80">
-                    جاري إعداد أمر الشراء لبنود المورد المحدد ({poItems.length} من أصل {pr.items?.length || 0} بند). بعد إصداره يمكنك إصدار أمر الشراء للمورد التالي.
+                    يتم إصدار أمر شراء موحد وإذن استلام موحد يضم جميع البنود ({poItems.length} بند) مع إسناد كل بند لمورده المحدد في الجدول أدناه.
                   </p>
                 </div>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {directPrSuppliers.map((s) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => handleSupplierSelect(String(s.id))}
-                    className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all ${
-                      Number(supplierId) === s.id
-                        ? 'bg-violet-600 text-white shadow-md shadow-violet-600/30 ring-1 ring-violet-400'
-                        : 'bg-slate-900/90 text-slate-300 hover:bg-slate-800 border border-slate-700'
-                    }`}
-                  >
-                    {s.company_name}
-                  </button>
-                ))}
               </div>
             </div>
           )}
@@ -553,6 +526,7 @@ export const CreatePurchaseOrderPage: React.FC = () => {
                     <th className="p-3">رقم قطعة الأرض</th>
                     <th className="p-3">المنطقة</th>
                     <th className="p-3">الصنف</th>
+                    <th className="p-3">المورد المعتمد</th>
                     <th className="p-3">الوحدة</th>
                     <th className="p-3">كمية طلب الشراء (PR)</th>
                     <th className="p-3">كمية أمر الشراء (PO)</th>
@@ -599,6 +573,20 @@ export const CreatePurchaseOrderPage: React.FC = () => {
                               المواصفات: {item.specifications}
                             </div>
                           )}
+                        </td>
+                        <td className="p-3">
+                          <select
+                            value={item.supplier_id || ''}
+                            onChange={(e) => handleItemSupplierChange(index, e.target.value ? Number(e.target.value) : null)}
+                            className="w-40 bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-100 focus:border-cyan-500 focus:outline-none"
+                          >
+                            <option value="">{supplierId ? '(المورد الرئيسي)' : 'اختر المورد'}</option>
+                            {suppliers.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.company_name}
+                              </option>
+                            ))}
+                          </select>
                         </td>
                         <td className="p-3 text-slate-400">{getUnitLabel(item.uom)}</td>
                         <td className="p-3 font-mono font-semibold text-slate-400">
@@ -652,6 +640,7 @@ export const CreatePurchaseOrderPage: React.FC = () => {
               </table>
             </div>
 
+
             {/* Mobile Commercial Cards */}
             <div className="space-y-4 md:hidden">
               {poItems.map((item, index) => {
@@ -667,6 +656,23 @@ export const CreatePurchaseOrderPage: React.FC = () => {
                         #{index + 1}
                       </span>
                     </div>
+
+                    <div className="text-xs">
+                      <label className="block text-[10px] text-slate-400 font-semibold mb-1">المورد المعتمد للبند</label>
+                      <select
+                        value={item.supplier_id || ''}
+                        onChange={(e) => handleItemSupplierChange(index, e.target.value ? Number(e.target.value) : null)}
+                        className="h-10 w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 text-xs text-slate-100 focus:border-cyan-500 focus:outline-none"
+                      >
+                        <option value="">{supplierId ? '(المورد الرئيسي لأمر الشراء)' : 'اختر المورد'}</option>
+                        {suppliers.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.company_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
 
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div>

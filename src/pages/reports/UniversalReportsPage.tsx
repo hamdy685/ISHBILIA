@@ -10,6 +10,7 @@ import { getUnitLabel } from '../../utils/units';
 import { PurchasesReportView } from './PurchasesReportView';
 import { useAuth } from '../../context/AuthContext';
 import { formatCleanNumber, formatCleanQty } from '../../utils/numberFormat';
+import { printDocumentOnly } from '../../utils/print';
 
 const PURCHASE_ORDER_STATUS_LABELS: Record<string, string> = {
   PO_DRAFT: 'مسودة أمر شراء',
@@ -425,7 +426,7 @@ export const UniversalReportsPage: React.FC = () => {
           {/* ========================================================================= */}
           {/* ── 1. OFFICIAL EXCEL PRINT DOCUMENT (Visible ONLY during window.print()) ── */}
           {/* ========================================================================= */}
-          <div className="hidden print:block font-sans text-black bg-white p-0 m-0 print:m-0 print:p-0">
+          <div className="hidden print:block font-sans text-black bg-white p-0 m-0 print:m-0 print:p-0 universal-report-print-target">
         
         {/* Official Header */}
         <div className="border-b-2 border-black pb-3 mb-3 flex items-start justify-between">
@@ -728,13 +729,14 @@ export const UniversalReportsPage: React.FC = () => {
             {/* Print Button */}
             <button
               type="button"
-              onClick={() => window.print()}
+              onClick={() => printDocumentOnly('.universal-report-print-target', { orientation: 'landscape', title: `تقرير أوامر الشراء والمشتريات (${reportSubtitle})` })}
               className="flex items-center gap-2 rounded-xl border border-emerald-600/60 bg-emerald-700/30 hover:bg-emerald-600/50 px-4 py-2 text-xs font-bold text-emerald-200 transition-all shadow-sm"
               title="طباعة تقرير إكسيل فوري"
             >
               <span className="text-base">🖨️</span>
               <span>طباعة تقرير إكسل</span>
             </button>
+
 
             {/* Export CSV / Excel */}
             <button

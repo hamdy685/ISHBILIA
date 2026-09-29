@@ -378,21 +378,38 @@ textarea:focus {
     direction: rtl !important;
   }
 
-  /* 1. إخفاء عناصر شريط التنقل والأزرار غير المخصصة للطباعة */
+  /* 1. إخفاء عناصر شريط التنقل والأزرار والبانرات العائمة غير المخصصة للطباعة */
+  header,
   nav,
   aside,
+  footer,
   button:not(.print-visible),
   .print\:hidden,
   .print-hidden,
   input:not([type="checkbox"]),
   select,
-  textarea {
+  textarea,
+  .fixed:not(.print-container):not(.print-document):not(.print-target-document),
+  [data-floating],
+  .quick-launcher {
     display: none !important;
   }
 
   /* 2. إذا كانت هناك نافذة منبثقة أو مستند مخصص للطباعة (Print Modal / Container) */
   body:has(.print-container) > #root:not(:has(.print-container)) {
     display: none !important;
+  }
+
+  #root,
+  main {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    min-height: 0 !important;
   }
 
   body:has(.print-container) .modal-top-viewport,
@@ -410,6 +427,7 @@ textarea:focus {
     box-shadow: none !important;
     border: none !important;
   }
+
 
   /* 3. معالجة تباعد وضبط الخطوط العربية لمنع التداخل والتقاطع والالتصاق */
   body,

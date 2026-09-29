@@ -83,14 +83,18 @@ class SupplierInvoiceService
             'purchaseOrder.purchaseRequest.siteEngineer',
             'purchaseOrder.purchaseRequest.approvalHistory.actor',
             'purchaseOrder.purchaseRequest.items.item',
+            'purchaseOrder.purchaseRequest.items.supplier',
             'purchaseOrder.items.item',
-            'purchaseOrder.items.prItem',
+            'purchaseOrder.items.supplier',
+            'purchaseOrder.items.prItem.supplier',
             'purchaseOrder.approvalHistory.actor',
             'warehouseKeeper',
             'siteEngineer',
             'items.purchaseOrderItem.item',
-            'items.purchaseOrderItem.prItem',
+            'items.purchaseOrderItem.supplier',
+            'items.purchaseOrderItem.prItem.supplier',
         ])
+
             ->where('status', 'APPROVED')
             ->whereDoesntHave('supplierInvoices', function ($query) {
                 $query->whereIn('status', ['DRAFT', 'OPEN', 'PARTIALLY_PAID', 'PAID']);

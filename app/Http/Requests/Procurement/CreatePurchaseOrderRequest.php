@@ -34,8 +34,10 @@ class CreatePurchaseOrderRequest extends FormRequest
             'items.*.unit_price' => ['nullable', 'numeric', 'gte:0'],
             'items.*.specifications' => ['nullable', 'string'],
             'items.*.change_reason' => ['nullable', 'string'],
+            'items.*.supplier_id' => ['nullable', 'integer', 'exists:suppliers,id'],
         ];
     }
+
 
     public function withValidator($validator): void
     {

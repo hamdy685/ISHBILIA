@@ -111,23 +111,15 @@ class PurchaseOrderService
             throw new \RuntimeException('لا يمكن تغيير مورد العرض الذي اختاره المدير التنفيذي.');
         }
 
-        // For direct purchases with per-item suppliers, check that the given supplier
-        // is assigned to at least one PR item. Fall back to direct_supplier_id for backward compat.
-        if ($isDirectPath) {
-            $hasItemsForSupplier = $pr->items->contains(fn ($item) => (int) ($item->supplier_id ?? 0) === (int) $supplierId);
-            if (! $hasItemsForSupplier && $pr->direct_supplier_id && (int) $pr->direct_supplier_id !== (int) $supplierId) {
-                throw new \RuntimeException('المورد المحدد ليس مُعيّنًا لأي بند في طلب الشراء المباشر.');
-            }
-        }
-
         if ($selectedQuote) {
             $supplierId = (int) $selectedQuote->supplier_id;
-        } elseif ($isDirectPath && ! $pr->items->contains(fn ($item) => (int) ($item->supplier_id ?? 0) === (int) $supplierId) && $pr->direct_supplier_id) {
-            $supplierId = (int) $pr->direct_supplier_id;
+        } elseif ($isDirectPath && empty($supplierId)) {
+            $firstItemSupplier = $pr->items->firstWhere('supplier_id', '!=', null)?->supplier_id;
+            $supplierId = (int) ($firstItemSupplier ?? $pr->direct_supplier_id ?? 0);
         }
 
-        $supplier = Supplier::findOrFail($supplierId);
-        if (! $supplier->is_active) {
+        $supplier = $supplierId ? Supplier::find($supplierId) : null;
+        if ($supplier && ! $supplier->is_active) {
             throw ValidationException::withMessages([
                 'supplier_id' => ['The selected supplier is inactive.'],
             ]);
@@ -143,20 +135,16 @@ class PurchaseOrderService
                 throw new \RuntimeException('تغيرت حالة طلب الشراء أثناء الإنشاء. أعد تحميل الطلب وحاول مرة أخرى.');
             }
 
-            // Check if PO already exists for this PR (scoped to supplier for direct purchases)
+            // Check if unified PO already exists for this PR
             $existingPoQuery = PurchaseOrder::where('purchase_request_id', $pr->id)
                 ->whereNotIn('status', ['REJECTED']);
-
-            if ($isDirectPath) {
-                $existingPoQuery->where('supplier_id', $supplier->id);
-            }
 
             $existingPo = $existingPoQuery->first();
 
             if ($existingPo) {
                 if (in_array($existingPo->status, ['PO_DRAFT', 'RETURNED_TO_PROCUREMENT'], true)) {
                     $existingPo->update([
-                        'supplier_id' => $supplier->id,
+                        'supplier_id' => $supplier?->id ?? $existingPo->supplier_id,
                         'payment_terms' => $options['payment_terms'] ?? $existingPo->payment_terms,
                         'delivery_terms' => $options['delivery_terms'] ?? $existingPo->delivery_terms,
                         'delivery_date' => !empty($options['delivery_date']) ? $options['delivery_date'] : ($existingPo->delivery_date ?? now()->toDateString()),
@@ -177,7 +165,7 @@ class PurchaseOrderService
                 'po_number' => $poNumber,
                 'purchase_request_id' => $pr->id,
                 'selected_quote_id' => $selectedQuote?->id,
-                'supplier_id' => $supplier->id,
+                'supplier_id' => $supplier?->id,
                 'created_by_user_id' => $user->id,
                 'status' => 'PO_DRAFT',
                 'payment_terms' => $options['payment_terms'] ?? null,
@@ -206,6 +194,7 @@ class PurchaseOrderService
                         ? (float) $selectedQuote->unit_price
                         : (isset($input['unit_price']) ? (float) $input['unit_price'] : 0.0);
                     $lineTotal = round($qty * $unitPrice, 2);
+                    $itemSupplierId = $input['supplier_id'] ?? $prItem?->supplier_id ?? $supplier?->id;
 
                     $poItem = $po->items()->create([
                         'pr_item_id'      => $prItem?->id,
@@ -218,6 +207,7 @@ class PurchaseOrderService
                         'unit_price'      => $unitPrice,
                         'line_total'      => $lineTotal,
                         'specifications'  => $input['specifications'] ?? $prItem?->specifications,
+                        'supplier_id'     => $itemSupplierId,
                     ]);
 
                     if ($prItem && (float) $prItem->quantity !== $qty) {
@@ -234,12 +224,8 @@ class PurchaseOrderService
                 }
             } else {
                 // When no items array supplied: copy PR items.
-                // For direct purchases, only copy items belonging to the PO's supplier.
-                // Use the PR item's estimated_unit_price for direct paths (already set during financial data entry).
+                // Keep all items together in the unified purchase order.
                 $prItems = $pr->items;
-                if ($isDirectPath) {
-                    $prItems = $prItems->filter(fn ($item) => (int) ($item->supplier_id ?? 0) === (int) $supplier->id);
-                }
                 foreach ($prItems as $prItem) {
                     [$itemReference, $region] = $this->requireReferenceFields(
                         $prItem->item_reference,
@@ -262,11 +248,14 @@ class PurchaseOrderService
                         'unit_price'      => $unitPrice,
                         'line_total'      => round($qty * $unitPrice, 2),
                         'specifications'  => $prItem->specifications,
+                        'supplier_id'     => $prItem->supplier_id ?? $supplier?->id,
                     ]);
                 }
             }
 
             $this->recalculateTotals($po);
+
+
 
             app(\App\Services\NotificationService::class)->markEntityNotificationsAsRead($pr);
 
@@ -284,8 +273,9 @@ class PurchaseOrderService
                 $po,
                 'PO_CREATED',
                 'أنشأ مدير المشتريات أمر شراء من طلب معتمد.',
-                ['event_type' => 'purchase_order.created', 'from_state' => $sourceState, 'to_state' => 'PO_DRAFT', 'actor_user_id' => $user->id, 'metadata' => ['supplier_id' => $supplier->id, 'selected_quote_id' => $selectedQuote?->id]]
+                ['event_type' => 'purchase_order.created', 'from_state' => $sourceState, 'to_state' => 'PO_DRAFT', 'actor_user_id' => $user->id, 'metadata' => ['supplier_id' => $supplier?->id, 'selected_quote_id' => $selectedQuote?->id]]
             );
+
 
             AuditLog::create([
                 'user_id' => $user->id,
