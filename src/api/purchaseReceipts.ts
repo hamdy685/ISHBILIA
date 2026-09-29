@@ -12,7 +12,16 @@ export interface ReceiptOrderItem {
   specifications?: string | null;
   notes?: string | null;
   item?: { id: number; name: string; sku?: string; category?: { name: string } } | null;
-  pr_item?: { id: number; specifications?: string | null; notes?: string | null; item_description?: string | null; item_reference?: string | null; region?: string | null } | null;
+  pr_item?: {
+    id: number;
+    specifications?: string | null;
+    notes?: string | null;
+    item_description?: string | null;
+    item_reference?: string | null;
+    region?: string | null;
+    quantity?: string | number | null;
+    uom?: string | null;
+  } | null;
   is_supplementary?: boolean;
   supplement_batch?: number | null;
 }

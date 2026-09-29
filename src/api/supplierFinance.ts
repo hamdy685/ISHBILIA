@@ -38,6 +38,7 @@ export interface ApprovedReceipt {
   receipt_number: string;
   status: string;
   received_at?: string | null;
+  created_at?: string | null;
   warehouse_submitted_at?: string | null;
   site_engineer_approved_at?: string | null;
   warehouse_notes?: string | null;

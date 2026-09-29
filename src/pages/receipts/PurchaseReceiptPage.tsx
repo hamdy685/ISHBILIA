@@ -603,17 +603,16 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                   </span>
                                   <div className="flex-1">
                                     <span className="text-xs text-slate-300 block">
-                                      الوحدة المقررة: <strong className="text-white font-mono text-sm">{getUnitLabel(item.uom || '')}</strong>
+                                      الوحدة المطلوبة للاستلام: <strong className="text-white font-mono text-sm">{getUnitLabel(item.pr_item?.uom || item.uom || '')}</strong>
                                     </span>
-                                    {item.uom === 'TON' && (item.specifications?.includes('سيخ') || item.item_description?.includes('حديد')) ? (
-                                      <span className="text-[11px] text-amber-300 font-bold block mt-0.5">
-                                        ⚠️ تنبيه هام: الوحدة المعتمدة هي <strong>الطن</strong>. برجاء إدخال الوزن الإجمالي بالطن (وليس عدد الأسياخ).
-                                      </span>
-                                    ) : (
-                                      <span className="text-[11px] text-amber-300 font-bold block mt-0.5">
-                                        ⚠️ استلام أعمى: يرجى كتابة الكمية المستلمة فعلياً في الموقع بعد انتهاء الصبة من واقع بونات التوريد.
+                                    {item.pr_item?.quantity && (
+                                      <span className="text-xs text-cyan-300 font-bold block mt-0.5">
+                                        الكمية المطلوبة بالموقع: <strong className="font-mono text-white text-sm">{item.pr_item.quantity} {getUnitLabel(item.pr_item?.uom || item.uom || '')}</strong>
                                       </span>
                                     )}
+                                    <span className="text-[11px] text-amber-300 font-bold block mt-0.5">
+                                      ⚠️ يرجى إدخال الكمية المستلمة فعلياً بوحدة ({getUnitLabel(item.pr_item?.uom || item.uom || '')}) كما طلبها مهندس الموقع.
+                                    </span>
                                   </div>
                                 </div>
 
@@ -644,7 +643,7 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                       {/* Unit badge pinned inside input */}
                                       <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-emerald-950/90 border border-emerald-500/50 px-3 py-1.5 rounded-xl pointer-events-none">
                                         <span className="text-xs sm:text-sm font-black text-emerald-300">
-                                          {getUnitLabel(item.uom || '')}
+                                          {getUnitLabel(item.pr_item?.uom || item.uom || '')}
                                         </span>
                                       </div>
                                     </div>
@@ -1060,45 +1059,61 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
                                   {/* Warehouse Recorded Quantity or Ordered Quantity for SITE_DIRECT */}
-                                  <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-4 flex flex-col justify-between space-y-1">
-                                    <span className="text-xs font-bold text-slate-400">
-                                      {receipt.receipt_type === 'SITE_DIRECT' ? 'الكمية المطلوبة للتوريد المباشر بالموقع:' : 'الكمية المسجلة من أمين المخزن:'}
-                                    </span>
-                                    <div className="font-mono text-xl sm:text-2xl font-black text-cyan-300 flex items-baseline gap-2 mt-1">
-                                      <span>{item.received_quantity}</span>
-                                      <span className="text-base font-bold text-slate-300">{getUnitLabel(item.purchase_order_item?.uom || '')}</span>
-                                    </div>
-                                  </div>
+                                  {(() => {
+                                    const poItem = item.purchase_order_item;
+                                    const prItem = poItem?.pr_item;
+                                    const poQty = Number(poItem?.quantity || 0);
+                                    const prQty = Number(prItem?.quantity || 0);
+                                    const isDiffUom = Boolean(prItem?.uom && poItem?.uom && prItem.uom !== poItem.uom && poQty > 0 && prQty > 0);
+                                    const displayReceivedQty = isDiffUom
+                                      ? (Number(item.received_quantity) > poQty * 2 ? Number(item.received_quantity) : Math.round(Number(item.received_quantity) * (prQty / poQty)))
+                                      : item.received_quantity;
+                                    const siteUom = prItem?.uom || poItem?.uom || '';
 
-                                  {/* Site Engineer Confirmed Quantity */}
-                                  <div className="rounded-2xl border-2 border-emerald-500/80 bg-emerald-950/30 p-4 space-y-2 shadow-inner">
-                                    <div className="flex items-center justify-between">
-                                      <label htmlFor={`site-qty-${key}`} className="text-xs sm:text-sm font-black text-emerald-300 flex items-center gap-1.5">
-                                        <span>👷</span>
-                                        <span>الكمية المعتمدة ميدانياً:</span>
-                                      </label>
-                                      <span className="text-[11px] font-bold text-emerald-400 bg-emerald-950 border border-emerald-500/50 px-2 py-0.5 rounded-full">
-                                        جاهزة للاعتماد
-                                      </span>
-                                    </div>
-                                    <div className="relative flex items-center">
-                                      <input
-                                        id={`site-qty-${key}`}
-                                        type="number"
-                                        min="0"
-                                        step="any"
-                                        placeholder="أدخل الكمية المعتمدة..."
-                                        value={val}
-                                        onChange={(e) => setQuantities({ ...quantities, [key]: e.target.value })}
-                                        className="w-full h-12 rounded-xl border-2 border-emerald-400 bg-slate-900/95 pl-24 pr-3.5 text-lg sm:text-xl font-black text-emerald-200 placeholder:text-slate-500 focus:border-emerald-300 focus:ring-4 focus:ring-emerald-500/30 focus:outline-none transition-all shadow-inner"
-                                      />
-                                      <div className="absolute left-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-emerald-950/90 border border-emerald-500/50 px-2.5 py-1 rounded-lg pointer-events-none">
-                                        <span className="text-xs font-black text-emerald-300">
-                                          {getUnitLabel(item.purchase_order_item?.uom || '')}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </div>
+                                    return (
+                                      <>
+                                        <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-4 flex flex-col justify-between space-y-1">
+                                          <span className="text-xs font-bold text-slate-400">
+                                            {receipt.receipt_type === 'SITE_DIRECT' ? 'الكمية المطلوبة للتوريد المباشر بالموقع:' : 'الكمية المسجلة من أمين المخزن:'}
+                                          </span>
+                                          <div className="font-mono text-xl sm:text-2xl font-black text-cyan-300 flex items-baseline gap-2 mt-1">
+                                            <span>{displayReceivedQty}</span>
+                                            <span className="text-base font-bold text-slate-300">{getUnitLabel(siteUom)}</span>
+                                          </div>
+                                        </div>
+
+                                        {/* Site Engineer Confirmed Quantity */}
+                                        <div className="rounded-2xl border-2 border-emerald-500/80 bg-emerald-950/30 p-4 space-y-2 shadow-inner">
+                                          <div className="flex items-center justify-between">
+                                            <label htmlFor={`site-qty-${key}`} className="text-xs sm:text-sm font-black text-emerald-300 flex items-center gap-1.5">
+                                              <span>👷</span>
+                                              <span>الكمية المعتمدة ميدانياً:</span>
+                                            </label>
+                                            <span className="text-[11px] font-bold text-emerald-400 bg-emerald-950 border border-emerald-500/50 px-2 py-0.5 rounded-full">
+                                              جاهزة للاعتماد
+                                            </span>
+                                          </div>
+                                          <div className="relative flex items-center">
+                                            <input
+                                              id={`site-qty-${key}`}
+                                              type="number"
+                                              min="0"
+                                              step="any"
+                                              placeholder="أدخل الكمية المعتمدة..."
+                                              value={val}
+                                              onChange={(e) => setQuantities({ ...quantities, [key]: e.target.value })}
+                                              className="w-full h-12 rounded-xl border-2 border-emerald-400 bg-slate-900/95 pl-24 pr-3.5 text-lg sm:text-xl font-black text-emerald-200 placeholder:text-slate-500 focus:border-emerald-300 focus:ring-4 focus:ring-emerald-500/30 focus:outline-none transition-all shadow-inner"
+                                            />
+                                            <div className="absolute left-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-emerald-950/90 border border-emerald-500/50 px-2.5 py-1 rounded-lg pointer-events-none">
+                                              <span className="text-xs font-black text-emerald-300">
+                                                {getUnitLabel(siteUom)}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </>
+                                    );
+                                  })()}
                                 </div>
 
                                 <div className="space-y-1 pt-1">
@@ -1342,24 +1357,48 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                               )}
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-                              <div className="bg-slate-900/90 p-3 rounded-xl border border-slate-800 flex items-center justify-between text-xs sm:text-sm">
-                                <span className="text-slate-400 font-bold flex items-center gap-1.5">
-                                  <span>📋</span> الكمية المطلوبة بأمر الشراء:
-                                </span>
-                                <span className="font-mono font-black text-cyan-300 text-sm sm:text-base">
-                                  {item.ordered_quantity ?? item.purchase_order_item?.quantity ?? '—'} {getUnitLabel(item.purchase_order_item?.uom || '')}
-                                </span>
-                              </div>
-                              <div className="bg-emerald-950/40 p-3 rounded-xl border border-emerald-800/60 flex items-center justify-between text-xs sm:text-sm">
-                                <span className="text-emerald-300 font-bold flex items-center gap-1.5">
-                                  <span>✓</span> الكمية الفعلية المستلمة:
-                                </span>
-                                <span className="font-mono font-black text-emerald-200 text-sm sm:text-base">
-                                  {item.received_quantity} {getUnitLabel(item.purchase_order_item?.uom || '')}
-                                </span>
-                              </div>
-                            </div>
+                            {(() => {
+                              const poItem = item.purchase_order_item;
+                              const prItem = poItem?.pr_item;
+                              const poQty = Number(poItem?.quantity || 0);
+                              const prQty = Number(prItem?.quantity || 0);
+                              const isDiffUom = Boolean(prItem?.uom && poItem?.uom && prItem.uom !== poItem.uom && poQty > 0 && prQty > 0);
+                              const displayReceivedQty = isDiffUom
+                                ? (Number(item.received_quantity) > poQty * 2 ? Number(item.received_quantity) : Math.round(Number(item.received_quantity) * (prQty / poQty)))
+                                : item.received_quantity;
+                              const displayUom = prItem?.uom || poItem?.uom || '';
+
+                              return (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                                  <div className="bg-slate-900/90 p-3 rounded-xl border border-slate-800 flex items-center justify-between text-xs sm:text-sm">
+                                    <span className="text-slate-400 font-bold flex items-center gap-1.5">
+                                      <span>📋</span> الكمية المطلوبة بأمر الشراء:
+                                    </span>
+                                    <span className="font-mono font-black text-cyan-300 text-sm sm:text-base">
+                                      {item.ordered_quantity ?? poItem?.quantity ?? '—'} {getUnitLabel(poItem?.uom || '')}
+                                      {isDiffUom && prItem?.quantity && (
+                                        <span className="block text-[11px] font-normal text-slate-400">
+                                          ({prItem.quantity} {getUnitLabel(displayUom)})
+                                        </span>
+                                      )}
+                                    </span>
+                                  </div>
+                                  <div className="bg-emerald-950/40 p-3 rounded-xl border border-emerald-800/60 flex items-center justify-between text-xs sm:text-sm">
+                                    <span className="text-emerald-300 font-bold flex items-center gap-1.5">
+                                      <span>✓</span> الكمية الفعلية المستلمة:
+                                    </span>
+                                    <span className="font-mono font-black text-emerald-200 text-sm sm:text-base">
+                                      {displayReceivedQty} {getUnitLabel(displayUom)}
+                                      {isDiffUom && (
+                                        <span className="block text-[11px] font-normal text-slate-400">
+                                          (ما يعادل {item.received_quantity} {getUnitLabel(poItem?.uom || '')})
+                                        </span>
+                                      )}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })()}
                             {item.notes && (
                               <p className="text-xs text-slate-400 bg-slate-900/60 p-2 rounded-lg">
                                 ملاحظات: {item.notes}

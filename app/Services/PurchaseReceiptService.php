@@ -70,7 +70,12 @@ class PurchaseReceiptService
         ?string $notes = null,
         ?array $photoData = null
     ): PurchaseReceipt {
-        $purchaseOrder->loadMissing(['purchaseRequest.targetDepartment', 'purchaseRequest.department', 'purchaseRequest.assignedReviewer.department', 'items']);
+        $purchaseOrder->loadMissing([
+            'purchaseRequest.targetDepartment',
+            'purchaseRequest.department',
+            'purchaseRequest.assignedReviewer.department',
+            'items.prItem',
+        ]);
 
         if (! $purchaseOrder->requiresWarehouseReceipt()) {
             throw new \RuntimeException('لا يمكن لأمين المخزن استلام هذا الطلب؛ حيث تم تحديده من قبل المراجع كتوريد مباشر لا يتطلب المرور على المخزن.');
@@ -140,11 +145,30 @@ class PurchaseReceiptService
                     throw ValidationException::withMessages(['items' => ['الكمية المستلمة لا يمكن أن تكون سالبة.']]);
                 }
 
+                $prItem = $orderItem->prItem;
+                $finalReceivedQuantity = $receivedQuantity;
+                $noteText = $item['notes'] ?? null;
+
+                // Handle case where requester requested in PR UOM (e.g. BAR) and PO was issued in another UOM (e.g. TON)
+                if ($prItem && $prItem->uom && $orderItem->uom && strtoupper((string)$prItem->uom) !== strtoupper((string)$orderItem->uom)) {
+                    $prQty = (float) $prItem->quantity;
+                    $poQty = (float) $orderItem->quantity;
+                    if ($prQty > 0 && $poQty > 0) {
+                        $ratio = $poQty / $prQty;
+                        // If entered quantity is in the scale of PR items (e.g. entered 40 bars for a 0.416 ton PO item)
+                        if ($receivedQuantity > ($poQty * 2) && $ratio < 0.2) {
+                            $finalReceivedQuantity = round($receivedQuantity * $ratio, 3);
+                            $notePrefix = "[المستلم بالموقع: {$receivedQuantity} {$prItem->uom}]";
+                            $noteText = $noteText ? "{$notePrefix} - {$noteText}" : $notePrefix;
+                        }
+                    }
+                }
+
                 $receipt->items()->create([
                     'purchase_order_item_id' => $orderItem->id,
                     'ordered_quantity' => $orderItem->quantity,
-                    'received_quantity' => $receivedQuantity,
-                    'notes' => $item['notes'] ?? null,
+                    'received_quantity' => $finalReceivedQuantity,
+                    'notes' => $noteText,
                 ]);
             }
 
@@ -224,7 +248,7 @@ class PurchaseReceiptService
 
     public function updateBySiteEngineer(User $siteEngineer, PurchaseReceipt $receipt, array $items, ?string $notes = null): PurchaseReceipt
     {
-        $receipt->loadMissing(['items', 'purchaseOrder.items']);
+        $receipt->loadMissing(['items.purchaseOrderItem.prItem', 'purchaseOrder.items.prItem']);
         if ((int) $receipt->site_engineer_user_id !== (int) $siteEngineer->id) {
             throw new \RuntimeException('هذا الإذن غير مخصص لمهندس الموقع الحالي.');
         }
@@ -243,9 +267,28 @@ class PurchaseReceiptService
                 if ($receivedQuantity < 0) {
                     throw ValidationException::withMessages(['items' => ['الكمية المستلمة لا يمكن أن تكون سالبة.']]);
                 }
+
+                $orderItem = $receiptItem->purchaseOrderItem;
+                $prItem = $orderItem?->prItem;
+                $finalReceivedQuantity = $receivedQuantity;
+                $noteText = $input['notes'] ?? $receiptItem->notes;
+
+                if ($prItem && $prItem->uom && $orderItem && $orderItem->uom && strtoupper((string)$prItem->uom) !== strtoupper((string)$orderItem->uom)) {
+                    $prQty = (float) $prItem->quantity;
+                    $poQty = (float) $orderItem->quantity;
+                    if ($prQty > 0 && $poQty > 0) {
+                        $ratio = $poQty / $prQty;
+                        if ($receivedQuantity > ($poQty * 2) && $ratio < 0.2) {
+                            $finalReceivedQuantity = round($receivedQuantity * $ratio, 3);
+                            $notePrefix = "[المعتمد بالموقع: {$receivedQuantity} {$prItem->uom}]";
+                            $noteText = $noteText ? "{$notePrefix} - {$noteText}" : $notePrefix;
+                        }
+                    }
+                }
+
                 $receiptItem->update([
-                    'received_quantity' => $receivedQuantity,
-                    'notes' => $input['notes'] ?? $receiptItem->notes,
+                    'received_quantity' => $finalReceivedQuantity,
+                    'notes' => $noteText,
                 ]);
             }
             if ($notes !== null) {

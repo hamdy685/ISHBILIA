@@ -61,77 +61,124 @@ export const PurchaseRequestPrintModal: React.FC<PurchaseRequestPrintModalProps>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto bg-slate-900 p-3 sm:p-6 print:overflow-visible print:bg-white print:p-0">
-          <div className="print-document mx-auto max-w-5xl bg-white p-3 sm:p-6 text-slate-900 print:max-w-none print:p-3">
-            <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-4 border-b-2 border-slate-900 pb-3">
-              <div className="space-y-1 text-right text-sm font-bold">
-                <div>التاريخ: <span className="font-normal">{formatDate(pr.created_at)}</span></div>
-                <div>القسم: <span className="font-normal">{pr.department?.name || '—'}</span></div>
-                <div>صاحب الطلب: <span className="font-normal">{pr.requester?.name || '—'}</span></div>
-              </div>
-              <div className="text-center">
-                <img src="/eshbelia-logo.png" alt="شعار شركة اشبيلية" className="document-logo mx-auto h-16 w-auto object-contain" />
-                <div className="text-2xl font-black">طلب شراء</div>
-                <div className="mt-1 text-xs font-bold">شركة اشبيلية</div>
-              </div>
-              <div className="text-left text-sm font-bold space-y-1">
-                <div>رقم الطلب: <span className="font-mono font-normal">{pr.request_number}</span></div>
-                {pr.request_type !== 'OFFICE_SUPPLIES' && (
-                  <>
-                    <div>قطعة الأرض: <span className="font-mono font-normal">{pr.parcel_reference || pr.items?.[0]?.item_reference || '—'}</span></div>
-                    <div>المنطقة: <span className="font-normal">{pr.region || pr.items?.[0]?.region || '—'}</span></div>
-                  </>
-                )}
+          <div className="print-document mx-auto max-w-5xl bg-white p-4 sm:p-6 text-black print:max-w-none print:p-2 space-y-3.5">
+            {/* Header: Logo on Top Right, Title Center, Metadata Left */}
+            <div className="border-b-2 border-black pb-3">
+              <div className="flex items-start justify-between gap-4">
+                {/* 1. TOP RIGHT: Logo + Company Name */}
+                <div className="text-right flex items-center gap-3 shrink-0">
+                  <img
+                    src="/eshbelia-logo.png"
+                    alt="شعار شركة اشبيلية"
+                    className="h-14 sm:h-16 w-auto object-contain"
+                  />
+                  <div className="text-[11px] leading-snug">
+                    <div className="font-black text-sm text-black">شركة إشبيلية</div>
+                    <div className="text-[10px] text-slate-800 font-bold">للتطوير العقاري والمقاولات</div>
+                  </div>
+                </div>
+
+                {/* 2. CENTER: Title & PR Number */}
+                <div className="text-center self-center">
+                  <h1 className="text-xl font-black text-black border-b-2 border-black pb-0.5 inline-block">
+                    طلب شراء (Purchase Request)
+                  </h1>
+                  <div className="text-xs font-mono font-black text-black mt-1">
+                    رقم: {pr.request_number}
+                  </div>
+                </div>
+
+                {/* 3. TOP LEFT: Metadata */}
+                <div className="text-left text-xs font-bold text-black space-y-0.5" dir="rtl">
+                  <div><strong>التاريخ:</strong> <span className="font-mono">{formatDate(pr.created_at)}</span></div>
+                  <div><strong>القسم:</strong> <span>{pr.department?.name || '—'}</span></div>
+                  <div><strong>المشروع:</strong> <span>{(pr as any).project_name || pr.department?.name || 'موقع الشركة'}</span></div>
+                  <div><strong>قطعة الأرض:</strong> <span className="font-mono">{pr.parcel_reference || pr.items?.[0]?.item_reference || '—'}</span></div>
+                  <div><strong>المنطقة:</strong> <span>{pr.region || pr.items?.[0]?.region || '—'}</span></div>
+                </div>
               </div>
             </div>
 
+            {/* Excel Grid Table */}
             <div className="overflow-x-auto print:overflow-visible">
-            <table className="mt-3 w-full border-collapse border border-slate-900 text-right text-[10px]">
-              <thead>
-                <tr className="bg-slate-100 font-black">
-                  <th className="border border-slate-900 p-2 text-center">م</th>
-                  <th className="border border-slate-900 p-2">رقم قطعة الأرض</th>
-                  <th className="border border-slate-900 p-2">المنطقة</th>
-                  <th className="border border-slate-900 p-2">اسم الصنف</th>
-                  <th className="border border-slate-900 p-2 text-center">الوحدة</th>
-                  <th className="border border-slate-900 p-2 text-center">الكمية</th>
-                  <th className="border border-slate-900 p-2">المواصفات الفنية</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(pr.items || []).map((item, index) => (
-                  <tr key={item.id || index} className="h-6">
-                    <td className="border border-slate-900 p-2 text-center">{index + 1}</td>
-                    <td className="border border-slate-900 p-2 font-mono">{item.item_reference || pr.parcel_reference || '—'}</td>
-                    <td className="border border-slate-900 p-2">{item.region || pr.region || '—'}</td>
-                    <td className="border border-slate-900 p-2 font-bold">{item.item_description}</td>
-                    <td className="border border-slate-900 p-2 text-center">
-                      <div>{getUnitLabel(item.uom)}</div>
-                      {extractRebarInfo(item.specifications) && (
-                        <div className="text-[9px] font-bold text-slate-800">
-                          ({extractRebarInfo(item.specifications)?.barCount} سيخ {extractRebarInfo(item.specifications)?.linia})
-                        </div>
-                      )}
-                    </td>
-                    <td className="border border-slate-900 p-2 text-center">{formatCleanQty(item.quantity)}</td>
-                    <td className="border border-slate-900 p-2">{item.specifications || '—'}</td>
+              <table className="w-full border-collapse border-2 border-black text-right text-[10px]">
+                <thead>
+                  <tr className="bg-slate-100 font-black border-b-2 border-black text-black">
+                    <th className="border border-black p-2 text-center w-8">م</th>
+                    <th className="border border-black p-2">الصنف</th>
+                    <th className="border border-black p-2 text-center w-16">الوحدة</th>
+                    <th className="border border-black p-2 text-center w-16">الكمية</th>
+                    <th className="border border-black p-2 text-center w-24">تاريخ التوريد</th>
+                    <th className="border border-black p-2">المواصفات الفنية</th>
                   </tr>
-                ))}
-                {Array.from({ length: PRINT_EXTRA_ROWS }, (_, extraIndex) => {
-                  const rowNumber = (pr.items?.length || 0) + extraIndex + 1;
-                  return (
-                    <tr key={`blank-print-row-${extraIndex}`} className="h-6">
-                      <td className="border border-slate-900 p-2 text-center">{rowNumber}</td>
-                      <td className="border border-slate-900 p-2">{' '}</td>
-                      <td className="border border-slate-900 p-2">{' '}</td>
-                      <td className="border border-slate-900 p-2">{' '}</td>
-                      <td className="border border-slate-900 p-2 text-center">{' '}</td>
-                      <td className="border border-slate-900 p-2 text-center">{' '}</td>
-                      <td className="border border-slate-900 p-2">{' '}</td>
+                </thead>
+                <tbody>
+                  {(pr.items || []).map((item, index) => (
+                    <tr key={item.id || index} className="border-b border-black">
+                      <td className="border border-black p-2 text-center font-bold">{index + 1}</td>
+                      <td className="border border-black p-2 font-bold">{item.item_description}</td>
+                      <td className="border border-black p-2 text-center font-bold">
+                        <div>{getUnitLabel(item.uom)}</div>
+                        {extractRebarInfo(item.specifications) && (
+                          <div className="text-[9px] font-bold text-slate-800">
+                            ({extractRebarInfo(item.specifications)?.barCount} سيخ {extractRebarInfo(item.specifications)?.linia})
+                          </div>
+                        )}
+                      </td>
+                      <td className="border border-black p-2 text-center font-mono font-black">{formatCleanQty(item.quantity)}</td>
+                      <td className="border border-black p-2 text-center font-mono">{formatDate(item.date_needed || pr.date_needed)}</td>
+                      <td className="border border-black p-2 text-[9.5px]">{item.specifications || '—'}</td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  ))}
+                  {Array.from({ length: Math.max(PRINT_EXTRA_ROWS - (pr.items?.length || 0), 2) }, (_, extraIndex) => {
+                    const rowNumber = (pr.items?.length || 0) + extraIndex + 1;
+                    return (
+                      <tr key={`blank-print-row-${extraIndex}`} className="h-6 border-b border-black">
+                        <td className="border border-black p-1.5 text-center font-mono text-slate-400">{rowNumber}</td>
+                        <td className="border border-black p-1.5">{' '}</td>
+                        <td className="border border-black p-1.5 text-center">{' '}</td>
+                        <td className="border border-black p-1.5 text-center">{' '}</td>
+                        <td className="border border-black p-1.5 text-center">{' '}</td>
+                        <td className="border border-black p-1.5">{' '}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Excel Signatures Grid Table matching user's Image 3 */}
+            <div className="pt-2">
+              <table className="w-full border-collapse border-2 border-black text-center text-[10px]">
+                <thead>
+                  <tr className="bg-slate-100 border-b-2 border-black font-black">
+                    <th className="border border-black p-1.5 w-1/4">مقدم الطلب</th>
+                    <th className="border border-black p-1.5 w-1/4">الجودة / مهندس الموقع</th>
+                    <th className="border border-black p-1.5 w-1/4">المشتريات</th>
+                    <th className="border border-black p-1.5 w-1/4">يعتمد (المدير العام)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="h-16">
+                    <td className="border border-black p-1.5 align-top font-bold">
+                      <div>{pr.requester?.name || 'مقدم الطلب'}</div>
+                      <div className="text-[9px] text-slate-600 font-normal mt-3">التوقيع: ..............</div>
+                    </td>
+                    <td className="border border-black p-1.5 align-top font-bold">
+                      <div>{pr.site_engineer?.name || pr.assigned_reviewer?.name || 'مهندس الموقع'}</div>
+                      <div className="text-[9px] text-slate-600 font-normal mt-3">التوقيع: ..............</div>
+                    </td>
+                    <td className="border border-black p-1.5 align-top font-bold">
+                      <div>إدارة المشتريات</div>
+                      <div className="text-[9px] text-slate-600 font-normal mt-3">التوقيع: ..............</div>
+                    </td>
+                    <td className="border border-black p-1.5 align-top font-bold">
+                      <div>المهندس محمد عبدالكريم</div>
+                      <div className="text-[9px] text-slate-600 font-normal mt-3">التوقيع: ..............</div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
 
           </div>

@@ -541,7 +541,7 @@ textarea:focus {
     margin: 0 auto 4px !important;
   }
 
-  /* تنسيق الجداول للطباعة A4 بدون تداخل أو تكسير نصوص */
+  /* تنسيق الجداول للطباعة A4 بأسلوب إكسل الواضح والمسطر */
   table,
   .print-document table {
     width: 100% !important;
@@ -551,6 +551,7 @@ textarea:focus {
     table-layout: auto !important;
     page-break-inside: auto !important;
     border-collapse: collapse !important;
+    border: 2px solid #000000 !important;
     font-size: 10px !important;
   }
 
@@ -565,7 +566,7 @@ textarea:focus {
     word-break: keep-all !important;
     overflow-wrap: normal !important;
     hyphens: none !important;
-    border: 1px solid #94a3b8 !important;
+    border: 1px solid #000000 !important;
     color: #000000 !important;
     vertical-align: middle !important;
     text-align: right !important;
@@ -573,11 +574,13 @@ textarea:focus {
 
   th,
   .print-document th {
-    background-color: #f1f5f9 !important;
-    font-weight: 700 !important;
+    background-color: #f8fafc !important;
+    font-weight: 800 !important;
     font-size: 10px !important;
     text-align: center !important;
     white-space: nowrap !important;
+    border: 1px solid #000000 !important;
+    border-bottom: 2px solid #000000 !important;
   }
 
   th.whitespace-nowrap,

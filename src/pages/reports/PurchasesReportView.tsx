@@ -704,10 +704,40 @@ export const PurchasesReportView: React.FC = () => {
         )}
 
         {/* ── REAL EXCEL SPREADSHEET GRID (WHITE PAPER SHEET) ── */}
-        <div className="rounded-2xl border-2 border-slate-300 bg-white text-slate-900 shadow-2xl overflow-hidden">
+        <div className="rounded-2xl border-2 border-slate-300 bg-white text-slate-900 shadow-2xl overflow-hidden print:border-none print:shadow-none print:rounded-none">
           
+          {/* Printable Header: Logo Top Right, Title Center, Date Left (Appears in Print) */}
+          <div className="hidden print:flex items-start justify-between pb-3 border-b-2 border-black p-4 bg-white text-black">
+            {/* 1. TOP RIGHT: Logo + Company Name */}
+            <div className="text-right flex items-center gap-3 shrink-0">
+              <img src="/eshbelia-logo.png" alt="شعار شركة اشبيلية" className="h-14 w-auto object-contain" />
+              <div className="text-[11px] leading-snug">
+                <div className="font-black text-sm text-black">شركة إشبيلية</div>
+                <div className="text-[10px] text-slate-800 font-bold">للتطوير والاستثمار العقاري</div>
+              </div>
+            </div>
+
+            {/* 2. CENTER: Title */}
+            <div className="text-center self-center">
+              <h1 className="text-base font-black text-black border-b-2 border-black pb-0.5 inline-block">
+                تقرير المشتريات والتوريدات المعتمد ({dynamicReportTitle})
+              </h1>
+              <div className="text-[10px] font-bold text-slate-700 mt-0.5">
+                ورقة إكسل المحاسبية — 12 عموداً
+              </div>
+            </div>
+
+            {/* 3. TOP LEFT: Metadata */}
+            <div className="text-left font-mono text-[10px] font-bold text-black" dir="rtl">
+              <div><strong>تاريخ الطباعة:</strong> {new Date().toLocaleDateString('ar-EG')}</div>
+              <div><strong>أوامر الشراء:</strong> {liveTotals.uniqueOrders}</div>
+              <div><strong>الموردين:</strong> {liveTotals.uniqueSuppliers}</div>
+              <div><strong>إجمالي البنود:</strong> {filteredRows.length}</div>
+            </div>
+          </div>
+
           {/* Sheet Tab Bar at top */}
-          <div className="bg-[#e9ecef] border-b border-slate-300 px-4 py-2 flex items-center justify-between text-xs">
+          <div className="bg-[#e9ecef] border-b border-slate-300 px-4 py-2 flex items-center justify-between text-xs print:hidden">
             <div className="flex items-center gap-2 font-bold text-slate-700">
               <span className="text-emerald-700">📊</span>
               <span>ورقة العمل: مشتريات وتوريدات شركة اشبيلية ({dynamicReportTitle})</span>
@@ -736,7 +766,7 @@ export const PurchasesReportView: React.FC = () => {
                 
                 {/* 1. Excel Column Letter Headers (A, B, C, D...) */}
                 <thead className="sticky top-0 z-20 bg-[#f1f5f9] border-b-2 border-slate-400 text-slate-700 select-none">
-                  <tr className="text-[11px] font-mono text-center font-extrabold">
+                  <tr className="text-[11px] font-mono text-center font-extrabold print:hidden">
                     <th className="border border-slate-300 px-1 py-1 w-8 bg-[#e2e8f0]">#</th>
                     <th className="border border-slate-300 px-2 py-1 bg-[#e2e8f0]">A</th>
                     <th className="border border-slate-300 px-2 py-1 bg-[#e2e8f0]">B</th>

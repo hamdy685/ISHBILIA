@@ -63,115 +63,156 @@ export const PurchaseOrderPrintModal: React.FC<PurchaseOrderPrintModalProps> = (
         </div>
 
         <div className="flex-1 overflow-y-auto bg-slate-900 p-3 sm:p-6 print:overflow-visible print:bg-white print:p-0">
-          <div className="print-document mx-auto max-w-5xl bg-white p-3 sm:p-6 text-slate-900 print:max-w-none print:p-3">
-            <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-4 border-b-2 border-slate-900 pb-3">
-              <div className="space-y-1 text-right text-sm font-bold">
-                <div>التاريخ: <span className="font-normal">{formatDate(po.created_at)}</span></div>
-                <div>رقم الطلب: <span className="font-mono font-normal">{po.purchase_request?.request_number || '—'}</span></div>
-                <div>القسم: <span className="font-normal">{po.department?.name || po.purchase_request?.department?.name || '—'}</span></div>
-                <div>صاحب الطلب: <span className="font-normal">{po.requested_by?.name || po.purchase_request?.requester?.name || '—'}</span></div>
-                <div>رئيس القسم المعتمد: <span className="font-normal">{po.department_approver?.name || po.purchase_request?.assigned_reviewer?.name || '—'}</span></div>
-                <div>اعتماد المدير التنفيذي: <span className="font-normal">{po.executive_approver?.name || 'المهندس محمد عبدالكريم'}</span></div>
-              </div>
-              <div className="text-center">
-                <img src="/eshbelia-logo.png" alt="شعار شركة اشبيلية" className="document-logo mx-auto h-16 w-auto object-contain" />
-                <div className="text-2xl font-black">أمر شراء</div>
-                <div className="mt-1 text-xs font-bold">شركة اشبيلية</div>
-              </div>
-              <div className="text-left text-sm font-bold">
-                <div>رقم أمر الشراء: <span className="font-mono font-normal">{po.po_number}</span></div>
+          <div className="print-document mx-auto max-w-5xl bg-white p-4 sm:p-6 text-black print:max-w-none print:p-2 space-y-3.5">
+            {/* Header: Logo on Top Right, Title Center, Metadata Left */}
+            <div className="border-b-2 border-black pb-3">
+              <div className="flex items-start justify-between gap-4">
+                {/* 1. TOP RIGHT: Logo + Company Name */}
+                <div className="text-right flex items-center gap-3 shrink-0">
+                  <img
+                    src="/eshbelia-logo.png"
+                    alt="شعار شركة اشبيلية"
+                    className="h-14 sm:h-16 w-auto object-contain"
+                  />
+                  <div className="text-[11px] leading-snug">
+                    <div className="font-black text-sm text-black">شركة إشبيلية</div>
+                    <div className="text-[10px] text-slate-800 font-bold">للتطوير العقاري والمقاولات</div>
+                  </div>
+                </div>
+
+                {/* 2. CENTER: Title & PO Number */}
+                <div className="text-center self-center">
+                  <h1 className="text-xl font-black text-black border-b-2 border-black pb-0.5 inline-block">
+                    أمر شراء (Purchase Order)
+                  </h1>
+                  <div className="text-xs font-mono font-black text-black mt-1">
+                    رقم: {po.po_number}
+                  </div>
+                </div>
+
+                {/* 3. TOP LEFT: Metadata */}
+                <div className="text-left text-xs font-bold text-black space-y-0.5" dir="rtl">
+                  <div><strong>التاريخ:</strong> <span className="font-mono">{formatDate(po.created_at)}</span></div>
+                  <div><strong>رقم الطلب:</strong> <span className="font-mono">{po.purchase_request?.request_number || '—'}</span></div>
+                  <div><strong>القسم:</strong> <span>{po.department?.name || po.purchase_request?.department?.name || '—'}</span></div>
+                  <div><strong>المورد:</strong> <span>{po.supplier?.company_name || '—'}</span></div>
+                  <div><strong>صاحب الطلب:</strong> <span>{po.requested_by?.name || po.purchase_request?.requester?.name || '—'}</span></div>
+                </div>
               </div>
             </div>
 
+            {/* Excel Grid Table */}
             <div className="overflow-x-auto print:overflow-visible">
-            <table className="mt-3 w-full border-collapse border border-slate-900 text-right text-[10px]">
-              <thead>
-                <tr className="bg-[#5B9BD5] font-black">
-                  <th className="border border-slate-900 p-2 text-center">م</th>
-                  <th className="border border-slate-900 p-2">رقم قطعة الأرض</th>
-                  <th className="border border-slate-900 p-2">المنطقة</th>
-                  <th className="border border-slate-900 p-2">اسم الصنف</th>
-                  <th className="border border-slate-900 p-2 text-center">الوحدة</th>
-                  <th className="border border-slate-900 p-2 text-center">الكمية</th>
-                  <th className="border border-slate-900 p-2 text-center">السعر</th>
-                  <th className="border border-slate-900 p-2 text-center">الإجمالي</th>
-                  <th className="border border-slate-900 p-2">ملاحظات</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(po.items || []).map((item, index) => (
-                  <tr key={item.id || index} className="h-6">
-                    <td className="border border-slate-900 p-2 text-center">{index + 1}</td>
-                    <td className="border border-slate-900 p-2 font-mono">{item.item_reference || '—'}</td>
-                    <td className="border border-slate-900 p-2">{item.region || '—'}</td>
-                    <td className="border border-slate-900 p-2 font-bold">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span>{item.item_name || item.item_description}</span>
-                        <SupplementItemBadge
-                          isSupplementary={item.is_supplementary}
-                          batchNumber={item.supplement_batch}
-                        />
-                      </div>
-                    </td>
-                    <td className="border border-slate-900 p-2 text-center">
-                      <div>{getUnitLabel(item.uom || 'PCS')}</div>
-                      {extractRebarInfo(item.specifications) && (
-                        <div className="text-[9px] font-bold text-slate-800">
-                          ({extractRebarInfo(item.specifications)?.barCount} سيخ {extractRebarInfo(item.specifications)?.linia})
-                        </div>
-                      )}
-                    </td>
-                    <td className="border border-slate-900 p-2 text-center">{formatCleanQty(item.quantity)}</td>
-                    <td className="border border-slate-900 p-2 text-center">{formatCleanNumber(item.unit_price)}</td>
-                    <td className="border border-slate-900 p-2 text-center">{formatCleanNumber(item.line_total)}</td>
-                    <td className="border border-slate-900 p-2">{item.specifications || '—'}</td>
+              <table className="w-full border-collapse border-2 border-black text-right text-[10px]">
+                <thead>
+                  <tr className="bg-slate-100 font-black border-b-2 border-black text-black">
+                    <th className="border border-black p-2 text-center w-8">م</th>
+                    <th className="border border-black p-2">رقم قطعة الأرض</th>
+                    <th className="border border-black p-2">المنطقة</th>
+                    <th className="border border-black p-2">اسم الصنف</th>
+                    <th className="border border-black p-2 text-center">الوحدة</th>
+                    <th className="border border-black p-2 text-center">الكمية</th>
+                    <th className="border border-slate-900 p-2 text-center">السعر</th>
+                    <th className="border border-slate-900 p-2 text-center">الإجمالي</th>
+                    <th className="border border-slate-900 p-2">ملاحظات ومواصفات</th>
                   </tr>
-                ))}
-                {Array.from({ length: PRINT_EXTRA_ROWS }, (_, extraIndex) => {
-                  const rowNumber = (po.items?.length || 0) + extraIndex + 1;
-                  return (
-                    <tr key={`blank-print-row-${extraIndex}`} className="h-6">
-                      <td className="border border-slate-900 p-2 text-center">{rowNumber}</td>
-                      <td className="border border-slate-900 p-2">{' '}</td>
-                      <td className="border border-slate-900 p-2">{' '}</td>
-                      <td className="border border-slate-900 p-2">{' '}</td>
-                      <td className="border border-slate-900 p-2 text-center">{' '}</td>
-                      <td className="border border-slate-900 p-2 text-center">{' '}</td>
-                      <td className="border border-slate-900 p-2 text-center">{' '}</td>
-                      <td className="border border-slate-900 p-2 text-center">{' '}</td>
-                      <td className="border border-slate-900 p-2">{' '}</td>
+                </thead>
+                <tbody>
+                  {(po.items || []).map((item, index) => (
+                    <tr key={item.id || index} className="border-b border-black">
+                      <td className="border border-black p-2 text-center font-bold">{index + 1}</td>
+                      <td className="border border-black p-2 font-mono font-bold">{item.item_reference || '—'}</td>
+                      <td className="border border-black p-2">{item.region || '—'}</td>
+                      <td className="border border-black p-2 font-bold">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span>{item.item_name || item.item_description}</span>
+                          <SupplementItemBadge
+                            isSupplementary={item.is_supplementary}
+                            batchNumber={item.supplement_batch}
+                          />
+                        </div>
+                      </td>
+                      <td className="border border-black p-2 text-center font-bold">
+                        <div>{getUnitLabel(item.uom || 'PCS')}</div>
+                        {extractRebarInfo(item.specifications) && (
+                          <div className="text-[9px] font-bold text-slate-800">
+                            ({extractRebarInfo(item.specifications)?.barCount} سيخ {extractRebarInfo(item.specifications)?.linia})
+                          </div>
+                        )}
+                      </td>
+                      <td className="border border-black p-2 text-center font-mono font-black">{formatCleanQty(item.quantity)}</td>
+                      <td className="border border-black p-2 text-center font-mono font-bold">{formatCleanNumber(item.unit_price)}</td>
+                      <td className="border border-black p-2 text-center font-mono font-black">{formatCleanNumber(item.line_total)}</td>
+                      <td className="border border-black p-2 text-[9.5px]">{item.specifications || '—'}</td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  ))}
+                  {Array.from({ length: Math.max(PRINT_EXTRA_ROWS - (po.items?.length || 0), 2) }, (_, extraIndex) => {
+                    const rowNumber = (po.items?.length || 0) + extraIndex + 1;
+                    return (
+                      <tr key={`blank-print-row-${extraIndex}`} className="h-6 border-b border-black">
+                        <td className="border border-black p-1.5 text-center font-mono text-slate-400">{rowNumber}</td>
+                        <td className="border border-black p-1.5">{' '}</td>
+                        <td className="border border-black p-1.5">{' '}</td>
+                        <td className="border border-black p-1.5">{' '}</td>
+                        <td className="border border-black p-1.5 text-center">{' '}</td>
+                        <td className="border border-black p-1.5 text-center">{' '}</td>
+                        <td className="border border-black p-1.5 text-center">{' '}</td>
+                        <td className="border border-black p-1.5 text-center">{' '}</td>
+                        <td className="border border-black p-1.5">{' '}</td>
+                      </tr>
+                    );
+                  })}
+                  {/* Total Row in Excel Grid */}
+                  <tr className="bg-slate-100 font-black border-t-2 border-black">
+                    <td colSpan={7} className="border border-black p-2 text-left font-black text-sm">
+                      الإجمالي الكلي لأمر الشراء (ج.م):
+                    </td>
+                    <td className="border border-black p-2 text-center font-mono font-black text-sm">
+                      {formatCleanNumber(po.grand_total)}
+                    </td>
+                    <td className="border border-black p-2"></td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
 
-            <div className="mt-2 mr-auto w-48 border-2 border-slate-900 bg-yellow-300 text-center font-black">
-              <div className="border-b border-slate-900 p-1.5">الإجمالي الكلي</div>
-              <div className="border-b border-slate-900 p-1.5">{formatCleanNumber(po.grand_total)}</div>
-              <div className="p-1.5">ج.م</div>
-            </div>
-
-            <div className="mt-6 grid grid-cols-3 gap-4 text-center text-[10px] font-bold">
-              <div>
-                <div>مدير المشتريات</div>
-                <div className="mt-1 font-normal">المهندس أحمد بدوي</div>
-              </div>
-              <div>
-                <div>اسم الموظف</div>
-                <div className="mt-1 font-normal">{po.requested_by?.name || po.purchase_request?.requester?.name || '—'}</div>
-              </div>
-              <div>
-                <div>رئيس القسم</div>
-                <div className="mt-1 font-normal">{po.department_approver?.name || po.purchase_request?.assigned_reviewer?.name || '—'}</div>
-                <div className="mt-1 font-normal text-[9px]">{po.department?.name || po.purchase_request?.department?.name || '—'}</div>
-              </div>
-              <div>
-                <div>المدير التنفيذي / المدير العام</div>
-                <div className="mt-1 font-normal">{po.executive_approver?.name || 'المهندس محمد عبدالكريم'}</div>
-                <div className="mt-1 text-[9px]">اعتماد نهائي</div>
-              </div>
+            {/* Excel Signatures Grid Table */}
+            <div className="pt-2">
+              <table className="w-full border-collapse border-2 border-black text-center text-[10px]">
+                <thead>
+                  <tr className="bg-slate-100 border-b-2 border-black font-black">
+                    <th className="border border-black p-1.5 w-1/5">صاحب الطلب</th>
+                    <th className="border border-black p-1.5 w-1/5">رئيس القسم المعتمد</th>
+                    <th className="border border-black p-1.5 w-1/5">إدارة المشتريات</th>
+                    <th className="border border-black p-1.5 w-1/5">مراجع الحسابات</th>
+                    <th className="border border-black p-1.5 w-1/5">يعتمد (المدير العام)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="h-16">
+                    <td className="border border-black p-1.5 align-top font-bold">
+                      <div>{po.requested_by?.name || po.purchase_request?.requester?.name || '—'}</div>
+                      <div className="text-[9px] text-slate-600 font-normal mt-3">التوقيع: ..............</div>
+                    </td>
+                    <td className="border border-black p-1.5 align-top font-bold">
+                      <div>{po.department_approver?.name || po.purchase_request?.assigned_reviewer?.name || '—'}</div>
+                      <div className="text-[9px] text-slate-600 font-normal mt-3">التوقيع: ..............</div>
+                    </td>
+                    <td className="border border-black p-1.5 align-top font-bold">
+                      <div>{po.created_by?.name || 'المهندس أحمد بدوي'}</div>
+                      <div className="text-[9px] text-slate-600 font-normal mt-3">التوقيع: ..............</div>
+                    </td>
+                    <td className="border border-black p-1.5 align-top font-bold">
+                      <div>{po.accounting_reviewer?.name || 'إدارة الحسابات'}</div>
+                      <div className="text-[9px] text-slate-600 font-normal mt-3">التوقيع: ..............</div>
+                    </td>
+                    <td className="border border-black p-1.5 align-top font-bold">
+                      <div>{po.executive_approver?.name || 'المهندس محمد عبدالكريم'}</div>
+                      <div className="text-[9px] text-slate-600 font-normal mt-3">التوقيع: ..............</div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>

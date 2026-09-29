@@ -52,6 +52,16 @@ export interface PurchaseOrderItem {
   unit_price: string;
   line_total: string;
   specifications?: string | null;
+  pr_item?: {
+    id: number;
+    item_description?: string | null;
+    quantity?: string | number | null;
+    uom?: string | null;
+    specifications?: string | null;
+    notes?: string | null;
+    item_reference?: string | null;
+    region?: string | null;
+  } | null;
   is_supplementary?: boolean;
   supplement_batch?: number | null;
 }
@@ -65,6 +75,10 @@ export interface PurchaseOrder {
     request_number: string;
     request_type?: 'PROJECT' | 'OFFICE_SUPPLIES';
     status: string;
+    created_at?: string | null;
+    project_name?: string | null;
+    parcel_reference?: string | null;
+    region?: string | null;
     requester?: {
       id: number;
       name: string;

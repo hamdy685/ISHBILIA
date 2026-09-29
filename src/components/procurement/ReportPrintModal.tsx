@@ -80,43 +80,54 @@ export const ReportPrintModal: React.FC<ReportPrintModalProps> = ({ data, isOpen
         <div className="flex-1 overflow-y-auto p-3 sm:p-8 bg-slate-900 print:bg-white print:text-slate-900 print:p-0">
           <div className="print-document bg-slate-950 print:bg-white border border-slate-800 print:border-none p-4 sm:p-8 rounded-xl shadow-inner space-y-6 max-w-3xl mx-auto font-sans">
             
-            {/* Report Header */}
-            <div className="flex items-center justify-between pb-4 border-b-2 border-slate-700 print:border-slate-300">
-              <div>
-                <img src="/eshbelia-logo.png" alt="شعار شركة اشبيلية" className="document-logo h-16 w-auto object-contain mb-2" />
-                <h1 className="text-xl font-extrabold text-cyan-400 print:text-slate-900">أحدث المشتريات</h1>
-                <p className="text-xs text-slate-400 print:text-slate-600 mt-1">شركة اشبيلية للتطوير والاستثمار العقاري</p>
+            {/* Report Header: Logo Top Right, Title Center, Date Left */}
+            <div className="flex items-start justify-between pb-3 border-b-2 border-black">
+              {/* Top Right: Logo + Company Name */}
+              <div className="text-right flex items-center gap-3 shrink-0">
+                <img src="/eshbelia-logo.png" alt="شعار شركة اشبيلية" className="h-14 w-auto object-contain" />
+                <div className="text-[11px] leading-snug">
+                  <div className="font-black text-sm text-black">شركة إشبيلية</div>
+                  <div className="text-[10px] text-slate-800 font-bold">للتطوير والاستثمار العقاري</div>
+                </div>
               </div>
-              <div className="text-left font-mono text-xs text-slate-400 print:text-slate-600">
-                <div>التاريخ: {new Date().toLocaleDateString('ar-EG')}</div>
+
+              {/* Center: Title */}
+              <div className="text-center self-center">
+                <h1 className="text-lg font-black text-black border-b-2 border-black pb-0.5 inline-block">
+                  تقرير المشتريات والتحليلات
+                </h1>
+              </div>
+
+              {/* Top Left: Date */}
+              <div className="text-left font-mono text-xs font-bold text-black" dir="rtl">
+                <div><strong>التاريخ:</strong> {new Date().toLocaleDateString('ar-EG')}</div>
               </div>
             </div>
 
-
-            {/* Recent Orders List */}
+            {/* Recent Orders List - Excel Style */}
             <div>
-              <h3 className="text-sm font-bold text-slate-300 print:text-slate-900 mb-2">أحدث أوامر الشراء</h3>
+              <h3 className="text-xs font-black text-black mb-2">أحدث أوامر الشراء الصادرة:</h3>
               <div className="overflow-x-auto print:overflow-visible">
-              <table className="w-full text-right text-xs border-collapse border border-slate-800 print:border-slate-300">
+              <table className="w-full text-right text-xs border-collapse border-2 border-black">
                 <thead>
-                  <tr className="bg-slate-900 print:bg-slate-100 font-bold border-b border-slate-800 print:border-slate-300">
-                    <th className="p-2 border-l border-slate-800 print:border-slate-300">رقم الأمر</th>
-                    <th className="p-2 border-l border-slate-800 print:border-slate-300">رقم قطعة الأرض</th>
-                    <th className="p-2 border-l border-slate-800 print:border-slate-300">المنطقة</th>
-                    <th className="p-2 border-l border-slate-800 print:border-slate-300">المورد</th>
-                    <th className="p-2 border-l border-slate-800 print:border-slate-300">الحالة</th>
-                    <th className="p-2">المبلغ الإجمالي</th>
+                  <tr className="bg-slate-100 font-black border-b-2 border-black text-black">
+                    <th className="p-2 border border-black text-center">رقم الأمر</th>
+                    <th className="p-2 border border-black text-center">رقم قطعة الأرض</th>
+                    <th className="p-2 border border-black text-center">المنطقة</th>
+                    <th className="p-2 border border-black">المورد</th>
+                    <th className="p-2 border border-black text-center">الحالة</th>
+                    <th className="p-2 border border-black text-center">المبلغ الإجمالي</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800 print:divide-slate-200">
+                <tbody>
                   {data.recent_purchase_orders.map((po) => (
-                    <tr key={po.id}>
-                      <td className="p-2 font-mono font-semibold text-cyan-400 print:text-slate-900 border-l border-slate-800 print:border-slate-300">{po.po_number}</td>
-                      <td className="p-2 font-mono text-slate-200 print:text-slate-900 border-l border-slate-800 print:border-slate-300">{po.items?.map((item) => item.item_reference || '—').join('، ') || '—'}</td>
-                      <td className="p-2 text-slate-200 print:text-slate-900 border-l border-slate-800 print:border-slate-300">{po.items?.map((item) => item.region || '—').join('، ') || '—'}</td>
-                      <td className="p-2 text-slate-200 print:text-slate-900 border-l border-slate-800 print:border-slate-300">{po.supplier_name || 'غير محدد'}</td>
-                      <td className="p-2 text-slate-300 print:text-slate-800 border-l border-slate-800 print:border-slate-300">{po.status}</td>
-                      <td className="p-2 font-mono font-bold text-slate-100 print:text-slate-900">{po.grand_total} ج.م</td>
+                    <tr key={po.id} className="border-b border-black">
+                      <td className="p-2 font-mono font-bold text-black border border-black text-center">{po.po_number}</td>
+                      <td className="p-2 font-mono text-black border border-black text-center">{po.items?.map((item) => item.item_reference || '—').join('، ') || '—'}</td>
+                      <td className="p-2 text-black border border-black text-center">{po.items?.map((item) => item.region || '—').join('، ') || '—'}</td>
+                      <td className="p-2 text-black border border-black font-semibold">{po.supplier_name || 'غير محدد'}</td>
+                      <td className="p-2 text-black border border-black text-center">{po.status}</td>
+                      <td className="p-2 font-mono font-black text-black border border-black text-center">{po.grand_total} ج.م</td>
                     </tr>
                   ))}
                 </tbody>

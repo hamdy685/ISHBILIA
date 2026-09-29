@@ -47,7 +47,7 @@ export const SupplierFinanceWorkspacePage: React.FC = () => {
             }`}
           >
             <span>🏦</span>
-            <span>كشف وأرصدة حسابات الموردين</span>
+            <span>كشف وحسابات وصرف الموردين</span>
           </button>
 
           <button
@@ -59,8 +59,8 @@ export const SupplierFinanceWorkspacePage: React.FC = () => {
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
             }`}
           >
-            <span>💳</span>
-            <span>فواتير ودفعات الموردين</span>
+            <span>🧾</span>
+            <span>فواتير الموردين والمطابقة</span>
           </button>
         </div>
 

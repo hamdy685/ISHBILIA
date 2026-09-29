@@ -35,4 +35,16 @@ class PurchaseReceiptItem extends Model
     {
         return $this->belongsTo(PurchaseOrderItem::class, 'purchase_order_item_id');
     }
+
+    public function item(): \Illuminate\Database\Eloquent\Relations\HasOneThrough
+    {
+        return $this->hasOneThrough(
+            Item::class,
+            PurchaseOrderItem::class,
+            'id',
+            'id',
+            'purchase_order_item_id',
+            'item_id'
+        );
+    }
 }

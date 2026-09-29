@@ -31,8 +31,8 @@ const LABELS: Record<string, string> = {
   'purchase-orders': 'أوامر الشراء',
   'purchase-requests': 'طلبات الشراء',
   'purchase-quotes': 'عروض الأسعار',
-  'supplier-payments': 'الفواتير والدفعات',
-  'supplier-accounts': 'حسابات الموردين',
+  'supplier-payments': 'فواتير الموردين والمطابقة',
+  'supplier-accounts': 'حسابات وصرف الموردين',
   reports: 'التقارير',
 };
 

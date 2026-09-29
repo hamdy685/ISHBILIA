@@ -110,11 +110,12 @@ class PurchasesReportController extends Controller
                 'purchaseRequest.department',
                 'purchaseRequest.targetDepartment',
                 'purchaseRequest.landParcel',
-                'purchaseReceipts.items.purchaseOrderItem',
-                'purchaseReceipts.items.item',
+                'purchaseReceipts.items.purchaseOrderItem.item',
+                'purchaseReceipts.items.purchaseOrderItem.prItem',
                 'supplierInvoices.landAllocations.parcel',
                 'supplierInvoices.landAllocations.department',
-                'supplierInvoices.purchaseReceipt.items.purchaseOrderItem',
+                'supplierInvoices.purchaseReceipt.items.purchaseOrderItem.item',
+                'supplierInvoices.purchaseReceipt.items.purchaseOrderItem.prItem',
                 'supplierInvoices.createdBy',
             ])
             ->whereNotIn('status', ['REJECTED', 'PO_DRAFT'])
@@ -252,7 +253,7 @@ class PurchasesReportController extends Controller
                                 'po_number' => $order->po_number,
                                 'po_number_short' => preg_replace('/^PO-\d{4}-0*/', '', $order->po_number) ?: $order->po_number,
                                 // 3. الصنف
-                                'item_name' => $poItem?->item_description ?? ($receiptItem->item?->name ?? '—'),
+                                'item_name' => $poItem?->item_description ?? ($poItem?->item?->name ?? '—'),
                                 // 4. الوحدة
                                 'uom' => $poItem?->uom ?? '—',
                                 // 5. الكمية (المستلمة المعتمدة لدى الحسابات)

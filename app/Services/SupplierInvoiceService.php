@@ -82,6 +82,7 @@ class SupplierInvoiceService
             'purchaseOrder.purchaseRequest.assignedReviewer',
             'purchaseOrder.purchaseRequest.siteEngineer',
             'purchaseOrder.purchaseRequest.approvalHistory.actor',
+            'purchaseOrder.purchaseRequest.items.item',
             'purchaseOrder.items.item',
             'purchaseOrder.items.prItem',
             'purchaseOrder.approvalHistory.actor',
@@ -254,10 +255,6 @@ class SupplierInvoiceService
         ?string $referenceNumber = null,
         ?string $notes = null,
     ): array {
-        if ($invoice->matching_status !== 'MATCHED') {
-            throw new \RuntimeException('لا يمكن تسجيل الدفع قبل إتمام المطابقة الثلاثية.');
-        }
-
         return $this->recordSupplierPayment(
             $accountant,
             Supplier::findOrFail($invoice->supplier_id),
@@ -270,7 +267,8 @@ class SupplierInvoiceService
     }
 
     /**
-     * Record a supplier-level payment and allocate it oldest-first across all matched debts.
+     * Record a supplier-level payment and allocate it oldest-first across all open debts.
+     * Payments are independent of invoice matching status — they apply to any OPEN or PARTIALLY_PAID invoice.
      */
     public function recordSupplierPayment(
         User $accountant,
@@ -303,7 +301,7 @@ class SupplierInvoiceService
             ]);
 
             $debts = SupplierInvoice::where('supplier_id', $supplierId)
-                ->where('matching_status', 'MATCHED')
+                ->whereIn('status', ['OPEN', 'PARTIALLY_PAID'])
                 ->where('outstanding_amount', '>', 0)
                 ->orderBy('invoice_date')
                 ->orderBy('id')

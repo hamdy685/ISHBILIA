@@ -176,13 +176,13 @@ export const AuthenticatedLayout: React.FC = () => {
                             to="/accounting/supplier-payments"
                             className={linkClassName("/accounting/supplier-payments")}
                         >
-                            <span className="ml-2.5 text-sm" aria-hidden="true">💳</span> فواتير ودفعات الموردين
+                            <span className="ml-2.5 text-sm" aria-hidden="true">🧾</span> فواتير الموردين والمطابقة
                         </Link>
                         <Link
                             to="/accounting/supplier-accounts"
                             className={linkClassName("/accounting/supplier-accounts")}
                         >
-                            <span className="ml-2.5 text-sm" aria-hidden="true">🏦</span> حسابات الموردين
+                            <span className="ml-2.5 text-sm" aria-hidden="true">🏦</span> حسابات وصرف الموردين
                         </Link>
                         <Link
                             to="/accounting/land-parcels"
@@ -225,13 +225,13 @@ export const AuthenticatedLayout: React.FC = () => {
                             to="/accounting/supplier-payments"
                             className={linkClassName("/accounting/supplier-payments")}
                         >
-                            <span className="ml-2.5 text-sm" aria-hidden="true">💳</span> فواتير ودفعات الموردين
+                            <span className="ml-2.5 text-sm" aria-hidden="true">🧾</span> تسجيل فواتير الموردين
                         </Link>
                         <Link
                             to="/accounting/supplier-accounts"
                             className={linkClassName("/accounting/supplier-accounts")}
                         >
-                            <span className="ml-2.5 text-sm" aria-hidden="true">🏦</span> حسابات الموردين
+                            <span className="ml-2.5 text-sm" aria-hidden="true">🏦</span> كشف حسابات الموردين
                         </Link>
                         <Link
                             to="/accounting/reports"
