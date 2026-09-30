@@ -176,12 +176,35 @@ export interface SupplierAccountSummary extends SupplierBalanceSummary {
   payments_count: number;
 }
 
+export interface SupplierLedgerRow {
+  id: string | number;
+  type: 'OPENING_BALANCE' | 'SUPPLY' | 'PAYMENT';
+  date: string;
+  date_formatted?: string;
+  description: string;
+  parcel: string;
+  region: string;
+  quantity: number | string | null;
+  uom?: string | null;
+  unit_price: number | string | null;
+  value: number;
+  paid: number;
+  balance: number;
+  reference?: string | null;
+  purchase_order_id?: number | null;
+  receipt_number?: string | null;
+  invoice_number?: string | null;
+  payment_id?: number | null;
+}
+
 export interface SupplierAccountDetails {
   supplier: المورد;
   summary: SupplierAccountSummary;
   invoices: SupplierInvoice[];
   payments: SupplierPayment[];
+  ledger?: SupplierLedgerRow[];
 }
+
 
 export interface CreateSupplierInvoicePayload {
   purchase_order_id: number;

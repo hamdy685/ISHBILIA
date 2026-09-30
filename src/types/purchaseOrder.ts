@@ -22,6 +22,7 @@ export interface المورد {
   notes?: string | null;
   tax_number?: string | null;
   commercial_register?: string | null;
+  created_at?: string;
   purchase_orders?: Array<{
     id: number;
     po_number: string;

@@ -7,6 +7,7 @@ use App\Models\Accounting\CostCenter;
 use App\Models\Accounting\JournalEntry;
 use App\Models\Accounting\JournalEntryLine;
 use App\Models\PurchaseOrder;
+use App\Models\PurchaseOrderItem;
 use App\Models\PurchaseReceipt;
 use App\Models\Supplier;
 use App\Models\SupplierBalance;
@@ -14,6 +15,7 @@ use App\Models\SupplierInvoice;
 use App\Models\SupplierPayment;
 use App\Models\User;
 use App\Services\LandParcelService;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
@@ -414,8 +416,180 @@ class SupplierInvoiceService
             'summary' => $this->supplierSummary($supplier, $user),
             'invoices' => $supplier->invoices->sortByDesc('invoice_date')->values(),
             'payments' => $supplier->payments->sortByDesc('payment_date')->values(),
+            'ledger' => $this->buildSupplierLedger($supplier, $user),
         ];
     }
+
+    public function buildSupplierLedger(Supplier $supplier, ?User $user = null): array
+    {
+        $allowedCodes = $this->getAllowedDepartmentCodesForAccountant($user);
+        $rows = [];
+
+        // 1. Opening Balance
+        if ((float) $supplier->opening_balance > 0) {
+            $obDate = $supplier->created_at ? $supplier->created_at->format('Y-m-d') : '2026-01-01';
+            $rows[] = [
+                'id' => 'OB-' . $supplier->id,
+                'type' => 'OPENING_BALANCE',
+                'sort_order' => 1,
+                'date' => $obDate,
+                'date_formatted' => Carbon::parse($obDate)->format('d/m/Y'),
+                'description' => 'رصيد افتتاحي سابق' . ($supplier->opening_balance_notes ? " ({$supplier->opening_balance_notes})" : ''),
+                'parcel' => '—',
+                'region' => '—',
+                'quantity' => null,
+                'uom' => '—',
+                'unit_price' => null,
+                'value' => (float) $supplier->opening_balance,
+                'paid' => 0.0,
+                'reference' => 'رصيد سابق',
+            ];
+        }
+
+        // 2. Supplies (Items supplied by this supplier from Purchase Orders & Receipts)
+        $poItems = PurchaseOrderItem::where(function ($q) use ($supplier) {
+                $q->where('supplier_id', $supplier->id)
+                  ->orWhere(function ($sub) use ($supplier) {
+                      $sub->whereNull('supplier_id')
+                          ->whereHas('purchaseOrder', fn ($po) => $po->where('supplier_id', $supplier->id));
+                  });
+            })
+            ->whereHas('purchaseOrder', function ($q) use ($allowedCodes) {
+                $q->whereNotIn('status', ['DRAFT', 'CANCELLED', 'VOIDED'])
+                  ->when($allowedCodes !== null, function ($dq) use ($allowedCodes) {
+                      $dq->whereHas('purchaseRequest.department', fn ($d) => $d->whereIn('code', $allowedCodes));
+                  });
+            })
+            ->with([
+                'purchaseOrder.purchaseRequest.department',
+                'purchaseOrder.purchaseRequest.landParcel',
+                'purchaseOrder.purchaseReceipts.items',
+                'purchaseOrder.supplierInvoices.landAllocations.parcel',
+                'prItem',
+                'item',
+            ])
+            ->get();
+
+        foreach ($poItems as $poItem) {
+            $order = $poItem->purchaseOrder;
+            $requestModel = $order?->purchaseRequest;
+
+            $receipt = $order?->purchaseReceipts?->firstWhere('status', 'APPROVED') ?? $order?->purchaseReceipts?->first();
+            $invoice = $order?->supplierInvoices?->firstWhere('status', '!=', 'VOIDED');
+
+            $date = $receipt?->received_at?->format('Y-m-d')
+                ?? ($invoice?->invoice_date?->format('Y-m-d')
+                ?? ($order?->actual_delivery_date?->format('Y-m-d')
+                ?? ($order?->order_date?->format('Y-m-d')
+                ?? ($order?->created_at?->format('Y-m-d') ?? now()->format('Y-m-d')))));
+
+            $parcel = $poItem->item_reference
+                ?: ($poItem->prItem?->item_reference
+                ?: ($poItem->prItem?->parcel_reference
+                ?: ($invoice?->landAllocations?->first()?->parcel?->parcel_reference
+                ?: ($requestModel?->parcel_reference
+                ?: ($requestModel?->landParcel?->parcel_reference ?: '—')))));
+
+            $region = $poItem->region
+                ?: ($poItem->prItem?->region
+                ?: ($invoice?->landAllocations?->first()?->parcel?->region
+                ?: ($requestModel?->region
+                ?: ($requestModel?->landParcel?->region ?: '—'))));
+
+            $receiptItem = $receipt?->items?->firstWhere('purchase_order_item_id', $poItem->id);
+            $quantity = (float) ($receiptItem?->received_quantity ?? $poItem->quantity);
+            $unitPrice = (float) $poItem->unit_price;
+            $value = round($quantity * $unitPrice, 2);
+
+            $desc = $poItem->item_description ?: ($poItem->item?->name ?: 'صنف');
+
+            $rows[] = [
+                'id' => "SUP-PO{$order?->id}-ITEM{$poItem->id}",
+                'type' => 'SUPPLY',
+                'sort_order' => 2,
+                'date' => $date,
+                'date_formatted' => Carbon::parse($date)->format('d/m/Y'),
+                'description' => $desc,
+                'parcel' => $parcel,
+                'region' => $region,
+                'quantity' => $quantity,
+                'uom' => $poItem->uom ?? '—',
+                'unit_price' => $unitPrice,
+                'value' => $value,
+                'paid' => 0.0,
+                'reference' => $order?->po_number ?? "PO #{$order?->id}",
+                'purchase_order_id' => $order?->id,
+                'receipt_number' => $receipt?->receipt_number,
+                'invoice_number' => $invoice?->invoice_number,
+            ];
+        }
+
+        // 3. Payments (الواصل)
+        $payments = $supplier->payments()
+            ->when($allowedCodes !== null, function ($q) use ($allowedCodes) {
+                $q->whereHas('allocations.invoice.purchaseOrder.purchaseRequest.department', function ($dq) use ($allowedCodes) {
+                    $dq->whereIn('code', $allowedCodes);
+                });
+            })
+            ->with(['allocations.invoice.landAllocations.parcel'])
+            ->orderBy('payment_date')
+            ->get();
+
+        foreach ($payments as $payment) {
+            $date = $payment->payment_date ? Carbon::parse($payment->payment_date)->format('Y-m-d') : $payment->created_at->format('Y-m-d');
+            $methodName = match ($payment->payment_method) {
+                'CASH' => 'نقدي',
+                'BANK_TRANSFER' => 'تحويل بنكي',
+                'CHEQUE' => 'شيك',
+                default => $payment->payment_method,
+            };
+
+            $desc = "سداد دفعة ({$methodName})"
+                . ($payment->payment_number ? " - إيصال #{$payment->payment_number}" : ($payment->reference_number ? " - مرجع #{$payment->reference_number}" : ''))
+                . ($payment->notes ? " - {$payment->notes}" : '');
+
+            $parcel = $payment->allocations->map(fn ($a) => $a->invoice?->landAllocations?->first()?->parcel?->parcel_reference)->filter()->first() ?? '—';
+            $region = $payment->allocations->map(fn ($a) => $a->invoice?->landAllocations?->first()?->parcel?->region)->filter()->first() ?? '—';
+
+            $rows[] = [
+                'id' => "PAY-{$payment->id}",
+                'type' => 'PAYMENT',
+                'sort_order' => 3,
+                'date' => $date,
+                'date_formatted' => Carbon::parse($date)->format('d/m/Y'),
+                'description' => $desc,
+                'parcel' => $parcel,
+                'region' => $region,
+                'quantity' => null,
+                'uom' => '—',
+                'unit_price' => null,
+                'value' => 0.0,
+                'paid' => (float) $payment->amount,
+                'reference' => $payment->payment_number ?: ($payment->reference_number ?: "PAY #{$payment->id}"),
+                'payment_id' => $payment->id,
+            ];
+        }
+
+        // 4. Sort chronologically by date ASC, then sort_order
+        usort($rows, function ($a, $b) {
+            $cmp = strcmp($a['date'], $b['date']);
+            if ($cmp !== 0) {
+                return $cmp;
+            }
+            return ($a['sort_order'] ?? 2) <=> ($b['sort_order'] ?? 2);
+        });
+
+        // 5. Calculate Running Balance
+        $runningBalance = 0;
+        foreach ($rows as &$row) {
+            $runningBalance += (float) $row['value'] - (float) $row['paid'];
+            $row['balance'] = round($runningBalance, 2);
+        }
+        unset($row);
+
+        return $rows;
+    }
+
 
     public function getSupplierBalance(int $supplierId): array
     {

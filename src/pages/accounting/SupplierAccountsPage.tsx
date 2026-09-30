@@ -4,6 +4,7 @@ import {
   CreateSupplierPaymentPayload,
   SupplierAccountDetails,
   SupplierAccountSummary,
+  SupplierLedgerRow,
   getSupplierAccountApi,
   getSupplierAccountsApi,
   recordSupplierPaymentApi,
@@ -45,6 +46,14 @@ const SupplierAccountDedicatedPage: React.FC<{
   onBack: () => void;
   onRecordPayment: (account: SupplierAccountSummary) => void;
 }> = ({ selected, onBack, onRecordPayment }) => {
+  const [activeTab, setActiveTab] = useState<'LEDGER' | 'INVOICES' | 'PAYMENTS' | 'QUOTES'>('LEDGER');
+  const [ledgerSearch, setLedgerSearch] = useState('');
+  const [ledgerParcel, setLedgerParcel] = useState('');
+  const [ledgerRegion, setLedgerRegion] = useState('');
+  const [ledgerType, setLedgerType] = useState<'ALL' | 'SUPPLY' | 'PAYMENT'>('ALL');
+  const [ledgerFromDate, setLedgerFromDate] = useState('');
+  const [ledgerToDate, setLedgerToDate] = useState('');
+
   const [quotes, setQuotes] = useState<PurchaseRequestQuote[]>([]);
   const [quotesLoading, setQuotesLoading] = useState<boolean>(true);
   const { hasRole } = useAuth();
@@ -57,6 +66,245 @@ const SupplierAccountDedicatedPage: React.FC<{
       .catch(() => setQuotes([]))
       .finally(() => setQuotesLoading(false));
   }, [selected.supplier.id]);
+
+  const rawLedgerRows = useMemo<SupplierLedgerRow[]>(() => {
+    if (selected.ledger && selected.ledger.length > 0) {
+      return selected.ledger;
+    }
+
+    const rows: SupplierLedgerRow[] = [];
+
+    // Opening Balance
+    if (Number(selected.summary.opening_balance || 0) > 0) {
+      const obDate = selected.supplier.created_at ? selected.supplier.created_at.slice(0, 10) : '2026-01-01';
+      rows.push({
+        id: 'ob-' + selected.supplier.id,
+        type: 'OPENING_BALANCE',
+        date: obDate,
+        date_formatted: obDate,
+        description: 'رصيد افتتاحي سابق' + (selected.supplier.opening_balance_notes ? ` (${selected.supplier.opening_balance_notes})` : ''),
+        parcel: '—',
+        region: '—',
+        quantity: null,
+        uom: '—',
+        unit_price: null,
+        value: Number(selected.summary.opening_balance),
+        paid: 0,
+        balance: 0,
+        reference: 'رصيد سابق',
+      });
+    }
+
+    // Invoices and PO items
+    selected.invoices.forEach((inv) => {
+      const po = inv.purchase_order;
+      const receipt = inv.purchase_receipt;
+      const invDate = inv.invoice_date ? inv.invoice_date.slice(0, 10) : (inv.created_at ? inv.created_at.slice(0, 10) : '—');
+      const defaultParcel = inv.land_allocations?.[0]?.parcel?.parcel_reference
+        || po?.purchase_request?.parcel_reference
+        || '—';
+      const defaultRegion = inv.land_allocations?.[0]?.parcel?.region
+        || po?.purchase_request?.region
+        || '—';
+
+      const items = receipt?.items?.length ? receipt.items : (po?.items?.length ? po.items : null);
+
+      if (items && items.length > 0) {
+        items.forEach((it: any, idx: number) => {
+          const poItem = it.purchase_order_item || it;
+          const itDesc = poItem.item_description || poItem.item?.name || `صنف #${idx + 1}`;
+          const itParcel = poItem.item_reference || poItem.pr_item?.item_reference || defaultParcel;
+          const itRegion = poItem.region || poItem.pr_item?.region || defaultRegion;
+          const itQty = Number(it.received_quantity ?? poItem.quantity ?? 1);
+          const itPrice = Number(poItem.unit_price || 0);
+          const itVal = Number(poItem.line_total || itQty * itPrice || inv.amount);
+
+          rows.push({
+            id: `inv-${inv.id}-item-${idx}`,
+            type: 'SUPPLY',
+            date: invDate,
+            date_formatted: invDate,
+            description: itDesc,
+            parcel: itParcel,
+            region: itRegion,
+            quantity: itQty,
+            uom: poItem.uom || '—',
+            unit_price: itPrice,
+            value: itVal,
+            paid: 0,
+            balance: 0,
+            reference: inv.invoice_number || po?.po_number,
+          });
+        });
+      } else {
+        rows.push({
+          id: `inv-${inv.id}`,
+          type: 'SUPPLY',
+          date: invDate,
+          date_formatted: invDate,
+          description: `فاتورة توريد #${inv.invoice_number}` + (po?.po_number ? ` (${po.po_number})` : ''),
+          parcel: defaultParcel,
+          region: defaultRegion,
+          quantity: 1,
+          uom: '—',
+          unit_price: Number(inv.amount),
+          value: Number(inv.amount),
+          paid: 0,
+          balance: 0,
+          reference: inv.invoice_number,
+        });
+      }
+    });
+
+    // Payments
+    selected.payments.forEach((p) => {
+      const pDate = p.payment_date ? p.payment_date.slice(0, 10) : '—';
+      const method = paymentMethods[p.payment_method] || p.payment_method;
+      const desc = `سداد دفعة (${method})` + (p.payment_number ? ` - إيصال #${p.payment_number}` : '') + (p.notes ? ` - ${p.notes}` : '');
+      const parcel = p.allocations?.map(a => a.invoice?.land_allocations?.[0]?.parcel?.parcel_reference).filter(Boolean)[0] || '—';
+      const region = p.allocations?.map(a => a.invoice?.land_allocations?.[0]?.parcel?.region).filter(Boolean)[0] || '—';
+
+      rows.push({
+        id: `pay-${p.id}`,
+        type: 'PAYMENT',
+        date: pDate,
+        date_formatted: pDate,
+        description: desc,
+        parcel,
+        region,
+        quantity: null,
+        uom: '—',
+        unit_price: null,
+        value: 0,
+        paid: Number(p.amount),
+        balance: 0,
+        reference: p.payment_number || p.reference_number,
+      });
+    });
+
+    // Sort chronologically
+    rows.sort((a, b) => {
+      const dCmp = (a.date || '').localeCompare(b.date || '');
+      if (dCmp !== 0) return dCmp;
+      const typeOrder = { OPENING_BALANCE: 1, SUPPLY: 2, PAYMENT: 3 };
+      return (typeOrder[a.type] || 2) - (typeOrder[b.type] || 2);
+    });
+
+    let b = 0;
+    rows.forEach(r => {
+      b += (r.value || 0) - (r.paid || 0);
+      r.balance = Math.round(b * 100) / 100;
+    });
+
+    return rows;
+  }, [selected]);
+
+  const availableParcels = useMemo(() => {
+    const set = new Set<string>();
+    rawLedgerRows.forEach(r => {
+      if (r.parcel && r.parcel !== '—') set.add(r.parcel);
+    });
+    return Array.from(set).sort();
+  }, [rawLedgerRows]);
+
+  const availableRegions = useMemo(() => {
+    const set = new Set<string>();
+    rawLedgerRows.forEach(r => {
+      if (r.region && r.region !== '—') set.add(r.region);
+    });
+    return Array.from(set).sort();
+  }, [rawLedgerRows]);
+
+  const filteredLedgerRows = useMemo(() => {
+    const list = rawLedgerRows.filter(row => {
+      if (ledgerType === 'SUPPLY' && row.type !== 'SUPPLY') return false;
+      if (ledgerType === 'PAYMENT' && row.type !== 'PAYMENT') return false;
+      if (ledgerParcel && row.parcel !== ledgerParcel) return false;
+      if (ledgerRegion && row.region !== ledgerRegion) return false;
+      if (ledgerFromDate && row.date < ledgerFromDate) return false;
+      if (ledgerToDate && row.date > ledgerToDate) return false;
+      if (ledgerSearch) {
+        const q = ledgerSearch.toLowerCase();
+        const match =
+          row.description.toLowerCase().includes(q) ||
+          (row.parcel && row.parcel.toLowerCase().includes(q)) ||
+          (row.region && row.region.toLowerCase().includes(q)) ||
+          (row.reference && row.reference.toLowerCase().includes(q)) ||
+          (row.date && row.date.includes(q));
+        if (!match) return false;
+      }
+      return true;
+    });
+
+    let running = 0;
+    return list.map(r => {
+      running += (r.value || 0) - (r.paid || 0);
+      return {
+        ...r,
+        balance: Math.round(running * 100) / 100,
+      };
+    });
+  }, [rawLedgerRows, ledgerType, ledgerParcel, ledgerRegion, ledgerFromDate, ledgerToDate, ledgerSearch]);
+
+  const totalQuantity = useMemo(() => {
+    return filteredLedgerRows.reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
+  }, [filteredLedgerRows]);
+
+  const totalValue = useMemo(() => {
+    return filteredLedgerRows.reduce((sum, r) => sum + (Number(r.value) || 0), 0);
+  }, [filteredLedgerRows]);
+
+  const totalPaid = useMemo(() => {
+    return filteredLedgerRows.reduce((sum, r) => sum + (Number(r.paid) || 0), 0);
+  }, [filteredLedgerRows]);
+
+  const finalBalance = useMemo(() => {
+    if (filteredLedgerRows.length === 0) return 0;
+    return filteredLedgerRows[filteredLedgerRows.length - 1].balance;
+  }, [filteredLedgerRows]);
+
+  const exportLedgerToCsv = () => {
+    const headers = ['التاريخ', 'بيان', 'قطعة', 'منطقة', 'كمية', 'سعر', 'قيمة', 'الواصل', 'الرصيد'];
+    const csvRows = [headers.join(',')];
+
+    filteredLedgerRows.forEach((row) => {
+      const values = [
+        `"${row.date || ''}"`,
+        `"${(row.description || '').replace(/"/g, '""')}"`,
+        `"${row.parcel || '—'}"`,
+        `"${row.region || '—'}"`,
+        `"${row.quantity !== null && row.quantity !== undefined ? row.quantity : ''}"`,
+        `"${row.unit_price !== null && row.unit_price !== undefined ? row.unit_price : ''}"`,
+        `"${row.value || 0}"`,
+        `"${row.paid || 0}"`,
+        `"${row.balance || 0}"`,
+      ];
+      csvRows.push(values.join(','));
+    });
+
+    csvRows.push([
+      '"الإجمالي"',
+      '""',
+      '""',
+      '""',
+      `"${totalQuantity}"`,
+      '""',
+      `"${totalValue}"`,
+      `"${totalPaid}"`,
+      `"${finalBalance}"`,
+    ].join(','));
+
+    const csvContent = '\uFEFF' + csvRows.join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `كشف_حساب_تحليلي_${selected.supplier.company_name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
   return (
     <div className="min-w-0 space-y-6 animate-fade-in print-container print-document" dir="rtl">
       {/* ── OFFICIAL PRINT HEADER ── */}
@@ -128,6 +376,16 @@ const SupplierAccountDedicatedPage: React.FC<{
           >
             <span>🖨️</span>
             <span>طباعة الكشف</span>
+          </Button>
+
+          <Button
+            size="sm"
+            variant="secondary"
+            className="font-bold flex items-center gap-1.5"
+            onClick={exportLedgerToCsv}
+          >
+            <span>📥</span>
+            <span>تصدير Excel (CSV)</span>
           </Button>
 
           <Button
@@ -211,8 +469,399 @@ const SupplierAccountDedicatedPage: React.FC<{
         </div>
       </div>
 
+      {/* Navigation Tabs */}
+      <div className="flex items-center gap-2 border-b border-slate-800 pb-3 print:hidden overflow-x-auto">
+        <button
+          type="button"
+          onClick={() => setActiveTab('LEDGER')}
+          className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black transition-all ${
+            activeTab === 'LEDGER'
+              ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20'
+              : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700/80'
+          }`}
+        >
+          <span>📊</span>
+          <span>كشف الحساب التحليلي (دفتر الأستاذ)</span>
+          <span className="rounded-full bg-slate-950/30 px-2 py-0.5 text-[11px] font-mono">
+            {filteredLedgerRows.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('INVOICES')}
+          className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black transition-all ${
+            activeTab === 'INVOICES'
+              ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20'
+              : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700/80'
+          }`}
+        >
+          <span>🧾</span>
+          <span>سجل الفواتير وأوامر الشراء</span>
+          <span className="rounded-full bg-slate-950/30 px-2 py-0.5 text-[11px] font-mono">
+            {selected.invoices.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('PAYMENTS')}
+          className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black transition-all ${
+            activeTab === 'PAYMENTS'
+              ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20'
+              : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700/80'
+          }`}
+        >
+          <span>💳</span>
+          <span>سجل المدفوعات المسددة</span>
+          <span className="rounded-full bg-slate-950/30 px-2 py-0.5 text-[11px] font-mono">
+            {selected.payments.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('QUOTES')}
+          className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black transition-all ${
+            activeTab === 'QUOTES'
+              ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20'
+              : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700/80'
+          }`}
+        >
+          <span>📁</span>
+          <span>أرشيف عروض الأسعار</span>
+          <span className="rounded-full bg-slate-950/30 px-2 py-0.5 text-[11px] font-mono">
+            {quotes.length}
+          </span>
+        </button>
+      </div>
+
+      {/* ── Analytical Ledger Tab (The 9-Column Table from User's Sheet) ── */}
+      <div className={activeTab === 'LEDGER' ? 'space-y-4' : 'hidden print:block space-y-4'}>
+        <Card className="space-y-4 border-slate-800 bg-slate-900/90 print:bg-white print:border-slate-900 print:p-0 print:shadow-none">
+          {/* Header & Filter Controls */}
+          <div className="flex flex-col gap-4 border-b border-slate-800 pb-3 print:hidden lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h3 className="text-base font-black text-slate-100 flex items-center gap-2">
+                <span>📊</span>
+                <span>دفتر الأستاذ وكشف الحساب التحليلي (الأصناف والواصل)</span>
+              </h3>
+              <p className="mt-0.5 text-xs text-slate-400">
+                بيان تفصيلي بجميع التوريدات مع تحديد القطعة والمنطقة والكمية والسعر، ومقارنتها بالدفعات المسددة والرصيد
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                className="font-bold flex items-center gap-1.5"
+                onClick={exportLedgerToCsv}
+              >
+                <span>📥</span>
+                <span>تصدير CSV</span>
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                className="font-bold flex items-center gap-1.5"
+                onClick={() => window.print()}
+              >
+                <span>🖨️</span>
+                <span>طباعة</span>
+              </Button>
+            </div>
+          </div>
+
+          {/* Filter Bar */}
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 print:hidden bg-slate-950/60 p-3 rounded-2xl border border-slate-800/80">
+            {/* Search */}
+            <div className="lg:col-span-2">
+              <label className="text-[11px] font-bold text-slate-400 block mb-1">بحث في البيان أو المرجع</label>
+              <input
+                type="text"
+                value={ledgerSearch}
+                onChange={(e) => setLedgerSearch(e.target.value)}
+                placeholder="ابحث بالصنف، الملاحظة..."
+                className="w-full rounded-xl bg-slate-900 border border-slate-700 px-3 py-1.5 text-xs text-slate-200 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none"
+              />
+            </div>
+
+            {/* Parcel Filter */}
+            <div>
+              <label className="text-[11px] font-bold text-slate-400 block mb-1">القطعة</label>
+              <select
+                value={ledgerParcel}
+                onChange={(e) => setLedgerParcel(e.target.value)}
+                className="w-full rounded-xl bg-slate-900 border border-slate-700 px-3 py-1.5 text-xs text-slate-200 focus:border-cyan-500 focus:outline-none"
+              >
+                <option value="">جميع القطع</option>
+                {availableParcels.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Region Filter */}
+            <div>
+              <label className="text-[11px] font-bold text-slate-400 block mb-1">المنطقة</label>
+              <select
+                value={ledgerRegion}
+                onChange={(e) => setLedgerRegion(e.target.value)}
+                className="w-full rounded-xl bg-slate-900 border border-slate-700 px-3 py-1.5 text-xs text-slate-200 focus:border-cyan-500 focus:outline-none"
+              >
+                <option value="">جميع المناطق</option>
+                {availableRegions.map((r) => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Type Filter */}
+            <div>
+              <label className="text-[11px] font-bold text-slate-400 block mb-1">نوع الحركة</label>
+              <select
+                value={ledgerType}
+                onChange={(e) => setLedgerType(e.target.value as any)}
+                className="w-full rounded-xl bg-slate-900 border border-slate-700 px-3 py-1.5 text-xs text-slate-200 focus:border-cyan-500 focus:outline-none"
+              >
+                <option value="ALL">جميع الحركات</option>
+                <option value="SUPPLY">توريدات فقط</option>
+                <option value="PAYMENT">سدادات (واصل) فقط</option>
+              </select>
+            </div>
+
+            {/* Reset Filters */}
+            <div className="flex items-end">
+              <Button
+                size="sm"
+                variant="secondary"
+                className="w-full text-xs font-bold"
+                onClick={() => {
+                  setLedgerSearch('');
+                  setLedgerParcel('');
+                  setLedgerRegion('');
+                  setLedgerType('ALL');
+                  setLedgerFromDate('');
+                  setLedgerToDate('');
+                }}
+              >
+                إعادة ضبط الفلاتر
+              </Button>
+            </div>
+          </div>
+
+          {/* The Exact 9-Column Table */}
+          {filteredLedgerRows.length > 0 ? (
+            <>
+              <div className="hidden min-w-0 md:block overflow-x-auto print:block">
+                <Table className="min-w-[850px] print:w-full print:min-w-0 print:border print:border-slate-900">
+                  <TableHeader className="bg-slate-950/80 print:bg-slate-100">
+                    <TableRow className="border-b border-slate-800 print:border-b-2 print:border-slate-900">
+                      <TableHead className="whitespace-nowrap text-center text-xs font-black text-slate-300 print:text-black print:border-r print:border-slate-900 py-2.5">
+                        التاريخ
+                      </TableHead>
+                      <TableHead className="whitespace-nowrap text-right text-xs font-black text-slate-300 print:text-black print:border-r print:border-slate-900 py-2.5">
+                        بيان
+                      </TableHead>
+                      <TableHead className="whitespace-nowrap text-center text-xs font-black text-slate-300 print:text-black print:border-r print:border-slate-900 py-2.5">
+                        قطعة
+                      </TableHead>
+                      <TableHead className="whitespace-nowrap text-center text-xs font-black text-slate-300 print:text-black print:border-r print:border-slate-900 py-2.5">
+                        منطقة
+                      </TableHead>
+                      <TableHead className="whitespace-nowrap text-center text-xs font-black text-slate-300 print:text-black print:border-r print:border-slate-900 py-2.5">
+                        كمية
+                      </TableHead>
+                      <TableHead className="whitespace-nowrap text-center text-xs font-black text-slate-300 print:text-black print:border-r print:border-slate-900 py-2.5">
+                        سعر
+                      </TableHead>
+                      <TableHead className="whitespace-nowrap text-center text-xs font-black text-slate-300 print:text-black print:border-r print:border-slate-900 py-2.5">
+                        قيمة
+                      </TableHead>
+                      <TableHead className="whitespace-nowrap text-center text-xs font-black text-slate-300 print:text-black print:border-r print:border-slate-900 py-2.5">
+                        الواصل
+                      </TableHead>
+                      <TableHead className="whitespace-nowrap text-center text-xs font-black text-slate-300 print:text-black py-2.5">
+                        الرصيد
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredLedgerRows.map((row) => (
+                      <TableRow
+                        key={row.id}
+                        className={`border-b border-slate-800/80 transition-colors hover:bg-slate-800/40 print:border-b print:border-slate-900 ${
+                          row.type === 'PAYMENT' ? 'bg-emerald-950/10' : row.type === 'OPENING_BALANCE' ? 'bg-amber-950/15' : ''
+                        }`}
+                      >
+                        {/* التاريخ */}
+                        <TableCell className="whitespace-nowrap font-mono text-center text-xs text-slate-300 print:text-black print:border-r print:border-slate-900 py-2">
+                          {row.date_formatted || row.date || '—'}
+                        </TableCell>
+
+                        {/* بيان */}
+                        <TableCell className="text-right text-xs font-medium text-slate-100 print:text-black print:border-r print:border-slate-900 py-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className={`inline-block shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold print:hidden ${
+                              row.type === 'SUPPLY'
+                                ? 'bg-cyan-950 text-cyan-300 border border-cyan-800/60'
+                                : row.type === 'PAYMENT'
+                                ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/60'
+                                : 'bg-amber-950 text-amber-300 border border-amber-800/60'
+                            }`}>
+                              {row.type === 'SUPPLY' ? 'توريد' : row.type === 'PAYMENT' ? 'سداد' : 'رصيد سابق'}
+                            </span>
+                            <span className="font-semibold">{row.description}</span>
+                            {row.reference && (
+                              <span className="font-mono text-[11px] text-slate-400 print:text-slate-600">
+                                ({row.reference})
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+
+                        {/* قطعة */}
+                        <TableCell className="whitespace-nowrap font-mono font-bold text-center text-xs text-amber-300 print:text-black print:border-r print:border-slate-900 py-2">
+                          {row.parcel || '—'}
+                        </TableCell>
+
+                        {/* منطقة */}
+                        <TableCell className="whitespace-nowrap text-center text-xs text-slate-300 print:text-black print:border-r print:border-slate-900 py-2">
+                          {row.region || '—'}
+                        </TableCell>
+
+                        {/* كمية */}
+                        <TableCell className="whitespace-nowrap font-mono text-center text-xs text-cyan-300 print:text-black print:border-r print:border-slate-900 py-2">
+                          {row.quantity !== null && row.quantity !== undefined
+                            ? `${formatCleanNumber(row.quantity)} ${row.uom && row.uom !== '—' ? row.uom : ''}`.trim()
+                            : '—'}
+                        </TableCell>
+
+                        {/* سعر */}
+                        <TableCell className="whitespace-nowrap font-mono text-center text-xs text-slate-300 print:text-black print:border-r print:border-slate-900 py-2">
+                          {row.unit_price !== null && row.unit_price !== undefined
+                            ? formatCleanNumber(row.unit_price)
+                            : '—'}
+                        </TableCell>
+
+                        {/* قيمة */}
+                        <TableCell className="whitespace-nowrap font-mono font-bold text-center text-xs text-cyan-300 print:text-black print:border-r print:border-slate-900 py-2">
+                          {row.value > 0 ? formatCleanNumber(row.value) : '—'}
+                        </TableCell>
+
+                        {/* الواصل */}
+                        <TableCell className="whitespace-nowrap font-mono font-bold text-center text-xs text-emerald-400 print:text-black print:border-r print:border-slate-900 py-2">
+                          {row.paid > 0 ? formatCleanNumber(row.paid) : '—'}
+                        </TableCell>
+
+                        {/* الرصيد */}
+                        <TableCell className={`whitespace-nowrap font-mono font-black text-center text-xs py-2 print:text-black ${
+                          row.balance > 0 ? 'text-amber-300' : row.balance < 0 ? 'text-cyan-300' : 'text-slate-300'
+                        }`}>
+                          {formatCleanNumber(row.balance)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+
+                  {/* Totals Footer */}
+                  <tfoot>
+                    <TableRow className="bg-slate-950 font-black border-t-2 border-slate-700 print:bg-slate-100 print:border-t-2 print:border-slate-900">
+                      <TableCell colSpan={2} className="text-right text-xs font-black text-slate-100 print:text-black print:border-r print:border-slate-900 py-3">
+                        الإجمالي العام ({filteredLedgerRows.length} حركة)
+                      </TableCell>
+                      <TableCell className="text-center font-mono text-xs text-slate-400 print:text-black print:border-r print:border-slate-900">—</TableCell>
+                      <TableCell className="text-center font-mono text-xs text-slate-400 print:text-black print:border-r print:border-slate-900">—</TableCell>
+                      <TableCell className="text-center font-mono font-bold text-xs text-cyan-300 print:text-black print:border-r print:border-slate-900">
+                        {totalQuantity > 0 ? formatCleanNumber(totalQuantity) : '—'}
+                      </TableCell>
+                      <TableCell className="text-center font-mono text-xs text-slate-400 print:text-black print:border-r print:border-slate-900">—</TableCell>
+                      <TableCell className="text-center font-mono font-black text-xs text-cyan-300 print:text-black print:border-r print:border-slate-900">
+                        {money(totalValue)}
+                      </TableCell>
+                      <TableCell className="text-center font-mono font-black text-xs text-emerald-400 print:text-black print:border-r print:border-slate-900">
+                        {money(totalPaid)}
+                      </TableCell>
+                      <TableCell className={`text-center font-mono font-black text-sm print:text-black ${
+                        finalBalance > 0 ? 'text-amber-300' : finalBalance < 0 ? 'text-cyan-300' : 'text-slate-100'
+                      }`}>
+                        {money(finalBalance)}
+                      </TableCell>
+                    </TableRow>
+                  </tfoot>
+                </Table>
+              </div>
+
+              {/* Mobile View */}
+              <div className="space-y-3 md:hidden print:hidden">
+                {filteredLedgerRows.map((row) => (
+                  <article
+                    key={`mobile-ledger-${row.id}`}
+                    className={`rounded-2xl border p-4 shadow-sm space-y-3 ${
+                      row.type === 'PAYMENT'
+                        ? 'border-emerald-800/60 bg-emerald-950/20'
+                        : row.type === 'OPENING_BALANCE'
+                        ? 'border-amber-800/60 bg-amber-950/20'
+                        : 'border-slate-800 bg-slate-950/60'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2 border-b border-slate-800 pb-2">
+                      <div>
+                        <span className="font-mono text-xs text-slate-400 block">{row.date}</span>
+                        <strong className="text-sm text-slate-100 block mt-0.5">{row.description}</strong>
+                      </div>
+                      <span className={`shrink-0 rounded px-2 py-0.5 text-[10px] font-bold ${
+                        row.type === 'SUPPLY'
+                          ? 'bg-cyan-500/20 text-cyan-300'
+                          : row.type === 'PAYMENT'
+                          ? 'bg-emerald-500/20 text-emerald-300'
+                          : 'bg-amber-500/20 text-amber-300'
+                      }`}>
+                        {row.type === 'SUPPLY' ? 'توريد' : row.type === 'PAYMENT' ? 'سداد' : 'رصيد سابق'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div><span className="text-slate-400">قطعة:</span> <strong className="font-mono text-amber-300">{row.parcel || '—'}</strong></div>
+                      <div><span className="text-slate-400">منطقة:</span> <span className="text-slate-200">{row.region || '—'}</span></div>
+                      {row.quantity !== null && (
+                        <div><span className="text-slate-400">كمية:</span> <strong className="font-mono text-cyan-300">{formatCleanNumber(row.quantity)} {row.uom || ''}</strong></div>
+                      )}
+                      {row.unit_price !== null && (
+                        <div><span className="text-slate-400">سعر:</span> <strong className="font-mono text-slate-200">{formatCleanNumber(row.unit_price)}</strong></div>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 text-center text-xs pt-2 border-t border-slate-800">
+                      <div className="rounded-lg bg-slate-900 p-2 border border-slate-800">
+                        <span className="text-[10px] text-slate-500 block">قيمة</span>
+                        <strong className="font-mono text-cyan-300 mt-0.5 block">{row.value > 0 ? money(row.value) : '—'}</strong>
+                      </div>
+                      <div className="rounded-lg bg-slate-900 p-2 border border-slate-800">
+                        <span className="text-[10px] text-slate-500 block">الواصل</span>
+                        <strong className="font-mono text-emerald-300 mt-0.5 block">{row.paid > 0 ? money(row.paid) : '—'}</strong>
+                      </div>
+                      <div className="rounded-lg bg-slate-900 p-2 border border-slate-800">
+                        <span className="text-[10px] text-slate-500 block">الرصيد</span>
+                        <strong className={`font-mono mt-0.5 block ${row.balance > 0 ? 'text-amber-300' : 'text-slate-200'}`}>{money(row.balance)}</strong>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="py-8 text-center text-sm text-slate-500 bg-slate-950/40 rounded-xl border border-slate-800/60">
+              لا توجد حركات مسجلة تطابق محددات البحث الحالية.
+            </div>
+          )}
+        </Card>
+      </div>
+
       {/* Section 1: Invoices & POs */}
-      <Card className="space-y-4 border-slate-800 bg-slate-900/90">
+      {activeTab === 'INVOICES' && (
+      <Card className="space-y-4 border-slate-800 bg-slate-900/90 print:hidden">
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div>
             <h3 className="text-base font-black text-slate-100 flex items-center gap-2">
@@ -343,9 +992,11 @@ const SupplierAccountDedicatedPage: React.FC<{
           </div>
         )}
       </Card>
+      )}
 
       {/* Section 2: Payments History */}
-      <Card className="space-y-4 border-slate-800 bg-slate-900/90">
+      {activeTab === 'PAYMENTS' && (
+      <Card className="space-y-4 border-slate-800 bg-slate-900/90 print:hidden">
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div>
             <h3 className="text-base font-black text-slate-100 flex items-center gap-2">
@@ -474,9 +1125,11 @@ const SupplierAccountDedicatedPage: React.FC<{
           </div>
         )}
       </Card>
+      )}
 
       {/* Section 3: Approved Price Quotes Archive */}
-      <Card className="space-y-4 border-slate-800 bg-slate-900/90">
+      {activeTab === 'QUOTES' && (
+      <Card className="space-y-4 border-slate-800 bg-slate-900/90 print:hidden">
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div>
             <h3 className="text-base font-black text-slate-100 flex items-center gap-2">
@@ -610,6 +1263,7 @@ const SupplierAccountDedicatedPage: React.FC<{
           </div>
         )}
       </Card>
+      )}
     </div>
   );
 };
