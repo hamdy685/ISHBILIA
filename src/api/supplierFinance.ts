@@ -209,7 +209,7 @@ export interface SupplierAccountDetails {
 export interface CreateSupplierInvoicePayload {
   purchase_order_id: number;
   purchase_receipt_id: number;
-  invoice_number: string;
+  invoice_number?: string;
   amount: number;
   invoice_date?: string;
   due_date?: string;

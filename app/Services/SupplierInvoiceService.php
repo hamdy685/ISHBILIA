@@ -138,7 +138,7 @@ class SupplierInvoiceService
         PurchaseOrder $purchaseOrder,
         PurchaseReceipt $receipt,
         float $amount,
-        string $invoiceNumber,
+        ?string $invoiceNumber = null,
         ?string $invoiceDate = null,
         ?string $dueDate = null,
         array $landAllocations = [],
@@ -170,11 +170,17 @@ class SupplierInvoiceService
             throw new \RuntimeException('تم تسجيل فاتورة لهذا إذن الاستلام بالفعل.');
         }
 
-        $normalizedInvoiceNumber = trim($invoiceNumber);
+        $normalizedInvoiceNumber = trim((string) $invoiceNumber);
         if ($normalizedInvoiceNumber === '') {
-            throw ValidationException::withMessages(['invoice_number' => ['رقم الفاتورة مطلوب.']]);
-        }
-        if (SupplierInvoice::where('invoice_number', $normalizedInvoiceNumber)->exists()) {
+            $year = now()->format('Y');
+            $maxId = (int) (SupplierInvoice::max('id') ?? 0);
+            $seq = $maxId + 1;
+            $normalizedInvoiceNumber = sprintf('INV-%s-%05d', $year, $seq);
+            while (SupplierInvoice::where('invoice_number', $normalizedInvoiceNumber)->exists()) {
+                $seq++;
+                $normalizedInvoiceNumber = sprintf('INV-%s-%05d', $year, $seq);
+            }
+        } elseif (SupplierInvoice::where('invoice_number', $normalizedInvoiceNumber)->exists()) {
             throw ValidationException::withMessages(['invoice_number' => ['رقم الفاتورة مستخدم من قبل. أدخل رقمًا مختلفًا أو راجع أرشيف فواتير المورد.']]);
         }
 

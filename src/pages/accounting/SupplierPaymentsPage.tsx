@@ -187,10 +187,6 @@ export const SupplierPaymentsPage: React.FC = () => {
 
     const amount = Number(String(invoiceForm.amount || '').replace(/,/g, '').trim());
     const invoiceNumber = (invoiceForm.invoice_number || '').trim();
-    if (!invoiceNumber) {
-      setInvoiceModalError('رقم فاتورة المورد مطلوب.');
-      return;
-    }
     if (invoiceForm.due_date && invoiceForm.due_date < invoiceForm.invoice_date) {
       setInvoiceModalError('تاريخ الاستحقاق لا يمكن أن يسبق تاريخ الفاتورة.');
       return;
@@ -214,7 +210,7 @@ export const SupplierPaymentsPage: React.FC = () => {
       const payload: CreateSupplierInvoicePayload = {
         purchase_order_id: poId,
         purchase_receipt_id: invoiceReceipt.id,
-        invoice_number: invoiceNumber,
+        invoice_number: invoiceNumber || undefined,
         amount,
         invoice_date: invoiceForm.invoice_date,
         due_date: invoiceForm.due_date || undefined,
@@ -820,12 +816,11 @@ export const SupplierPaymentsPage: React.FC = () => {
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <label className="block text-xs font-bold text-slate-300">
-                  رقم فاتورة المورد *
+                  رقم فاتورة المورد (اختياري)
                   <input
-                    required
                     value={invoiceForm.invoice_number}
                     onChange={(event) => setInvoiceForm({ ...invoiceForm, invoice_number: event.target.value })}
-                    placeholder="مثال: INV-2026-981"
+                    placeholder="مثال: INV-2026-981 (تلقائي إن ترك فارغاً)"
                     className="mt-1 h-10 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 placeholder:text-slate-600 focus:border-cyan-500 focus:outline-none"
                   />
                 </label>

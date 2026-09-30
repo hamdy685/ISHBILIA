@@ -38,7 +38,7 @@ class SupplierInvoiceController extends Controller
         $validated = $request->validate([
             'purchase_order_id' => ['required', 'integer', 'exists:purchase_orders,id'],
             'purchase_receipt_id' => ['required', 'integer', 'exists:purchase_receipts,id'],
-            'invoice_number' => ['required', 'string', 'max:100'],
+            'invoice_number' => ['nullable', 'string', 'max:100'],
             'amount' => ['required', 'numeric', 'gt:0'],
             'invoice_date' => ['nullable', 'date'],
             'due_date' => ['nullable', 'date'],
@@ -72,7 +72,7 @@ class SupplierInvoiceController extends Controller
             PurchaseOrder::findOrFail($validated['purchase_order_id']),
             PurchaseReceipt::findOrFail($validated['purchase_receipt_id']),
             (float) $validated['amount'],
-            $validated['invoice_number'],
+            $validated['invoice_number'] ?? null,
             $validated['invoice_date'] ?? null,
             $validated['due_date'] ?? null,
             $validated['land_allocations'] ?? [],
