@@ -5,6 +5,7 @@ import { PurchaseOrder, المورد } from '../../types/purchaseOrder';
 import { getSuppliersApi } from '../../api/suppliers';
 import PurchaseOrderStatusBadge from '../../components/procurement/PurchaseOrderStatusBadge';
 import PurchaseOrderPrintModal from '../../components/procurement/PurchaseOrderPrintModal';
+import ThreeWayMatchPrintModal from '../../components/accounting/ThreeWayMatchPrintModal';
 import DirectPoModal from '../../components/procurement/DirectPoModal';
 import { TableSkeleton } from '../../components/ui/StateFeedback';
 import ErrorMessage from '../../components/ErrorMessage';
@@ -42,6 +43,7 @@ export const PurchaseOrdersPage: React.FC = () => {
   });
 
   const [selectedPrintPo, setSelectedPrintPo] = useState<PurchaseOrder | null>(null);
+  const [selectedCyclePo, setSelectedCyclePo] = useState<PurchaseOrder | null>(null);
   const [isDirectPoModalOpen, setIsDirectPoModalOpen] = useState<boolean>(false);
   const ignoreDefaultDateForSearch = Boolean(searchTerm.trim()) && isDefaultTodayRange(dateFrom, dateTo);
 
@@ -238,9 +240,17 @@ export const PurchaseOrdersPage: React.FC = () => {
                         variant="ghost"
                         size="sm"
                         onClick={() => setSelectedPrintPo(po)}
-                        className="px-2 py-0.5 text-[10px] border border-slate-700 text-cyan-400"
+                        className="px-2 py-0.5 text-[10px] border border-slate-700 text-cyan-400 hover:bg-slate-800"
                       >
-                        🖨️ طباعة
+                        🖨️ طباعة PO
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSelectedCyclePo(po)}
+                        className="px-2 py-0.5 text-[10px] border border-slate-700 text-cyan-300 hover:bg-slate-800"
+                      >
+                        🖨️ طباعة الدورة (3 في 1)
                       </Button>
                     </div>
                   </TableCell>
@@ -274,7 +284,8 @@ export const PurchaseOrdersPage: React.FC = () => {
                 <div className="mt-4 flex flex-wrap gap-2">
                   <Link to={`/procurement/purchase-orders/${po.id}`}><Button variant="secondary" size="sm">عرض التفاصيل</Button></Link>
                   {canEdit && <Link to={`/procurement/purchase-orders/${po.id}/edit`}><Button variant="warning" size="sm">تعديل</Button></Link>}
-                  <Button variant="ghost" size="sm" onClick={() => setSelectedPrintPo(po)}>طباعة</Button>
+                  <Button variant="ghost" size="sm" onClick={() => setSelectedPrintPo(po)}>طباعة PO</Button>
+                  <Button variant="ghost" size="sm" className="text-cyan-300 border border-slate-700" onClick={() => setSelectedCyclePo(po)}>🖨️ طباعة الدورة (3 في 1)</Button>
                 </div>
               </article>
             );
@@ -300,6 +311,14 @@ export const PurchaseOrdersPage: React.FC = () => {
           po={selectedPrintPo}
           isOpen={!!selectedPrintPo}
           onClose={() => setSelectedPrintPo(null)}
+        />
+      )}
+
+      {selectedCyclePo && (
+        <ThreeWayMatchPrintModal
+          po={selectedCyclePo}
+          isOpen={!!selectedCyclePo}
+          onClose={() => setSelectedCyclePo(null)}
         />
       )}
 

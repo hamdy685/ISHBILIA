@@ -6,6 +6,7 @@ import { Button } from '../../components/ui/Button';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/ui/Table';
 import { CurrencyDisplay } from '../../components/ui/CurrencyDisplay';
 import PurchaseOrderPrintModal from '../../components/procurement/PurchaseOrderPrintModal';
+import ThreeWayMatchPrintModal from '../../components/accounting/ThreeWayMatchPrintModal';
 import TableFilterBar from '../../components/ui/TableFilterBar';
 import { getDefaultDateFrom, getTodayInputDate, isDefaultTodayRange } from '../../utils/dateFilters';
 import { parseApiError } from '../../utils/apiError';
@@ -16,6 +17,7 @@ export const AccountingPurchaseOrdersPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedPo, setSelectedPo] = useState<PurchaseOrder | null>(null);
+  const [cyclePrintPo, setCyclePrintPo] = useState<PurchaseOrder | null>(null);
   const [openingPoId, setOpeningPoId] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -154,7 +156,12 @@ export const AccountingPurchaseOrdersPage: React.FC = () => {
                   <TableCell className="font-mono font-bold text-amber-300 text-xs whitespace-nowrap">{quantity}</TableCell>
                   <TableCell className="whitespace-nowrap"><CurrencyDisplay amount={x.grand_total} amountClassName="font-mono font-bold text-emerald-400" /></TableCell>
                   <TableCell className="whitespace-nowrap"><Badge status={x.status} /></TableCell>
-                  <TableCell className="text-center"><Button type="button" variant="secondary" size="sm" className="whitespace-nowrap px-2 py-0.5 text-[10px]" onClick={() => void openPurchaseOrder(x)} disabled={openingPoId === x.id}>{openingPoId === x.id ? 'جاري الفتح...' : '👁️ فتح أمر الشراء'}</Button></TableCell>
+                  <TableCell className="text-center">
+                    <div className="flex items-center justify-center gap-1.5">
+                      <Button type="button" variant="secondary" size="sm" className="whitespace-nowrap px-2 py-0.5 text-[10px]" onClick={() => void openPurchaseOrder(x)} disabled={openingPoId === x.id}>{openingPoId === x.id ? 'جاري الفتح...' : '👁️ فتح أمر الشراء'}</Button>
+                      <Button type="button" variant="ghost" size="sm" className="whitespace-nowrap px-2 py-0.5 text-[10px] border border-slate-700 text-cyan-300 hover:bg-slate-800" onClick={() => setCyclePrintPo(x)}>🖨️ طباعة الدورة (3 في 1)</Button>
+                    </div>
+                  </TableCell>
                 </TableRow>
               );
             })}
@@ -196,7 +203,10 @@ export const AccountingPurchaseOrdersPage: React.FC = () => {
                 <div className="min-w-0"><dt className="text-slate-500">رئيس القسم</dt><dd className="mt-1 break-normal leading-6 text-emerald-300">{x.department_approver?.name || x.purchase_request?.assigned_reviewer?.name || 'غير محدد'}</dd></div>
                 <div className="min-w-0 min-[420px]:col-span-2"><dt className="text-slate-500">الإجمالي الكلي</dt><dd className="mt-1 whitespace-nowrap"><CurrencyDisplay amount={x.grand_total} amountClassName="font-mono font-bold text-emerald-400" /></dd></div>
               </dl>
-              <Button type="button" variant="secondary" size="sm" className="mt-4 w-full whitespace-nowrap" onClick={() => void openPurchaseOrder(x)} disabled={openingPoId === x.id}>{openingPoId === x.id ? 'جاري الفتح...' : '👁️ فتح أمر الشراء'}</Button>
+              <div className="mt-4 flex flex-col sm:flex-row gap-2">
+                <Button type="button" variant="secondary" size="sm" className="w-full whitespace-nowrap" onClick={() => void openPurchaseOrder(x)} disabled={openingPoId === x.id}>{openingPoId === x.id ? 'جاري الفتح...' : '👁️ فتح أمر الشراء'}</Button>
+                <Button type="button" variant="ghost" size="sm" className="w-full whitespace-nowrap text-xs border border-slate-700 text-cyan-300 hover:bg-slate-800" onClick={() => setCyclePrintPo(x)}>🖨️ طباعة الدورة (3 في 1)</Button>
+              </div>
             </article>
           );
         })}
@@ -204,6 +214,9 @@ export const AccountingPurchaseOrdersPage: React.FC = () => {
 
       {selectedPo && (
         <PurchaseOrderPrintModal po={selectedPo} isOpen={true} onClose={() => setSelectedPo(null)} />
+      )}
+      {cyclePrintPo && (
+        <ThreeWayMatchPrintModal po={cyclePrintPo} isOpen={true} onClose={() => setCyclePrintPo(null)} />
       )}
     </div>
   );

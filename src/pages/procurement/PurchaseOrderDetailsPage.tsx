@@ -4,6 +4,7 @@ import { getPurchaseOrderApi, submitPurchaseOrderApi } from '../../api/purchaseO
 import { PurchaseOrder } from '../../types/purchaseOrder';
 import PurchaseOrderStatusBadge from '../../components/procurement/PurchaseOrderStatusBadge';
 import PurchaseOrderPrintModal from '../../components/procurement/PurchaseOrderPrintModal';
+import ThreeWayMatchPrintModal from '../../components/accounting/ThreeWayMatchPrintModal';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import ErrorMessage from '../../components/ErrorMessage';
 import { useAuth } from '../../context/AuthContext';
@@ -25,6 +26,7 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const [isPrintModalOpen, setIsPrintModalOpen] = useState<boolean>(false);
+  const [isCyclePrintModalOpen, setIsCyclePrintModalOpen] = useState<boolean>(false);
 
   const { hasPermission } = useAuth();
 
@@ -136,7 +138,16 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
             onClick={() => setIsPrintModalOpen(true)}
             className="flex-1 md:flex-none min-h-10 text-xs"
           >
-            🖨️ معاينة وتصدير للطباعة
+            🖨️ معاينة PO
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="md"
+            onClick={() => setIsCyclePrintModalOpen(true)}
+            className="flex-1 md:flex-none min-h-10 text-xs text-cyan-300 border border-slate-700 hover:bg-slate-800 font-bold"
+          >
+            🖨️ طباعة الدورة (3 في 1)
           </Button>
         </div>
       </div>
@@ -292,6 +303,12 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
         po={po}
         isOpen={isPrintModalOpen}
         onClose={() => setIsPrintModalOpen(false)}
+      />
+
+      <ThreeWayMatchPrintModal
+        po={po}
+        isOpen={isCyclePrintModalOpen}
+        onClose={() => setIsCyclePrintModalOpen(false)}
       />
     </div>
   );

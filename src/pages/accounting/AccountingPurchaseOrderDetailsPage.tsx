@@ -10,6 +10,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '.
 import { CurrencyDisplay } from '../../components/ui/CurrencyDisplay';
 import { getUnitLabel } from '../../utils/units';
 import PrintablePO from '../../components/procurement/PrintablePO';
+import ThreeWayMatchPrintModal from '../../components/accounting/ThreeWayMatchPrintModal';
 import { UnifiedNotesCard } from '../../components/common/UnifiedNotesCard';
 import { Modal } from '../../components/ui/Modal';
 import { useAuth } from '../../context/AuthContext';
@@ -23,6 +24,7 @@ export const AccountingPurchaseOrderDetailsPage: React.FC = () => {
   const [po, setPo] = useState<PurchaseOrder | null>(null);
   const [extraReceipts, setExtraReceipts] = useState<LinkedReceiptSummary[]>([]);
   const [printPo, setPrintPo] = useState<PurchaseOrder | null>(null);
+  const [cyclePrintPo, setCyclePrintPo] = useState<PurchaseOrder | null>(null);
   const [previewPhoto, setPreviewPhoto] = useState<{ url: string; title: string } | null>(null);
   const { hasRole } = useAuth();
   const isDepartmentAccountant = hasRole('site_accountant') || hasRole('licenses_accountant') || hasRole('buffet_accountant');
@@ -115,6 +117,12 @@ export const AccountingPurchaseOrderDetailsPage: React.FC = () => {
             className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
           >
             🖨️ طباعة PO
+          </button>
+          <button
+            onClick={() => setCyclePrintPo(po)}
+            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 rounded-xl text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
+          >
+            🖨️ طباعة الدورة (3 في 1)
           </button>
           <button
             onClick={handleExportJson}
@@ -652,6 +660,14 @@ export const AccountingPurchaseOrderDetailsPage: React.FC = () => {
         <PrintablePO
           po={printPo}
           onClose={() => setPrintPo(null)}
+        />
+      )}
+
+      {cyclePrintPo && (
+        <ThreeWayMatchPrintModal
+          po={cyclePrintPo}
+          isOpen={true}
+          onClose={() => setCyclePrintPo(null)}
         />
       )}
 

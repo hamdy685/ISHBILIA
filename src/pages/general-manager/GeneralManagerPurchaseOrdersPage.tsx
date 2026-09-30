@@ -10,10 +10,12 @@ import TableFilterBar from '../../components/ui/TableFilterBar';
 import { getDefaultDateFrom, getTodayInputDate, isDefaultTodayRange } from '../../utils/dateFilters';
 import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh';
 import { getUnitLabel } from '../../utils/units';
+import ThreeWayMatchPrintModal from '../../components/accounting/ThreeWayMatchPrintModal';
 
 export const GeneralManagerPurchaseOrdersPage: React.FC = () => {
   const [pos, setPos] = useState<PurchaseOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cyclePrintPo, setCyclePrintPo] = useState<PurchaseOrder | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('ALL');
   const [supplierFilter, setSupplierFilter] = useState('ALL');
@@ -143,11 +145,22 @@ export const GeneralManagerPurchaseOrdersPage: React.FC = () => {
                       <Badge status={x.status} />
                     </TableCell>
                     <TableCell className="text-center">
-                      <Link to={`/general-manager/purchase-orders/${x.id}`}>
-                        <Button variant="secondary" size="sm" className="px-2 py-0.5 text-[10px]">
-                          👁️ عرض التفاصيل
+                      <div className="flex items-center justify-center gap-1.5">
+                        <Link to={`/general-manager/purchase-orders/${x.id}`}>
+                          <Button variant="secondary" size="sm" className="px-2 py-0.5 text-[10px]">
+                            👁️ عرض التفاصيل
+                          </Button>
+                        </Link>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="px-2 py-0.5 text-[10px] border border-slate-700 text-cyan-300 hover:bg-slate-800"
+                          onClick={() => setCyclePrintPo(x)}
+                        >
+                          🖨️ طباعة الدورة (3 في 1)
                         </Button>
-                      </Link>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -182,16 +195,31 @@ export const GeneralManagerPurchaseOrdersPage: React.FC = () => {
                   <div className="min-w-0"><dt className="text-slate-500">الكمية / العدد</dt><dd className="mt-1 font-mono font-bold text-amber-300">{quantity}</dd></div>
                   <div className="min-w-0"><dt className="text-slate-500">الإجمالي النهائي</dt><dd className="mt-1 whitespace-nowrap"><CurrencyDisplay amount={x.grand_total} amountClassName="font-mono font-bold text-emerald-400" /></dd></div>
                 </dl>
-                <Link to={`/general-manager/purchase-orders/${x.id}`} className="mt-4 block">
-                  <Button variant="secondary" size="sm" className="w-full whitespace-nowrap min-h-10">
-                    👁️ عرض التفاصيل
+                <div className="mt-4 flex flex-col sm:flex-row gap-2">
+                  <Link to={`/general-manager/purchase-orders/${x.id}`} className="flex-1">
+                    <Button variant="secondary" size="sm" className="w-full whitespace-nowrap min-h-10">
+                      👁️ عرض التفاصيل
+                    </Button>
+                  </Link>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="flex-1 w-full whitespace-nowrap min-h-10 text-xs border border-slate-700 text-cyan-300 hover:bg-slate-800"
+                    onClick={() => setCyclePrintPo(x)}
+                  >
+                    🖨️ طباعة الدورة (3 في 1)
                   </Button>
-                </Link>
+                </div>
               </article>
             );
           })
         )}
       </div>
+
+      {cyclePrintPo && (
+        <ThreeWayMatchPrintModal po={cyclePrintPo} isOpen={true} onClose={() => setCyclePrintPo(null)} />
+      )}
     </div>
   );
 };

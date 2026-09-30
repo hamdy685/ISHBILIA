@@ -1,12 +1,14 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { ApprovedReceipt } from '../../api/supplierFinance';
+import { PurchaseOrder } from '../../types/purchaseOrder';
 import { getUnitLabel } from '../../utils/units';
 import { printDocumentOnly } from '../../utils/print';
 import { formatCleanNumber } from '../../utils/numberFormat';
 
 interface ThreeWayMatchPrintModalProps {
-  receipt: ApprovedReceipt | null;
+  receipt?: ApprovedReceipt | null;
+  po?: PurchaseOrder | null;
   isOpen: boolean;
   onClose: () => void;
 }
@@ -21,7 +23,8 @@ const money = (value: number | string | null | undefined) =>
   `${formatCleanNumber(value)} ج.م`;
 
 export const ThreeWayMatchPrintModal: React.FC<ThreeWayMatchPrintModalProps> = ({
-  receipt,
+  receipt: propsReceipt,
+  po: propsPo,
   isOpen,
   onClose,
 }) => {
@@ -38,9 +41,22 @@ export const ThreeWayMatchPrintModal: React.FC<ThreeWayMatchPrintModalProps> = (
     };
   }, [isOpen, onClose]);
 
-  if (!isOpen || !receipt) return null;
+  if (!isOpen || (!propsReceipt && !propsPo)) return null;
 
-  const po = receipt.purchase_order;
+  const po = propsPo || propsReceipt?.purchase_order || null;
+  const receipt = propsReceipt || (po?.receipts?.[0] as any) || {
+    id: 0,
+    receipt_number: po?.po_number ? `GRN-${po.po_number}` : 'إذن استلام',
+    received_at: po?.created_at,
+    created_at: po?.created_at,
+    purchase_order: po,
+    purchase_request: po?.purchase_request,
+    warehouse_keeper: { name: 'أمين المخزن' },
+    site_engineer: po?.purchase_request?.site_engineer || { name: 'مهندس الموقع' },
+    warehouse_notes: 'مطابق للفحص والمعاينة',
+    items: [],
+  };
+
   const pr = po?.purchase_request || receipt.purchase_request;
 
   // Extract PR items: either from pr.items or from po.items.pr_item
@@ -62,7 +78,7 @@ export const ThreeWayMatchPrintModal: React.FC<ThreeWayMatchPrintModalProps> = (
   const displayReceiptItems = poItems.length > 0
     ? poItems.map((poItem, idx) => {
         const found = receiptItems.find(
-          (ri) => ri.purchase_order_item?.id === poItem.id || (ri as any).purchase_order_item_id === poItem.id
+          (ri: any) => ri.purchase_order_item?.id === poItem.id || (ri as any).purchase_order_item_id === poItem.id
         );
         if (found) return found;
         return {
@@ -300,7 +316,7 @@ export const ThreeWayMatchPrintModal: React.FC<ThreeWayMatchPrintModalProps> = (
                   </tr>
                 </thead>
                 <tbody>
-                  {displayReceiptItems.map((item, idx) => {
+                  {displayReceiptItems.map((item: any, idx: number) => {
                     const poItem = item.purchase_order_item;
                     const prItem = poItem?.pr_item;
                     const itemUom = prItem?.uom || poItem?.uom || '';
