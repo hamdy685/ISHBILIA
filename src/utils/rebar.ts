@@ -8,6 +8,12 @@ export interface RebarSpec {
 }
 
 export const REBAR_TYPES: Record<string, RebarSpec> = {
+  BAR_2_5LINIA: {
+    code: 'BAR_2_5LINIA',
+    label: 'سيخ 2.5 لينية',
+    linia: '2.5 لينية',
+    weightKg: 4.7,
+  },
   BAR_3LINIA: {
     code: 'BAR_3LINIA',
     label: 'سيخ 3 لينية',
@@ -26,13 +32,21 @@ export const REBAR_TYPES: Record<string, RebarSpec> = {
     linia: '5 لينية',
     weightKg: 19.0,
   },
+  PARCEL: {
+    code: 'PARCEL',
+    label: 'طرد حديد',
+    linia: 'طرد (1.940 طن)',
+    weightKg: 1940.0,
+  },
 };
 
 export const normalizeRebarCode = (unit?: string | null): string => {
   const u = (unit || '').trim().toUpperCase();
+  if (u.includes('2.5') || u.includes('2_5') || u.includes('2,5')) return 'BAR_2_5LINIA';
   if (u.includes('3') && (u.includes('LINIA') || u.includes('MM') || u.includes('لينية') || u.includes('لنية') || u.includes('ملل'))) return 'BAR_3LINIA';
   if (u.includes('4') && (u.includes('LINIA') || u.includes('MM') || u.includes('لينية') || u.includes('لنية') || u.includes('ملل'))) return 'BAR_4LINIA';
   if (u.includes('5') && (u.includes('LINIA') || u.includes('MM') || u.includes('لينية') || u.includes('لنية') || u.includes('ملل'))) return 'BAR_5LINIA';
+  if (u === 'PARCEL' || u.includes('طرد')) return 'PARCEL';
   return u;
 };
 
@@ -93,11 +107,14 @@ export const formatRebarDisplay = (
   unit?: string | null,
   specifications?: string | null
 ): string | null => {
-  // Case 1: Unit is one of the rebar units (BAR_3LINIA, BAR_4LINIA, BAR_5LINIA)
+  // Case 1: Unit is one of the rebar units (BAR_2_5LINIA, BAR_3LINIA, BAR_4LINIA, BAR_5LINIA, PARCEL)
   if (isRebarUnit(unit)) {
     const spec = getRebarType(unit)!;
     const count = typeof quantity === 'string' ? parseFloat(quantity) || 0 : Number(quantity) || 0;
     const tons = calculateRebarTons(count, unit);
+    if (spec.code === 'PARCEL') {
+      return `${formatCleanNumber(tons, 3)} طن (${formatCleanQty(count)} طرد)`;
+    }
     return `${formatCleanNumber(tons, 3)} طن (${formatCleanQty(count)} سيخ ${spec.linia})`;
   }
 

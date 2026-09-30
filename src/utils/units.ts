@@ -27,10 +27,12 @@ export const UNIT_LABELS: Record<string, string> = {
   PALLET: 'طبالي',
   DRUM: 'برميل',
   SHEET: 'لوح',
+  BAR_2_5LINIA: 'سيخ 2.5 لينية',
   BAR_3LINIA: 'سيخ 3 لينية',
   BAR_4LINIA: 'سيخ 4 لينية',
   BAR_5LINIA: 'سيخ 5 لينية',
   BAR: 'سيخ',
+  PARCEL: 'طرد (1.940 طن)',
   GALLON: 'جالون',
   JERRICAN: 'جركن',
   SPOOL: 'بكرة',
@@ -42,6 +44,7 @@ export const UNIT_LABELS: Record<string, string> = {
   MONTH: 'شهر',
   SERVICE: 'خدمة',
 };
+
 
 const UNIT_ALIASES: Record<string, string> = {
   'M³': 'M3',
@@ -191,6 +194,19 @@ const UNIT_ALIASES: Record<string, string> = {
   'قضيب': 'BAR',
   'BAR': 'BAR',
   'BARS': 'BAR',
+  'سيخ 2.5 لينية': 'BAR_2_5LINIA',
+  '2.5 لينية': 'BAR_2_5LINIA',
+  'سيخ 2.5 لنية': 'BAR_2_5LINIA',
+  '2.5 لنية': 'BAR_2_5LINIA',
+  'سيخ 2.5 ملل': 'BAR_2_5LINIA',
+  '2.5 ملل': 'BAR_2_5LINIA',
+  'BAR_2_5LINIA': 'BAR_2_5LINIA',
+  'BAR_2.5LINIA': 'BAR_2_5LINIA',
+  'BAR_2.5MM': 'BAR_2_5LINIA',
+  'طرد': 'PARCEL',
+  'طرد حديد': 'PARCEL',
+  'طرد (1.940 طن)': 'PARCEL',
+  'PARCEL': 'PARCEL',
   'سيخ 3 لينية': 'BAR_3LINIA',
   '3 لينية': 'BAR_3LINIA',
   'سيخ 3 لنية': 'BAR_3LINIA',
@@ -291,9 +307,11 @@ export const getUnitValue = (unit?: string | null): string => {
 
 export const getUnitOptions = (units: string[]): Array<{ value: string; label: string }> =>
   units.map((value) => {
+    if (value === 'BAR_2_5LINIA') return { value, label: 'سيخ 2.5 لينية (4.7 كجم)' };
     if (value === 'BAR_3LINIA') return { value, label: 'سيخ 3 لينية (7.4 كجم)' };
     if (value === 'BAR_4LINIA') return { value, label: 'سيخ 4 لينية (10.4 كجم)' };
     if (value === 'BAR_5LINIA') return { value, label: 'سيخ 5 لينية (19 كجم)' };
+    if (value === 'PARCEL') return { value, label: 'طرد حديد (1.940 طن)' };
     return { value, label: getUnitLabel(value) };
   });
 
@@ -316,12 +334,15 @@ export const DEFAULT_PR_UNIT_CODES = [
   'ROLL',
   'SPOOL',
   'DOZEN',
+  'BAR_2_5LINIA',
   'BAR_3LINIA',
   'BAR_4LINIA',
   'BAR_5LINIA',
+  'PARCEL',
   'SET',
   'PAIR',
   'UNIT',
   'HOUR',
   'DAY',
 ];
+
