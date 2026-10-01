@@ -204,6 +204,9 @@ class SupplierInvoiceService
             app(LandParcelService::class)->recordInvoiceAllocations($accountant, $invoice, $landAllocations);
             $this->refreshSupplierBalance($invoice->supplier_id);
 
+            // Auto-resolve / mark read all notifications related to this PO and Receipt
+            app(NotificationService::class)->markOrderAndReceiptNotificationsAsRead($purchaseOrder, $receipt);
+
             return $invoice->fresh(['supplier', 'purchaseOrder', 'purchaseReceipt', 'landAllocations.parcel']);
         });
     }
@@ -247,6 +250,7 @@ class SupplierInvoiceService
 
         $this->refreshSupplierBalance($invoice->supplier_id);
         $this->generateSupplierInvoiceJournalEntry($invoice);
+        app(NotificationService::class)->markOrderAndReceiptNotificationsAsRead($invoice->purchaseOrder, $invoice->purchaseReceipt);
 
         return $invoice->fresh([
             'supplier',

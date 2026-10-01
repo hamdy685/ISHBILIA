@@ -13,18 +13,22 @@ export const getUnreadNotificationCountApi = async (): Promise<number> => {
 
 export const getUnreadCountApi = getUnreadNotificationCountApi;
 
-export const markNotificationAsReadApi = async (id: number): Promise<Notification> => {
-  const response = await apiClient.post<{ data: Notification } | Notification>(
-    '/notifications/' + id + '/read'
+export const markNotificationAsReadApi = async (id: number): Promise<Notification & { unread_count?: number }> => {
+  const response = await apiClient.post<{ data: Notification; unread_count?: number } | Notification>(
+    '/notifications/' + id + '/mark-as-read'
   );
   const data = response.data;
-  return (data && typeof data === 'object' && 'data' in data && (data as any).data)
-    ? (data as { data: Notification }).data
-    : (data as Notification);
+  if (data && typeof data === 'object' && 'data' in data && (data as any).data) {
+    return {
+      ...(data as any).data,
+      unread_count: (data as any).unread_count,
+    };
+  }
+  return data as Notification;
 };
 
 export const markAllNotificationsAsReadApi = async (): Promise<void> => {
-  await apiClient.post('/notifications/read-all');
+  await apiClient.post('/notifications/mark-all-as-read');
 };
 
 export const sendTestPushApi = async (): Promise<{ message: string; device_count: number }> => {

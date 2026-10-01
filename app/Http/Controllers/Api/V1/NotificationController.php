@@ -99,12 +99,18 @@ class NotificationController extends Controller
     public function markAsRead(Request $request, string|int $id): JsonResponse|NotificationResource
     {
         $notification = Notification::findOrFail((int) $id);
-        try {
-            $updatedNotif = $this->notificationService->markAsRead($request->user(), $notification);
-        } catch (AuthorizationException $e) {
+        if ($notification->user_id !== $request->user()->id) {
             return response()->json(['message' => 'هذا الإشعار لا يخص المستخدم الحالي.'], 403);
         }
-        return new NotificationResource($updatedNotif);
+
+        $notification->markAsRead();
+        $unreadCount = $this->notificationService->getUnreadCount($request->user());
+
+        return (new NotificationResource($notification))->additional([
+            'message' => 'تم تحديد الإشعار كمقروء.',
+            'unread_count' => $unreadCount,
+            'count' => $unreadCount,
+        ]);
     }
 
     public function markAllAsRead(Request $request): JsonResponse
@@ -112,6 +118,8 @@ class NotificationController extends Controller
         $this->notificationService->markAllAsRead($request->user());
         return response()->json([
             'message' => 'تم تحديد جميع الإشعارات كمقروءة.',
+            'unread_count' => 0,
+            'count' => 0,
         ]);
     }
 

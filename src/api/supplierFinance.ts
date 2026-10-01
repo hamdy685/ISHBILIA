@@ -330,11 +330,21 @@ export const createSupplierInvoiceApi = async (payload: CreateSupplierInvoicePay
   const response = await apiClient.post<{ data: SupplierInvoice }>(`${accountingBase}/invoices`, payload);
   invalidateCachedGet(`${accountingBase}/land-parcels`);
   invalidateCachedGet(`${accountingBase}/suppliers/accounts`);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('notifications-updated'));
+    window.dispatchEvent(new CustomEvent('app-data-updated'));
+  }
   return response.data.data;
 };
 
-export const matchSupplierInvoiceApi = async (invoiceId: number) =>
-  (await apiClient.post<{ data: SupplierInvoice }>(`${accountingBase}/invoices/${invoiceId}/match`)).data.data;
+export const matchSupplierInvoiceApi = async (invoiceId: number) => {
+  const response = await apiClient.post<{ data: SupplierInvoice }>(`${accountingBase}/invoices/${invoiceId}/match`);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('notifications-updated'));
+    window.dispatchEvent(new CustomEvent('app-data-updated'));
+  }
+  return response.data.data;
+};
 
 export interface SupplierPaymentResult {
   payment: SupplierPayment;

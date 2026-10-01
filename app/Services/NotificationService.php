@@ -319,7 +319,10 @@ class NotificationService
             ->paginate($perPage);
         }
 
-        return $query->whereIn('notifiable_type', $this->procurementNotifiableTypes())
+        return $query->where(function ($q) {
+            $q->whereIn('notifiable_type', $this->procurementNotifiableTypes())
+              ->orWhereNull('notifiable_type');
+        })
             ->orderBy('created_at', 'desc')
             ->orderBy('id', 'desc')
             ->paginate($perPage);
@@ -340,8 +343,10 @@ class NotificationService
             })->count();
         }
 
-        return $query->whereIn('notifiable_type', $this->procurementNotifiableTypes())
-            ->count();
+        return $query->where(function ($q) {
+            $q->whereIn('notifiable_type', $this->procurementNotifiableTypes())
+              ->orWhereNull('notifiable_type');
+        })->count();
     }
 
     /**
@@ -375,8 +380,7 @@ class NotificationService
             })->update(['read_at' => now()]);
         }
 
-        return $query->whereIn('notifiable_type', $this->procurementNotifiableTypes())
-            ->update(['read_at' => now()]);
+        return $query->update(['read_at' => now()]);
     }
 
     /**
@@ -384,9 +388,32 @@ class NotificationService
      */
     public function markEntityNotificationsAsRead(Model $notifiable, User|int|null $user = null, ?string $type = null): int
     {
-        $query = Notification::where('notifiable_type', get_class($notifiable))
-            ->where('notifiable_id', $notifiable->getKey())
-            ->whereNull('read_at');
+        $notifiableClass = get_class($notifiable);
+        $notifiableKey = $notifiable->getKey();
+
+        $query = Notification::where(function ($q) use ($notifiableClass, $notifiableKey, $notifiable) {
+            $q->where(function ($sub) use ($notifiableClass, $notifiableKey) {
+                $sub->where('notifiable_type', $notifiableClass)
+                    ->where('notifiable_id', $notifiableKey);
+            });
+
+            if ($notifiable instanceof PurchaseOrder) {
+                $q->orWhere('purchase_order_id', $notifiableKey);
+                if (!empty($notifiable->po_number)) {
+                    $q->orWhere('message', 'like', "%{$notifiable->po_number}%");
+                }
+            } elseif ($notifiable instanceof PurchaseReceipt) {
+                $q->orWhere('purchase_receipt_id', $notifiableKey);
+                if (!empty($notifiable->receipt_number)) {
+                    $q->orWhere('message', 'like', "%{$notifiable->receipt_number}%");
+                }
+            } elseif ($notifiable instanceof PurchaseRequest) {
+                if (!empty($notifiable->request_number)) {
+                    $q->orWhere('message', 'like', "%{$notifiable->request_number}%");
+                }
+            }
+        })
+        ->whereNull('read_at');
 
         if ($user !== null) {
             $userId = $user instanceof User ? $user->id : (int) $user;
@@ -395,6 +422,49 @@ class NotificationService
 
         if ($type !== null) {
             $query->where('type', $type);
+        }
+
+        return $query->update(['read_at' => now()]);
+    }
+
+    /**
+     * Mark all pending notifications for a purchase order, receipt, or related request as read when an action is executed.
+     */
+    public function markOrderAndReceiptNotificationsAsRead(int|PurchaseOrder $purchaseOrder, int|PurchaseReceipt|null $receipt = null, User|int|null $user = null): int
+    {
+        $poId = $purchaseOrder instanceof PurchaseOrder ? $purchaseOrder->id : (int) $purchaseOrder;
+        $poNumber = $purchaseOrder instanceof PurchaseOrder ? $purchaseOrder->po_number : null;
+        $receiptId = $receipt instanceof PurchaseReceipt ? $receipt->id : ($receipt ? (int) $receipt : null);
+        $receiptNumber = $receipt instanceof PurchaseReceipt ? $receipt->receipt_number : null;
+
+        $query = Notification::where(function ($q) use ($poId, $poNumber, $receiptId, $receiptNumber) {
+            $q->where('purchase_order_id', $poId)
+              ->orWhere(function ($q2) use ($poId) {
+                  $q2->where('notifiable_type', PurchaseOrder::class)
+                     ->where('notifiable_id', $poId);
+              });
+
+            if ($poNumber) {
+                $q->orWhere('message', 'like', "%{$poNumber}%");
+            }
+
+            if ($receiptId) {
+                $q->orWhere('purchase_receipt_id', $receiptId)
+                  ->orWhere(function ($q3) use ($receiptId) {
+                      $q3->where('notifiable_type', PurchaseReceipt::class)
+                         ->where('notifiable_id', $receiptId);
+                  });
+            }
+
+            if ($receiptNumber) {
+                $q->orWhere('message', 'like', "%{$receiptNumber}%");
+            }
+        })
+        ->whereNull('read_at');
+
+        if ($user !== null) {
+            $userId = $user instanceof User ? $user->id : (int) $user;
+            $query->where('user_id', $userId);
         }
 
         return $query->update(['read_at' => now()]);

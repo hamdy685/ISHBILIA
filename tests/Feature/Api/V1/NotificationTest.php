@@ -305,6 +305,69 @@ class NotificationTest extends TestCase
         $this->assertNull($revNotif->fresh()->read_at);
     }
 
+    public function test_mark_as_read_endpoint_returns_updated_unread_count(): void
+    {
+        $notif1 = Notification::create([
+            'user_id' => $this->employee->id,
+            'type' => 'type_1',
+            'title' => 'Title 1',
+            'message' => 'Msg 1',
+            'notifiable_type' => PurchaseRequest::class,
+            'notifiable_id' => 1,
+        ]);
+        $notif2 = Notification::create([
+            'user_id' => $this->employee->id,
+            'type' => 'type_2',
+            'title' => 'Title 2',
+            'message' => 'Msg 2',
+            'notifiable_type' => PurchaseRequest::class,
+            'notifiable_id' => 2,
+        ]);
+
+        $token = $this->employee->createToken('test_token')->plainTextToken;
+
+        $response = $this->withHeader('Authorization', 'Bearer ' . $token)
+            ->postJson('/api/v1/notifications/' . $notif1->id . '/mark-as-read');
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'unread_count' => 1,
+                'count' => 1,
+            ]);
+
+        $this->assertNotNull($notif1->fresh()->read_at);
+        $this->assertNull($notif2->fresh()->read_at);
+    }
+
+    public function test_mark_all_as_read_endpoint_clears_all_and_returns_zero_count(): void
+    {
+        Notification::create([
+            'user_id' => $this->employee->id,
+            'type' => 'type_1',
+            'title' => 'Title 1',
+            'message' => 'Msg 1',
+        ]);
+        Notification::create([
+            'user_id' => $this->employee->id,
+            'type' => 'type_2',
+            'title' => 'Title 2',
+            'message' => 'Msg 2',
+        ]);
+
+        $token = $this->employee->createToken('test_token')->plainTextToken;
+
+        $response = $this->withHeader('Authorization', 'Bearer ' . $token)
+            ->postJson('/api/v1/notifications/mark-all-as-read');
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'unread_count' => 0,
+                'count' => 0,
+            ]);
+
+        $this->assertEquals(0, Notification::where('user_id', $this->employee->id)->whereNull('read_at')->count());
+    }
+
     public function test_full_workflow_end_to_end_notifications(): void
     {
         // 1. Employee creates and submits PR

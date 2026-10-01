@@ -435,8 +435,10 @@ Route::middleware('auth:sanctum')->prefix('notifications')->group(function () {
     Route::get('/', [NotificationController::class, 'index']);
     Route::get('/unread-count', [NotificationController::class, 'unreadCount']);
     Route::get('/stream', [NotificationController::class, 'stream'])->middleware('throttle:30,1');
-    Route::post('/{id}/read', [NotificationController::class, 'markAsRead']);
+    Route::post('/{id}/read', [NotificationController::class, 'markAsRead'])->whereNumber('id');
+    Route::post('/{id}/mark-as-read', [NotificationController::class, 'markAsRead'])->whereNumber('id');
     Route::post('/read-all', [NotificationController::class, 'markAllAsRead']);
+    Route::post('/mark-all-as-read', [NotificationController::class, 'markAllAsRead']);
     Route::post('/device-token', [NotificationController::class, 'registerDeviceToken']);
     Route::delete('/device-token', [NotificationController::class, 'deleteDeviceToken']);
     Route::post('/test-push', [NotificationController::class, 'testPush']);

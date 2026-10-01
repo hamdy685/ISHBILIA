@@ -30,6 +30,7 @@ import {
 import type { PurchaseRequest } from '../types/purchaseRequest';
 import { getPurchaseRequestApi } from '../api/purchaseRequests';
 import { PrDetailsModal } from '../components/procurement/PrDetailsModal';
+import { broadcastNotificationCount } from '../utils/notificationBadge';
 
 export type QuickFilterKey = 'ALL' | 'UNREAD' | 'READ' | 'TODAY' | 'LAST_10_DAYS' | 'NEEDS_ACTION' | 'COMPLETED' | 'RETURNED';
 
@@ -188,18 +189,45 @@ export const NotificationsPage: React.FC = () => {
       if (!notification) return;
       if (!isAllowedNotificationForUser(notification, user)) return;
       setNotifications((current) => [notification, ...current.filter((n) => n.id !== notification.id)]);
-      if (!notification.read_at) setUnreadCount((current) => current + 1);
+      if (!notification.read_at) {
+        setUnreadCount((current) => {
+          const next = current + 1;
+          broadcastNotificationCount(next);
+          return next;
+        });
+      }
     };
 
-    const handleNotificationsUpdated = () => {
+    const handleNotificationsUpdated = (event?: Event) => {
+      const custom = event as CustomEvent<{ optimistic?: boolean; id?: number; read_at?: string; unread_count?: number }>;
+      if (custom?.detail?.optimistic) {
+        if (typeof custom.detail.unread_count === 'number') {
+          setUnreadCount(custom.detail.unread_count);
+        }
+        if (custom.detail.id) {
+          setNotifications((prev) =>
+            prev.map((n) => (n.id === custom.detail.id ? { ...n, read_at: custom.detail.read_at || new Date().toISOString() } : n))
+          );
+        }
+        return;
+      }
       void loadNotificationsData();
+    };
+
+    const handleCountChanged = (e: Event) => {
+      const val = (e as CustomEvent<number>).detail;
+      if (typeof val === 'number') {
+        setUnreadCount((prev) => (prev !== val ? val : prev));
+      }
     };
 
     window.addEventListener('notification-received', handleRealtimeNotification as EventListener);
     window.addEventListener('notifications-updated', handleNotificationsUpdated);
+    window.addEventListener('notification-count-changed', handleCountChanged as EventListener);
     return () => {
       window.removeEventListener('notification-received', handleRealtimeNotification as EventListener);
       window.removeEventListener('notifications-updated', handleNotificationsUpdated);
+      window.removeEventListener('notification-count-changed', handleCountChanged as EventListener);
     };
   }, []);
 
@@ -210,15 +238,30 @@ export const NotificationsPage: React.FC = () => {
 
     setExecutingId(notification.id);
 
-    // Mark as read in background if unread
+    // Instant Optimistic UI Update: decrement count & update visual state without waiting
     if (!notification.read_at) {
-      void markNotificationAsReadApi(notification.id)
-        .then(() => {
-          setNotifications((prev) =>
-            prev.map((n) => (n.id === notification.id ? { ...n, read_at: new Date().toISOString() } : n))
-          );
-          setUnreadCount((prev) => Math.max(0, prev - 1));
-          window.dispatchEvent(new CustomEvent('notifications-updated'));
+      const nowIso = new Date().toISOString();
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === notification.id ? { ...n, read_at: nowIso } : n))
+      );
+      setUnreadCount((prev) => {
+        const next = Math.max(0, prev - 1);
+        broadcastNotificationCount(next);
+        return next;
+      });
+      window.dispatchEvent(
+        new CustomEvent('notifications-updated', {
+          detail: { id: notification.id, read_at: nowIso, optimistic: true },
+        })
+      );
+
+      // Background API call to persist on server and reconcile authoritative count
+      markNotificationAsReadApi(notification.id)
+        .then((res) => {
+          if (typeof res?.unread_count === 'number') {
+            setUnreadCount(res.unread_count);
+            broadcastNotificationCount(res.unread_count);
+          }
         })
         .catch(() => { });
     }
@@ -231,7 +274,7 @@ export const NotificationsPage: React.FC = () => {
       });
 
       // Small delay for clean feedback transition
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((r) => setTimeout(r, 150));
 
       navigate(action.url);
     } catch (err: any) {
@@ -255,11 +298,29 @@ export const NotificationsPage: React.FC = () => {
     });
 
     if (!notification.read_at) {
-      void markNotificationAsReadApi(notification.id).catch(() => { });
+      const nowIso = new Date().toISOString();
       setNotifications((prev) =>
-        prev.map((n) => (n.id === notification.id ? { ...n, read_at: new Date().toISOString() } : n))
+        prev.map((n) => (n.id === notification.id ? { ...n, read_at: nowIso } : n))
       );
-      setUnreadCount((prev) => Math.max(0, prev - 1));
+      setUnreadCount((prev) => {
+        const next = Math.max(0, prev - 1);
+        broadcastNotificationCount(next);
+        return next;
+      });
+      window.dispatchEvent(
+        new CustomEvent('notifications-updated', {
+          detail: { id: notification.id, read_at: nowIso, optimistic: true },
+        })
+      );
+
+      markNotificationAsReadApi(notification.id)
+        .then((res) => {
+          if (typeof res?.unread_count === 'number') {
+            setUnreadCount(res.unread_count);
+            broadcastNotificationCount(res.unread_count);
+          }
+        })
+        .catch(() => { });
     }
   };
 
@@ -272,15 +333,23 @@ export const NotificationsPage: React.FC = () => {
   const handleMarkAllAsRead = async () => {
     if (unreadCount === 0) return;
     setMarkingAll(true);
+    const readAt = new Date().toISOString();
+    // Instant Optimistic Update
+    setNotifications((prev) => prev.map((n) => ({ ...n, read_at: n.read_at || readAt })));
+    setUnreadCount(0);
+    broadcastNotificationCount(0);
+    window.dispatchEvent(
+      new CustomEvent('notifications-updated', {
+        detail: { optimistic: true, unread_count: 0 },
+      })
+    );
+
     try {
       await markAllNotificationsAsReadApi();
-      const readAt = new Date().toISOString();
-      setNotifications((prev) => prev.map((n) => ({ ...n, read_at: n.read_at || readAt })));
-      setUnreadCount(0);
-      window.dispatchEvent(new CustomEvent('notifications-updated'));
     } catch (err: any) {
       const parsed = parseApiError(err);
       setError(parsed.message);
+      void loadNotificationsData();
     } finally {
       setMarkingAll(false);
     }

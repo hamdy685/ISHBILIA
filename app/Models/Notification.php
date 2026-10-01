@@ -41,4 +41,13 @@ class Notification extends Model
     {
         return $this->morphTo();
     }
+
+    public function markAsRead(): self
+    {
+        if ($this->read_at === null) {
+            $this->update(['read_at' => now()]);
+        }
+
+        return $this;
+    }
 }

@@ -145,11 +145,30 @@ export const NotificationBell: React.FC = () => {
       }
     };
 
-    const handleUpdated = () => {
+    const handleUpdated = (event?: Event) => {
+      const custom = event as CustomEvent<{ optimistic?: boolean; id?: number; read_at?: string; unread_count?: number }>;
+      if (custom?.detail?.optimistic) {
+        if (typeof custom.detail.unread_count === 'number') {
+          setCount(custom.detail.unread_count);
+        }
+        if (custom.detail.id) {
+          setRecentNotifications((prev) =>
+            prev.map((n) => (n.id === custom.detail.id ? { ...n, read_at: custom.detail.read_at || new Date().toISOString() } : n))
+          );
+        }
+        return; // Don't wipe optimistic update with a race-condition network poll
+      }
       if (dropdownOpenRef.current) {
         void fetchNotificationsList();
       } else {
         void fetchUnreadCountOnly();
+      }
+    };
+
+    const handleCountChanged = (event: Event) => {
+      const val = (event as CustomEvent<number>).detail;
+      if (typeof val === 'number') {
+        setCount((prev) => (prev !== val ? val : prev));
       }
     };
 
@@ -181,6 +200,7 @@ export const NotificationBell: React.FC = () => {
     startNotificationsRealtime();
     window.addEventListener('notification-received', handleReceived as EventListener);
     window.addEventListener('notifications-updated', handleUpdated);
+    window.addEventListener('notification-count-changed', handleCountChanged as EventListener);
     window.addEventListener('app-data-updated', handleUpdated);
     document.addEventListener('visibilitychange', handleVisibilityOrFocus);
     window.addEventListener('focus', handleVisibilityOrFocus);
@@ -210,6 +230,7 @@ export const NotificationBell: React.FC = () => {
       window.clearInterval(pollInterval);
       window.removeEventListener('notification-received', handleReceived as EventListener);
       window.removeEventListener('notifications-updated', handleUpdated);
+      window.removeEventListener('notification-count-changed', handleCountChanged as EventListener);
       window.removeEventListener('app-data-updated', handleUpdated);
       document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
       window.removeEventListener('focus', handleVisibilityOrFocus);
@@ -227,25 +248,41 @@ export const NotificationBell: React.FC = () => {
     });
   };
 
-  const handleNotificationClick = async (notification: Notification) => {
+  const handleNotificationClick = (notification: Notification) => {
     setLatestToast(null);
     setDropdownOpen(false);
 
     // Resolve target route
     const { url } = resolveNotificationAction(notification, user);
 
-    // Mark as read in background
+    // Instant Optimistic UI Update: decrement count & update styling immediately without waiting for API
     if (!notification.read_at) {
-      try {
-        await markNotificationAsReadApi(notification.id);
-        setCount((prev) => Math.max(0, prev - 1));
-        setRecentNotifications((prev) =>
-          prev.map((n) => (n.id === notification.id ? { ...n, read_at: new Date().toISOString() } : n))
-        );
-        window.dispatchEvent(new CustomEvent('notifications-updated'));
-      } catch (err) {
-        console.error('Error marking notification as read:', err);
-      }
+      const nowIso = new Date().toISOString();
+      setCount((prev) => {
+        const next = Math.max(0, prev - 1);
+        broadcastNotificationCount(next);
+        return next;
+      });
+      setRecentNotifications((prev) =>
+        prev.map((n) => (n.id === notification.id ? { ...n, read_at: nowIso } : n))
+      );
+      window.dispatchEvent(
+        new CustomEvent('notifications-updated', {
+          detail: { id: notification.id, read_at: nowIso, optimistic: true },
+        })
+      );
+
+      // Background API call to persist on server and reconcile unread count
+      markNotificationAsReadApi(notification.id)
+        .then((res) => {
+          if (typeof res?.unread_count === 'number') {
+            setCount(res.unread_count);
+            broadcastNotificationCount(res.unread_count);
+          }
+        })
+        .catch((err) => {
+          console.error('Error marking notification as read:', err);
+        });
     }
 
     navigate(url);
@@ -268,13 +305,23 @@ export const NotificationBell: React.FC = () => {
   const handleMarkAllRead = async () => {
     if (count === 0) return;
     setLoading(true);
+    // Instant Optimistic Update
+    setCount(0);
+    broadcastNotificationCount(0);
+    const nowIso = new Date().toISOString();
+    setRecentNotifications((prev) =>
+      prev.map((n) => ({ ...n, read_at: n.read_at || nowIso }))
+    );
+    window.dispatchEvent(
+      new CustomEvent('notifications-updated', {
+        detail: { optimistic: true, unread_count: 0 },
+      })
+    );
     try {
       await markAllNotificationsAsReadApi();
-      setCount(0);
-      setRecentNotifications((prev) =>
-        prev.map((n) => ({ ...n, read_at: new Date().toISOString() }))
-      );
-      window.dispatchEvent(new CustomEvent('notifications-updated'));
+    } catch (err) {
+      console.error('Failed to mark all as read', err);
+      void fetchNotificationsList();
     } finally {
       setLoading(false);
     }
