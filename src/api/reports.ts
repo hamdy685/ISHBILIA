@@ -27,6 +27,9 @@ export interface PurchasesReportRow {
   accounting_status_label?: string;
   order_status?: string;
   accountant_name?: string;
+  photo_url?: string | null;
+  receipt_number?: string | null;
+  grand_total?: number;
   created_at?: string;
 }
 

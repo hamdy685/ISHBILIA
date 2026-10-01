@@ -1,9 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   getPurchasesReportApi,
   PurchasesReportResponse,
   PurchasesReportRow,
 } from '../../api/reports';
+import {
+  createSupplierInvoiceApi,
+  getLandParcelsApi,
+  LandParcel,
+} from '../../api/supplierFinance';
+import { LandAllocationEditor, LandAllocationDraft } from '../../components/accounting/LandAllocationEditor';
+import { getTodayInputDate } from '../../utils/dateFilters';
 import { parseApiError } from '../../utils/apiError';
 import { getUnitLabel } from '../../utils/units';
 import { printDocumentOnly } from '../../utils/print';
@@ -21,6 +29,7 @@ interface ColumnFilters {
   region: string;
   department_name: string;
   works: string;
+  invoice_status: string;
 }
 
 const initialFilters: ColumnFilters = {
@@ -36,6 +45,7 @@ const initialFilters: ColumnFilters = {
   region: '',
   department_name: '',
   works: '',
+  invoice_status: '',
 };
 
 // Clean number formatting without any RTL reversing bugs or minus signs
@@ -63,7 +73,7 @@ export const PurchasesReportView: React.FC = () => {
   const [fromDate, setFromDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [toDate, setToDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [selectedDepartment, setSelectedDepartment] = useState<string>('ALL');
-  const [accountingFilter, setAccountingFilter] = useState<'ALL' | 'VERIFIED_ONLY' | 'PENDING'>('VERIFIED_ONLY');
+  const [accountingFilter, setAccountingFilter] = useState<'ALL' | 'VERIFIED_ONLY' | 'PENDING'>('ALL');
 
   // Column search filters
   const [colFilters, setColFilters] = useState<ColumnFilters>(initialFilters);
@@ -82,6 +92,35 @@ export const PurchasesReportView: React.FC = () => {
 
   // Active cell selection indicator (Excel aesthetic)
   const [selectedCell, setSelectedCell] = useState<string | null>(null);
+
+  // Land parcels for allocation
+  const [parcels, setParcels] = useState<LandParcel[]>([]);
+
+  // Invoice Registration Modal State (Unified In-Page Registration)
+  const [selectedRowForInvoice, setSelectedRowForInvoice] = useState<PurchasesReportRow | null>(null);
+  const [invoiceForm, setInvoiceForm] = useState<{
+    invoice_number: string;
+    amount: string;
+    invoice_date: string;
+    due_date: string;
+    notes: string;
+  }>({
+    invoice_number: '',
+    amount: '',
+    invoice_date: getTodayInputDate(),
+    due_date: '',
+    notes: '',
+  });
+  const [allocations, setAllocations] = useState<LandAllocationDraft[]>([]);
+  const [submittingInvoice, setSubmittingInvoice] = useState<boolean>(false);
+  const [invoiceError, setInvoiceError] = useState<string | null>(null);
+  const [invoiceSuccessNotice, setInvoiceSuccessNotice] = useState<string | null>(null);
+  const [photoZoomUrl, setPhotoZoomUrl] = useState<string | null>(null);
+
+  // Load parcels once
+  useEffect(() => {
+    getLandParcelsApi().then(setParcels).catch(() => {});
+  }, []);
 
   // Fetch report from backend
   const loadReport = async () => {
@@ -157,6 +196,9 @@ export const PurchasesReportView: React.FC = () => {
       const matchRegion = !colFilters.region || row.region?.toLowerCase().includes(colFilters.region.toLowerCase());
       const matchDept = !colFilters.department_name || row.department_name?.toLowerCase().includes(colFilters.department_name.toLowerCase());
       const matchWorks = !colFilters.works || row.works?.toLowerCase().includes(colFilters.works.toLowerCase());
+      const matchInvoiceStatus = !colFilters.invoice_status ||
+        (colFilters.invoice_status === 'VERIFIED' && (row.accounting_status === 'VERIFIED' || !!row.invoice_number)) ||
+        (colFilters.invoice_status === 'PENDING' && (row.accounting_status === 'PENDING' || !row.invoice_number));
 
       return (
         matchDate &&
@@ -170,7 +212,8 @@ export const PurchasesReportView: React.FC = () => {
         matchParcel &&
         matchRegion &&
         matchDept &&
-        matchWorks
+        matchWorks &&
+        matchInvoiceStatus
       );
     });
   }, [data?.rows, colFilters]);
@@ -181,9 +224,190 @@ export const PurchasesReportView: React.FC = () => {
     const totalAmount = filteredRows.reduce((sum, r) => sum + Number(r.total_price || 0), 0);
     const uniqueOrders = new Set(filteredRows.map((r) => r.purchase_order_id)).size;
     const uniqueSuppliers = new Set(filteredRows.map((r) => r.supplier_name).filter((s) => s && s !== '—')).size;
+    const verifiedItemsCount = filteredRows.filter((r) => r.accounting_status === 'VERIFIED' || !!r.invoice_number).length;
+    const pendingItemsCount = filteredRows.filter((r) => r.accounting_status === 'PENDING' || !r.invoice_number).length;
 
-    return { totalQty, totalAmount, uniqueOrders, uniqueSuppliers };
+    return { totalQty, totalAmount, uniqueOrders, uniqueSuppliers, verifiedItemsCount, pendingItemsCount };
   }, [filteredRows]);
+
+  // Calculate PO groupings to color all items of the same purchase order with identical color
+  const poGroupingMeta = useMemo(() => {
+    const map = new Map<string, { groupIdx: number; count: number }>();
+    let currentGroupIdx = 0;
+
+    filteredRows.forEach((row) => {
+      const poKey = String(row.purchase_order_id || row.po_number || row.id);
+      if (!map.has(poKey)) {
+        map.set(poKey, { groupIdx: currentGroupIdx, count: 1 });
+        currentGroupIdx++;
+      } else {
+        const entry = map.get(poKey)!;
+        entry.count++;
+      }
+    });
+
+    return map;
+  }, [filteredRows]);
+
+  // Alternating palette for distinct purchase orders so items of same PO share the exact same background & border theme
+  const PO_PALETTES = [
+    {
+      bg: 'bg-white',
+      hover: 'hover:bg-blue-50/70',
+      accentBorder: 'border-r-[6px] border-r-blue-600',
+      poTag: 'bg-blue-100 text-blue-900 border border-blue-300',
+      rowNumBg: 'bg-blue-50/80 text-blue-900',
+      poNumberColor: 'text-blue-700',
+    },
+    {
+      bg: 'bg-[#f4fbf7]', // soft emerald/mint
+      hover: 'hover:bg-emerald-100/60',
+      accentBorder: 'border-r-[6px] border-r-emerald-600',
+      poTag: 'bg-emerald-100 text-emerald-900 border border-emerald-300',
+      rowNumBg: 'bg-emerald-50/80 text-emerald-900',
+      poNumberColor: 'text-emerald-800',
+    },
+    {
+      bg: 'bg-[#fdfaf3]', // soft warm amber
+      hover: 'hover:bg-amber-100/60',
+      accentBorder: 'border-r-[6px] border-r-amber-500',
+      poTag: 'bg-amber-100 text-amber-900 border border-amber-300',
+      rowNumBg: 'bg-amber-50/80 text-amber-900',
+      poNumberColor: 'text-amber-800',
+    },
+    {
+      bg: 'bg-[#fbf7fd]', // soft violet
+      hover: 'hover:bg-violet-100/60',
+      accentBorder: 'border-r-[6px] border-r-violet-600',
+      poTag: 'bg-violet-100 text-violet-900 border border-violet-300',
+      rowNumBg: 'bg-violet-50/80 text-violet-900',
+      poNumberColor: 'text-violet-800',
+    },
+  ];
+
+  // Open invoice modal for a specific PO row
+  const handleOpenInvoiceModal = (row: PurchasesReportRow) => {
+    setSelectedRowForInvoice(row);
+    setInvoiceError(null);
+
+    const suggestedAmount = row.grand_total && row.grand_total > 0
+      ? String(row.grand_total)
+      : String(row.total_price || '');
+
+    setInvoiceForm({
+      invoice_number: '',
+      amount: suggestedAmount,
+      invoice_date: getTodayInputDate(),
+      due_date: '',
+      notes: `أمر شراء ${row.po_number} - مورد: ${row.supplier_name}`,
+    });
+
+    // Pre-seed allocation if parcel matches
+    const matchingParcel = parcels.find(
+      (p) => p.parcel_reference.trim().toLowerCase() === (row.parcel_reference || '').trim().toLowerCase()
+    );
+
+    if (matchingParcel && suggestedAmount) {
+      setAllocations([
+        {
+          land_parcel_id: matchingParcel.id,
+          department_id: row.department_id || '',
+          amount: suggestedAmount,
+          notes: `تخصيص أمر شراء ${row.po_number}`,
+        },
+      ]);
+    } else {
+      setAllocations([]);
+    }
+  };
+
+  const handleCloseInvoiceModal = () => {
+    if (submittingInvoice) return;
+    setSelectedRowForInvoice(null);
+    setInvoiceError(null);
+  };
+
+  const handleSubmitInvoice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedRowForInvoice) return;
+
+    const numAmount = Number(invoiceForm.amount);
+    if (!numAmount || numAmount <= 0) {
+      setInvoiceError('يرجى إدخال مبلغ صحيح للفاتورة أكبر من صفر.');
+      return;
+    }
+
+    if (!selectedRowForInvoice.receipt_id) {
+      setInvoiceError('لا يوجد إذن استلام معتمد بالموقع لهذا الأمر. يجب استلام وفحص المواد بالموقع أولاً قبل تسجيل الفاتورة.');
+      return;
+    }
+
+    setSubmittingInvoice(true);
+    setInvoiceError(null);
+
+    try {
+      const validAllocations = allocations
+        .filter((a) => Number(a.land_parcel_id) > 0 && Number(a.amount) > 0)
+        .map((a) => ({
+          land_parcel_id: Number(a.land_parcel_id),
+          department_id: a.department_id ? Number(a.department_id) : undefined,
+          amount: Number(a.amount),
+          notes: a.notes || undefined,
+        }));
+
+      const newInvoice = await createSupplierInvoiceApi({
+        purchase_order_id: selectedRowForInvoice.purchase_order_id,
+        purchase_receipt_id: selectedRowForInvoice.receipt_id,
+        invoice_number: invoiceForm.invoice_number.trim() || undefined,
+        amount: numAmount,
+        invoice_date: invoiceForm.invoice_date || undefined,
+        due_date: invoiceForm.due_date || undefined,
+        notes: invoiceForm.notes.trim() || undefined,
+        land_allocations: validAllocations.length > 0 ? validAllocations : undefined,
+      });
+
+      const recordedInvoiceNum = newInvoice.invoice_number || invoiceForm.invoice_number.trim() || String(newInvoice.id);
+
+      // Instant local state update for all rows of this PO without full page reload
+      setData((prev) => {
+        if (!prev) return prev;
+        const updatedRows = prev.rows.map((r) => {
+          if (r.purchase_order_id === selectedRowForInvoice.purchase_order_id) {
+            return {
+              ...r,
+              accounting_status: 'VERIFIED',
+              accounting_status_label: 'مسقط ومسجل بالحسابات',
+              invoice_number: recordedInvoiceNum,
+              invoice_id: newInvoice.id,
+            };
+          }
+          return r;
+        });
+
+        return {
+          ...prev,
+          rows: updatedRows,
+          metrics: {
+            ...prev.metrics,
+            verified_items_count: (prev.metrics.verified_items_count || 0) + 1,
+          },
+        };
+      });
+
+      setInvoiceSuccessNotice(`تم تسجيل فاتورة المورد #${recordedInvoiceNum} بنجاح لأمر الشراء ${selectedRowForInvoice.po_number}`);
+      setSelectedRowForInvoice(null);
+      setTimeout(() => {
+        setInvoiceSuccessNotice(null);
+      }, 6000);
+
+      // Refresh background data
+      void loadReport();
+    } catch (err) {
+      setInvoiceError(parseApiError(err).message || 'حدث خطأ أثناء تسجيل الفاتورة.');
+    } finally {
+      setSubmittingInvoice(false);
+    }
+  };
 
   const hasActiveColFilters = useMemo(() => {
     return Object.values(colFilters).some((val) => val.trim() !== '');
@@ -214,12 +438,17 @@ export const PurchasesReportView: React.FC = () => {
       'إسم المنطقة',
       'القسم',
       'الاعمال',
+      'تسجيل الفاتورة / الحالة',
     ];
 
     const lines: string[] = [];
     lines.push('\uFEFF' + headers.join(','));
 
     filteredRows.forEach((r) => {
+      const statusText = r.accounting_status === 'VERIFIED' || r.invoice_number
+        ? `مسجلة (${r.invoice_number || ''})`
+        : 'بانتظار التسجيل';
+
       lines.push(
         [
           `"${r.delivery_date_formatted || r.delivery_date || '—'}"`,
@@ -234,6 +463,7 @@ export const PurchasesReportView: React.FC = () => {
           `"${r.region || '—'}"`,
           `"${r.department_name || '—'}"`,
           `"${(r.works || '—').replace(/"/g, '""')}"`,
+          `"${statusText}"`,
         ].join(',')
       );
     });
@@ -252,6 +482,7 @@ export const PurchasesReportView: React.FC = () => {
         '""',
         '""',
         '""',
+        `"المسجلة: ${liveTotals.verifiedItemsCount} | بالانتظار: ${liveTotals.pendingItemsCount}"`,
       ].join(',')
     );
 
@@ -282,10 +513,15 @@ export const PurchasesReportView: React.FC = () => {
       'إسم المنطقة',
       'القسم',
       'الاعمال',
+      'تسجيل الفاتورة / الحالة',
     ];
 
     const lines: string[] = [headers.join('\t')];
     filteredRows.forEach((r) => {
+      const statusText = r.accounting_status === 'VERIFIED' || r.invoice_number
+        ? `مسجلة (${r.invoice_number || ''})`
+        : 'بانتظار التسجيل';
+
       lines.push(
         [
           r.delivery_date_formatted || r.delivery_date || '—',
@@ -300,6 +536,7 @@ export const PurchasesReportView: React.FC = () => {
           r.region || '—',
           r.department_name || '—',
           r.works || '—',
+          statusText,
         ].join('\t')
       );
     });
@@ -360,7 +597,7 @@ export const PurchasesReportView: React.FC = () => {
           </div>
         </div>
 
-        {/* 12-Column Official Excel Table */}
+        {/* 13-Column Official Excel Table */}
         <table className="w-full border-collapse border border-black text-[10px] text-right">
           <thead>
             <tr className="bg-slate-100 border-b border-black font-black text-black">
@@ -377,6 +614,7 @@ export const PurchasesReportView: React.FC = () => {
               <th className="border border-black px-2 py-1.5 text-center">إسم المنطقة</th>
               <th className="border border-black px-2 py-1.5 text-center">القسم</th>
               <th className="border border-black px-2 py-1.5">الاعمال</th>
+              <th className="border border-black px-2 py-1.5 text-center whitespace-nowrap">تسجيل الفاتورة / الحالة</th>
             </tr>
           </thead>
           <tbody>
@@ -405,6 +643,13 @@ export const PurchasesReportView: React.FC = () => {
                 <td className="border border-black px-2 py-1 text-center">{row.region}</td>
                 <td className="border border-black px-2 py-1 text-center">{row.department_name}</td>
                 <td className="border border-black px-2 py-1">{row.works}</td>
+                <td className="border border-black px-2 py-1 text-center font-bold text-[9px]">
+                  {row.accounting_status === 'VERIFIED' || row.invoice_number ? (
+                    <span className="text-emerald-800">مسجلة (#{row.invoice_number || 'معتمد'})</span>
+                  ) : (
+                    <span className="text-amber-800">بانتظار التسجيل</span>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -420,8 +665,8 @@ export const PurchasesReportView: React.FC = () => {
               <td className="border border-black px-2 py-1.5 text-center font-mono font-black text-xs bg-slate-200" dir="ltr">
                 {formatCleanNumber(liveTotals.totalAmount)} ج.م
               </td>
-              <td colSpan={5} className="border border-black px-2 py-1.5 text-left text-[10px] text-slate-700">
-                أوامر الشراء: {liveTotals.uniqueOrders} | الموردين: {liveTotals.uniqueSuppliers}
+              <td colSpan={6} className="border border-black px-2 py-1.5 text-left text-[10px] text-slate-700">
+                أوامر الشراء: {liveTotals.uniqueOrders} | الموردين: {liveTotals.uniqueSuppliers} | المسجلة: {liveTotals.verifiedItemsCount} | بالانتظار: {liveTotals.pendingItemsCount}
               </td>
             </tr>
           </tfoot>
@@ -543,20 +788,9 @@ export const PurchasesReportView: React.FC = () => {
               </div>
             </div>
 
-            {/* Accounting Mode Toggle (Verified Only vs All Invoiced vs Pending) */}
+            {/* Accounting Mode Toggle (All Orders vs Pending Invoices vs Verified) */}
             <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
               <span className="text-[10px] font-bold text-slate-400 px-2">عرض:</span>
-              <button
-                type="button"
-                onClick={() => setAccountingFilter('VERIFIED_ONLY')}
-                className={`px-2.5 py-1 text-[11px] font-bold rounded transition ${
-                  accountingFilter === 'VERIFIED_ONLY'
-                    ? 'bg-amber-500 text-slate-950 shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                مسقط ومسجل بالحسابات ({data?.metrics?.verified_items_count || 0})
-              </button>
               <button
                 type="button"
                 onClick={() => setAccountingFilter('ALL')}
@@ -566,18 +800,29 @@ export const PurchasesReportView: React.FC = () => {
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                جميع المشتريات المعتمدة ({data?.rows?.length || 0})
+                جميع أوامر الشراء ({data?.rows?.length || 0})
               </button>
               <button
                 type="button"
                 onClick={() => setAccountingFilter('PENDING')}
                 className={`px-2.5 py-1 text-[11px] font-bold rounded transition ${
                   accountingFilter === 'PENDING'
-                    ? 'bg-cyan-600 text-white shadow-sm'
+                    ? 'bg-amber-500 text-slate-950 shadow-sm'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                بانتظار تسجيل الفاتورة
+                ⏳ بانتظار تسجيل الفاتورة
+              </button>
+              <button
+                type="button"
+                onClick={() => setAccountingFilter('VERIFIED_ONLY')}
+                className={`px-2.5 py-1 text-[11px] font-bold rounded transition ${
+                  accountingFilter === 'VERIFIED_ONLY'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                ✅ مسقط ومسجل بالحسابات ({data?.metrics?.verified_items_count || 0})
               </button>
             </div>
           </div>
@@ -708,6 +953,23 @@ export const PurchasesReportView: React.FC = () => {
           </div>
         )}
 
+        {/* Invoice Recorded Success Notice */}
+        {invoiceSuccessNotice && (
+          <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-4 text-xs font-bold text-emerald-300 flex items-center justify-between shadow-lg">
+            <div className="flex items-center gap-2">
+              <span className="text-base">✅</span>
+              <span>{invoiceSuccessNotice}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setInvoiceSuccessNotice(null)}
+              className="text-emerald-400 hover:text-white font-bold px-2 py-0.5"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {/* ── REAL EXCEL SPREADSHEET GRID (WHITE PAPER SHEET) ── */}
         <div className="rounded-2xl border-2 border-slate-300 bg-white text-slate-900 shadow-2xl overflow-hidden print:border-none print:shadow-none print:rounded-none">
           
@@ -769,7 +1031,7 @@ export const PurchasesReportView: React.FC = () => {
             <div className="overflow-x-auto max-h-[700px] overflow-y-auto">
               <table className="w-full text-right text-xs border-collapse min-w-[1200px]">
                 
-                {/* 1. Excel Column Letter Headers (A, B, C, D...) */}
+                {/* 1. Excel Column Letter Headers (A, B, C, D... M) */}
                 <thead className="sticky top-0 z-20 bg-[#f1f5f9] border-b-2 border-slate-400 text-slate-700 select-none">
                   <tr className="text-[11px] font-mono text-center font-extrabold print:hidden">
                     <th className="border border-slate-300 px-1 py-1 w-8 bg-[#e2e8f0]">#</th>
@@ -785,9 +1047,10 @@ export const PurchasesReportView: React.FC = () => {
                     <th className="border border-slate-300 px-2 py-1 bg-[#e2e8f0]">J</th>
                     <th className="border border-slate-300 px-2 py-1 bg-[#e2e8f0]">K</th>
                     <th className="border border-slate-300 px-2 py-1 bg-[#e2e8f0]">L</th>
+                    <th className="border border-slate-300 px-2 py-1 bg-[#e2e8f0] w-36">M</th>
                   </tr>
 
-                  {/* 2. Formal 12-Column Title Headers from Handwritten Note */}
+                  {/* 2. Formal 13-Column Title Headers from Handwritten Note */}
                   <tr className="bg-[#f8fafc] text-slate-900 font-black text-[11.5px] border-b-2 border-slate-400 whitespace-nowrap">
                     <th className="border border-slate-300 px-1 py-2 text-center w-8 bg-[#e2e8f0]">م</th>
                     <th className="border border-slate-300 px-2.5 py-2 text-center whitespace-nowrap min-w-[90px]">تاريخ التوريد</th>
@@ -802,6 +1065,9 @@ export const PurchasesReportView: React.FC = () => {
                     <th className="border border-slate-300 px-2.5 py-2 text-center w-24">إسم المنطقة</th>
                     <th className="border border-slate-300 px-2.5 py-2 text-center w-24">القسم</th>
                     <th className="border border-slate-300 px-3 py-2 min-w-[170px]">الاعمال</th>
+                    <th className="border border-slate-300 px-3 py-2 text-center whitespace-nowrap min-w-[150px] bg-slate-200/90 text-slate-900 font-black">
+                      تسجيل الفاتورة / الحالة
+                    </th>
                   </tr>
 
                   {/* 3. Excel Filter Input Row under each column */}
@@ -916,25 +1182,42 @@ export const PurchasesReportView: React.FC = () => {
                           className="w-full rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[11px] text-slate-800 placeholder-slate-400 focus:border-emerald-600 focus:outline-none"
                         />
                       </th>
+                      <th className="p-1 border border-slate-300">
+                        <select
+                          value={colFilters.invoice_status}
+                          onChange={(e) => handleUpdateColFilter('invoice_status', e.target.value)}
+                          className="w-full rounded border border-slate-300 bg-white px-1 py-0.5 text-[11px] text-center font-bold text-slate-800 focus:border-emerald-600 focus:outline-none"
+                        >
+                          <option value="">كل الحالات</option>
+                          <option value="VERIFIED">✅ تم التسجيل</option>
+                          <option value="PENDING">⏳ بانتظار التسجيل</option>
+                        </select>
+                      </th>
                     </tr>
                   )}
                 </thead>
 
-                {/* 4. Table Rows with Clear Authentic Excel Cell Borders */}
+                {/* 4. Table Rows with Clear Authentic Excel Cell Borders & PO Color Grouping */}
                 <tbody>
                   {filteredRows.map((row, idx) => {
                     const rowNumber = idx + 1;
-                    const isEven = idx % 2 === 0;
+                    const poKey = String(row.purchase_order_id || row.po_number || row.id);
+                    const groupInfo = poGroupingMeta.get(poKey);
+                    const groupIdx = groupInfo ? groupInfo.groupIdx : idx;
+                    const palette = PO_PALETTES[groupIdx % PO_PALETTES.length];
+
+                    const prevRow = idx > 0 ? filteredRows[idx - 1] : null;
+                    const isFirstOfGroup = !prevRow || String(prevRow.purchase_order_id || prevRow.po_number) !== poKey;
 
                     return (
                       <tr
                         key={row.id}
-                        className={`transition-colors hover:bg-emerald-50/70 ${
-                          isEven ? 'bg-white' : 'bg-[#f8fafc]'
+                        className={`transition-colors ${palette.bg} ${palette.hover} ${
+                          isFirstOfGroup && idx > 0 ? 'border-t-2 border-slate-400' : 'border-t border-slate-200'
                         }`}
                       >
-                        {/* Row Number (Excel Index Column) */}
-                        <td className="border border-slate-300 px-1.5 py-2 text-center font-mono text-[10px] font-bold text-slate-500 bg-[#f1f5f9] select-none">
+                        {/* Row Number (Excel Index Column with PO Accent Strip) */}
+                        <td className={`border border-slate-300 px-1.5 py-2 text-center font-mono text-[10px] font-bold select-none ${palette.rowNumBg} ${palette.accentBorder}`}>
                           {rowNumber}
                         </td>
 
@@ -949,9 +1232,11 @@ export const PurchasesReportView: React.FC = () => {
                         {/* B: رقم أمر الشراء */}
                         <td
                           onClick={() => setSelectedCell(`B${rowNumber}`)}
-                          className="border border-slate-300 px-2.5 py-2 text-center font-mono font-black text-blue-700 whitespace-nowrap"
+                          className="border border-slate-300 px-2 py-2 text-center font-mono whitespace-nowrap"
                         >
-                          {row.po_number_short || row.po_number}
+                          <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-black shadow-2xs ${palette.poTag}`}>
+                            {row.po_number_short || row.po_number}
+                          </span>
                         </td>
 
                         {/* C: الصنف */}
@@ -1038,6 +1323,42 @@ export const PurchasesReportView: React.FC = () => {
                         >
                           {row.works}
                         </td>
+
+                        {/* M: تسجيل الفاتورة / الحالة */}
+                        <td
+                          onClick={() => setSelectedCell(`M${rowNumber}`)}
+                          className="border border-slate-300 px-2 py-1.5 text-center whitespace-nowrap"
+                        >
+                          {row.accounting_status === 'VERIFIED' || row.invoice_number ? (
+                            <div className="flex flex-col items-center justify-center gap-0.5">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 border border-emerald-300 px-2.5 py-0.5 text-[11px] font-black text-emerald-800 shadow-2xs">
+                                <span className="text-emerald-600 font-bold">✓</span>
+                                <span>تم التسجيل</span>
+                              </span>
+                              {row.invoice_number && (
+                                <span
+                                  className="text-[10px] font-mono font-bold text-slate-700 bg-white/90 border border-slate-200 px-1.5 py-0.5 rounded mt-0.5 shadow-2xs"
+                                  title={`رقم فاتورة المورد: ${row.invoice_number}`}
+                                >
+                                  فاتورة #{row.invoice_number}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenInvoiceModal(row);
+                              }}
+                              className="inline-flex items-center justify-center gap-1.5 w-full rounded-lg bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-2.5 py-1.5 text-xs font-black shadow-sm transition-all border border-emerald-700 hover:shadow cursor-pointer"
+                              title="تسجيل فاتورة المورد واعتمادها بالحسابات"
+                            >
+                              <span>🧾</span>
+                              <span>تسجيل الفاتورة</span>
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     );
                   })}
@@ -1057,8 +1378,8 @@ export const PurchasesReportView: React.FC = () => {
                     <td className="border border-slate-300 px-3 py-2 text-center font-mono font-black text-sm text-emerald-800 bg-emerald-100" dir="ltr">
                       {formatCleanNumber(liveTotals.totalAmount)} ج.م
                     </td>
-                    <td colSpan={5} className="border border-slate-300 px-3 py-2 text-slate-700 text-left text-[11px] font-mono">
-                      عدد الأوامر: {liveTotals.uniqueOrders} | الموردين: {liveTotals.uniqueSuppliers}
+                    <td colSpan={6} className="border border-slate-300 px-3 py-2 text-slate-700 text-left text-[11px] font-mono">
+                      أوامر الشراء: {liveTotals.uniqueOrders} | الموردين: {liveTotals.uniqueSuppliers} | المسجلة: {liveTotals.verifiedItemsCount} | بالانتظار: {liveTotals.pendingItemsCount}
                     </td>
                   </tr>
                 </tfoot>
@@ -1143,6 +1464,248 @@ export const PurchasesReportView: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* ── 3. UNIFIED INVOICE REGISTRATION MODAL (IN-PAGE POPUP) ── */}
+      {selectedRowForInvoice && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm overflow-y-auto">
+          <div
+            className="relative w-full max-w-3xl rounded-2xl border border-slate-700 bg-slate-900 text-slate-100 shadow-2xl my-8 overflow-hidden"
+            dir="rtl"
+          >
+            {/* Header */}
+            <div className="bg-gradient-to-r from-emerald-950/80 via-slate-900 to-slate-900 p-5 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl p-2 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">🧾</span>
+                <div>
+                  <h3 className="text-base font-black text-white">تسجيل فاتورة مورد واعتماد بالحسابات</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    ربط إذن الاستلام المعتمد بالموقع مع أمر الشراء وتسجيل الفاتورة في القيود المالية
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseInvoiceModal}
+                disabled={submittingInvoice}
+                className="rounded-lg bg-slate-800 p-2 text-slate-400 hover:bg-slate-700 hover:text-white transition disabled:opacity-50"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitInvoice} className="p-6 space-y-5">
+              {/* Order & Receipt Context Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-950/70 p-4 rounded-xl border border-slate-800 text-xs">
+                <div>
+                  <span className="text-slate-400 block text-[11px]">رقم أمر الشراء:</span>
+                  <span className="font-mono font-black text-blue-400 text-sm">{selectedRowForInvoice.po_number}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">المورد:</span>
+                  <span className="font-bold text-white truncate block">{selectedRowForInvoice.supplier_name}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">إذن الاستلام بالموقع:</span>
+                  <span className="font-mono font-bold text-emerald-400">
+                    {selectedRowForInvoice.receipt_number || (selectedRowForInvoice.receipt_id ? `#${selectedRowForInvoice.receipt_id}` : 'غير متوفر')}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">قيمة أمر الشراء:</span>
+                  <span className="font-mono font-black text-amber-300 text-sm" dir="ltr">
+                    {formatCleanNumber(selectedRowForInvoice.grand_total || selectedRowForInvoice.total_price)} ج.م
+                  </span>
+                </div>
+              </div>
+
+              {/* Weighbridge scale photo preview if available */}
+              {selectedRowForInvoice.photo_url && (
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-3.5 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={selectedRowForInvoice.photo_url}
+                      alt="إيصال الميزان البسكول"
+                      className="h-14 w-20 object-cover rounded-lg border border-emerald-500/40 cursor-pointer shadow-sm hover:opacity-90 transition"
+                      onClick={() => setPhotoZoomUrl(selectedRowForInvoice.photo_url || null)}
+                    />
+                    <div>
+                      <div className="text-xs font-bold text-emerald-300">مرفق صورة بوليصة / ميزان البسكول المعتمدة بالموقع</div>
+                      <div className="text-[11px] text-slate-400">تم التقاطها أثناء الاستلام وتأكيد الكميات الفعلية</div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPhotoZoomUrl(selectedRowForInvoice.photo_url || null)}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 text-xs font-bold border border-emerald-500/30 transition shrink-0"
+                  >
+                    🔍 تكبير الصورة
+                  </button>
+                </div>
+              )}
+
+              {/* Missing Receipt Warning */}
+              {!selectedRowForInvoice.receipt_id && (
+                <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3.5 text-xs text-amber-200">
+                  ⚠️ تنبيه: لا يوجد إذن استلام وفحص معتمد بالموقع لهذا الأمر حتى الآن. يتطلب النظام فحص واستلام المواد بالموقع أولاً لربط الفاتورة به.
+                </div>
+              )}
+
+              {/* Form Input Fields */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                    رقم فاتورة المورد <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="مثال: INV-10492"
+                    value={invoiceForm.invoice_number}
+                    onChange={(e) => setInvoiceForm((prev) => ({ ...prev, invoice_number: e.target.value }))}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2 text-xs font-mono font-bold text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-1 block">رقم الفاتورة المطبوع على إشعار المورد الورقي</span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                    مبلغ الفاتورة الإجمالي (ج.م) <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    min="0.01"
+                    value={invoiceForm.amount}
+                    onChange={(e) => setInvoiceForm((prev) => ({ ...prev, amount: e.target.value }))}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2 text-xs font-mono font-black text-emerald-400 focus:border-emerald-500 focus:outline-none"
+                    dir="ltr"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-1 block">الإجمالي المعتمد للخصم والاستحقاق المالي</span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                    تاريخ الفاتورة <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={invoiceForm.invoice_date}
+                    onChange={(e) => setInvoiceForm((prev) => ({ ...prev, invoice_date: e.target.value }))}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2 text-xs font-mono text-white focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                    تاريخ الاستحقاق (اختياري)
+                  </label>
+                  <input
+                    type="date"
+                    value={invoiceForm.due_date}
+                    onChange={(e) => setInvoiceForm((prev) => ({ ...prev, due_date: e.target.value }))}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2 text-xs font-mono text-white focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1.5">ملاحظات الفاتورة</label>
+                <textarea
+                  rows={2}
+                  value={invoiceForm.notes}
+                  onChange={(e) => setInvoiceForm((prev) => ({ ...prev, notes: e.target.value }))}
+                  placeholder="ملاحظات محاسبية أو بنود إضافية..."
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:border-emerald-500 focus:outline-none"
+                />
+              </div>
+
+              {/* Cost Allocation to Land Parcels */}
+              <div className="border-t border-slate-800 pt-4">
+                <h4 className="text-xs font-bold text-slate-300 mb-2">توزيع التكلفة على قطع الأراضي (اختياري / موصى به):</h4>
+                <LandAllocationEditor
+                  parcels={parcels}
+                  departments={data?.departments?.map((d) => ({ id: d.id, name: d.name, code: d.code })) || []}
+                  allocations={allocations}
+                  invoiceAmount={Number(invoiceForm.amount || 0)}
+                  disabled={submittingInvoice}
+                  onChange={setAllocations}
+                  onParcelCreated={(newP) => setParcels((prev) => [...prev, newP])}
+                />
+              </div>
+
+              {invoiceError && (
+                <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 p-3 text-xs font-bold text-rose-300">
+                  {invoiceError}
+                </div>
+              )}
+
+              {/* Modal Actions */}
+              <div className="border-t border-slate-800 pt-4 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={handleCloseInvoiceModal}
+                  disabled={submittingInvoice}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition disabled:opacity-50"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingInvoice || !selectedRowForInvoice.receipt_id}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-black shadow-lg shadow-emerald-900/30 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {submittingInvoice ? (
+                    <>
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                      <span>جاري حفظ واعتماد الفاتورة...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>✅</span>
+                      <span>حفظ وتسجيل الفاتورة بالحسابات</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ── 4. PHOTO ZOOM LIGHTBOX MODAL ── */}
+      {photoZoomUrl && createPortal(
+        <div
+          className="fixed inset-0 z-60 flex items-center justify-center bg-black/90 p-4 backdrop-blur-md"
+          onClick={() => setPhotoZoomUrl(null)}
+        >
+          <div
+            className="relative max-w-4xl max-h-[90vh] bg-slate-900 rounded-2xl overflow-hidden border border-slate-700 p-2 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-2 border-b border-slate-800 text-xs text-slate-300">
+              <span className="font-bold">معاينة بوليصة / ميزان البسكول المعتمدة بالموقع</span>
+              <button
+                type="button"
+                onClick={() => setPhotoZoomUrl(null)}
+                className="rounded-lg bg-slate-800 hover:bg-slate-700 text-white px-2.5 py-1 text-xs font-bold"
+              >
+                ✕ إغلاق
+              </button>
+            </div>
+            <div className="p-2 flex items-center justify-center">
+              <img
+                src={photoZoomUrl}
+                alt="صورة الميزان البسكول"
+                className="max-h-[80vh] w-auto mx-auto object-contain rounded-lg"
+              />
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };

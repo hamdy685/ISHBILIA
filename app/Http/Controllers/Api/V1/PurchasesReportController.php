@@ -125,7 +125,7 @@ class PurchasesReportController extends Controller
                 });
             });
 
-        // التقارير المحاسبية للمشتريات تظهر حصرياً بعد تسجيل المحاسب للفاتورة في المرحلة النهائية
+        // التقارير المحاسبية للمشتريات
         if ($accountingFilter === 'PENDING') {
             // أوامر الشراء الصادرة التي لم يسجل لها المحاسب فاتورة بعد
             $ordersQuery->whereDoesntHave('supplierInvoices', function ($iq) {
@@ -140,8 +140,24 @@ class PurchasesReportController extends Controller
                         ->whereDate('created_at', '<=', $endDateStr);
                 });
             }
+        } elseif ($accountingFilter === 'ALL') {
+            // جميع أوامر الشراء (المسقطة والمفتوحة بانتظار التسجيل)
+            if ($startDate !== null && $endDate !== null) {
+                $startDateStr = $startDate->toDateString();
+                $endDateStr = $endDate->toDateString();
+                $ordersQuery->where(function ($q) use ($startDateStr, $endDateStr) {
+                    $q->whereBetween('created_at', [$startDateStr, $endDateStr])
+                        ->orWhereHas('supplierInvoices', function ($iq) use ($startDateStr, $endDateStr) {
+                            $iq->whereNotIn('status', ['VOIDED', 'CANCELLED'])
+                                ->where(function ($dateQ) use ($startDateStr, $endDateStr) {
+                                    $dateQ->whereBetween('invoice_date', [$startDateStr, $endDateStr])
+                                        ->orWhereBetween('created_at', [$startDateStr, $endDateStr]);
+                                });
+                        });
+                });
+            }
         } else {
-            // الافتراضي والرسمي: فقط الأوامر التي سجل لها المحاسب فاتورة مورد معتمدة
+            // الافتراضي والرسمي (VERIFIED_ONLY): فقط الأوامر التي سجل لها المحاسب فاتورة مورد معتمدة
             $ordersQuery->whereHas('supplierInvoices', function ($iq) {
                 $iq->whereNotIn('status', ['VOIDED', 'CANCELLED']);
             });
@@ -199,11 +215,15 @@ class PurchasesReportController extends Controller
             $activeInvoices = $order->supplierInvoices->filter(fn ($inv) => ! in_array($inv->status, ['VOIDED', 'CANCELLED'], true));
 
             // في الوضع الافتراضي أو المعتمد: نضمن عدم ظهور أي أمر لم يسجل له المحاسب فاتورة
-            if ($accountingFilter !== 'PENDING') {
-                if ($activeInvoices->isEmpty()) {
-                    continue; // استبعاد كامل لأي أمر في منتصف الدورة لم يسجل له فاتورة
-                }
+            if ($accountingFilter === 'VERIFIED_ONLY' && $activeInvoices->isEmpty()) {
+                continue;
+            }
 
+            if ($accountingFilter === 'PENDING' && $activeInvoices->isNotEmpty()) {
+                continue;
+            }
+
+            if ($activeInvoices->isNotEmpty() && $accountingFilter !== 'PENDING') {
                 foreach ($activeInvoices as $invoice) {
                     // التحقق من تاريخ الفاتورة ضمن الفترة المحددة
                     if ($startDate !== null && $endDate !== null) {
@@ -245,7 +265,10 @@ class PurchasesReportController extends Controller
                                 'id' => "INV-{$invoice->id}-REC-{$receiptItem->id}",
                                 'invoice_id' => $invoice->id,
                                 'receipt_id' => $receipt->id,
+                                'receipt_number' => $receipt->receipt_number,
+                                'photo_url' => $receipt->photo_url,
                                 'purchase_order_id' => $order->id,
+                                'grand_total' => (float) $order->grand_total,
                                 // 1. تاريخ التوريد
                                 'delivery_date' => $deliveryDate,
                                 'delivery_date_formatted' => $deliveryDate ? Carbon::parse($deliveryDate)->format('d/m/Y') : '—',
@@ -309,7 +332,10 @@ class PurchasesReportController extends Controller
                                 'id' => "INV-{$invoice->id}-ITEM-{$poItem->id}",
                                 'invoice_id' => $invoice->id,
                                 'receipt_id' => $receipt?->id,
+                                'receipt_number' => $receipt?->receipt_number,
+                                'photo_url' => $receipt?->photo_url,
                                 'purchase_order_id' => $order->id,
+                                'grand_total' => (float) $order->grand_total,
                                 'delivery_date' => $deliveryDate,
                                 'delivery_date_formatted' => $deliveryDate ? Carbon::parse($deliveryDate)->format('d/m/Y') : '—',
                                 'po_number' => $order->po_number,
@@ -342,13 +368,16 @@ class PurchasesReportController extends Controller
                             'id' => "INV-{$invoice->id}",
                             'invoice_id' => $invoice->id,
                             'receipt_id' => $receipt?->id,
+                            'receipt_number' => $receipt?->receipt_number,
+                            'photo_url' => $receipt?->photo_url,
                             'purchase_order_id' => $order->id,
+                            'grand_total' => (float) $order->grand_total,
                             'delivery_date' => $deliveryDate,
                             'delivery_date_formatted' => $deliveryDate ? Carbon::parse($deliveryDate)->format('d/m/Y') : '—',
                             'po_number' => $order->po_number,
                             'po_number_short' => preg_replace('/^PO-\d{4}-0*/', '', $order->po_number) ?: $order->po_number,
                             'item_name' => 'فاتورة مشتريات مورد #' . $invoice->invoice_number,
-                            'uom' => 'مقطوعية',
+                            'uom' => 'إجمالي',
                             'quantity' => 1,
                             'unit_price' => (float) $invoice->amount,
                             'total_price' => (float) $invoice->amount,
@@ -369,8 +398,8 @@ class PurchasesReportController extends Controller
                         ];
                     }
                 }
-            } elseif ($accountingFilter === 'PENDING') {
-                // تظهر فقط عند الاختيار الصريح لتبويب "بانتظار تسجيل الفاتورة"
+            } elseif ($activeInvoices->isEmpty() && $accountingFilter !== 'VERIFIED_ONLY') {
+                // تظهر عند اختيار "بانتظار تسجيل الفاتورة" أو "جميع المشتريات"
                 $latestReceipt = $order->purchaseReceipts->where('status', 'APPROVED')->first()
                     ?? $order->purchaseReceipts->first();
 
@@ -397,7 +426,10 @@ class PurchasesReportController extends Controller
                         'id' => "PO-{$order->id}-ITEM-{$poItem->id}",
                         'invoice_id' => null,
                         'receipt_id' => $latestReceipt?->id,
+                        'receipt_number' => $latestReceipt?->receipt_number,
+                        'photo_url' => $latestReceipt?->photo_url,
                         'purchase_order_id' => $order->id,
+                        'grand_total' => (float) $order->grand_total,
                         'delivery_date' => $deliveryDate,
                         'delivery_date_formatted' => $deliveryDate ? Carbon::parse($deliveryDate)->format('d/m/Y') : '—',
                         'po_number' => $order->po_number,
