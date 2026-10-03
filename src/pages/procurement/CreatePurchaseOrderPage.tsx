@@ -55,7 +55,7 @@ export const CreatePurchaseOrderPage: React.FC = () => {
   const [suppliers, setSuppliers] = useState<المورد[]>([]);
   const [supplierId, setSupplierId] = useState<string>('');
   const [oneTimeSupplierName, setOneTimeSupplierName] = useState<string>('');
-  const [paymentTerms, setPaymentTerms] = useState<string>('دفع عند الاستلام');
+  const [paymentTerms, setPaymentTerms] = useState<string>('');
   const [deliveryDate, setDeliveryDate] = useState<string>(getLocalDateIso());
   const [budgetCode, setBudgetCode] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
@@ -573,7 +573,7 @@ export const CreatePurchaseOrderPage: React.FC = () => {
                   setSuppliers((prev) => [...prev, newSup]);
                   handleSupplierSelect(String(newSup.id));
                 }}
-                disabled={Boolean(pr?.selected_quote?.id || (pr?.procurement_route === 'DIRECT' && !hasMultipleDirectSuppliers))}
+                disabled={false}
                 label="اختر المورد المعتمد"
                 required
               />
@@ -589,18 +589,7 @@ export const CreatePurchaseOrderPage: React.FC = () => {
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">شروط الدفع والائتمان</label>
-              <input
-                type="text"
-                value={paymentTerms}
-                onChange={(e) => setPaymentTerms(e.target.value)}
-                placeholder="مثال: دفع عند الاستلام، آجل 30 يوم"
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 min-h-10"
-              />
-            </div>
-
-            <div>
+            <div className="md:col-span-2">
               <label className="block text-xs font-semibold text-slate-300 mb-1.5">ملاحظات وشروط خاصة للمورد</label>
               <input
                 type="text"
@@ -916,7 +905,6 @@ export const CreatePurchaseOrderPage: React.FC = () => {
                           required
                           value={item.unit_price ?? ''}
                           onFocus={(e) => e.target.select()}
-                          readOnly={Boolean(pr?.selected_quote?.id)}
                           onChange={(e) => handleItemPriceChange(index, e.target.value)}
                           placeholder={item.uom === 'TON' ? 'سعر الطن...' : '0.00'}
                           className="h-10 w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 text-xs text-emerald-400 font-mono font-bold"

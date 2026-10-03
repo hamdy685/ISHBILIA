@@ -228,7 +228,7 @@ export const EditPurchaseOrderPage: React.FC = () => {
       <form onSubmit={handleSaveHeader} className="bg-slate-950 p-6 rounded-xl border border-slate-800 space-y-4 shadow-xl">
         <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">البيانات التجارية والرئيسية لأمر الشراء</h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <SupplierSelectWithQuickAdd
               suppliers={suppliers}
@@ -244,17 +244,6 @@ export const EditPurchaseOrderPage: React.FC = () => {
               disabled={!isEditable}
               label="المورد المعتمد"
               required
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">شروط الدفع</label>
-            <input
-              type="text"
-              disabled={!isEditable}
-              value={paymentTerms}
-              onChange={e => setPaymentTerms(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-cyan-500"
             />
           </div>
 
