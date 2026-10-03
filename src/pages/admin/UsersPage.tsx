@@ -135,7 +135,7 @@ export const UsersPage: React.FC = () => {
       .filter((u) => {
         if (editingUser && u.id === editingUser.id) return false;
         const userRoles = u.roles?.map((r) => (typeof r === 'object' ? r.slug : r)) || [];
-        return userRoles.some((r) => ['general_manager', 'execution_manager', 'admin'].includes(r));
+        return userRoles.some((r) => ['general_manager', 'execution_manager'].includes(r));
       })
       .map((u) => {
         const userRoles = u.roles?.map((r) => (typeof r === 'object' ? r.slug : r)) || [];
