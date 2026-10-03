@@ -14,9 +14,9 @@ class GeneralManagerPurchaseRequestService
 {
     public const PENDING_STATUS = 'PENDING_EXECUTIVE_APPROVAL';
 
-    public function getPendingRequests(int $perPage = 50): LengthAwarePaginator
+    public function getPendingRequests(int $perPage = 50, ?User $user = null): LengthAwarePaginator
     {
-        return PurchaseRequest::query()
+        $query = PurchaseRequest::query()
             ->with([
                 'requester.roles',
                 'department:id,name,code',
@@ -30,14 +30,19 @@ class GeneralManagerPurchaseRequestService
                 'quotes.recommendations.user.roles',
                 'selectedQuote.supplier',
             ])
-            ->where('status', self::PENDING_STATUS)
-            ->orderByDesc('updated_at')
+            ->where('status', self::PENDING_STATUS);
+
+        if ($user && $user->hasRole('execution_manager')) {
+            $query->whereHas('requester', fn ($q) => $q->where('manager_id', $user->id));
+        }
+
+        return $query->orderByDesc('updated_at')
             ->paginate(min(max($perPage, 1), 100));
     }
 
-    public function getPendingRequest(int $id): PurchaseRequest
+    public function getPendingRequest(int $id, ?User $user = null): PurchaseRequest
     {
-        return PurchaseRequest::query()
+        $query = PurchaseRequest::query()
             ->with([
                 'requester.roles',
                 'department:id,name,code',
@@ -51,13 +56,25 @@ class GeneralManagerPurchaseRequestService
                 'quotes.recommendations.user.roles',
                 'selectedQuote.supplier',
             ])
-            ->where('status', self::PENDING_STATUS)
-            ->findOrFail($id);
+            ->where('status', self::PENDING_STATUS);
+
+        if ($user && $user->hasRole('execution_manager')) {
+            $query->whereHas('requester', fn ($q) => $q->where('manager_id', $user->id));
+        }
+
+        return $query->findOrFail($id);
     }
 
     public function updateRequest(User $executive, PurchaseRequest $request, array $data): PurchaseRequest
     {
         $this->ensurePending($request);
+
+        if ($executive->hasRole('execution_manager')) {
+            $request->loadMissing('requester');
+            if ((int) $request->requester?->manager_id !== (int) $executive->id) {
+                throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('غير مصرح لك بتعديل طلب شراء لا يتبع موظفيك.');
+            }
+        }
 
         return DB::transaction(function () use ($executive, $request, $data): PurchaseRequest {
             $pr = PurchaseRequest::query()->lockForUpdate()->findOrFail($request->id);
@@ -164,7 +181,16 @@ class GeneralManagerPurchaseRequestService
     {
         $this->ensurePending($request);
 
-        return DB::transaction(function () use ($executive, $request, $comment): PurchaseRequest {
+        if ($executive->hasRole('execution_manager')) {
+            $request->loadMissing('requester');
+            if ((int) $request->requester?->manager_id !== (int) $executive->id) {
+                throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('غير مصرح لك باعتماد طلب شراء لا يتبع موظفيك.');
+            }
+        }
+
+        $actorTitle = $executive->hasRole('execution_manager') ? "مدير مشروعات التنفيذ ({$executive->name})" : "المدير التنفيذي ({$executive->name})";
+
+        return DB::transaction(function () use ($executive, $request, $comment, $actorTitle): PurchaseRequest {
             $pr = PurchaseRequest::query()->lockForUpdate()->findOrFail($request->id);
             if ($pr->status !== self::PENDING_STATUS) {
                 throw new \RuntimeException('تم اتخاذ قرار بشأن طلب الشراء بالفعل أو لم يعد بانتظار المدير التنفيذي.');
@@ -184,13 +210,13 @@ class GeneralManagerPurchaseRequestService
                 'action' => 'APPROVED_BY_EXECUTIVE',
                 'from_state' => self::PENDING_STATUS,
                 'to_state' => $nextStatus,
-                'comments' => $comment ?? ($isDirect ? 'اعتمد المدير التنفيذي المهندس محمد طلب الشراء المباشر وحوله إلى الإدارة المالية للموافقة.' : 'تم اعتماد الطلب من المدير التنفيذي وإرساله للمشتريات.'),
+                'comments' => $comment ?? ($isDirect ? "اعتمد {$actorTitle} طلب الشراء المباشر وحوله إلى الإدارة المالية للموافقة." : "تم اعتماد الطلب من {$actorTitle} وإرساله للمشتريات."),
             ]);
 
             app(SystemEventService::class)->recordAction(
                 $pr,
                 'APPROVED_BY_EXECUTIVE',
-                $isDirect ? 'اعتمد المدير التنفيذي طلب الشراء المباشر وحوله إلى الإدارة المالية.' : 'اعتمد المدير التنفيذي طلب الشراء وأرسله إلى مدير المشتريات.',
+                $isDirect ? "اعتمد {$actorTitle} طلب الشراء المباشر وحوله إلى الإدارة المالية." : "اعتمد {$actorTitle} طلب الشراء وأرسله إلى مدير المشتريات.",
                 [
                     'event_type' => 'purchase_request.approved_by_executive',
                     'from_state' => self::PENDING_STATUS,
@@ -204,7 +230,7 @@ class GeneralManagerPurchaseRequestService
                 $pr->user_id,
                 'purchase_request_approved_by_executive',
                 'تم اعتماد طلب الشراء تنفيذيًا',
-                "اعتمد المدير التنفيذي طلب الشراء {$pr->request_number}.",
+                "اعتمد {$actorTitle} طلب الشراء {$pr->request_number}.",
                 $pr
             );
 
@@ -214,11 +240,11 @@ class GeneralManagerPurchaseRequestService
                     $notificationService->resolveUsersWithPermission('purchase_request.accounting_view'),
                     'purchase_request_pending_accounting_approval',
                     'طلب شراء مباشر معتمد تنفيذيًا بانتظار الموافقة المالية',
-                    "اعتمد المدير التنفيذي المهندس محمد الطلب المباشر {$pr->request_number}، وهو الآن بانتظار موافقة المدير المالي / الحسابات.",
+                    "اعتمد {$actorTitle} الطلب المباشر {$pr->request_number}، وهو الآن بانتظار موافقة المدير المالي / الحسابات.",
                     $pr
                 );
             } else {
-                $this->notifyProcurement($pr, 'اعتمد المدير التنفيذي طلب الشراء، وهو بانتظار إجراء مدير المشتريات.');
+                $this->notifyProcurement($pr, "اعتمد {$actorTitle} طلب الشراء، وهو بانتظار إجراء مدير المشتريات.");
             }
 
             return $pr->fresh(['requester', 'department', 'assignedReviewer', 'siteEngineer', 'items.item', 'approvalHistory']);
@@ -228,6 +254,13 @@ class GeneralManagerPurchaseRequestService
     public function rejectRequest(User $executive, PurchaseRequest $request, string $comment): PurchaseRequest
     {
         $this->ensurePending($request);
+
+        if ($executive->hasRole('execution_manager')) {
+            $request->loadMissing('requester');
+            if ((int) $request->requester?->manager_id !== (int) $executive->id) {
+                throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('غير مصرح لك برفض طلب شراء لا يتبع موظفيك.');
+            }
+        }
 
         return DB::transaction(function () use ($executive, $request, $comment): PurchaseRequest {
             $pr = PurchaseRequest::query()->lockForUpdate()->findOrFail($request->id);

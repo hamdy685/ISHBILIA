@@ -4,6 +4,7 @@ import { hasRole } from "../utils/permissions";
 export type AppRoleSlug =
     | "admin"
     | "general_manager"
+    | "execution_manager"
     | "accountant"
     | "site_accountant"
     | "licenses_accountant"
@@ -17,6 +18,7 @@ export type AppRoleSlug =
 export const ROLE_HOME_PRIORITY: AppRoleSlug[] = [
     "admin",
     "general_manager",
+    "execution_manager",
     "accountant",
     "site_accountant",
     "licenses_accountant",
@@ -31,6 +33,7 @@ export const ROLE_HOME_PRIORITY: AppRoleSlug[] = [
 const ROLE_HOME_PATHS: Record<AppRoleSlug, string> = {
     admin: "/admin",
     general_manager: "/general-manager",
+    execution_manager: "/general-manager",
     accountant: "/accounting",
     site_accountant: "/site-accountant",
     licenses_accountant: "/site-accountant",
@@ -45,6 +48,7 @@ const ROLE_HOME_PATHS: Record<AppRoleSlug, string> = {
 const ROLE_LABELS: Record<AppRoleSlug, string> = {
     admin: "مدير النظام",
     general_manager: "المدير العام",
+    execution_manager: "مدير مشروعات التنفيذ",
     accountant: "المدير المالي",
     site_accountant: "الحسابات (التنفيذ والتشطيبات)",
     licenses_accountant: "حسابات التراخيص",

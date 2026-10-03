@@ -12,6 +12,7 @@ class PurchaseRequestResource extends JsonResource
         return [
             'id' => $this->id,
             'request_number' => $this->request_number,
+            'manual_request_number' => $this->manual_request_number,
             'request_type' => $this->request_type ?? 'PROJECT',
             'parcel_reference' => $this->parcel_reference,
             'region' => $this->region,

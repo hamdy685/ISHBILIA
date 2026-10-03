@@ -77,3 +77,13 @@ export const submitPurchaseOrderApi = async (id: number) => {
   invalidateCachedGet(base);
   return response.data.data;
 };
+
+export interface CombinedPoPrDocument {
+  purchase_order: PurchaseOrder;
+  purchase_request: any;
+}
+
+export const getCombinedPoPrDocumentApi = async (id: number): Promise<CombinedPoPrDocument> => {
+  const response = await apiClient.get<{ data: CombinedPoPrDocument }>(`${base}/${id}/combined-document`);
+  return response.data.data;
+};

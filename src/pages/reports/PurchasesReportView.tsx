@@ -327,6 +327,40 @@ export const PurchasesReportView: React.FC = () => {
     setInvoiceError(null);
   };
 
+  const handlePrintInvoiceVoucher = () => {
+    printDocumentOnly('#printable-invoice-voucher', {
+      title: `سند_فاتورة_${invoiceForm.invoice_number || selectedRowForInvoice?.po_number || 'مورد'}`,
+      orientation: 'portrait',
+    });
+  };
+
+  const handleShareInvoiceWhatsApp = () => {
+    if (!selectedRowForInvoice) return;
+    const lines = [
+      '🏢 *شركة إشبيلية للتطوير العقاري والمقاولات*',
+      '🧾 *إشعار تسجيل فاتورة مورد بالحسابات*',
+      '─────────────────────────',
+      `📑 *رقم الفاتورة:* ${invoiceForm.invoice_number.trim() || 'مسودة قيد الحفظ'}`,
+      `💰 *المبلغ الإجمالي:* ${formatCleanNumber(invoiceForm.amount)} ج.م`,
+      `📅 *تاريخ الفاتورة:* ${invoiceForm.invoice_date || '—'}`,
+      invoiceForm.due_date ? `⏳ *تاريخ الاستحقاق:* ${invoiceForm.due_date}` : '',
+      '─────────────────────────',
+      `🏬 *المورد:* ${selectedRowForInvoice.supplier_name}`,
+      `📦 *أمر الشراء:* ${selectedRowForInvoice.po_number}`,
+      `📥 *إذن الاستلام بالموقع:* ${selectedRowForInvoice.receipt_number || (selectedRowForInvoice.receipt_id ? `#${selectedRowForInvoice.receipt_id}` : '—')}`,
+      `📍 *القطعة / المنطقة:* ${selectedRowForInvoice.parcel_reference || '—'} ${selectedRowForInvoice.region ? `(${selectedRowForInvoice.region})` : ''}`,
+      `🏗️ *القسم:* ${selectedRowForInvoice.department_name || '—'}`,
+      `⚖️ *الصنف المستلم:* ${selectedRowForInvoice.item_name} (كمية: ${formatCleanQty(selectedRowForInvoice.quantity)} ${selectedRowForInvoice.uom || ''})`,
+      invoiceForm.notes ? `📝 *ملاحظات:* ${invoiceForm.notes}` : '',
+      selectedRowForInvoice.photo_url ? `📎 *مرفق بوليصة الميزان البسكول متوفر.*` : '',
+      '─────────────────────────',
+      '✅ *تم تدقيق الفاتورة ومطابقتها ثلاثياً للإدراج في القيود المحاسبية.*',
+    ].filter(Boolean);
+
+    const url = `https://wa.me/?text=${encodeURIComponent(lines.join('\n'))}`;
+    window.open(url, '_blank');
+  };
+
   const handleSubmitInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedRowForInvoice) return;
@@ -1642,34 +1676,181 @@ export const PurchasesReportView: React.FC = () => {
               )}
 
               {/* Modal Actions */}
-              <div className="border-t border-slate-800 pt-4 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={handleCloseInvoiceModal}
-                  disabled={submittingInvoice}
-                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition disabled:opacity-50"
-                >
-                  إلغاء
-                </button>
-                <button
-                  type="submit"
-                  disabled={submittingInvoice || !selectedRowForInvoice.receipt_id}
-                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-black shadow-lg shadow-emerald-900/30 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {submittingInvoice ? (
-                    <>
-                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                      <span>جاري حفظ واعتماد الفاتورة...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>✅</span>
-                      <span>حفظ وتسجيل الفاتورة بالحسابات</span>
-                    </>
-                  )}
-                </button>
+              <div className="border-t border-slate-800 pt-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handlePrintInvoiceVoucher}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-800/40 text-xs font-bold transition shadow-sm"
+                    title="طباعة سند تسجيل الفاتورة والمرفقات"
+                  >
+                    <span>🖨️</span> طباعة الفاتورة والمرفقات
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleShareInvoiceWhatsApp}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-800/50 text-xs font-bold transition shadow-sm"
+                    title="مشاركة تفاصيل الفاتورة عبر تطبيق واتساب"
+                  >
+                    <span>📱</span> إرسال واتساب
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleCloseInvoiceModal}
+                    disabled={submittingInvoice}
+                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition disabled:opacity-50"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingInvoice || !selectedRowForInvoice.receipt_id}
+                    className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-black shadow-lg shadow-emerald-900/30 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {submittingInvoice ? (
+                      <>
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                        <span>جاري حفظ واعتماد الفاتورة...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>✅</span>
+                        <span>حفظ وتسجيل الفاتورة بالحسابات</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </form>
+
+            {/* Hidden Printable Voucher for Print Engine */}
+            <div id="printable-invoice-voucher" className="hidden p-8 bg-white text-black font-sans text-xs" dir="rtl">
+              <div className="flex items-center justify-between border-b-2 border-black pb-3 mb-4">
+                <div className="text-right">
+                  <h1 className="text-base font-bold text-black">شركة إشبيلية للتطوير العقاري والمقاولات</h1>
+                  <p className="text-xs text-gray-700">الإدارة المالية - قسم الحسابات والمشتريات</p>
+                  <p className="text-[11px] text-gray-500 font-mono">تاريخ التقرير: {new Date().toLocaleDateString('ar-EG')}</p>
+                </div>
+                <div className="text-left font-mono">
+                  <div className="border-2 border-black px-4 py-1.5 font-bold text-sm bg-gray-100 rounded">
+                    سند تسجيل فاتورة مورد
+                  </div>
+                  <div className="text-xs mt-1 text-gray-700 font-bold">
+                    رقم الفاتورة: {invoiceForm.invoice_number || 'مسودة قيد الحفظ'}
+                  </div>
+                </div>
+              </div>
+
+              <table className="w-full border-collapse border border-black text-xs mb-4">
+                <tbody>
+                  <tr>
+                    <td className="border border-black bg-gray-100 p-2 font-bold w-1/4">المورد:</td>
+                    <td className="border border-black p-2 w-1/4 font-bold">{selectedRowForInvoice.supplier_name}</td>
+                    <td className="border border-black bg-gray-100 p-2 font-bold w-1/4">تاريخ الفاتورة:</td>
+                    <td className="border border-black p-2 w-1/4 font-mono">{invoiceForm.invoice_date || '—'}</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-black bg-gray-100 p-2 font-bold">رقم أمر الشراء:</td>
+                    <td className="border border-black p-2 font-mono font-bold">{selectedRowForInvoice.po_number}</td>
+                    <td className="border border-black bg-gray-100 p-2 font-bold">إذن الاستلام بالموقع:</td>
+                    <td className="border border-black p-2 font-mono font-bold text-emerald-800">
+                      {selectedRowForInvoice.receipt_number || (selectedRowForInvoice.receipt_id ? `#${selectedRowForInvoice.receipt_id}` : '—')}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="border border-black bg-gray-100 p-2 font-bold">المشروع / القطعة:</td>
+                    <td className="border border-black p-2">{selectedRowForInvoice.parcel_reference || '—'} ({selectedRowForInvoice.region || '—'})</td>
+                    <td className="border border-black bg-gray-100 p-2 font-bold">القسم الطالب:</td>
+                    <td className="border border-black p-2">{selectedRowForInvoice.department_name || '—'}</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-black bg-gray-100 p-2 font-bold">الصنف وبيان الأعمال:</td>
+                    <td className="border border-black p-2 font-semibold" colSpan={3}>
+                      {selectedRowForInvoice.item_name} {selectedRowForInvoice.works ? ` - ${selectedRowForInvoice.works}` : ''}
+                      {' '}(الكمية المعتمدة: {formatCleanQty(selectedRowForInvoice.quantity)} {selectedRowForInvoice.uom || ''} × سعر: {formatCleanNumber(selectedRowForInvoice.unit_price)} ج.م)
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="border border-black bg-gray-100 p-2 font-bold text-sm">إجمالي مبلغ الفاتورة:</td>
+                    <td className="border border-black p-2 font-mono font-black text-sm" colSpan={3} dir="ltr">
+                      {formatCleanNumber(invoiceForm.amount)} EGP (جنيه مصري)
+                    </td>
+                  </tr>
+                  {invoiceForm.due_date && (
+                    <tr>
+                      <td className="border border-black bg-gray-100 p-2 font-bold">تاريخ الاستحقاق:</td>
+                      <td className="border border-black p-2 font-mono" colSpan={3}>{invoiceForm.due_date}</td>
+                    </tr>
+                  )}
+                  {invoiceForm.notes && (
+                    <tr>
+                      <td className="border border-black bg-gray-100 p-2 font-bold">ملاحظات الفاتورة:</td>
+                      <td className="border border-black p-2" colSpan={3}>{invoiceForm.notes}</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+
+              {allocations.length > 0 && (
+                <div className="mb-4">
+                  <h3 className="font-bold text-xs mb-1">جدول توزيع التكلفة على قطع الأراضي والمشاريع:</h3>
+                  <table className="w-full border-collapse border border-black text-[11px]">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="border border-black p-1 text-right">#</th>
+                        <th className="border border-black p-1 text-right">رقم القطعة</th>
+                        <th className="border border-black p-1 text-right">المبلغ المخصص (ج.م)</th>
+                        <th className="border border-black p-1 text-right">الملاحظات</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allocations.map((alloc, idx) => {
+                        const p = parcels.find(item => item.id === alloc.land_parcel_id);
+                        return (
+                          <tr key={idx}>
+                            <td className="border border-black p-1 font-mono">{idx + 1}</td>
+                            <td className="border border-black p-1 font-bold">{p?.parcel_reference || `قطعة #${alloc.land_parcel_id}`}</td>
+                            <td className="border border-black p-1 font-mono font-bold">{formatCleanNumber(alloc.amount)}</td>
+                            <td className="border border-black p-1">{alloc.notes || '—'}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {selectedRowForInvoice.photo_url && (
+                <div className="mb-4 border border-black p-3 rounded page-break-inside-avoid">
+                  <div className="font-bold text-xs mb-1.5 text-gray-900">مرفق صورة بوليصة ميزان البسكول المعتمدة من الموقع:</div>
+                  <div className="text-center">
+                    <img
+                      src={selectedRowForInvoice.photo_url}
+                      alt="بوليصة ميزان البسكول"
+                      className="max-h-64 max-w-full mx-auto object-contain border border-gray-300 rounded shadow-sm"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-3 gap-4 pt-6 border-t-2 border-black text-center text-xs mt-6">
+                <div>
+                  <p className="font-bold">محاسب المشتريات / الموقع</p>
+                  <p className="mt-8 text-gray-400">..............................</p>
+                </div>
+                <div>
+                  <p className="font-bold">رئيس قسم الحسابات</p>
+                  <p className="mt-8 text-gray-400">..............................</p>
+                </div>
+                <div>
+                  <p className="font-bold">المدير المالي والتنفيذي</p>
+                  <p className="mt-8 text-gray-400">..............................</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>,
         document.body

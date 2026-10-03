@@ -260,6 +260,7 @@ export const AuthenticatedLayout: React.FC = () => {
                     </>
                 );
             case "general_manager":
+            case "execution_manager":
                 return (
                     <>
                         <Link to="/requests" className={linkClassName("/requests")}><span className="ml-2.5 text-sm" aria-hidden="true">📋</span> طلبات الشراء الخاصة بي</Link>
@@ -270,7 +271,7 @@ export const AuthenticatedLayout: React.FC = () => {
                             to="/general-manager"
                             className={linkClassName("/general-manager")}
                         >
-                            <span className="ml-2.5 text-sm" aria-hidden="true">📊</span> لوحة المدير العام
+                            <span className="ml-2.5 text-sm" aria-hidden="true">📊</span> {primaryRoleSlug === "execution_manager" ? "لوحة مدير مشروعات التنفيذ" : "لوحة المدير العام"}
                         </Link>
                         <Link
                             to="/general-manager/purchase-requests"

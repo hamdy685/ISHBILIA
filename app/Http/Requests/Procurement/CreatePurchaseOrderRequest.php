@@ -16,6 +16,8 @@ class CreatePurchaseOrderRequest extends FormRequest
     {
         return [
             'purchase_request_id' => ['required', 'integer', 'exists:purchase_requests,id'],
+            'manual_po_number' => ['nullable', 'string', 'max:50'],
+            'manual_pr_number' => ['nullable', 'string', 'max:50'],
             'supplier_id' => ['nullable', 'integer', 'exists:suppliers,id'],
             'one_time_supplier_name' => ['nullable', 'string', 'max:150'],
             'payment_terms' => ['nullable', 'string', 'max:150'],

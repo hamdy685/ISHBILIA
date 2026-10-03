@@ -21,7 +21,7 @@ class GeneralManagerPurchaseOrderController extends Controller
     public function index(Request $request): AnonymousResourceCollection
     {
         $perPage = min((int) $request->query('per_page', 15), 100);
-        $pos = $this->gmService->getGmPurchaseOrders($perPage);
+        $pos = $this->gmService->getGmPurchaseOrders($perPage, $request->user());
         return PurchaseOrderResource::collection($pos);
     }
 
@@ -30,7 +30,7 @@ class GeneralManagerPurchaseOrderController extends Controller
      */
     public function show(Request $request, string|int $id): JsonResponse|PurchaseOrderResource
     {
-        $po = $this->gmService->getPoForGmView((int) $id);
+        $po = $this->gmService->getPoForGmView((int) $id, $request->user());
         return new PurchaseOrderResource($po);
     }
 

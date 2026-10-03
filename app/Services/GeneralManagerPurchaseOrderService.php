@@ -3,12 +3,14 @@
 namespace App\Services;
 
 use App\Models\PurchaseOrder;
+use App\Models\User;
+use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
 class GeneralManagerPurchaseOrderService
 {
-    public function getGmPurchaseOrders(int $perPage = 15)
+    public function getGmPurchaseOrders(int $perPage = 15, ?User $user = null)
     {
-        return PurchaseOrder::with([
+        $query = PurchaseOrder::with([
             'purchaseRequest.requester',
             'purchaseRequest.department',
             'supplier',
@@ -16,14 +18,19 @@ class GeneralManagerPurchaseOrderService
             'accountingReviewer',
             'items.item:id,name,sku',
         ])
-            ->whereIn('status', ['ISSUED', 'APPROVED_BY_ACCOUNTING'])
-            ->orderBy('updated_at', 'desc')
+            ->whereIn('status', ['ISSUED', 'APPROVED_BY_ACCOUNTING']);
+
+        if ($user && $user->hasRole('execution_manager')) {
+            $query->whereHas('purchaseRequest.requester', fn ($q) => $q->where('manager_id', $user->id));
+        }
+
+        return $query->orderBy('updated_at', 'desc')
             ->paginate($perPage);
     }
 
-    public function getPoForGmView(int $id): PurchaseOrder
+    public function getPoForGmView(int $id, ?User $user = null): PurchaseOrder
     {
-        return PurchaseOrder::with([
+        $po = PurchaseOrder::with([
             'purchaseRequest.requester',
             'purchaseRequest.department',
             'purchaseRequest.assignedReviewer',
@@ -38,5 +45,13 @@ class GeneralManagerPurchaseOrderService
             'receipts.siteEngineer',
             'receipts.receiver',
         ])->findOrFail($id);
+
+        if ($user && $user->hasRole('execution_manager')) {
+            if ((int) $po->purchaseRequest?->requester?->manager_id !== (int) $user->id) {
+                throw new AccessDeniedHttpException('غير مصرح لك باستعراض أمر شراء لا يتبع موظفيك.');
+            }
+        }
+
+        return $po;
     }
 }

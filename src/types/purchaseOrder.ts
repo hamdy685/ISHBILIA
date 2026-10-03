@@ -83,10 +83,13 @@ export interface PurchaseOrderItem {
 export interface PurchaseOrder {
   id: number;
   po_number: string;
+  manual_po_number?: string | null;
+  manual_pr_number?: string | null;
   purchase_request_id?: number | null;
   purchase_request?: {
     id: number;
     request_number: string;
+    manual_request_number?: string | null;
     request_type?: 'PROJECT' | 'OFFICE_SUPPLIES';
     status: string;
     created_at?: string | null;
@@ -239,6 +242,8 @@ export interface LinkedReceiptSummary {
 
 export interface PurchaseOrderPayload {
   purchase_request_id?: number;
+  manual_po_number?: string;
+  manual_pr_number?: string;
   supplier_id?: number;
   one_time_supplier_name?: string;
   payment_terms?: string;

@@ -28,6 +28,7 @@ import LandAllocationEditor, { LandAllocationDraft } from '../../components/acco
 import { SupplementItemBadge } from '../../components/common/SupplementItemBadge';
 import { ThreeWayMatchPrintModal } from '../../components/accounting/ThreeWayMatchPrintModal';
 import { formatCleanNumber } from '../../utils/numberFormat';
+import { printDocumentOnly } from '../../utils/print';
 
 const today = getTodayInputDate;
 const cleanDate = (d?: string | null) => d ? String(d).slice(0, 10) : '—';
@@ -123,6 +124,36 @@ export const SupplierPaymentsPage: React.FC = () => {
       amount: receiptTotal,
       land_allocations: defaultAllocations,
     });
+  };
+
+  const handlePrintInvoiceVoucher = () => {
+    printDocumentOnly('#printable-supplier-invoice-voucher', {
+      title: `سند_فاتورة_${invoiceForm.invoice_number || invoiceReceipt?.purchase_order?.po_number || 'مورد'}`,
+      orientation: 'portrait',
+    });
+  };
+
+  const handleShareInvoiceWhatsApp = () => {
+    if (!invoiceReceipt) return;
+    const lines = [
+      '🏢 *شركة إشبيلية للتطوير العقاري والمقاولات*',
+      '🧾 *إشعار تسجيل فاتورة مورد بالحسابات*',
+      '─────────────────────────',
+      `📑 *رقم الفاتورة:* ${invoiceForm.invoice_number.trim() || 'مسودة قيد الحفظ'}`,
+      `💰 *المبلغ الإجمالي:* ${formatCleanNumber(invoiceForm.amount)} ج.م`,
+      `📅 *تاريخ الفاتورة:* ${invoiceForm.invoice_date || '—'}`,
+      invoiceForm.due_date ? `⏳ *تاريخ الاستحقاق:* ${invoiceForm.due_date}` : '',
+      '─────────────────────────',
+      `🏬 *المورد:* ${invoiceReceipt.purchase_order?.supplier?.company_name || '—'}`,
+      `📦 *أمر الشراء:* ${invoiceReceipt.purchase_order?.po_number || '—'}`,
+      `📥 *إذن الاستلام بالموقع:* ${invoiceReceipt.receipt_number}`,
+      `🏗️ *القسم:* ${invoiceReceipt.purchase_order?.purchase_request?.department?.name || '—'}`,
+      '─────────────────────────',
+      '✅ *تم تدقيق الفاتورة ومطابقتها ثلاثياً للإدراج في القيود المحاسبية.*',
+    ].filter(Boolean);
+
+    const url = `https://wa.me/?text=${encodeURIComponent(lines.join('\n'))}`;
+    window.open(url, '_blank');
   };
 
   const load = async () => {
@@ -908,15 +939,108 @@ export const SupplierPaymentsPage: React.FC = () => {
             )}
 
             {/* Actions */}
-            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 border-t border-slate-800 pt-3">
-              <Button type="button" variant="secondary" className="min-h-10" onClick={() => setInvoiceReceipt(null)}>
-                إلغاء
-              </Button>
-              <Button type="submit" variant="primary" className="min-h-10 font-bold" isLoading={saving} disabled={!parcels.length}>
-                حفظ الفاتورة وترحيل المصروف
-              </Button>
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-2 border-t border-slate-800 pt-3">
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={handlePrintInvoiceVoucher}
+                  className="inline-flex items-center gap-1.5 text-cyan-300 border-cyan-800/40 text-xs font-bold"
+                  title="طباعة سند تسجيل الفاتورة والمرفقات"
+                >
+                  <span>🖨️</span> طباعة الفاتورة والمرفقات
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleShareInvoiceWhatsApp}
+                  className="inline-flex items-center gap-1.5 text-emerald-300 border-emerald-800/40 text-xs font-bold hover:bg-emerald-950/50"
+                  title="مشاركة تفاصيل الفاتورة عبر تطبيق واتساب"
+                >
+                  <span>📱</span> إرسال واتساب
+                </Button>
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <Button type="button" variant="secondary" className="min-h-10" onClick={() => setInvoiceReceipt(null)}>
+                  إلغاء
+                </Button>
+                <Button type="submit" variant="primary" className="min-h-10 font-bold" isLoading={saving} disabled={!parcels.length}>
+                  حفظ الفاتورة وترحيل المصروف
+                </Button>
+              </div>
             </div>
           </form>
+
+          {/* Hidden Printable Voucher for SupplierPaymentsPage */}
+          <div id="printable-supplier-invoice-voucher" className="hidden p-8 bg-white text-black font-sans text-xs" dir="rtl">
+            <div className="flex items-center justify-between border-b-2 border-black pb-3 mb-4">
+              <div className="text-right">
+                <h1 className="text-base font-bold text-black">شركة إشبيلية للتطوير العقاري والمقاولات</h1>
+                <p className="text-xs text-gray-700">الإدارة المالية - قسم الحسابات</p>
+                <p className="text-[11px] text-gray-500 font-mono">تاريخ الطباعة: {new Date().toLocaleDateString('ar-EG')}</p>
+              </div>
+              <div className="text-left font-mono">
+                <div className="border-2 border-black px-4 py-1.5 font-bold text-sm bg-gray-100 rounded">
+                  سند تسجيل فاتورة مورد
+                </div>
+                <div className="text-xs mt-1 text-gray-700 font-bold">
+                  رقم الفاتورة: {invoiceForm.invoice_number || 'مسودة قيد الحفظ'}
+                </div>
+              </div>
+            </div>
+
+            <table className="w-full border-collapse border border-black text-xs mb-4">
+              <tbody>
+                <tr>
+                  <td className="border border-black bg-gray-100 p-2 font-bold w-1/4">المورد:</td>
+                  <td className="border border-black p-2 w-1/4 font-bold">{invoiceReceipt.purchase_order?.supplier?.company_name || '—'}</td>
+                  <td className="border border-black bg-gray-100 p-2 font-bold w-1/4">تاريخ الفاتورة:</td>
+                  <td className="border border-black p-2 w-1/4 font-mono">{invoiceForm.invoice_date || '—'}</td>
+                </tr>
+                <tr>
+                  <td className="border border-black bg-gray-100 p-2 font-bold">رقم أمر الشراء:</td>
+                  <td className="border border-black p-2 font-mono font-bold">{invoiceReceipt.purchase_order?.po_number || '—'}</td>
+                  <td className="border border-black bg-gray-100 p-2 font-bold">إذن الاستلام بالموقع:</td>
+                  <td className="border border-black p-2 font-mono font-bold text-emerald-800">{invoiceReceipt.receipt_number}</td>
+                </tr>
+                <tr>
+                  <td className="border border-black bg-gray-100 p-2 font-bold">القسم:</td>
+                  <td className="border border-black p-2" colSpan={3}>{invoiceReceipt.purchase_order?.purchase_request?.department?.name || '—'}</td>
+                </tr>
+                <tr>
+                  <td className="border border-black bg-gray-100 p-2 font-bold text-sm">إجمالي مبلغ الفاتورة:</td>
+                  <td className="border border-black p-2 font-mono font-black text-sm" colSpan={3} dir="ltr">
+                    {formatCleanNumber(invoiceForm.amount)} EGP (جنيه مصري)
+                  </td>
+                </tr>
+                {invoiceForm.due_date && (
+                  <tr>
+                    <td className="border border-black bg-gray-100 p-2 font-bold">تاريخ الاستحقاق:</td>
+                    <td className="border border-black p-2 font-mono" colSpan={3}>{invoiceForm.due_date}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+
+            {/* Signatures */}
+            <div className="grid grid-cols-3 gap-4 pt-6 border-t-2 border-black text-center text-xs mt-6">
+              <div>
+                <p className="font-bold">محاسب القسم / المشتريات</p>
+                <p className="mt-8 text-gray-400">..............................</p>
+              </div>
+              <div>
+                <p className="font-bold">رئيس قسم الحسابات</p>
+                <p className="mt-8 text-gray-400">..............................</p>
+              </div>
+              <div>
+                <p className="font-bold">المدير المالي والتنفيذي</p>
+                <p className="mt-8 text-gray-400">..............................</p>
+              </div>
+            </div>
+          </div>
         </div>,
         document.body,
       )}

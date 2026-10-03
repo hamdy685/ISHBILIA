@@ -46,6 +46,7 @@ class PurchaseRequest extends Model
 
     protected $fillable = [
         'request_number',
+        'manual_request_number',
         'request_type',
         'parcel_reference',
         'region',

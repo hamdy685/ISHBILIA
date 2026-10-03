@@ -21,6 +21,7 @@ class PurchasesReportController extends Controller
         'licenses_accountant',
         'buffet_accountant',
         'general_manager',
+        'execution_manager',
         'procurement_manager',
         'admin',
     ];
@@ -122,6 +123,11 @@ class PurchasesReportController extends Controller
             ->when($allowedDepartmentCodes !== null, function ($q) use ($allowedDepartmentCodes) {
                 $q->whereHas('purchaseRequest.department', function ($dq) use ($allowedDepartmentCodes) {
                     $dq->whereIn('code', $allowedDepartmentCodes);
+                });
+            })
+            ->when($user->hasRole('execution_manager'), function ($q) use ($user) {
+                $q->whereHas('purchaseRequest.requester', function ($rq) use ($user) {
+                    $rq->where('manager_id', $user->id);
                 });
             });
 

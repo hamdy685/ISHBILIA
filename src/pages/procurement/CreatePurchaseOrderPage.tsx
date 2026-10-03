@@ -18,6 +18,7 @@ import { tafqeetCurrency } from '../../utils/tafqeet';
 import { UnifiedNotesCard } from '../../components/common/UnifiedNotesCard';
 import { SupplierSelectWithQuickAdd } from '../../components/common/SupplierSelectWithQuickAdd';
 import { formatCleanNumber } from '../../utils/numberFormat';
+import { CombinedPoPrPrintModal, CombinedPrintData } from '../../components/procurement/CombinedPoPrPrintModal';
 
 const getLocalDateIso = () => {
   const now = new Date();
@@ -54,6 +55,9 @@ export const CreatePurchaseOrderPage: React.FC = () => {
   const [deliveryDate, setDeliveryDate] = useState<string>(getLocalDateIso());
   const [budgetCode, setBudgetCode] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
+  const [manualPrNumber, setManualPrNumber] = useState<string>('');
+  const [manualPoNumber, setManualPoNumber] = useState<string>('');
+  const [showCombinedPrintModal, setShowCombinedPrintModal] = useState<boolean>(false);
   const [poItems, setPoItems] = useState<PoItemInput[]>([]);
 
   const [loading, setLoading] = useState<boolean>(false);
@@ -71,6 +75,9 @@ export const CreatePurchaseOrderPage: React.FC = () => {
         if (prId) {
           const prData = await getApprovedPurchaseRequestApi(prId);
           setPr(prData);
+          if (prData?.manual_request_number) {
+            setManualPrNumber(prData.manual_request_number);
+          }
           if (quoteId && prData?.selected_quote?.id && quoteId !== prData.selected_quote.id) {
             throw new Error('العرض المختار في الرابط لا يطابق العرض المعتمد لهذا الطلب.');
           }
@@ -193,6 +200,8 @@ export const CreatePurchaseOrderPage: React.FC = () => {
         delivery_date: deliveryDate || undefined,
         budget_code: budgetCode || undefined,
         notes: notes || undefined,
+        manual_po_number: manualPoNumber.trim() || undefined,
+        manual_pr_number: manualPrNumber.trim() || undefined,
         items: poItems.map((item) => ({
           pr_item_id: item.pr_item_id,
           item_id: item.item_id,
@@ -223,6 +232,76 @@ export const CreatePurchaseOrderPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const selectedSupplier = useMemo(() => {
+    return suppliers.find((s) => String(s.id) === String(supplierId));
+  }, [suppliers, supplierId]);
+
+  const supplierDisplayName = useMemo(() => {
+    return selectedSupplier?.company_name || oneTimeSupplierName.trim() || 'مورد غير محدد';
+  }, [selectedSupplier, oneTimeSupplierName]);
+
+  const combinedPrintData: CombinedPrintData = useMemo(() => {
+    return {
+      prId: pr?.id,
+      prNumber: pr?.request_number || '—',
+      manualPrNumber: manualPrNumber.trim() || pr?.manual_request_number || null,
+      prDate: pr?.created_at || null,
+      requesterName: pr?.requester?.name || '—',
+      departmentName: pr?.department?.name || '—',
+      reviewerName: pr?.assigned_reviewer?.name || '—',
+      executiveApproverName: pr?.approval_history?.find((h) => h.action?.includes('APPROVE') || h.action?.includes('EXECUTIVE'))?.actor?.name || 'المدير التنفيذي',
+      projectOrParcel: poItems[0]?.item_reference || pr?.items?.[0]?.item_reference || '—',
+      region: poItems[0]?.region || pr?.items?.[0]?.region || '—',
+      dateNeeded: pr?.date_needed || '—',
+      prNotes: pr?.notes || pr?.justification || '',
+
+      poNumber: manualPoNumber.trim() || (pr ? `PO-PREVIEW-${pr.request_number}` : 'PO-PREVIEW'),
+      manualPoNumber: manualPoNumber.trim() || null,
+      poDate: getLocalDateIso(),
+      supplierName: supplierDisplayName,
+      supplierPhone: selectedSupplier?.phone || undefined,
+      supplierTaxNumber: selectedSupplier?.tax_number || undefined,
+      paymentTerms: paymentTerms || undefined,
+      deliveryTerms: undefined,
+      deliveryDate: deliveryDate || undefined,
+      poNotes: notes || undefined,
+      items: poItems.map((item) => ({
+        id: item.pr_item_id,
+        item_description: item.item_description,
+        item_reference: item.item_reference,
+        region: item.region,
+        quantity: item.quantity,
+        uom: item.uom,
+        unit_price: item.unit_price,
+        specifications: item.specifications,
+      })),
+      grandTotal: calculateGrandTotal(),
+    };
+  }, [pr, manualPrNumber, manualPoNumber, supplierDisplayName, selectedSupplier, paymentTerms, deliveryDate, notes, poItems]);
+
+  const handleDirectWhatsAppShare = () => {
+    const totalAmount = calculateGrandTotal();
+    const textLines = [
+      '🏢 *شركة إشبيلية للتطوير العقاري والمقاولات*',
+      '📄 *بيانات أمر الشراء وطلب الشراء المعتمد*',
+      '─────────────────────────',
+      `📝 *طلب الشراء:* ${pr?.request_number || '—'} ${manualPrNumber ? `(يدوي: ${manualPrNumber})` : ''}`,
+      `📑 *أمر الشراء:* ${manualPoNumber ? `(يدوي: ${manualPoNumber})` : 'قيد الإصدار'}`,
+      `🏬 *المورد:* ${supplierDisplayName}`,
+      `📍 *المشروع / القطعة:* ${poItems[0]?.item_reference || '—'} ${poItems[0]?.region ? `(${poItems[0]?.region})` : ''}`,
+      `💰 *إجمالي أمر الشراء:* ${formatCleanNumber(totalAmount)} ج.م`,
+      `💳 *شروط الدفع:* ${paymentTerms || 'دفع عند الاستلام'}`,
+      `🚚 *تاريخ التوريد:* ${deliveryDate || '—'}`,
+      '─────────────────────────',
+      '📌 *أصناف التوريد المعتمدة:*',
+      ...poItems.map((item, idx) => `  ${idx + 1}. ${item.item_description} | ك: ${item.quantity} ${getUnitLabel(item.uom)} | س: ${formatCleanNumber(item.unit_price)} ج.م`),
+      '─────────────────────────',
+      '✅ *المستند معتمد إدارياً وفنياً للتنفيذ.*',
+    ];
+    const url = `https://wa.me/?text=${encodeURIComponent(textLines.join('\n'))}`;
+    window.open(url, '_blank');
   };
 
   const directPrSuppliers = useMemo(() => {
@@ -493,6 +572,44 @@ export const CreatePurchaseOrderPage: React.FC = () => {
                 placeholder="ملاحظات توريد أو شروط استلام..."
                 className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 min-h-10"
               />
+            </div>
+          </div>
+
+          {/* Document Reference Numbers (Manual PR / PO) */}
+          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+              <h3 className="text-xs font-bold text-cyan-300 flex items-center gap-1.5">
+                <span>📑</span> أرقام الدورة المستندية الورقية / اليدوية (اختياري)
+              </h3>
+              <span className="text-[11px] text-slate-400">
+                في حال تركها فارغة، يعتمد النظام تلقائياً على الترقيم الآلي
+              </span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  رقم طلب الشراء الورقي / اليدوي (Manual PR No.)
+                </label>
+                <input
+                  type="text"
+                  value={manualPrNumber}
+                  onChange={(e) => setManualPrNumber(e.target.value)}
+                  placeholder="مثال: PR-MAN-2026/01 (اختياري)"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono focus:outline-none focus:border-cyan-500 min-h-10"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  رقم أمر الشراء الورقي / اليدوي (Manual PO No.)
+                </label>
+                <input
+                  type="text"
+                  value={manualPoNumber}
+                  onChange={(e) => setManualPoNumber(e.target.value)}
+                  placeholder="مثال: PO-MAN-2026/01 (اختياري)"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-xs text-slate-100 placeholder:text-slate-500 font-mono focus:outline-none focus:border-cyan-500 min-h-10"
+                />
+              </div>
             </div>
           </div>
 
@@ -772,24 +889,54 @@ export const CreatePurchaseOrderPage: React.FC = () => {
           </div>
 
           {/* Form الإجراءات */}
-          <div className="flex items-center justify-end space-x-3 space-x-reverse pt-4 border-t border-slate-800">
-            <button
-              type="button"
-              onClick={() => navigate(-1)}
-              className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-4 py-2.5 rounded-lg font-medium"
-            >
-              إلغاء
-            </button>
-            <button
-              type="submit"
-              disabled={loading || !supplierId || !prId}
-              className="bg-cyan-600 hover:bg-cyan-500 text-white text-xs px-6 py-2.5 rounded-lg font-bold shadow-lg shadow-cyan-600/20 disabled:opacity-50"
-            >
-              {loading ? 'جاري إصدار وإرسال أمر الشراء...' : 'إصدار وإرسال أمر الشراء للاستلام ←'}
-            </button>
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-800">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowCombinedPrintModal(true)}
+                disabled={!prId || poItems.length === 0}
+                className="inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-800/50 text-xs px-4 py-2.5 rounded-lg font-bold transition-all disabled:opacity-50"
+                title="توليد وطباعة ملف PDF مدمج يضم طلب الشراء وأمر الشراء فقط دون إذن الاستلام"
+              >
+                <span>🖨️</span> طباعة المستند المدمج (PR + PO)
+              </button>
+              <button
+                type="button"
+                onClick={handleDirectWhatsAppShare}
+                disabled={!prId || poItems.length === 0}
+                className="inline-flex items-center gap-2 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-800/60 text-xs px-4 py-2.5 rounded-lg font-bold transition-all disabled:opacity-50"
+                title="مشاركة تفاصيل أمر الشراء وطلب الشراء عبر تطبيق واتساب"
+              >
+                <span>📱</span> إرسال واتساب
+              </button>
+            </div>
+
+            <div className="flex items-center space-x-3 space-x-reverse">
+              <button
+                type="button"
+                onClick={() => navigate(-1)}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-4 py-2.5 rounded-lg font-medium"
+              >
+                إلغاء
+              </button>
+              <button
+                type="submit"
+                disabled={loading || !supplierId || !prId}
+                className="bg-cyan-600 hover:bg-cyan-500 text-white text-xs px-6 py-2.5 rounded-lg font-bold shadow-lg shadow-cyan-600/20 disabled:opacity-50"
+              >
+                {loading ? 'جاري إصدار وإرسال أمر الشراء...' : 'إصدار وإرسال أمر الشراء للاستلام ←'}
+              </button>
+            </div>
           </div>
         </Card>
       </form>
+
+      {/* Combined PR + PO Print & Share Modal (Strictly without GRN) */}
+      <CombinedPoPrPrintModal
+        isOpen={showCombinedPrintModal}
+        onClose={() => setShowCombinedPrintModal(false)}
+        data={combinedPrintData}
+      />
 
       {/* Direct purchase request modal */}
       <DirectPoModal

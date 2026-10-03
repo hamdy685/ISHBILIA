@@ -24,6 +24,7 @@ import { FormField, Input, Select, SearchableSelect } from '../../components/ui/
 const ROLE_LABELS: Record<string, string> = {
   admin: 'مدير النظام',
   general_manager: 'المدير العام',
+  execution_manager: 'مدير مشروعات التنفيذ',
   accountant: 'المدير المالي',
   site_accountant: 'الحسابات',
   procurement_manager: 'مدير المشتريات',
@@ -62,6 +63,7 @@ export const UsersPage: React.FC = () => {
     password: '',
     role_ids: [],
     department_id: null,
+    manager_id: null,
     is_active: true,
   });
   const [submitting, setSubmitting] = useState<boolean>(false);
@@ -128,6 +130,25 @@ export const UsersPage: React.FC = () => {
     loadData();
   }, []);
 
+  const managerOptions = useMemo(() => {
+    return users
+      .filter((u) => {
+        if (editingUser && u.id === editingUser.id) return false;
+        const userRoles = u.roles?.map((r) => (typeof r === 'object' ? r.slug : r)) || [];
+        return userRoles.some((r) => ['general_manager', 'execution_manager', 'admin'].includes(r));
+      })
+      .map((u) => {
+        const userRoles = u.roles?.map((r) => (typeof r === 'object' ? r.slug : r)) || [];
+        const isGm = userRoles.includes('general_manager');
+        const isEm = userRoles.includes('execution_manager');
+        const roleLabel = isGm ? 'المدير العام' : isEm ? 'مدير مشروعات التنفيذ' : 'مدير';
+        return {
+          value: u.id,
+          label: `${u.name} — (${roleLabel})`,
+        };
+      });
+  }, [users, editingUser]);
+
   const handleOpenAdd = () => {
     setEditingUser(null);
     setFormData({
@@ -136,6 +157,7 @@ export const UsersPage: React.FC = () => {
       password: '',
       role_ids: [],
       department_id: null,
+      manager_id: null,
       is_active: true,
     });
     setIsModalOpen(true);
@@ -147,8 +169,9 @@ export const UsersPage: React.FC = () => {
       name: user.name,
       email: user.email,
       password: '',
-      role_ids: user.roles ? user.roles.map((r) => typeof r === 'object' ? r.id : (r as any)) : [],
+      role_ids: user.roles ? user.roles.map((r) => (typeof r === 'object' ? r.id : (r as any))) : [],
       department_id: user.department?.id || null,
+      manager_id: user.manager_id || null,
       is_active: user.is_active,
     });
     setIsModalOpen(true);
@@ -264,6 +287,7 @@ export const UsersPage: React.FC = () => {
               <TableHead>البريد الإلكتروني</TableHead>
               <TableHead>الأدوار</TableHead>
               <TableHead>القسم</TableHead>
+              <TableHead>المدير المباشر</TableHead>
               <TableHead>الحالة</TableHead>
               <TableHead className="text-center">الإجراءات</TableHead>
             </TableRow>
@@ -295,6 +319,15 @@ export const UsersPage: React.FC = () => {
                     <div className="mt-1 text-[10px] font-normal text-amber-300">
                       مهندس موقع لأقسام: {u.site_engineer_departments.map((department) => department.name).join('، ')}
                     </div>
+                  )}
+                </TableCell>
+                <TableCell className="text-slate-300">
+                  {u.manager ? (
+                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-indigo-950/80 border border-indigo-800/60 text-indigo-300 text-xs font-bold">
+                      👔 {u.manager.name}
+                    </span>
+                  ) : (
+                    <span className="text-slate-500 text-xs">— (الإدارة العامة)</span>
                   )}
                 </TableCell>
                 <TableCell>
@@ -396,6 +429,12 @@ export const UsersPage: React.FC = () => {
                         مهندس موقع لأقسام: {u.site_engineer_departments.map((department) => department.name).join('، ')}
                       </div>
                     )}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-slate-500">المدير المباشر</dt>
+                  <dd className="mt-1 text-slate-200 font-medium">
+                    {u.manager ? `👔 ${u.manager.name}` : '— (الإدارة العامة)'}
                   </dd>
                 </div>
               </dl>
@@ -574,6 +613,27 @@ export const UsersPage: React.FC = () => {
               placeholder="-- بدون قسم (أو ابحث عن القسم) --"
               searchPlaceholder="ابحث باسم القسم أو الكود..."
               emptyMessage="لا يوجد قسم بهذا الاسم"
+            />
+          </FormField>
+
+          <FormField
+            label="المدير المباشر / المدير التنفيذي (الهيكل الإداري)"
+            helperText="المدير المباشر المسؤول عن اعتماد طلبات الشراء لهذا المستخدم (مثلاً: م. كريم كمدير مشروعات التنفيذ، أو م. محمد عبدالكريم كمدير عام)."
+          >
+            <SearchableSelect
+              options={managerOptions}
+              value={formData.manager_id || ''}
+              onChange={(val) =>
+                setFormData({
+                  ...formData,
+                  manager_id: val ? Number(val) : null,
+                })
+              }
+              clearable
+              onClear={() => setFormData({ ...formData, manager_id: null })}
+              placeholder="-- بدون مدير مباشر (يتبع الإدارة العامة تلقائيًا) --"
+              searchPlaceholder="ابحث باسم المدير..."
+              emptyMessage="لا يوجد مدير مطابق"
             />
           </FormField>
 

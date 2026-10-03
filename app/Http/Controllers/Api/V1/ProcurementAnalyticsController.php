@@ -35,7 +35,7 @@ class ProcurementAnalyticsController extends Controller
         $user = $request->user();
         $allowedDepartmentCodes = app(\App\Services\SupplierInvoiceService::class)->getAllowedDepartmentCodesForAccountant($user);
 
-        $cacheKey = 'procurement:analytics:v4:' . ($allowedDepartmentCodes !== null ? 'dept_acc_' . ($user->id ?? 0) . ':' : '') . md5(json_encode($request->all()));
+        $cacheKey = 'procurement:analytics:v5:' . ($user->hasRole('execution_manager') ? 'exec_mgr_' . $user->id . ':' : '') . ($allowedDepartmentCodes !== null ? 'dept_acc_' . ($user->id ?? 0) . ':' : '') . md5(json_encode($request->all()));
 
         if (Cache::has($cacheKey)) {
             return response()->json(Cache::get($cacheKey));
@@ -49,6 +49,11 @@ class ProcurementAnalyticsController extends Controller
             ->when($allowedDepartmentCodes !== null, function ($q) use ($allowedDepartmentCodes) {
                 $q->whereHas('purchaseRequest.department', function ($dq) use ($allowedDepartmentCodes) {
                     $dq->whereIn('code', $allowedDepartmentCodes);
+                });
+            })
+            ->when($user->hasRole('execution_manager'), function ($q) use ($user) {
+                $q->whereHas('purchaseRequest.requester', function ($rq) use ($user) {
+                    $rq->where('manager_id', $user->id);
                 });
             });
 
@@ -78,6 +83,11 @@ class ProcurementAnalyticsController extends Controller
             ->when($allowedDepartmentCodes !== null, function ($q) use ($allowedDepartmentCodes) {
                 $q->whereHas('purchaseRequest.department', function ($dq) use ($allowedDepartmentCodes) {
                     $dq->whereIn('code', $allowedDepartmentCodes);
+                });
+            })
+            ->when($user->hasRole('execution_manager'), function ($q) use ($user) {
+                $q->whereHas('purchaseRequest.requester', function ($rq) use ($user) {
+                    $rq->where('manager_id', $user->id);
                 });
             });
 

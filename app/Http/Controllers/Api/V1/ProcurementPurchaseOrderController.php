@@ -271,6 +271,31 @@ class ProcurementPurchaseOrderController extends Controller
         return new PurchaseOrderResource($po);
     }
 
+    /**
+     * Get combined Purchase Request + Purchase Order document (strictly excluding receipts/GRN).
+     */
+    public function combinedDocument(Request $request, string|int $id): JsonResponse
+    {
+        $po = PurchaseOrder::with([
+            'purchaseRequest.requester',
+            'purchaseRequest.department',
+            'purchaseRequest.assignedReviewer',
+            'purchaseRequest.approvalHistory.actor',
+            'purchaseRequest.items.item',
+            'supplier',
+            'createdBy',
+            'items.item',
+            'items.supplier',
+        ])->findOrFail((int) $id);
+
+        return response()->json([
+            'data' => [
+                'purchase_order' => new PurchaseOrderResource($po),
+                'purchase_request' => new PurchaseRequestResource($po->purchaseRequest),
+            ],
+        ]);
+    }
+
 
     /**
      * Create a new draft Purchase Order from a procurement-approved Purchase Request.

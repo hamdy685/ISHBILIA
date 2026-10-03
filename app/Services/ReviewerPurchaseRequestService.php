@@ -535,15 +535,30 @@ class ReviewerPurchaseRequestService
                 $pr
             );
 
-            // Notify the Executive / General Manager
-            $executives = $notificationService->resolveUsersWithPermission('purchase_request.approve_gm');
-            $notificationService->queueUsers(
-                $executives,
-                'purchase_request_pending_executive',
-                'طلب شراء بانتظار قرار المدير التنفيذي',
-                "طلب الشراء {$pr->request_number} اعتمده المراجع وبانتظار قرار المدير التنفيذي.",
-                $pr
-            );
+            // Notify the Executive / General Manager or Direct Manager
+            $requester = $pr->requester;
+            $directManager = ($requester && $requester->manager_id)
+                ? User::where('id', $requester->manager_id)->where('is_active', true)->first()
+                : null;
+
+            if ($directManager) {
+                $notificationService->queueNotification(
+                    $directManager->id,
+                    'purchase_request_pending_executive',
+                    'طلب شراء بانتظار قرار المدير',
+                    "طلب الشراء {$pr->request_number} لموظفك ({$requester->name}) اعتمده المراجع وبانتظار قرارك.",
+                    $pr
+                );
+            } else {
+                $executives = $notificationService->resolveUsersWithPermission('purchase_request.approve_gm');
+                $notificationService->queueUsers(
+                    $executives,
+                    'purchase_request_pending_executive',
+                    'طلب شراء بانتظار قرار المدير التنفيذي',
+                    "طلب الشراء {$pr->request_number} اعتمده المراجع وبانتظار قرار المدير التنفيذي.",
+                    $pr
+                );
+            }
 
             return $pr->fresh(['requester', 'department', 'assignedReviewer', 'siteEngineer', 'items.item', 'approvalHistory']);
         });

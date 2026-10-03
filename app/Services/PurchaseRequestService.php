@@ -569,13 +569,28 @@ class PurchaseRequestService
                     $request
                 );
             } elseif ($nextStatus === 'PENDING_EXECUTIVE_APPROVAL') {
-                $notificationService->queueUsers(
-                    $notificationService->resolveUsersWithPermission('purchase_request.view_gm'),
-                    'purchase_request_pending_executive_approval',
-                    'طلب شراء بانتظار اعتماد المدير التنفيذي',
-                    "طلب الشراء {$request->request_number} جاهز لقرار المدير التنفيذي.",
-                    $request
-                );
+                $requester = $request->requester;
+                $directManager = ($requester && $requester->manager_id)
+                    ? User::where('id', $requester->manager_id)->where('is_active', true)->first()
+                    : null;
+
+                if ($directManager) {
+                    $notificationService->queueNotification(
+                        $directManager->id,
+                        'purchase_request_pending_executive_approval',
+                        'طلب شراء بانتظار اعتماد المدير',
+                        "طلب الشراء {$request->request_number} لموظفك ({$requester->name}) جاهز لقرارك.",
+                        $request
+                    );
+                } else {
+                    $notificationService->queueUsers(
+                        $notificationService->resolveUsersWithPermission('purchase_request.view_gm'),
+                        'purchase_request_pending_executive_approval',
+                        'طلب شراء بانتظار اعتماد المدير التنفيذي',
+                        "طلب الشراء {$request->request_number} جاهز لقرار المدير التنفيذي.",
+                        $request
+                    );
+                }
             } else {
                 $notificationService->queueUsers(
                     $notificationService->resolveUsersWithPermission('purchase_request.view_approved'),

@@ -234,6 +234,19 @@ class RolePermissionSeeder extends Seeder
                     'purchase_order.view_gm',
                 ],
             ],
+            'execution_manager' => [
+                'name' => 'Execution Projects Manager',
+                'description' => 'مدير مشروعات التنفيذ - اعتماد ومتابعة طلبات وأوامر الشراء للموظفين التابعين له',
+                'permissions' => [
+                    'purchase_request.view_gm',
+                    'purchase_quote.view',
+                    'purchase_quote.decide',
+                    'purchase_request.edit_gm',
+                    'purchase_request.approve_gm',
+                    'purchase_request.reject_gm',
+                    'purchase_order.view_gm',
+                ],
+            ],
             'admin' => [
                 'name' => 'Admin',
                 'description' => 'System administrator',
@@ -241,7 +254,7 @@ class RolePermissionSeeder extends Seeder
             ],
         ];
 
-        $requestCreatorRoles = ['reviewer', 'site_engineer', 'warehouse_keeper', 'procurement_manager', 'accountant', 'general_manager', 'site_accountant', 'licenses_accountant', 'buffet_accountant'];
+        $requestCreatorRoles = ['reviewer', 'site_engineer', 'warehouse_keeper', 'procurement_manager', 'accountant', 'general_manager', 'execution_manager', 'site_accountant', 'licenses_accountant', 'buffet_accountant'];
         $requestCreatorPermissions = ['purchase_request.create', 'purchase_request.view_own', 'purchase_request.edit_own', 'purchase_request.submit'];
         $receiptPermissions = ['purchase_receipt.view_assigned', 'purchase_receipt.edit', 'purchase_receipt.approve'];
 

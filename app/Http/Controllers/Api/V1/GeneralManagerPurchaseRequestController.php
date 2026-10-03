@@ -19,12 +19,12 @@ class GeneralManagerPurchaseRequestController extends Controller
     public function index(Request $request): AnonymousResourceCollection
     {
         $perPage = min((int) $request->query('per_page', 30), 100);
-        return PurchaseRequestResource::collection($this->service->getPendingRequests($perPage));
+        return PurchaseRequestResource::collection($this->service->getPendingRequests($perPage, $request->user()));
     }
 
     public function show(Request $request, string|int $id): PurchaseRequestResource
     {
-        return new PurchaseRequestResource($this->service->getPendingRequest((int) $id));
+        return new PurchaseRequestResource($this->service->getPendingRequest((int) $id, $request->user()));
     }
 
     public function update(UpdatePurchaseRequestRequest $request, string|int $id): PurchaseRequestResource
@@ -32,7 +32,7 @@ class GeneralManagerPurchaseRequestController extends Controller
         $validated = $request->validated();
 
         return new PurchaseRequestResource(
-            $this->service->updateRequest($request->user(), $this->service->getPendingRequest((int) $id), $validated)
+            $this->service->updateRequest($request->user(), $this->service->getPendingRequest((int) $id, $request->user()), $validated)
         );
     }
 
@@ -45,7 +45,7 @@ class GeneralManagerPurchaseRequestController extends Controller
         return new PurchaseRequestResource(
             $this->service->approveRequest(
                 $request->user(),
-                $this->service->getPendingRequest((int) $id),
+                $this->service->getPendingRequest((int) $id, $request->user()),
                 $validated['comment'] ?? null
             )
         );
@@ -60,7 +60,7 @@ class GeneralManagerPurchaseRequestController extends Controller
         return new PurchaseRequestResource(
             $this->service->rejectRequest(
                 $request->user(),
-                $this->service->getPendingRequest((int) $id),
+                $this->service->getPendingRequest((int) $id, $request->user()),
                 $validated['comment']
             )
         );

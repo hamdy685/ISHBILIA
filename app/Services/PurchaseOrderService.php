@@ -141,9 +141,18 @@ class PurchaseOrderService
 
             $existingPo = $existingPoQuery->first();
 
+            $manualPoNumber = !empty($options['manual_po_number']) ? trim((string) $options['manual_po_number']) : null;
+            $manualPrNumber = !empty($options['manual_pr_number']) ? trim((string) $options['manual_pr_number']) : null;
+
+            if ($manualPrNumber) {
+                $pr->update(['manual_request_number' => $manualPrNumber]);
+            }
+
             if ($existingPo) {
                 if (in_array($existingPo->status, ['PO_DRAFT', 'RETURNED_TO_PROCUREMENT'], true)) {
                     $existingPo->update([
+                        'manual_po_number' => $manualPoNumber ?? $existingPo->manual_po_number,
+                        'manual_pr_number' => $manualPrNumber ?? $existingPo->manual_pr_number,
                         'supplier_id' => $supplier?->id ?? $existingPo->supplier_id,
                         'payment_terms' => $options['payment_terms'] ?? $existingPo->payment_terms,
                         'delivery_terms' => $options['delivery_terms'] ?? $existingPo->delivery_terms,
@@ -163,7 +172,9 @@ class PurchaseOrderService
 
             $po = PurchaseOrder::create([
                 'po_number' => $poNumber,
+                'manual_po_number' => $manualPoNumber,
                 'purchase_request_id' => $pr->id,
+                'manual_pr_number' => $manualPrNumber,
                 'selected_quote_id' => $selectedQuote?->id,
                 'supplier_id' => $supplier?->id,
                 'created_by_user_id' => $user->id,

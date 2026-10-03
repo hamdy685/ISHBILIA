@@ -20,6 +20,7 @@ class User extends Authenticatable
 
     protected $fillable = [
         'department_id',
+        'manager_id',
         'name',
         'email',
         'password',
@@ -38,6 +39,16 @@ class User extends Authenticatable
             'is_active' => 'boolean',
             'password' => 'hashed',
         ];
+    }
+
+    public function manager(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'manager_id');
+    }
+
+    public function subordinates(): HasMany
+    {
+        return $this->hasMany(User::class, 'manager_id');
     }
 
     public function department(): BelongsTo

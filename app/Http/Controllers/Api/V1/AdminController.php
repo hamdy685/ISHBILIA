@@ -24,7 +24,7 @@ class AdminController extends Controller
     public function indexUsers(Request $request): JsonResponse
     {
         $perPage = min(max((int) $request->query('per_page', 200), 1), 200);
-        $paginator = User::with(['department', 'roles', 'siteEngineerDepartments'])
+        $paginator = User::with(['department', 'roles', 'siteEngineerDepartments', 'manager'])
             ->orderByDesc('id')
             ->paginate($perPage);
 
@@ -35,6 +35,12 @@ class AdminController extends Controller
                 'email' => $u->email,
                 'phone' => $u->phone,
                 'is_active' => (bool) $u->is_active,
+                'manager_id' => $u->manager_id,
+                'manager' => $u->manager ? [
+                    'id' => $u->manager->id,
+                    'name' => $u->manager->name,
+                    'email' => $u->manager->email,
+                ] : null,
                 'department' => $u->department ? [
                     'id' => $u->department->id,
                     'name' => $u->department->name,
@@ -73,6 +79,7 @@ class AdminController extends Controller
             'password' => 'required|string|min:6',
             'phone' => 'nullable|string|max:50',
             'department_id' => 'nullable|exists:departments,id',
+            'manager_id' => 'nullable|exists:users,id',
             'role_ids' => 'nullable|array',
             'role_ids.*' => 'exists:roles,id',
             'is_active' => 'boolean',
@@ -84,6 +91,7 @@ class AdminController extends Controller
             'password' => Hash::make($validated['password']),
             'phone' => $validated['phone'] ?? null,
             'department_id' => $validated['department_id'] ?? null,
+            'manager_id' => $validated['manager_id'] ?? null,
             'is_active' => $validated['is_active'] ?? true,
         ]);
 
@@ -93,7 +101,7 @@ class AdminController extends Controller
 
         return response()->json([
             'message' => 'User created successfully',
-            'data' => $user->load(['department', 'roles', 'siteEngineerDepartments']),
+            'data' => $user->load(['department', 'roles', 'siteEngineerDepartments', 'manager']),
         ], 201);
     }
 
@@ -107,6 +115,15 @@ class AdminController extends Controller
             'password' => 'nullable|string|min:6',
             'phone' => 'nullable|string|max:50',
             'department_id' => 'nullable|exists:departments,id',
+            'manager_id' => [
+                'nullable',
+                'exists:users,id',
+                function ($attribute, $value, $fail) use ($user) {
+                    if ($value && (int) $value === (int) $user->id) {
+                        $fail('لا يمكن تعيين المستخدم كمدير مباشر لنفسه.');
+                    }
+                },
+            ],
             'role_ids' => 'nullable|array',
             'role_ids.*' => 'exists:roles,id',
             'is_active' => 'sometimes|boolean',
@@ -117,6 +134,7 @@ class AdminController extends Controller
         if (!empty($validated['password'])) $user->password = Hash::make($validated['password']);
         if (array_key_exists('phone', $validated)) $user->phone = $validated['phone'];
         if (array_key_exists('department_id', $validated)) $user->department_id = $validated['department_id'];
+        if (array_key_exists('manager_id', $validated)) $user->manager_id = $validated['manager_id'];
         if (isset($validated['is_active'])) $user->is_active = $validated['is_active'];
 
         $user->save();
@@ -127,7 +145,7 @@ class AdminController extends Controller
 
         return response()->json([
             'message' => 'User updated successfully',
-            'data' => $user->load(['department', 'roles', 'siteEngineerDepartments']),
+            'data' => $user->load(['department', 'roles', 'siteEngineerDepartments', 'manager']),
         ]);
     }
 

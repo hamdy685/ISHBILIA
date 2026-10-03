@@ -11,6 +11,12 @@ export interface AdminUser {
     name: string;
     code: string;
   };
+  manager_id?: number | null;
+  manager?: {
+    id: number;
+    name: string;
+    email: string;
+  } | null;
   site_engineer_departments?: Array<{
     id: number;
     name: string;
@@ -30,6 +36,7 @@ export interface UserInput {
   password?: string;
   phone?: string;
   department_id?: number | null;
+  manager_id?: number | null;
   role_ids?: number[];
   is_active?: boolean;
 }

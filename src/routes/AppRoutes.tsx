@@ -193,8 +193,8 @@ export const AppRoutes: React.FC = () => {
                     <Route path="/accounting/land-parcels" element={<LandParcelsPage />} />
                 </Route>
 
-                {/* ── General Manager Routes ────────────────────────────────── */}
-                <Route element={<RoleRoute allowedRoles={["general_manager"]} />}>
+                {/* ── General Manager & Execution Manager Routes ───────────────── */}
+                <Route element={<RoleRoute allowedRoles={["general_manager", "execution_manager"]} />}>
                     <Route path="/general-manager" element={<GeneralManagerDashboardPage />} />
                     <Route path="/general-manager/purchase-requests" element={<GeneralManagerPurchaseRequestsPage />} />
                     <Route path="/general-manager/purchase-quotes" element={<PurchaseQuotesDecisionPage mode="executive" />} />
@@ -205,12 +205,12 @@ export const AppRoutes: React.FC = () => {
                 </Route>
 
                 {/* Direct alias & shared routes */}
-                <Route element={<RoleRoute allowedRoles={["accountant", "site_accountant", "licenses_accountant", "buffet_accountant", "general_manager", "procurement_manager", "admin"]} />}>
+                <Route element={<RoleRoute allowedRoles={["accountant", "site_accountant", "licenses_accountant", "buffet_accountant", "general_manager", "execution_manager", "procurement_manager", "admin"]} />}>
                     <Route path="/reports" element={<UniversalReportsPage />} />
                 </Route>
                 <Route path="/purchase-quotes" element={<PurchaseQuotesDecisionPage mode="recommend" />} />
                 <Route path="/purchase-quotes/decision" element={<PurchaseQuotesDecisionPage mode="executive" />} />
-                <Route element={<RoleRoute allowedRoles={["accountant", "reviewer", "general_manager", "procurement_manager", "admin"]} />}>
+                <Route element={<RoleRoute allowedRoles={["accountant", "reviewer", "general_manager", "execution_manager", "procurement_manager", "admin"]} />}>
                     <Route path="/quotes" element={<PurchaseQuotesDecisionPage mode="recommend" />} />
                 </Route>
             </Route>
