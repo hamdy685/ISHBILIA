@@ -15,22 +15,9 @@ import { getTodayInputDate } from '../../utils/dateFilters';
 import { parseApiError } from '../../utils/apiError';
 import { getUnitLabel } from '../../utils/units';
 import { printDocumentOnly } from '../../utils/print';
+import { useDebounce } from '../../hooks/useDebounce';
 
-interface ColumnFilters {
-  delivery_date: string;
-  po_number: string;
-  item_name: string;
-  uom: string;
-  quantity: string;
-  unit_price: string;
-  total_price: string;
-  supplier_name: string;
-  parcel_reference: string;
-  region: string;
-  department_name: string;
-  works: string;
-  invoice_status: string;
-}
+export type ColumnFilters = Record<string, string>;
 
 const initialFilters: ColumnFilters = {
   delivery_date: '',
@@ -75,8 +62,9 @@ export const PurchasesReportView: React.FC = () => {
   const [selectedDepartment, setSelectedDepartment] = useState<string>('ALL');
   const [accountingFilter, setAccountingFilter] = useState<'ALL' | 'VERIFIED_ONLY' | 'PENDING'>('ALL');
 
-  // Column search filters
-  const [colFilters, setColFilters] = useState<ColumnFilters>(initialFilters);
+  // Column search filters with Debounce (400ms) for high performance
+  const [colFilters, setColFilters] = useState<Record<string, string>>(initialFilters);
+  const debouncedColFilters = useDebounce<Record<string, string>>(colFilters, 400);
   const [showColumnFilters, setShowColumnFilters] = useState<boolean>(true);
 
   // Pagination state
@@ -180,43 +168,61 @@ export const PurchasesReportView: React.FC = () => {
     return `تقرير مشتريات ${deptPrefix} ${timePeriod}`;
   }, [activeDepartmentName, filterType, selectedMonth, selectedDate, fromDate, toDate]);
 
-  // Client-side filtering by column inputs
+  // Client-side filtering by column inputs with multi-column AND logic (every)
+  // Protected against null/undefined values and crashes
   const filteredRows = useMemo(() => {
-    if (!data?.rows) return [];
-    return data.rows.filter((row) => {
-      const matchDate = !colFilters.delivery_date || row.delivery_date?.toLowerCase().includes(colFilters.delivery_date.toLowerCase()) || row.delivery_date_formatted?.includes(colFilters.delivery_date);
-      const matchPo = !colFilters.po_number || row.po_number?.toLowerCase().includes(colFilters.po_number.toLowerCase()) || row.po_number_short?.includes(colFilters.po_number);
-      const matchItem = !colFilters.item_name || row.item_name?.toLowerCase().includes(colFilters.item_name.toLowerCase());
-      const matchUom = !colFilters.uom || row.uom?.toLowerCase().includes(colFilters.uom.toLowerCase());
-      const matchQty = !colFilters.quantity || String(row.quantity).includes(colFilters.quantity);
-      const matchUnitPrice = !colFilters.unit_price || String(row.unit_price).includes(colFilters.unit_price);
-      const matchTotal = !colFilters.total_price || String(row.total_price).includes(colFilters.total_price);
-      const matchSupplier = !colFilters.supplier_name || row.supplier_name?.toLowerCase().includes(colFilters.supplier_name.toLowerCase());
-      const matchParcel = !colFilters.parcel_reference || row.parcel_reference?.toLowerCase().includes(colFilters.parcel_reference.toLowerCase());
-      const matchRegion = !colFilters.region || row.region?.toLowerCase().includes(colFilters.region.toLowerCase());
-      const matchDept = !colFilters.department_name || row.department_name?.toLowerCase().includes(colFilters.department_name.toLowerCase());
-      const matchWorks = !colFilters.works || row.works?.toLowerCase().includes(colFilters.works.toLowerCase());
-      const matchInvoiceStatus = !colFilters.invoice_status ||
-        (colFilters.invoice_status === 'VERIFIED' && (row.accounting_status === 'VERIFIED' || !!row.invoice_number)) ||
-        (colFilters.invoice_status === 'PENDING' && (row.accounting_status === 'PENDING' || !row.invoice_number));
+    if (!data?.rows || !Array.isArray(data.rows)) return [];
 
-      return (
-        matchDate &&
-        matchPo &&
-        matchItem &&
-        matchUom &&
-        matchQty &&
-        matchUnitPrice &&
-        matchTotal &&
-        matchSupplier &&
-        matchParcel &&
-        matchRegion &&
-        matchDept &&
-        matchWorks &&
-        matchInvoiceStatus
-      );
+    const activeFilterEntries = Object.entries(debouncedColFilters).filter(
+      ([, value]) => typeof value === 'string' && value.trim() !== ''
+    );
+
+    if (activeFilterEntries.length === 0) {
+      return data.rows;
+    }
+
+    return data.rows.filter((row) => {
+      if (!row) return false;
+
+      // Multi-Column AND Logic: Row must match every active filter
+      return activeFilterEntries.every(([key, rawValue]) => {
+        const searchStr = String(rawValue || '').trim().toLowerCase();
+        if (!searchStr) return true;
+
+        // 1. Status Dropdown filter (تسجيل الفاتورة / الحالة)
+        // Runs in parallel with text column filters without overriding them
+        if (key === 'invoice_status') {
+          if (!rawValue) return true; // 'كل الحالات'
+          if (rawValue === 'VERIFIED') {
+            return row.accounting_status === 'VERIFIED' || Boolean(row.invoice_number);
+          }
+          if (rawValue === 'PENDING') {
+            return row.accounting_status === 'PENDING' || !row.invoice_number;
+          }
+          return true;
+        }
+
+        // 2. Delivery Date filter: checks both ISO date and formatted date safely
+        if (key === 'delivery_date') {
+          const val1 = String(row?.delivery_date || '').toLowerCase();
+          const val2 = String(row?.delivery_date_formatted || '').toLowerCase();
+          return val1.includes(searchStr) || val2.includes(searchStr);
+        }
+
+        // 3. PO Number filter: checks both full PO number and short number safely
+        if (key === 'po_number') {
+          const val1 = String(row?.po_number || '').toLowerCase();
+          const val2 = String(row?.po_number_short || '').toLowerCase();
+          return val1.includes(searchStr) || val2.includes(searchStr);
+        }
+
+        // 4. All other columns: Null-Safe evaluation with String(...) and .toLowerCase()
+        const fieldVal = (row as any)?.[key];
+        const fieldStr = String(fieldVal != null ? fieldVal : '').toLowerCase();
+        return fieldStr.includes(searchStr);
+      });
     });
-  }, [data?.rows, colFilters]);
+  }, [data?.rows, debouncedColFilters]);
 
   // Live totals of currently filtered rows
   const liveTotals = useMemo(() => {
@@ -444,14 +450,16 @@ export const PurchasesReportView: React.FC = () => {
   };
 
   const hasActiveColFilters = useMemo(() => {
-    return Object.values(colFilters).some((val) => val.trim() !== '');
+    return Object.values(colFilters).some(
+      (val) => typeof val === 'string' && val.trim() !== ''
+    );
   }, [colFilters]);
 
   const handleClearColFilters = () => {
     setColFilters(initialFilters);
   };
 
-  const handleUpdateColFilter = (key: keyof ColumnFilters, value: string) => {
+  const handleUpdateColFilter = (key: string, value: string) => {
     setColFilters((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -1061,7 +1069,17 @@ export const PurchasesReportView: React.FC = () => {
                 </span>
               </div>
             </div>
-          ) : filteredRows.length > 0 ? (
+          ) : !data?.rows || data.rows.length === 0 ? (
+            <div className="flex flex-col items-center justify-center p-16 text-center bg-white text-slate-600">
+              <span className="text-4xl mb-3">📋</span>
+              <p className="text-base font-black text-slate-800">
+                لا توجد بيانات مسجلة في هذا الشهر أو الفترة المحددة
+              </p>
+              <p className="text-xs text-slate-500 mt-1 max-w-md">
+                قم بتعديل محدد الشهر أو القسم، أو اضغط على &quot;عرض: الكل&quot; لمشاهدة كافة الأوامر الصادرة.
+              </p>
+            </div>
+          ) : (
             <div className="overflow-x-auto max-h-[700px] overflow-y-auto">
               <table className="w-full text-right text-xs border-collapse min-w-[1200px]">
                 
@@ -1112,7 +1130,7 @@ export const PurchasesReportView: React.FC = () => {
                         <input
                           type="text"
                           placeholder="فلتر..."
-                          value={colFilters.delivery_date}
+                          value={colFilters.delivery_date || ''}
                           onChange={(e) => handleUpdateColFilter('delivery_date', e.target.value)}
                           className="w-full rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[11px] text-slate-800 placeholder-slate-400 focus:border-emerald-600 focus:outline-none"
                         />
@@ -1121,7 +1139,7 @@ export const PurchasesReportView: React.FC = () => {
                         <input
                           type="text"
                           placeholder="الأمر..."
-                          value={colFilters.po_number}
+                          value={colFilters.po_number || ''}
                           onChange={(e) => handleUpdateColFilter('po_number', e.target.value)}
                           className="w-full rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[11px] text-slate-800 placeholder-slate-400 focus:border-emerald-600 focus:outline-none"
                         />
@@ -1130,7 +1148,7 @@ export const PurchasesReportView: React.FC = () => {
                         <input
                           type="text"
                           placeholder="الصنف..."
-                          value={colFilters.item_name}
+                          value={colFilters.item_name || ''}
                           onChange={(e) => handleUpdateColFilter('item_name', e.target.value)}
                           className="w-full rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[11px] text-slate-800 placeholder-slate-400 focus:border-emerald-600 focus:outline-none"
                         />
@@ -1139,7 +1157,7 @@ export const PurchasesReportView: React.FC = () => {
                         <input
                           type="text"
                           placeholder="الوحدة..."
-                          value={colFilters.uom}
+                          value={colFilters.uom || ''}
                           onChange={(e) => handleUpdateColFilter('uom', e.target.value)}
                           className="w-full rounded border border-slate-300 bg-white px-1 py-0.5 text-[11px] text-center text-slate-800 placeholder-slate-400 focus:border-emerald-600 focus:outline-none"
                         />
@@ -1148,7 +1166,7 @@ export const PurchasesReportView: React.FC = () => {
                         <input
                           type="text"
                           placeholder="كمية..."
-                          value={colFilters.quantity}
+                          value={colFilters.quantity || ''}
                           onChange={(e) => handleUpdateColFilter('quantity', e.target.value)}
                           className="w-full rounded border border-slate-300 bg-white px-1 py-0.5 text-[11px] text-center text-slate-800 placeholder-slate-400 focus:border-emerald-600 focus:outline-none"
                         />
@@ -1157,7 +1175,7 @@ export const PurchasesReportView: React.FC = () => {
                         <input
                           type="text"
                           placeholder="سعر..."
-                          value={colFilters.unit_price}
+                          value={colFilters.unit_price || ''}
                           onChange={(e) => handleUpdateColFilter('unit_price', e.target.value)}
                           className="w-full rounded border border-slate-300 bg-white px-1 py-0.5 text-[11px] text-center text-slate-800 placeholder-slate-400 focus:border-emerald-600 focus:outline-none"
                         />
@@ -1166,7 +1184,7 @@ export const PurchasesReportView: React.FC = () => {
                         <input
                           type="text"
                           placeholder="إجمالي..."
-                          value={colFilters.total_price}
+                          value={colFilters.total_price || ''}
                           onChange={(e) => handleUpdateColFilter('total_price', e.target.value)}
                           className="w-full rounded border border-slate-300 bg-white px-1 py-0.5 text-[11px] text-center text-slate-800 placeholder-slate-400 focus:border-emerald-600 focus:outline-none"
                         />
@@ -1175,7 +1193,7 @@ export const PurchasesReportView: React.FC = () => {
                         <input
                           type="text"
                           placeholder="المورد..."
-                          value={colFilters.supplier_name}
+                          value={colFilters.supplier_name || ''}
                           onChange={(e) => handleUpdateColFilter('supplier_name', e.target.value)}
                           className="w-full rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[11px] text-slate-800 placeholder-slate-400 focus:border-emerald-600 focus:outline-none"
                         />
@@ -1184,7 +1202,7 @@ export const PurchasesReportView: React.FC = () => {
                         <input
                           type="text"
                           placeholder="قطعة..."
-                          value={colFilters.parcel_reference}
+                          value={colFilters.parcel_reference || ''}
                           onChange={(e) => handleUpdateColFilter('parcel_reference', e.target.value)}
                           className="w-full rounded border border-slate-300 bg-white px-1 py-0.5 text-[11px] text-center text-slate-800 placeholder-slate-400 focus:border-emerald-600 focus:outline-none"
                         />
@@ -1193,7 +1211,7 @@ export const PurchasesReportView: React.FC = () => {
                         <input
                           type="text"
                           placeholder="منطقة..."
-                          value={colFilters.region}
+                          value={colFilters.region || ''}
                           onChange={(e) => handleUpdateColFilter('region', e.target.value)}
                           className="w-full rounded border border-slate-300 bg-white px-1 py-0.5 text-[11px] text-center text-slate-800 placeholder-slate-400 focus:border-emerald-600 focus:outline-none"
                         />
@@ -1202,7 +1220,7 @@ export const PurchasesReportView: React.FC = () => {
                         <input
                           type="text"
                           placeholder="القسم..."
-                          value={colFilters.department_name}
+                          value={colFilters.department_name || ''}
                           onChange={(e) => handleUpdateColFilter('department_name', e.target.value)}
                           className="w-full rounded border border-slate-300 bg-white px-1 py-0.5 text-[11px] text-center text-slate-800 placeholder-slate-400 focus:border-emerald-600 focus:outline-none"
                         />
@@ -1211,14 +1229,14 @@ export const PurchasesReportView: React.FC = () => {
                         <input
                           type="text"
                           placeholder="الاعمال..."
-                          value={colFilters.works}
+                          value={colFilters.works || ''}
                           onChange={(e) => handleUpdateColFilter('works', e.target.value)}
                           className="w-full rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[11px] text-slate-800 placeholder-slate-400 focus:border-emerald-600 focus:outline-none"
                         />
                       </th>
                       <th className="p-1 border border-slate-300">
                         <select
-                          value={colFilters.invoice_status}
+                          value={colFilters.invoice_status || ''}
                           onChange={(e) => handleUpdateColFilter('invoice_status', e.target.value)}
                           className="w-full rounded border border-slate-300 bg-white px-1 py-0.5 text-[11px] text-center font-bold text-slate-800 focus:border-emerald-600 focus:outline-none"
                         >
@@ -1233,7 +1251,8 @@ export const PurchasesReportView: React.FC = () => {
 
                 {/* 4. Table Rows with Clear Authentic Excel Cell Borders & PO Color Grouping */}
                 <tbody>
-                  {filteredRows.map((row, idx) => {
+                  {filteredRows.length > 0 ? (
+                    filteredRows.map((row, idx) => {
                     const rowNumber = idx + 1;
                     const poKey = String(row.purchase_order_id || row.po_number || row.id);
                     const groupInfo = poGroupingMeta.get(poKey);
@@ -1395,7 +1414,34 @@ export const PurchasesReportView: React.FC = () => {
                         </td>
                       </tr>
                     );
-                  })}
+                  })
+                ) : (
+                  <tr>
+                    <td
+                      colSpan={14}
+                      className="border border-slate-300 py-16 text-center text-slate-600 bg-slate-50/50"
+                    >
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <span className="text-3xl">🔍</span>
+                        <p className="text-sm font-bold text-slate-800">
+                          لا توجد بيانات مطابقة لخيارات الفلترة المدخلة
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          تأكد من صحة نص البحث أو جرّب تعديل نصوص الفلاتر في الأعمدة أعلاه.
+                        </p>
+                        {hasActiveColFilters && (
+                          <button
+                            type="button"
+                            onClick={handleClearColFilters}
+                            className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 text-xs font-black shadow-sm transition-all"
+                          >
+                            <span>✕ مسح كافة فلاتر الأعمدة</span>
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )}
                 </tbody>
 
                 {/* 5. Excel Total Formula Row with Double Bottom Underline */}
@@ -1418,16 +1464,6 @@ export const PurchasesReportView: React.FC = () => {
                   </tr>
                 </tfoot>
               </table>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center p-16 text-center bg-white text-slate-600">
-              <span className="text-4xl mb-3">📋</span>
-              <p className="text-base font-black text-slate-800">
-                لا توجد بيانات مطابقة للفترة أو الفلاتر المحددة
-              </p>
-              <p className="text-xs text-slate-500 mt-1 max-w-md">
-                قم بتعديل محدد الشهر أو القسم، أو اضغط على &quot;عرض: الكل&quot; لمشاهدة كافة الأوامر الصادرة.
-              </p>
             </div>
           )}
 
