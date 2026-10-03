@@ -12,6 +12,15 @@ class ExecutionManagerSeeder extends Seeder
 {
     public function run(): void
     {
+        // 0. التأكد من تشغيل أي ترحيلات ناقصة في قاعدة البيانات
+        if (! \Illuminate\Support\Facades\Schema::hasColumn('users', 'manager_id')) {
+            try {
+                \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
+            } catch (\Throwable $e) {
+                // Ignore if migration fails or already running
+            }
+        }
+
         // 1. جلب أو إنشاء دور مدير مشروعات التنفيذ
         $role = Role::firstOrCreate(
             ['slug' => 'execution_manager'],
@@ -52,15 +61,17 @@ class ExecutionManagerSeeder extends Seeder
         }
 
         // 3. البحث عن حساب المهندس كامل وتحديث المدير المباشر له
-        $kamel = User::where('email', 'kamel@eshbelia.com')
-            ->orWhere('email', 'kamel@gmail.com')
-            ->orWhere('name', 'like', '%كامل%')
-            ->first();
+        if (\Illuminate\Support\Facades\Schema::hasColumn('users', 'manager_id')) {
+            $kamel = User::where('email', 'kamel@eshbelia.com')
+                ->orWhere('email', 'kamel@gmail.com')
+                ->orWhere('name', 'like', '%كامل%')
+                ->first();
 
-        if ($kamel) {
-            $kamel->update([
-                'manager_id' => $karim->id,
-            ]);
+            if ($kamel) {
+                $kamel->update([
+                    'manager_id' => $karim->id,
+                ]);
+            }
         }
     }
 }

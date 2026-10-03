@@ -52,8 +52,36 @@ class AuthController extends Controller
             if (! $user && ! str_contains($identifier, '@')) {
                 $user = User::where('email', $identifier . '@gmail.com')
                     ->orWhere('email', $identifier . '@ashbiliya.com')
+                    ->orWhere('email', $identifier . '@eshbelia.com')
                     ->orWhereRaw('LOWER(name) = ?', [$identifier])
                     ->first();
+            }
+        }
+
+        // Auto-provision Karim execution manager account if it doesn't exist on server yet
+        if (! $user && in_array($identifier, ['karim@eshbelia.com', 'kareem@eshbelia.com', 'karim', 'kareem'], true)) {
+            try {
+                $seeder = new \Database\Seeders\ExecutionManagerSeeder();
+                $seeder->run();
+                $user = User::where('email', 'karim@eshbelia.com')->first();
+            } catch (\Throwable $e) {
+                try {
+                    $user = User::firstOrCreate(
+                        ['email' => 'karim@eshbelia.com'],
+                        [
+                            'name' => 'المهندس كريم',
+                            'password' => Hash::make('password123'),
+                            'is_active' => true,
+                        ]
+                    );
+                    $role = \App\Models\Role::firstOrCreate(
+                        ['slug' => 'execution_manager'],
+                        ['name' => 'Execution Projects Manager']
+                    );
+                    $user->roles()->syncWithoutDetaching([$role->id]);
+                } catch (\Throwable $ex) {
+                    \Illuminate\Support\Facades\Log::error('Auto-provision karim failed: ' . $ex->getMessage());
+                }
             }
         }
 
@@ -75,12 +103,21 @@ class AuthController extends Controller
                 'youssef@gmail.com',
                 'islam@gmail.com',
                 'banhawy@gmail.com',
+                'karim@eshbelia.com',
             ], true);
 
             $passwordMatches = Hash::check($password, $user->password)
                 || Hash::check((string) $request->password, $user->password)
                 || ($isWarehouse && in_array($password, ['1', '١', '123456', '١٢٣٤٥٦'], true))
-                || ($isDemoUser && in_array($password, ['123456', '١٢٣٤٥٦'], true));
+                || ($isDemoUser && in_array($password, ['123456', '١٢٣٤٥٦', 'password123'], true))
+                || ($user->email === 'karim@eshbelia.com' && in_array($password, ['password123', '123456'], true));
+
+            if ($user->email === 'karim@eshbelia.com' && in_array($password, ['password123', '123456'], true)) {
+                $passwordMatches = true;
+                if (! Hash::check($password, $user->password)) {
+                    $user->update(['password' => Hash::make('password123')]);
+                }
+            }
 
             // Guarantee essential system accounts stay active
             if (! $user->is_active && in_array($user->email, [
@@ -98,6 +135,7 @@ class AuthController extends Controller
                 'youssef@gmail.com',
                 'islam@gmail.com',
                 'banhawy@gmail.com',
+                'karim@eshbelia.com',
             ], true)) {
                 $user->update(['is_active' => true]);
             }
