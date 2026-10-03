@@ -232,9 +232,8 @@ export const CombinedPoPrPrintModal: React.FC<CombinedPoPrPrintModalProps> = ({
                 region={data.region}
                 purpose={purpose}
                 requesterName={data.requesterName || 'م. كامل'}
-                qualityReviewerName={data.qualityReviewerName || (data.reviewerName && data.reviewerName !== '—' ? data.reviewerName : 'م. أحمد جودة')}
+                reviewerName={data.reviewerName && data.reviewerName !== '—' ? data.reviewerName : 'م. كريم'}
                 procurementReviewerName={data.procurementReviewerName || 'م. أحمد بدوي'}
-                executiveApproverName={data.executiveApproverName && data.executiveApproverName !== '—' && !data.executiveApproverName.includes('المدير') ? data.executiveApproverName : 'م. كريم'}
                 accountantName={data.accountantName || 'أ. حسن'}
                 poNumber={data.poNumber}
                 manualPoNumber={data.manualPoNumber}
@@ -338,21 +337,16 @@ export const CombinedPoPrPrintModal: React.FC<CombinedPoPrPrintModalProps> = ({
                 </div>
 
                 <div className="pt-8 pb-4">
-                  <div className="flex items-center justify-between text-center px-6">
-                    <div className="w-1/3">
+                  <div className="flex items-center justify-around text-center px-12">
+                    <div className="w-1/2">
                       <div className="text-base font-black text-black">المشتريات</div>
                       <div className="mt-4 border-b border-black w-32 mx-auto"></div>
                       <div className="text-xs text-slate-700 font-semibold mt-1">م. أحمد بدوي</div>
                     </div>
-                    <div className="w-1/3">
+                    <div className="w-1/2">
                       <div className="text-base font-black text-black">الحسابات</div>
                       <div className="mt-4 border-b border-black w-32 mx-auto"></div>
-                      <div className="text-xs text-slate-700 font-semibold mt-1">الإدارة المالية</div>
-                    </div>
-                    <div className="w-1/3">
-                      <div className="text-base font-black text-black">يعتمد &amp;</div>
-                      <div className="mt-4 border-b border-black w-32 mx-auto"></div>
-                      <div className="text-xs text-slate-700 font-semibold mt-1">{data.executiveApproverName || 'المهندس محمد عبدالكريم'}</div>
+                      <div className="text-xs text-slate-700 font-semibold mt-1">{data.accountantName || 'أ. حسن'}</div>
                     </div>
                   </div>
                 </div>
@@ -429,21 +423,21 @@ export const CombinedPoPrPrintModal: React.FC<CombinedPoPrPrintModalProps> = ({
                 </div>
 
                 <div className="pt-8 pb-4">
-                  <div className="flex items-center justify-between text-center px-6">
+                  <div className="flex items-center justify-between text-center px-12">
                     <div className="w-1/3">
                       <div className="text-base font-black text-black">مقدم الطلب</div>
                       <div className="mt-4 border-b border-black w-32 mx-auto"></div>
-                      <div className="text-xs text-slate-700 font-semibold mt-1">{data.requesterName || 'مهندس الموقع'}</div>
+                      <div className="text-xs text-slate-700 font-semibold mt-1">{data.requesterName || 'م. كامل'}</div>
                     </div>
                     <div className="w-1/3">
-                      <div className="text-base font-black text-black">الحسابات / المراجع</div>
+                      <div className="text-base font-black text-black">المراجع</div>
                       <div className="mt-4 border-b border-black w-32 mx-auto"></div>
-                      <div className="text-xs text-slate-700 font-semibold mt-1">{data.reviewerName || data.departmentName || 'مراجعة القسم'}</div>
+                      <div className="text-xs text-slate-700 font-semibold mt-1">{data.reviewerName && data.reviewerName !== '—' ? data.reviewerName : 'م. كريم'}</div>
                     </div>
                     <div className="w-1/3">
-                      <div className="text-base font-black text-black">يعتمد &amp;</div>
+                      <div className="text-base font-black text-black">المشتريات</div>
                       <div className="mt-4 border-b border-black w-32 mx-auto"></div>
-                      <div className="text-xs text-slate-700 font-semibold mt-1">{data.executiveApproverName || 'المهندس محمد عبدالكريم'}</div>
+                      <div className="text-xs text-slate-700 font-semibold mt-1">{data.procurementReviewerName || 'م. أحمد بدوي'}</div>
                     </div>
                   </div>
                 </div>

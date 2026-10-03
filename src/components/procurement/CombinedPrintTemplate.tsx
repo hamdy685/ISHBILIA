@@ -26,6 +26,7 @@ export interface CombinedPrintTemplateProps {
   region?: string;
   purpose?: string;
   requesterName?: string;
+  reviewerName?: string;
   qualityReviewerName?: string;
   procurementReviewerName?: string;
   executiveApproverName?: string;
@@ -73,6 +74,7 @@ export const CombinedPrintTemplate = React.forwardRef<HTMLDivElement, CombinedPr
       region = '',
       purpose = 'اعتماد وتوريد للمشروع',
       requesterName = 'م. كامل',
+      reviewerName = 'م. كريم',
       qualityReviewerName = 'م. أحمد جودة',
       procurementReviewerName = 'م. أحمد بدوي',
       executiveApproverName = 'م. كريم',
@@ -221,22 +223,18 @@ export const CombinedPrintTemplate = React.forwardRef<HTMLDivElement, CombinedPr
           </div>
 
           {/* 3. الإسقاط الآلي للأسماء (Dynamic Signatures) - طلب الشراء */}
-          <div className="flex justify-between items-center text-center px-8 mt-4">
-            <div className="w-1/4">
+          <div className="flex justify-between items-center text-center px-12 mt-4">
+            <div className="w-1/3">
               <span className="text-sm text-gray-600 block">مقدم الطلب</span>
               <span className="font-bold text-lg text-black mt-1 block">{requesterName || 'م. كامل'}</span>
             </div>
-            <div className="w-1/4">
-              <span className="text-sm text-gray-600 block">الجودة</span>
-              <span className="font-bold text-lg text-black mt-1 block">{qualityReviewerName || 'م. أحمد جودة'}</span>
+            <div className="w-1/3">
+              <span className="text-sm text-gray-600 block">المراجع</span>
+              <span className="font-bold text-lg text-black mt-1 block">{reviewerName || qualityReviewerName || 'م. كريم'}</span>
             </div>
-            <div className="w-1/4">
+            <div className="w-1/3">
               <span className="text-sm text-gray-600 block">المشتريات</span>
               <span className="font-bold text-lg text-black mt-1 block">{procurementReviewerName || 'م. أحمد بدوي'}</span>
-            </div>
-            <div className="w-1/4">
-              <span className="text-sm text-gray-600 block">يعتمد</span>
-              <span className="font-bold text-lg text-black mt-1 block">{executiveApproverName || 'م. كريم'}</span>
             </div>
           </div>
         </section>
@@ -390,18 +388,14 @@ export const CombinedPrintTemplate = React.forwardRef<HTMLDivElement, CombinedPr
           </div>
 
           {/* 3. الإسقاط الآلي للأسماء (Dynamic Signatures) - أمر الشراء */}
-          <div className="flex justify-between items-center text-center px-8 mt-4">
-            <div className="w-1/3">
+          <div className="flex justify-around items-center text-center px-20 mt-4">
+            <div className="w-1/2">
               <span className="text-sm text-gray-600 block">المشتريات</span>
               <span className="font-bold text-lg text-black mt-1 block">{procurementReviewerName || 'م. أحمد بدوي'}</span>
             </div>
-            <div className="w-1/3">
+            <div className="w-1/2">
               <span className="text-sm text-gray-600 block">الحسابات</span>
               <span className="font-bold text-lg text-black mt-1 block">{accountantName || 'أ. حسن'}</span>
-            </div>
-            <div className="w-1/3">
-              <span className="text-sm text-gray-600 block">يعتمد &amp;</span>
-              <span className="font-bold text-lg text-black mt-1 block">{executiveApproverName || 'م. كريم'}</span>
             </div>
           </div>
         </section>

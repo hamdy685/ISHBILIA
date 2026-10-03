@@ -228,33 +228,24 @@ export const PurchaseOrderPrintModal: React.FC<PurchaseOrderPrintModalProps> = (
               </div>
             </div>
 
-            {/* Bottom 3 Signatures matching exact template */}
+            {/* Bottom 2 Signatures */}
             <div className="pt-8 pb-4">
-              <div className="flex items-center justify-between text-center px-6">
+              <div className="flex items-center justify-around text-center px-12">
                 {/* 1. المشتريات (Right) */}
-                <div className="w-1/3">
+                <div className="w-1/2">
                   <div className="text-base font-black text-black">المشتريات</div>
                   <div className="mt-4 border-b border-black w-32 mx-auto"></div>
                   <div className="text-xs text-slate-700 font-semibold mt-1">
-                    {po.created_by?.name || 'إدارة المشتريات'}
+                    {po.created_by?.name || 'م. أحمد بدوي'}
                   </div>
                 </div>
 
-                {/* 2. الحسابات (Center) */}
-                <div className="w-1/3">
+                {/* 2. الحسابات (Left) */}
+                <div className="w-1/2">
                   <div className="text-base font-black text-black">الحسابات</div>
                   <div className="mt-4 border-b border-black w-32 mx-auto"></div>
                   <div className="text-xs text-slate-700 font-semibold mt-1">
-                    {po.accounting_reviewer?.name || 'الإدارة المالية'}
-                  </div>
-                </div>
-
-                {/* 3. يعتمد & (Left) */}
-                <div className="w-1/3">
-                  <div className="text-base font-black text-black">يعتمد &amp;</div>
-                  <div className="mt-4 border-b border-black w-32 mx-auto"></div>
-                  <div className="text-xs text-slate-700 font-semibold mt-1">
-                    {po.executive_approver?.name || 'المهندس محمد عبدالكريم'}
+                    {po.accounting_reviewer?.name || 'أ. حسن'}
                   </div>
                 </div>
               </div>

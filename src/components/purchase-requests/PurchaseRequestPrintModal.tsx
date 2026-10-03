@@ -213,7 +213,7 @@ export const PurchaseRequestPrintModal: React.FC<PurchaseRequestPrintModalProps>
               </div>
             </div>
 
-            {/* Bottom 3 Signatures matching exact template */}
+            {/* Bottom 3 Signatures */}
             <div className="pt-8 pb-4">
               <div className="flex items-center justify-between text-center px-6">
                 {/* 1. مقدم الطلب (Right) */}
@@ -221,25 +221,25 @@ export const PurchaseRequestPrintModal: React.FC<PurchaseRequestPrintModalProps>
                   <div className="text-base font-black text-black">مقدم الطلب</div>
                   <div className="mt-4 border-b border-black w-32 mx-auto"></div>
                   <div className="text-xs text-slate-700 font-semibold mt-1">
-                    {pr.requester?.name || 'مهندس الموقع'}
+                    {pr.requester?.name || 'م. كامل'}
                   </div>
                 </div>
 
-                {/* 2. الحسابات / المراجع (Center) */}
+                {/* 2. المراجع (Center) */}
                 <div className="w-1/3">
-                  <div className="text-base font-black text-black">الحسابات / المراجع</div>
+                  <div className="text-base font-black text-black">المراجع</div>
                   <div className="mt-4 border-b border-black w-32 mx-auto"></div>
                   <div className="text-xs text-slate-700 font-semibold mt-1">
-                    {pr.assigned_reviewer?.name || pr.department?.name || 'مراجعة القسم'}
+                    {pr.assigned_reviewer?.name || (pr.department as any)?.manager?.name || 'م. كريم'}
                   </div>
                 </div>
 
-                {/* 3. يعتمد & (Left) */}
+                {/* 3. المشتريات (Left) */}
                 <div className="w-1/3">
-                  <div className="text-base font-black text-black">يعتمد &amp;</div>
+                  <div className="text-base font-black text-black">المشتريات</div>
                   <div className="mt-4 border-b border-black w-32 mx-auto"></div>
                   <div className="text-xs text-slate-700 font-semibold mt-1">
-                    المهندس محمد عبدالكريم
+                    م. أحمد بدوي
                   </div>
                 </div>
               </div>
