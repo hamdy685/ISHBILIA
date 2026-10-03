@@ -1,54 +1,15 @@
-export interface PrintDocumentOptions {
-  orientation?: 'portrait' | 'landscape';
-  title?: string;
-  pageMargin?: string;
-}
-
-export const printDocumentOnly = (
-  selector = '.print-container .print-document',
-  options: PrintDocumentOptions = {}
-): void => {
-  const sourceDocument = document.querySelector<HTMLElement>(selector);
-  if (!sourceDocument) {
-    window.print();
-    return;
-  }
-
-  const printWindow = window.open('', '_blank', 'width=1100,height=800');
-  if (!printWindow) {
-    window.print();
-    return;
-  }
-
-  const orientation = options.orientation || 'portrait';
-  const docTitle = options.title || document.title || 'طباعة مستند';
-  const margin = options.pageMargin || (orientation === 'landscape' ? '5mm' : '4mm');
-
-  const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
-    .map((style) => style.outerHTML)
-    .join('\n');
-
-  const clonedDocument = sourceDocument.cloneNode(true) as HTMLElement;
-  clonedDocument.classList.remove('hidden', 'print:block');
-  clonedDocument.style.display = 'block';
-  clonedDocument.style.width = '100%';
-  clonedDocument.style.background = '#ffffff';
-
-  // Remove any interactive or hidden-in-print elements from the clone
-  clonedDocument.querySelectorAll('button, .print\\:hidden, .print-hidden').forEach((el) => el.remove());
-
-  printWindow.document.open();
-  printWindow.document.write(`<!doctype html>
+const b=(d=".print-container .print-document",e={})=>{const n=document.querySelector(d);if(!n){window.print();return}const t=window.open("","_blank","width=1100,height=800");if(!t){window.print();return}const a=e.orientation||"portrait",l=e.title||document.title||"طباعة مستند",c=e.pageMargin||(a==="landscape"?"5mm":"4mm"),s=Array.from(document.querySelectorAll('link[rel="stylesheet"], style')).map(r=>r.outerHTML).join(`
+`),o=n.cloneNode(!0);o.classList.remove("hidden","print:block"),o.style.display="block",o.style.width="100%",o.style.background="#ffffff",o.querySelectorAll("button, .print\\:hidden, .print-hidden").forEach(r=>r.remove()),t.document.open(),t.document.write(`<!doctype html>
 <html lang="ar" dir="rtl">
   <head>
     <meta charset="UTF-8" />
-    <title>${docTitle}</title>
+    <title>${l}</title>
     <base href="${document.baseURI}" />
-    ${styles}
+    ${s}
     <style>
       @page {
-        size: A4 ${orientation};
-        margin: ${margin};
+        size: A4 ${a};
+        margin: ${c};
       }
       *, *::before, *::after {
         box-sizing: border-box !important;
@@ -145,30 +106,6 @@ export const printDocumentOnly = (
     </style>
   </head>
   <body>
-    <div class="print-container">${clonedDocument.outerHTML}</div>
+    <div class="print-container">${o.outerHTML}</div>
   </body>
-</html>`);
-  printWindow.document.close();
-
-  const printAfterResourcesLoad = async () => {
-    const images = Array.from(printWindow.document.images);
-    await Promise.all(images.map((image) => {
-      if (image.complete) return Promise.resolve();
-      return new Promise<void>((resolve) => {
-        image.addEventListener('load', () => resolve(), { once: true });
-        image.addEventListener('error', () => resolve(), { once: true });
-      });
-    }));
-
-    if (printWindow.document.fonts?.ready) {
-      await printWindow.document.fonts.ready;
-    }
-
-    printWindow.addEventListener('afterprint', () => printWindow.close(), { once: true });
-    printWindow.focus();
-    printWindow.print();
-  };
-
-  void printAfterResourcesLoad();
-};
-
+</html>`),t.document.close(),(async()=>{var p;const r=Array.from(t.document.images);await Promise.all(r.map(i=>i.complete?Promise.resolve():new Promise(m=>{i.addEventListener("load",()=>m(),{once:!0}),i.addEventListener("error",()=>m(),{once:!0})}))),(p=t.document.fonts)!=null&&p.ready&&await t.document.fonts.ready,t.addEventListener("afterprint",()=>t.close(),{once:!0}),t.focus(),t.print()})()};export{b as p};

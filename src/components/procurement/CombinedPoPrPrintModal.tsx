@@ -1,8 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { printDocumentOnly } from '../../utils/print';
-import { formatCleanNumber } from '../../utils/numberFormat';
-import { tafqeetCurrency } from '../../utils/tafqeet';
+import { formatCleanNumber, formatCleanQty } from '../../utils/numberFormat';
 import { getUnitLabel } from '../../utils/units';
 
 export interface CombinedPrintItem {
@@ -53,9 +52,13 @@ interface CombinedPoPrPrintModalProps {
 }
 
 const formatDate = (value?: string | null) => {
-  if (!value) return new Date().toLocaleDateString('ar-EG');
+  if (!value) return new Date().toISOString().split('T')[0];
   const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? value : d.toLocaleDateString('ar-EG');
+  if (Number.isNaN(d.getTime())) return value;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 };
 
 export const CombinedPoPrPrintModal: React.FC<CombinedPoPrPrintModalProps> = ({
@@ -63,6 +66,9 @@ export const CombinedPoPrPrintModal: React.FC<CombinedPoPrPrintModalProps> = ({
   onClose,
   data,
 }) => {
+  // View mode: 'SINGLE_PAGE_COMBINED' (Both on 1 A4 sheet) | 'PO_ONLY' | 'PR_ONLY' | 'TWO_PAGES'
+  const [viewMode, setViewMode] = useState<'SINGLE_PAGE_COMBINED' | 'PO_ONLY' | 'PR_ONLY' | 'TWO_PAGES'>('SINGLE_PAGE_COMBINED');
+
   React.useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -80,33 +86,33 @@ export const CombinedPoPrPrintModal: React.FC<CombinedPoPrPrintModalProps> = ({
 
   const handlePrint = () => {
     printDocumentOnly('.combined-print-container .print-document', {
-      title: `مستند_مدمج_${data.poNumber || data.prNumber}`,
+      title: `مستند_${data.poNumber || data.prNumber}`,
       orientation: 'portrait',
+      pageMargin: '5mm',
     });
   };
 
   const handleShareWhatsApp = () => {
     const textLines = [
       '🏢 *شركة إشبيلية للتطوير العقاري والمقاولات*',
-      '📄 *مستند مدمج: طلب شراء + أمر شراء معتمد*',
-      '─────────────────────────',
-      `📝 *طلب الشراء:* ${data.prNumber} ${data.manualPrNumber ? `(يدوي: ${data.manualPrNumber})` : ''}`,
-      `📑 *أمر الشراء:* ${data.poNumber} ${data.manualPoNumber ? `(يدوي: ${data.manualPoNumber})` : ''}`,
-      `👤 *مقدم الطلب:* ${data.requesterName || '—'}`,
-      `🏢 *القسم:* ${data.departmentName || '—'}`,
-      `✅ *المراجع:* ${data.reviewerName || '—'}`,
-      `👔 *الاعتماد الإداري:* ${data.executiveApproverName || 'المدير التنفيذي'}`,
+      '📄 *أمر وطلب شراء معتمد*',
+      `📝 *طلب الشراء:* ${data.manualPrNumber ? `${data.prNumber} (${data.manualPrNumber})` : data.prNumber}`,
+      `📑 *أمر الشراء:* ${data.manualPoNumber ? `${data.poNumber} (${data.manualPoNumber})` : data.poNumber}`,
       `🏬 *المورد:* ${data.supplierName || '—'}`,
       `📍 *المشروع / القطعة:* ${data.projectOrParcel || '—'} ${data.region ? `(${data.region})` : ''}`,
-      `💰 *إجمالي أمر الشراء:* ${formatCleanNumber(data.grandTotal)} ج.م`,
-      `💵 *المبلغ كتابة:* ${tafqeetCurrency(data.grandTotal)}`,
-      '─────────────────────────',
-      '📌 تم اعتماد وتأكيد الدورة المستندية الرسمية (طلب شراء + أمر شراء تجاري دون إذن استلام).',
+      `💰 *الإجمالي:* ${formatCleanNumber(data.grandTotal)} ج.م`,
     ];
 
-    const shareUrl = `https://wa.me/?text=${encodeURIComponent(textLines.join('\n'))}`;
-    window.open(shareUrl, '_blank');
+    window.open(`https://wa.me/?text=${encodeURIComponent(textLines.join('\n'))}`, '_blank');
   };
+
+  const items = data.items || [];
+  const poDateFormatted = formatDate(data.poDate);
+  const prDateFormatted = formatDate(data.prDate);
+  const requestNumber = data.manualPrNumber ? `${data.prNumber} (${data.manualPrNumber})` : data.prNumber;
+  const orderNumber = data.manualPoNumber ? `${data.poNumber} (${data.manualPoNumber})` : data.poNumber;
+  const projectOrRegion = data.region || data.projectOrParcel || 'مجاورة عامة';
+  const purpose = data.departmentName || data.poNotes || data.prNotes || 'اعتماد وتوريد للمشروع';
 
   return createPortal(
     <div
@@ -116,31 +122,80 @@ export const CombinedPoPrPrintModal: React.FC<CombinedPoPrPrintModalProps> = ({
       <div className="flex min-h-0 max-h-[calc(100dvh-2rem)] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl sm:max-h-[calc(100dvh-3rem)] print:block print:max-w-none print:max-h-none print:border-none print:shadow-none">
         
         {/* Header Controls (Screen only) */}
-        <div className="print:hidden flex items-center justify-between gap-3 border-b border-slate-700 bg-slate-800 px-6 py-4">
+        <div className="print:hidden flex flex-col sm:flex-row items-center justify-between gap-3 border-b border-slate-700 bg-slate-800 px-5 py-3">
           <div className="flex items-center gap-2">
-            <span className="text-xl">📑</span>
+            <span className="text-xl">🖨️</span>
             <div>
-              <h2 className="font-black text-slate-100 text-sm sm:text-base">
-                معاينة وطباعة المستند المدمج (طلب الشراء + أمر الشراء)
+              <h2 className="font-bold text-slate-100 text-sm sm:text-base">
+                طباعة طلب الشراء وأمر الشراء
               </h2>
               <p className="text-[11px] text-slate-400">
-                مستند ثنائي الصفحات معتمد رسميًا دون إذن الاستلام بالموقع
+                مطابق تماماً للنموذج الرسمي (الجدول الأزرق والإجمالي الأصفر وبدون بيانات مالية في طلب الشراء)
               </p>
             </div>
           </div>
+
+          {/* Mode Selector Tabs */}
+          <div className="flex items-center gap-1 bg-slate-950/80 p-1 rounded-xl border border-slate-700">
+            <button
+              type="button"
+              onClick={() => setViewMode('SINGLE_PAGE_COMBINED')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                viewMode === 'SINGLE_PAGE_COMBINED'
+                  ? 'bg-amber-600 text-white shadow'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              📄 ورقة واحدة مدمجة (A4)
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('PO_ONLY')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                viewMode === 'PO_ONLY'
+                  ? 'bg-cyan-600 text-white shadow'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              أمر الشراء فقط
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('PR_ONLY')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                viewMode === 'PR_ONLY'
+                  ? 'bg-cyan-600 text-white shadow'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              طلب الشراء فقط (بدون ماليات)
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('TWO_PAGES')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                viewMode === 'TWO_PAGES'
+                  ? 'bg-cyan-600 text-white shadow'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              صفحتان كاملتان
+            </button>
+          </div>
+
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={handleShareWhatsApp}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-3.5 py-2 text-xs font-bold text-white shadow-md shadow-emerald-950/40 transition active:scale-95"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 text-xs font-bold text-white shadow transition"
             >
               <span>📱</span>
-              <span>إرسال واتساب</span>
+              <span>واتساب</span>
             </button>
             <button
               type="button"
               onClick={handlePrint}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 px-4 py-2 text-xs font-bold text-white shadow-md shadow-cyan-950/40 transition active:scale-95"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 px-4 py-1.5 text-xs font-bold text-white shadow transition"
             >
               <span>🖨️</span>
               <span>طباعة المستند</span>
@@ -148,7 +203,7 @@ export const CombinedPoPrPrintModal: React.FC<CombinedPoPrPrintModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-600 bg-slate-700 text-xl font-black text-white hover:bg-slate-600 transition"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-600 bg-slate-700 text-lg font-black text-white hover:bg-rose-600 transition"
               title="إغلاق"
             >
               ✕
@@ -158,314 +213,386 @@ export const CombinedPoPrPrintModal: React.FC<CombinedPoPrPrintModalProps> = ({
 
         {/* Printable Document Body */}
         <div className="flex-1 overflow-y-auto bg-slate-900 p-4 sm:p-6 print:overflow-visible print:bg-white print:p-0">
-          <div className="print-document mx-auto max-w-4xl bg-white text-black print:max-w-none print:p-0">
+          <div className="print-document mx-auto max-w-[210mm] bg-white text-black print:max-w-none print:p-0">
             
             {/* ════════════════════════════════════════════════════════════
-                PAGE 1: طلب الشراء المعتمد (APPROVED PURCHASE REQUEST)
+                OPTION 1: ورقة واحدة مدمجة (A4 واحدة شاملة للطلب والأمر)
                ════════════════════════════════════════════════════════════ */}
-            <section
-              className="p-6 sm:p-8 bg-white text-black min-h-[270mm] flex flex-col justify-between"
-              style={{ pageBreakAfter: 'always', breakAfter: 'page' }}
-            >
-              <div>
-                {/* Official Letterhead */}
-                <div className="border-b-2 border-black pb-3 mb-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="text-right flex items-center gap-3">
-                      <img
-                        src="/eshbelia-logo.png"
-                        alt="شعار شركة إشبيلية"
-                        className="h-16 w-auto object-contain"
-                        onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none'; }}
-                      />
-                      <div className="text-[11px] leading-snug">
-                        <div className="font-black text-base text-black">شركة إشبيلية</div>
-                        <div className="text-[10px] text-slate-800 font-bold">للتطوير العقاري والمقاولات</div>
-                        <div className="text-[9px] text-slate-600">إدارة المشروعات والتنفيذ والمشتريات</div>
-                      </div>
+            {viewMode === 'SINGLE_PAGE_COMBINED' && (
+              <section className="p-4 sm:p-6 bg-white text-black flex flex-col justify-between" style={{ minHeight: '270mm', pageBreakInside: 'avoid' }}>
+                {/* ── UPPER HALF: طلب الشراء (بدون بيانات مالية) ── */}
+                <div className="border-b-2 border-dashed border-slate-800 pb-4 mb-4">
+                  {/* PR Header */}
+                  <div className="flex items-start justify-between gap-2 pb-1.5">
+                    <div className="text-left shrink-0 w-1/4">
+                      <img src="/eshbelia-logo.png" alt="شركة إشبيلية" className="h-12 w-auto object-contain" onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none'; }} />
+                      <div className="text-[8px] text-amber-700 font-bold text-center w-12 mt-0.5">ISHBILIA إشبيلية</div>
                     </div>
-
-                    <div className="text-center self-center">
-                      <div className="inline-block border-2 border-black bg-slate-100 px-4 py-1.5 rounded-lg shadow-sm">
-                        <h1 className="text-lg font-black text-black">طلب شراء مواد / أعمال</h1>
-                        <div className="text-[11px] font-bold text-slate-700">Purchase Requisition</div>
-                      </div>
-                      <div className="text-xs font-mono font-black text-black mt-1.5" dir="ltr">
-                        {data.prNumber}
-                        {data.manualPrNumber && (
-                          <span className="text-[11px] font-sans font-bold text-slate-800 mr-2">
-                            (يدوي: {data.manualPrNumber})
-                          </span>
-                        )}
-                      </div>
+                    <div className="text-center self-center w-2/4">
+                      <h2 className="text-2xl font-black text-black">طلب شراء</h2>
+                      <div className="text-[10px] text-slate-600 font-bold">(بدون بيانات مالية)</div>
                     </div>
-
-                    <div className="text-left text-xs font-bold text-black space-y-1" dir="rtl">
-                      <div><strong>التاريخ:</strong> <span className="font-mono">{formatDate(data.prDate)}</span></div>
-                      <div><strong>القسم:</strong> <span>{data.departmentName || '—'}</span></div>
-                      <div><strong>تاريخ الاحتياج:</strong> <span className="font-mono">{data.dateNeeded || '—'}</span></div>
+                    <div className="text-right text-[11px] font-bold text-black space-y-0.5 w-1/4 shrink-0" dir="rtl">
+                      <div className="flex items-center justify-end gap-1"><span className="font-mono">{prDateFormatted}</span><span>/التاريخ</span></div>
+                      <div className="flex items-center justify-end gap-1"><span className="font-mono">{requestNumber}</span><span>/رقم الطلب</span></div>
+                      <div className="flex items-center justify-end gap-1"><span className="font-normal truncate">{projectOrRegion}</span><span>/المشروع</span></div>
+                      <div className="flex items-center justify-end gap-1"><span className="font-normal truncate">{purpose}</span><span>/غرض الشراء</span></div>
                     </div>
                   </div>
-                </div>
 
-                {/* PR Context Grid */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-lg border border-black bg-slate-50 text-xs mb-4">
-                  <div>
-                    <span className="text-slate-600 block text-[10px] font-semibold">مقدم الطلب:</span>
-                    <span className="font-bold text-black">{data.requesterName || '—'}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-600 block text-[10px] font-semibold">المشروع / قطعة الأرض:</span>
-                    <span className="font-mono font-bold text-black">{data.projectOrParcel || '—'}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-600 block text-[10px] font-semibold">المنطقة / الموقع:</span>
-                    <span className="font-bold text-black">{data.region || '—'}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-600 block text-[10px] font-semibold">حالة الاعتماد:</span>
-                    <span className="font-bold text-emerald-800">معتمد تنفيذيًا ✅</span>
-                  </div>
-                </div>
-
-                {/* PR Items Table */}
-                <div className="mb-4">
-                  <table className="w-full border-collapse border border-black text-xs text-right">
+                  {/* PR Table (NO FINANCIAL DATA) */}
+                  <table className="w-full border-collapse border-2 border-black text-right text-[11px] mt-1" style={{ border: '2px solid #000' }}>
                     <thead>
-                      <tr className="bg-slate-200 text-black font-black border-b border-black">
-                        <th className="border border-black p-2 text-center w-10">م</th>
-                        <th className="border border-black p-2">بيان الصنف والمواصفات الفنية</th>
-                        <th className="border border-black p-2 text-center w-28">رقم القطعة / المشروع</th>
-                        <th className="border border-black p-2 text-center w-20">الكمية</th>
-                        <th className="border border-black p-2 text-center w-20">الوحدة</th>
-                        <th className="border border-black p-2 text-center w-28">السعر التقديري</th>
-                        <th className="border border-black p-2 text-center w-28">الإجمالي التقديري</th>
+                      <tr className="bg-[#5B9BD5] bg-header-blue text-black font-black text-center" style={{ backgroundColor: '#5B9BD5' }}>
+                        <th className="border border-black p-1 w-8 text-center font-black">م</th>
+                        <th className="border border-black p-1 text-right font-black">الصنف</th>
+                        <th className="border border-black p-1 w-14 text-center font-black">الوحدة</th>
+                        <th className="border border-black p-1 w-14 text-center font-black">الكمية</th>
+                        <th className="border border-black p-1 w-28 text-center font-black">الموقع / قطعة الأرض</th>
+                        <th className="border border-black p-1 text-right font-black">المواصفات الفنية والملاحظات</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {data.items.map((item, idx) => {
+                      {items.map((item, idx) => (
+                        <tr key={idx} className="h-6 border border-black">
+                          <td className="border border-black p-1 text-center font-mono font-bold">{idx + 1}</td>
+                          <td className="border border-black p-1 font-bold">{item.item_description}</td>
+                          <td className="border border-black p-1 text-center">{getUnitLabel(item.uom || 'PCS')}</td>
+                          <td className="border border-black p-1 text-center font-mono font-black">{formatCleanQty(item.quantity)}</td>
+                          <td className="border border-black p-1 text-center font-mono">{item.item_reference || data.projectOrParcel || '—'}</td>
+                          <td className="border border-black p-1 text-[10px] text-slate-700">{item.specifications || item.region || '—'}</td>
+                        </tr>
+                      ))}
+                      {/* Pad empty rows if fewer than 4 */}
+                      {Array.from({ length: Math.max(4 - items.length, 0) }, (_, i) => (
+                        <tr key={`pr-pad-${i}`} className="h-6 border border-black">
+                          <td className="border border-black p-1 text-center font-mono text-slate-400">{items.length + i + 1}</td>
+                          <td className="border border-black p-1">&nbsp;</td>
+                          <td className="border border-black p-1">&nbsp;</td>
+                          <td className="border border-black p-1">&nbsp;</td>
+                          <td className="border border-black p-1">&nbsp;</td>
+                          <td className="border border-black p-1">&nbsp;</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  {/* PR Signatures */}
+                  <div className="flex items-center justify-between text-center px-4 pt-3 text-xs">
+                    <div className="w-1/3">
+                      <span className="font-bold">مقدم الطلب:</span> {data.requesterName || 'المهندس الطالب'}
+                      <div className="border-b border-black w-24 mx-auto mt-2"></div>
+                    </div>
+                    <div className="w-1/3">
+                      <span className="font-bold">رئيس القسم / المراجع:</span> {data.reviewerName || 'المراجعة الفنية'}
+                      <div className="border-b border-black w-24 mx-auto mt-2"></div>
+                    </div>
+                    <div className="w-1/3">
+                      <span className="font-bold">يعتمد &amp;:</span> {data.executiveApproverName || 'المدير العام'}
+                      <div className="border-b border-black w-24 mx-auto mt-2"></div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── LOWER HALF: أمر الشراء (مع الأسعار والمورد والإجمالي الأصفر) ── */}
+                <div>
+                  {/* PO Header */}
+                  <div className="flex items-start justify-between gap-2 pb-1.5">
+                    <div className="text-left shrink-0 w-1/4">
+                      <img src="/eshbelia-logo.png" alt="شركة إشبيلية" className="h-12 w-auto object-contain" onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none'; }} />
+                      <div className="text-[8px] text-amber-700 font-bold text-center w-12 mt-0.5">ISHBILIA إشبيلية</div>
+                    </div>
+                    <div className="text-center self-center w-2/4">
+                      <h2 className="text-2xl font-black text-black">أمر شراء</h2>
+                    </div>
+                    <div className="text-right text-[11px] font-bold text-black space-y-0.5 w-1/4 shrink-0" dir="rtl">
+                      <div className="flex items-center justify-end gap-1"><span className="font-mono">{poDateFormatted}</span><span>/التاريخ</span></div>
+                      <div className="flex items-center justify-end gap-1"><span className="font-mono">{orderNumber}</span><span>/رقم الطلب</span></div>
+                      <div className="flex items-center justify-end gap-1"><span className="font-normal truncate">{projectOrRegion}</span><span>/المشروع</span></div>
+                      <div className="flex items-center justify-end gap-1"><span className="font-normal truncate">{purpose}</span><span>/غرض الشراء</span></div>
+                    </div>
+                  </div>
+
+                  {/* PO Table */}
+                  <table className="w-full border-collapse border-2 border-black text-right text-[11px] mt-1" style={{ border: '2px solid #000' }}>
+                    <thead>
+                      <tr className="bg-[#5B9BD5] bg-header-blue text-black font-black text-center" style={{ backgroundColor: '#5B9BD5' }}>
+                        <th className="border border-black p-1 w-8 text-center font-black">م</th>
+                        <th className="border border-black p-1 text-right font-black">الصنف</th>
+                        <th className="border border-black p-1 w-14 text-center font-black">الوحدة</th>
+                        <th className="border border-black p-1 w-14 text-center font-black">الكمية</th>
+                        <th className="border border-black p-1 w-16 text-center font-black">السعر</th>
+                        <th className="border border-black p-1 w-20 text-center font-black">الاجمالى</th>
+                        <th className="border border-black p-1 w-32 text-right font-black">ملاحظات</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items.map((item, idx) => {
                         const qty = Number(item.quantity) || 0;
                         const price = Number(item.unit_price) || 0;
-                        const total = qty * price;
+                        const lineTotal = Math.round(qty * price * 100) / 100;
                         return (
-                          <tr key={idx} className="border-b border-black">
-                            <td className="border border-black p-2 text-center font-mono font-bold">{idx + 1}</td>
-                            <td className="border border-black p-2 font-bold">
-                              <div>{item.item_description}</div>
-                              {item.specifications && (
-                                <div className="text-[10px] text-slate-600 font-normal mt-0.5">{item.specifications}</div>
-                              )}
+                          <tr key={idx} className="h-6 border border-black">
+                            <td className="border border-black p-1 text-center font-mono font-bold">{idx + 1}</td>
+                            <td className="border border-black p-1 font-bold">{item.item_description}</td>
+                            <td className="border border-black p-1 text-center">{getUnitLabel(item.uom || 'PCS')}</td>
+                            <td className="border border-black p-1 text-center font-mono font-black">{formatCleanQty(qty)}</td>
+                            <td className="border border-black p-1 text-center font-mono font-bold">{price > 0 ? formatCleanNumber(price) : ''}</td>
+                            <td className="border border-black p-1 text-center font-mono font-black">{lineTotal > 0 ? formatCleanNumber(lineTotal) : '0'}</td>
+                            <td className="border border-black p-1 text-[10px]">
+                              {idx === 0 ? <strong className="text-black">مورد / {data.supplierName || '—'}</strong> : (item.item_reference ? `قطعة ${item.item_reference}` : '')}
                             </td>
-                            <td className="border border-black p-2 text-center font-mono font-semibold">
-                              {item.item_reference || data.projectOrParcel || '—'}
-                            </td>
-                            <td className="border border-black p-2 text-center font-mono font-black">{qty}</td>
-                            <td className="border border-black p-2 text-center font-bold">{getUnitLabel(item.uom)}</td>
-                            <td className="border border-black p-2 text-center font-mono">{formatCleanNumber(price)}</td>
-                            <td className="border border-black p-2 text-center font-mono font-bold">{formatCleanNumber(total)}</td>
                           </tr>
                         );
                       })}
+                      {/* Pad empty rows if fewer than 4 */}
+                      {Array.from({ length: Math.max(4 - items.length, 0) }, (_, i) => (
+                        <tr key={`po-pad-${i}`} className="h-6 border border-black">
+                          <td className="border border-black p-1 text-center font-mono text-slate-400">{items.length + i + 1}</td>
+                          <td className="border border-black p-1">&nbsp;</td>
+                          <td className="border border-black p-1">&nbsp;</td>
+                          <td className="border border-black p-1">&nbsp;</td>
+                          <td className="border border-black p-1">&nbsp;</td>
+                          <td className="border border-black p-1">&nbsp;</td>
+                          <td className="border border-black p-1 text-[10px]">{i === 0 && items.length === 0 ? `مورد / ${data.supplierName}` : ''}</td>
+                        </tr>
+                      ))}
+
+                      {/* Yellow Total Row */}
+                      <tr className="border-2 border-black" style={{ borderTop: '2px solid #000' }}>
+                        <td colSpan={4} className="border border-black p-1.5 text-center font-black text-sm tracking-wider bg-white">
+                          الأجـــــــــــــــــمالـــــــــي
+                        </td>
+                        <td
+                          colSpan={2}
+                          className="border-2 border-black p-1.5 text-center font-mono font-black text-base bg-[#FFFF00] bg-yellow-total text-black"
+                          style={{ backgroundColor: '#FFFF00', border: '2px solid #000' }}
+                        >
+                          {formatCleanNumber(data.grandTotal)}
+                        </td>
+                        <td className="border border-black p-1.5 bg-white"></td>
+                      </tr>
                     </tbody>
                   </table>
-                </div>
 
-                {/* PR Notes if any */}
-                {data.prNotes && (
-                  <div className="border border-black rounded-lg p-2.5 bg-slate-50 text-xs mb-4">
-                    <strong className="text-black block mb-0.5">ملاحظات ومبررات طلب الشراء:</strong>
-                    <div className="text-slate-800 whitespace-pre-wrap">{data.prNotes}</div>
-                  </div>
-                )}
-              </div>
-
-              {/* Signatures & Cycle Decision Box for PR */}
-              <div className="border-2 border-black rounded-xl p-4 bg-slate-50 mt-4">
-                <div className="text-xs font-black text-black border-b border-black pb-1.5 mb-3 flex items-center justify-between">
-                  <span>سجل الاعتمادات والتوقيعات الرسمية لدورة طلب الشراء:</span>
-                  <span className="text-[10px] font-normal text-slate-600">صفحة 1 من 2 (طلب الشراء)</span>
-                </div>
-                <div className="grid grid-cols-3 gap-4 text-xs text-center">
-                  <div className="border-l border-slate-400 pl-2">
-                    <div className="font-bold text-slate-700 text-[11px] mb-1">مقدم الطلب (المهندس)</div>
-                    <div className="font-black text-black text-sm my-1">{data.requesterName || '—'}</div>
-                    <div className="text-[10px] text-slate-500 font-mono">التوقيع: معتمد إلكترونياً</div>
-                  </div>
-                  <div className="border-l border-slate-400 pl-2">
-                    <div className="font-bold text-slate-700 text-[11px] mb-1">مراجع / رئيس القسم</div>
-                    <div className="font-black text-black text-sm my-1">{data.reviewerName || '—'}</div>
-                    <div className="text-[10px] text-slate-500 font-mono">التوقيع: تم الفحص والاعتماد</div>
-                  </div>
-                  <div>
-                    <div className="font-bold text-emerald-800 text-[11px] mb-1">المدير المباشر / المدير التنفيذي</div>
-                    <div className="font-black text-emerald-950 text-sm my-1">{data.executiveApproverName || 'المهندس محمد عبدالكريم'}</div>
-                    <div className="text-[10px] text-emerald-700 font-bold">القرار: موافقة واعتماد نهائي ✅</div>
+                  {/* PO 3 Signatures */}
+                  <div className="flex items-center justify-between text-center px-6 pt-4 text-xs">
+                    <div className="w-1/3">
+                      <div className="font-black text-sm">المشتريات</div>
+                      <div className="border-b border-black w-24 mx-auto mt-2"></div>
+                      <div className="text-[10px] text-slate-600 mt-1">م. أحمد بدوي</div>
+                    </div>
+                    <div className="w-1/3">
+                      <div className="font-black text-sm">الحسابات</div>
+                      <div className="border-b border-black w-24 mx-auto mt-2"></div>
+                      <div className="text-[10px] text-slate-600 mt-1">الإدارة المالية</div>
+                    </div>
+                    <div className="w-1/3">
+                      <div className="font-black text-sm">يعتمد &amp;</div>
+                      <div className="border-b border-black w-24 mx-auto mt-2"></div>
+                      <div className="text-[10px] text-slate-600 mt-1">{data.executiveApproverName || 'المهندس محمد عبدالكريم'}</div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </section>
+              </section>
+            )}
 
             {/* ════════════════════════════════════════════════════════════
-                PAGE 2: أمر الشراء التجاري (COMMERCIAL PURCHASE ORDER)
+                OPTION 2 & 4: أمر الشراء فقط أو مع الصفحتين (A4 كاملة)
                ════════════════════════════════════════════════════════════ */}
-            <section className="p-6 sm:p-8 bg-white text-black min-h-[270mm] flex flex-col justify-between">
-              <div>
-                {/* PO Header */}
-                <div className="border-b-2 border-black pb-3 mb-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="text-right flex items-center gap-3">
-                      <img
-                        src="/eshbelia-logo.png"
-                        alt="شعار شركة إشبيلية"
-                        className="h-16 w-auto object-contain"
-                        onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none'; }}
-                      />
-                      <div className="text-[11px] leading-snug">
-                        <div className="font-black text-base text-black">شركة إشبيلية</div>
-                        <div className="text-[10px] text-slate-800 font-bold">للتطوير العقاري والمقاولات</div>
-                        <div className="text-[9px] text-slate-600">إدارة التوريدات والمشتريات المركزية</div>
-                      </div>
+            {(viewMode === 'PO_ONLY' || viewMode === 'TWO_PAGES') && (
+              <section className="p-6 sm:p-8 bg-white text-black flex flex-col justify-between" style={{ minHeight: '270mm', pageBreakInside: 'avoid', breakAfter: viewMode === 'TWO_PAGES' ? 'page' : 'auto' }}>
+                <div>
+                  <div className="flex items-start justify-between gap-2 pb-2">
+                    <div className="text-left shrink-0 w-1/4">
+                      <img src="/eshbelia-logo.png" alt="شركة إشبيلية" className="h-16 w-auto object-contain" onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none'; }} />
+                      <div className="text-[10px] text-amber-700 font-black text-center w-16 mt-0.5">ISHBILIA<br />اشبيلية</div>
                     </div>
-
-                    <div className="text-center self-center">
-                      <div className="inline-block border-2 border-black bg-cyan-50 px-5 py-1.5 rounded-lg shadow-sm">
-                        <h1 className="text-lg font-black text-black">أمر شراء تجاري معتمد</h1>
-                        <div className="text-[11px] font-bold text-slate-700">Official Purchase Order</div>
-                      </div>
-                      <div className="text-xs font-mono font-black text-cyan-950 mt-1.5" dir="ltr">
-                        {data.poNumber}
-                        {data.manualPoNumber && (
-                          <span className="text-[11px] font-sans font-bold text-slate-800 mr-2">
-                            (يدوي: {data.manualPoNumber})
-                          </span>
-                        )}
-                      </div>
+                    <div className="text-center self-center w-2/4">
+                      <h1 className="text-3xl sm:text-4xl font-black text-black">أمر شراء</h1>
                     </div>
-
-                    <div className="text-left text-xs font-bold text-black space-y-1" dir="rtl">
-                      <div><strong>تاريخ الأمر:</strong> <span className="font-mono">{formatDate(data.poDate)}</span></div>
-                      <div><strong>مرجع طلب الشراء:</strong> <span className="font-mono">{data.prNumber}</span></div>
-                      <div><strong>موعد التوريد:</strong> <span className="font-mono">{data.deliveryDate || '—'}</span></div>
+                    <div className="text-right text-xs font-bold text-black space-y-1 w-1/4 shrink-0" dir="rtl">
+                      <div className="flex items-center justify-end gap-1"><span className="font-mono font-black text-sm">{poDateFormatted}</span><span>/التاريخ</span></div>
+                      <div className="flex items-center justify-end gap-1"><span className="font-mono font-black text-sm">{orderNumber}</span><span>/رقم الطلب</span></div>
+                      <div className="flex items-center justify-end gap-1"><span className="font-normal truncate">{projectOrRegion}</span><span>/المشروع</span></div>
+                      <div className="flex items-center justify-end gap-1"><span className="font-normal truncate">{purpose}</span><span>/غرض الشراء</span></div>
                     </div>
                   </div>
-                </div>
 
-                {/* PO Commercial Info Cards */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-lg border border-black bg-slate-50 text-xs mb-4">
-                  <div>
-                    <span className="text-slate-600 block text-[10px] font-semibold">السادة المورد:</span>
-                    <span className="font-black text-black text-sm">{data.supplierName || '—'}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-600 block text-[10px] font-semibold">شروط الدفع:</span>
-                    <span className="font-bold text-black">{data.paymentTerms || 'دفع عند الاستلام'}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-600 block text-[10px] font-semibold">مكان وشروط التسليم:</span>
-                    <span className="font-bold text-black">{data.deliveryTerms || 'بالموقع'}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-600 block text-[10px] font-semibold">صاحب المعاملة:</span>
-                    <span className="font-bold text-black">{data.requesterName || '—'}</span>
-                  </div>
-                </div>
-
-                {/* PO Items Table */}
-                <div className="mb-4">
-                  <table className="w-full border-collapse border border-black text-xs text-right">
+                  <table className="w-full border-collapse border-2 border-black text-right text-xs mt-3" style={{ border: '2px solid #000' }}>
                     <thead>
-                      <tr className="bg-slate-200 text-black font-black border-b border-black">
-                        <th className="border border-black p-2 text-center w-10">م</th>
-                        <th className="border border-black p-2">بيان الصنف والمواصفات المعتمدة للتوريد</th>
-                        <th className="border border-black p-2 text-center w-28">قطعة الأرض / الموقع</th>
-                        <th className="border border-black p-2 text-center w-20">الكمية</th>
-                        <th className="border border-black p-2 text-center w-20">الوحدة</th>
-                        <th className="border border-black p-2 text-center w-28">سعر الوحدة (ج.م)</th>
-                        <th className="border border-black p-2 text-center w-28">إجمالي القيمة (ج.م)</th>
+                      <tr className="bg-[#5B9BD5] bg-header-blue text-black font-black text-center" style={{ backgroundColor: '#5B9BD5' }}>
+                        <th className="border border-black p-2 w-10 text-center font-black">م</th>
+                        <th className="border border-black p-2 text-right font-black">الصنف</th>
+                        <th className="border border-black p-2 w-16 text-center font-black">الوحدة</th>
+                        <th className="border border-black p-2 w-20 text-center font-black">الكمية</th>
+                        <th className="border border-black p-2 w-24 text-center font-black">السعر</th>
+                        <th className="border border-black p-2 w-28 text-center font-black">الاجمالى</th>
+                        <th className="border border-black p-2 w-44 text-right font-black">ملاحظات</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {data.items.map((item, idx) => {
+                      {items.map((item, idx) => {
                         const qty = Number(item.quantity) || 0;
                         const price = Number(item.unit_price) || 0;
-                        const total = qty * price;
+                        const lineTotal = Math.round(qty * price * 100) / 100;
                         return (
-                          <tr key={idx} className="border-b border-black">
-                            <td className="border border-black p-2 text-center font-mono font-bold">{idx + 1}</td>
-                            <td className="border border-black p-2 font-bold">
-                              <div>{item.item_description}</div>
-                              {item.specifications && (
-                                <div className="text-[10px] text-slate-600 font-normal mt-0.5">{item.specifications}</div>
-                              )}
+                          <tr key={idx} className="h-7 border border-black">
+                            <td className="border border-black p-1.5 text-center font-mono font-bold">{idx + 1}</td>
+                            <td className="border border-black p-1.5 font-bold">{item.item_description}</td>
+                            <td className="border border-black p-1.5 text-center">{getUnitLabel(item.uom || 'PCS')}</td>
+                            <td className="border border-black p-1.5 text-center font-mono font-black">{formatCleanQty(qty)}</td>
+                            <td className="border border-black p-1.5 text-center font-mono font-bold">{price > 0 ? formatCleanNumber(price) : ''}</td>
+                            <td className="border border-black p-1.5 text-center font-mono font-black">{lineTotal > 0 ? formatCleanNumber(lineTotal) : '0'}</td>
+                            <td className="border border-black p-1.5 text-xs font-semibold">
+                              {idx === 0 ? `مورد / ${data.supplierName || '—'}` : (item.item_reference ? `قطعة ${item.item_reference}` : '')}
                             </td>
-                            <td className="border border-black p-2 text-center font-mono font-semibold">
-                              {item.item_reference || data.projectOrParcel || '—'}
-                            </td>
-                            <td className="border border-black p-2 text-center font-mono font-black">{qty}</td>
-                            <td className="border border-black p-2 text-center font-bold">{getUnitLabel(item.uom)}</td>
-                            <td className="border border-black p-2 text-center font-mono font-semibold">{formatCleanNumber(price)}</td>
-                            <td className="border border-black p-2 text-center font-mono font-black">{formatCleanNumber(total)}</td>
                           </tr>
                         );
                       })}
+                      {Array.from({ length: Math.max(10 - items.length, 0) }, (_, i) => (
+                        <tr key={`po-full-pad-${i}`} className="h-7 border border-black">
+                          <td className="border border-black p-1.5 text-center font-mono font-bold text-slate-400">{items.length + i + 1}</td>
+                          <td className="border border-black p-1.5">&nbsp;</td>
+                          <td className="border border-black p-1.5">&nbsp;</td>
+                          <td className="border border-black p-1.5">&nbsp;</td>
+                          <td className="border border-black p-1.5">&nbsp;</td>
+                          <td className="border border-black p-1.5">&nbsp;</td>
+                          <td className="border border-black p-1.5 text-xs">{i === 0 && items.length === 0 ? `مورد / ${data.supplierName}` : ''}</td>
+                        </tr>
+                      ))}
+                      <tr className="border-2 border-black" style={{ borderTop: '2px solid #000' }}>
+                        <td colSpan={4} className="border border-black p-2 text-center font-black text-base tracking-widest bg-white">
+                          الأجـــــــــــــــــمالـــــــــي
+                        </td>
+                        <td
+                          colSpan={2}
+                          className="border-2 border-black p-2 text-center font-mono font-black text-xl bg-[#FFFF00] bg-yellow-total text-black"
+                          style={{ backgroundColor: '#FFFF00', border: '2px solid #000' }}
+                        >
+                          {formatCleanNumber(data.grandTotal)}
+                        </td>
+                        <td className="border border-black p-2 bg-white"></td>
+                      </tr>
                     </tbody>
-                    <tfoot>
-                      <tr className="bg-slate-100 border-t-2 border-black font-black">
-                        <td colSpan={5} className="border border-black p-2 text-left pl-4 font-bold text-xs">
-                          إجمالي قيمة أمر الشراء (بالجنيه المصري EGP):
-                        </td>
-                        <td colSpan={2} className="border border-black p-2 text-center font-mono text-base font-black text-black">
-                          {formatCleanNumber(data.grandTotal)} ج.م
-                        </td>
-                      </tr>
-                      <tr className="bg-slate-50 border-t border-black">
-                        <td colSpan={7} className="border border-black p-2 text-right text-xs font-bold text-slate-800">
-                          <span className="text-slate-600 font-normal ml-2">المبلغ بالحروف:</span>
-                          <span>{tafqeetCurrency(data.grandTotal)}</span>
-                        </td>
-                      </tr>
-                    </tfoot>
                   </table>
                 </div>
 
-                {/* PO Notes */}
-                {data.poNotes && (
-                  <div className="border border-black rounded-lg p-2.5 bg-slate-50 text-xs mb-4">
-                    <strong className="text-black block mb-0.5">تعليمات وملاحظات التوريد:</strong>
-                    <div className="text-slate-800 whitespace-pre-wrap">{data.poNotes}</div>
+                <div className="pt-8 pb-4">
+                  <div className="flex items-center justify-between text-center px-6">
+                    <div className="w-1/3">
+                      <div className="text-base font-black text-black">المشتريات</div>
+                      <div className="mt-4 border-b border-black w-32 mx-auto"></div>
+                      <div className="text-xs text-slate-700 font-semibold mt-1">م. أحمد بدوي</div>
+                    </div>
+                    <div className="w-1/3">
+                      <div className="text-base font-black text-black">الحسابات</div>
+                      <div className="mt-4 border-b border-black w-32 mx-auto"></div>
+                      <div className="text-xs text-slate-700 font-semibold mt-1">الإدارة المالية</div>
+                    </div>
+                    <div className="w-1/3">
+                      <div className="text-base font-black text-black">يعتمد &amp;</div>
+                      <div className="mt-4 border-b border-black w-32 mx-auto"></div>
+                      <div className="text-xs text-slate-700 font-semibold mt-1">{data.executiveApproverName || 'المهندس محمد عبدالكريم'}</div>
+                    </div>
                   </div>
-                )}
-              </div>
+                </div>
+              </section>
+            )}
 
-              {/* Official PO Authorization Signatures */}
-              <div className="border-2 border-black rounded-xl p-4 bg-slate-50 mt-4">
-                <div className="text-xs font-black text-black border-b border-black pb-1.5 mb-3 flex items-center justify-between">
-                  <span>التوقيعات والاعتمادات التجارية الرسمية لأمر الشراء:</span>
-                  <span className="text-[10px] font-normal text-slate-600">صفحة 2 من 2 (أمر الشراء التجاري)</span>
+            {/* ════════════════════════════════════════════════════════════
+                OPTION 3 & 4: طلب الشراء فقط (A4 كاملة - بدون بيانات مالية)
+               ════════════════════════════════════════════════════════════ */}
+            {(viewMode === 'PR_ONLY' || viewMode === 'TWO_PAGES') && (
+              <section className="p-6 sm:p-8 bg-white text-black flex flex-col justify-between" style={{ minHeight: '270mm', pageBreakInside: 'avoid' }}>
+                <div>
+                  <div className="flex items-start justify-between gap-2 pb-2">
+                    <div className="text-left shrink-0 w-1/4">
+                      <img src="/eshbelia-logo.png" alt="شركة إشبيلية" className="h-16 w-auto object-contain" onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none'; }} />
+                      <div className="text-[10px] text-amber-700 font-black text-center w-16 mt-0.5">ISHBILIA<br />اشبيلية</div>
+                    </div>
+                    <div className="text-center self-center w-2/4">
+                      <h1 className="text-3xl sm:text-4xl font-black text-black">طلب شراء</h1>
+                    </div>
+                    <div className="text-right text-xs font-bold text-black space-y-1 w-1/4 shrink-0" dir="rtl">
+                      <div className="flex items-center justify-end gap-1"><span className="font-mono font-black text-sm">{prDateFormatted}</span><span>/التاريخ</span></div>
+                      <div className="flex items-center justify-end gap-1"><span className="font-mono font-black text-sm">{requestNumber}</span><span>/رقم الطلب</span></div>
+                      <div className="flex items-center justify-end gap-1"><span className="font-normal truncate">{projectOrRegion}</span><span>/المشروع</span></div>
+                      <div className="flex items-center justify-end gap-1"><span className="font-normal truncate">{purpose}</span><span>/غرض الشراء</span></div>
+                    </div>
+                  </div>
+
+                  <table className="w-full border-collapse border-2 border-black text-right text-xs mt-3" style={{ border: '2px solid #000' }}>
+                    <thead>
+                      <tr className="bg-[#5B9BD5] bg-header-blue text-black font-black text-center" style={{ backgroundColor: '#5B9BD5' }}>
+                        <th className="border border-black p-2 w-10 text-center font-black">م</th>
+                        <th className="border border-black p-2 text-right font-black">الصنف</th>
+                        <th className="border border-black p-2 w-16 text-center font-black">الوحدة</th>
+                        <th className="border border-black p-2 w-20 text-center font-black">الكمية</th>
+                        <th className="border border-black p-2 w-32 text-center font-black">الموقع / قطعة الأرض</th>
+                        <th className="border border-black p-2 w-44 text-right font-black">المواصفات الفنية</th>
+                        <th className="border border-black p-2 w-32 text-right font-black">ملاحظات</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items.map((item, idx) => (
+                        <tr key={idx} className="h-7 border border-black">
+                          <td className="border border-black p-1.5 text-center font-mono font-bold">{idx + 1}</td>
+                          <td className="border border-black p-1.5 font-bold">{item.item_description}</td>
+                          <td className="border border-black p-1.5 text-center">{getUnitLabel(item.uom || 'PCS')}</td>
+                          <td className="border border-black p-1.5 text-center font-mono font-black">{formatCleanQty(item.quantity)}</td>
+                          <td className="border border-black p-1.5 text-center font-mono font-semibold text-slate-800">{item.item_reference || data.projectOrParcel || '—'}</td>
+                          <td className="border border-black p-1.5 text-xs text-slate-700">{item.specifications || '—'}</td>
+                          <td className="border border-black p-1.5 text-xs font-semibold text-slate-800">{item.region || (idx === 0 ? `طلب: ${data.requesterName || ''}` : '')}</td>
+                        </tr>
+                      ))}
+                      {Array.from({ length: Math.max(10 - items.length, 0) }, (_, i) => (
+                        <tr key={`pr-full-pad-${i}`} className="h-7 border border-black">
+                          <td className="border border-black p-1.5 text-center font-mono font-bold text-slate-400">{items.length + i + 1}</td>
+                          <td className="border border-black p-1.5">&nbsp;</td>
+                          <td className="border border-black p-1.5">&nbsp;</td>
+                          <td className="border border-black p-1.5">&nbsp;</td>
+                          <td className="border border-black p-1.5">&nbsp;</td>
+                          <td className="border border-black p-1.5">&nbsp;</td>
+                          <td className="border border-black p-1.5">&nbsp;</td>
+                        </tr>
+                      ))}
+                      <tr className="border-2 border-black" style={{ borderTop: '2px solid #000' }}>
+                        <td colSpan={4} className="border border-black p-2 text-center font-black text-sm bg-slate-100">
+                          إجمالي بنود طلب الشراء: ({items.length}) بنود معتمدة
+                        </td>
+                        <td colSpan={3} className="border border-black p-2 text-right text-xs font-bold text-slate-700 bg-slate-50">
+                          طلب الشراء لأغراض الفحص والموافقة الفنية ولا يتضمن أي بيانات مالية
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
-                <div className="grid grid-cols-3 gap-4 text-xs text-center">
-                  <div className="border-l border-slate-400 pl-2">
-                    <div className="font-bold text-slate-700 text-[11px] mb-1">إدارة المشتريات والتوريدات</div>
-                    <div className="font-black text-black text-sm my-1">م. أحمد بدوي</div>
-                    <div className="text-[10px] text-slate-500 font-mono">الإصدار: تم إصدار الأمر تجاريًا</div>
-                  </div>
-                  <div className="border-l border-slate-400 pl-2">
-                    <div className="font-bold text-slate-700 text-[11px] mb-1">المراجعة والمطابقة المالية</div>
-                    <div className="font-black text-black text-sm my-1">الإدارة المالية / الحسابات</div>
-                    <div className="text-[10px] text-slate-500 font-mono">التأكيد: مراجع ماليًا</div>
-                  </div>
-                  <div>
-                    <div className="font-bold text-emerald-800 text-[11px] mb-1">الاعتماد الإداري والتنفيذي</div>
-                    <div className="font-black text-emerald-950 text-sm my-1">{data.executiveApproverName || 'المهندس محمد عبدالكريم'}</div>
-                    <div className="text-[10px] text-emerald-700 font-bold">القرار: معتمد للتوريد والتشغيل ✅</div>
+
+                <div className="pt-8 pb-4">
+                  <div className="flex items-center justify-between text-center px-6">
+                    <div className="w-1/3">
+                      <div className="text-base font-black text-black">مقدم الطلب</div>
+                      <div className="mt-4 border-b border-black w-32 mx-auto"></div>
+                      <div className="text-xs text-slate-700 font-semibold mt-1">{data.requesterName || 'مهندس الموقع'}</div>
+                    </div>
+                    <div className="w-1/3">
+                      <div className="text-base font-black text-black">الحسابات / المراجع</div>
+                      <div className="mt-4 border-b border-black w-32 mx-auto"></div>
+                      <div className="text-xs text-slate-700 font-semibold mt-1">{data.reviewerName || data.departmentName || 'مراجعة القسم'}</div>
+                    </div>
+                    <div className="w-1/3">
+                      <div className="text-base font-black text-black">يعتمد &amp;</div>
+                      <div className="mt-4 border-b border-black w-32 mx-auto"></div>
+                      <div className="text-xs text-slate-700 font-semibold mt-1">{data.executiveApproverName || 'المهندس محمد عبدالكريم'}</div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </section>
+              </section>
+            )}
 
           </div>
         </div>
-
       </div>
     </div>,
     document.body
