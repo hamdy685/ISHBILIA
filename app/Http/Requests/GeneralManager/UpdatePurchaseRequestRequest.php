@@ -18,6 +18,7 @@ class UpdatePurchaseRequestRequest extends FormRequest
             'notes' => ['sometimes', 'nullable', 'string'],
             'comment' => ['sometimes', 'nullable', 'string', 'max:2000'],
             'items' => ['sometimes', 'array', 'min:1'],
+            'items.*.id' => ['nullable', 'integer'],
             'items.*.item_id' => ['nullable', 'integer', 'exists:items,id'],
             'items.*.item_description' => ['required_with:items', 'string', 'max:255'],
             'items.*.item_reference' => ['required_with:items', 'string', 'max:100'],
@@ -26,6 +27,8 @@ class UpdatePurchaseRequestRequest extends FormRequest
             'items.*.uom' => ['nullable', 'string', 'max:20'],
             'items.*.specifications' => ['nullable', 'string'],
             'items.*.notes' => ['nullable', 'string'],
+            'items.*.supplier_id' => ['nullable', 'integer', 'exists:suppliers,id'],
+            'items.*.estimated_unit_price' => ['nullable', 'numeric', 'min:0'],
         ];
     }
 }

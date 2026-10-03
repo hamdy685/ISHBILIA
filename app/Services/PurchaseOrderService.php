@@ -73,7 +73,7 @@ class PurchaseOrderService
      */
     public function getApprovedPurchaseRequests(): Collection
     {
-        return PurchaseRequest::with(['requester', 'department', 'assignedReviewer', 'approvalHistory.actor', 'items.item'])
+        return PurchaseRequest::with(['requester', 'department', 'assignedReviewer', 'approvalHistory.actor', 'items.item', 'items.supplier'])
             ->where('status', 'APPROVED_BY_PROCUREMENT')
             ->orderBy('updated_at', 'desc')
             ->limit(500)
@@ -200,6 +200,11 @@ class PurchaseOrderService
                     );
 
                     $qty       = isset($input['quantity'])   ? (float) $input['quantity']   : ($prItem ? (float) $prItem->quantity : 1.0);
+                    $uom       = $input['uom'] ?? $prItem?->uom ?? 'PCS';
+                    $specs     = $input['specifications'] ?? $prItem?->specifications;
+
+                    [$qty, $uom, $specs] = $this->normalizePoItemUnitAndQuantity($qty, $uom, $specs);
+
                     // Procurement sets the commercial unit price. PR estimated price is ignored.
                     $unitPrice = $selectedQuote
                         ? (float) $selectedQuote->unit_price
@@ -214,14 +219,14 @@ class PurchaseOrderService
                         'item_reference'  => $itemReference,
                         'region'          => $region,
                         'quantity'        => $qty,
-                        'uom'             => $input['uom'] ?? $prItem?->uom ?? 'PCS',
+                        'uom'             => $uom,
                         'unit_price'      => $unitPrice,
                         'line_total'      => $lineTotal,
-                        'specifications'  => $input['specifications'] ?? $prItem?->specifications,
+                        'specifications'  => $specs,
                         'supplier_id'     => $itemSupplierId,
                     ]);
 
-                    if ($prItem && (float) $prItem->quantity !== $qty) {
+                    if ($prItem && (float) $prItem->quantity !== $qty && $uom !== 'TON') {
                         AuditLog::create([
                             'user_id'     => $user->id,
                             'entity_type' => PurchaseOrderItem::class,
@@ -244,6 +249,10 @@ class PurchaseOrderService
                         "pr_item.{$prItem->id}"
                     );
                     $qty = (float) $prItem->quantity;
+                    $uom = $prItem->uom;
+                    $specs = $prItem->specifications;
+                    [$qty, $uom, $specs] = $this->normalizePoItemUnitAndQuantity($qty, $uom, $specs);
+
                     $unitPrice = $isDirectPath
                         ? (float) ($prItem->estimated_unit_price ?? 0.00)
                         : (float) ($selectedQuote?->unit_price ?? 0.00);
@@ -255,10 +264,10 @@ class PurchaseOrderService
                         'item_reference'  => $itemReference,
                         'region'          => $region,
                         'quantity'        => $qty,
-                        'uom'             => $prItem->uom,
+                        'uom'             => $uom,
                         'unit_price'      => $unitPrice,
                         'line_total'      => round($qty * $unitPrice, 2),
-                        'specifications'  => $prItem->specifications,
+                        'specifications'  => $specs,
                         'supplier_id'     => $prItem->supplier_id ?? $supplier?->id,
                     ]);
                 }
@@ -630,6 +639,50 @@ class PurchaseOrderService
 
             return $lockedPo->fresh(['purchaseRequest.requester', 'purchaseRequest.department', 'purchaseRequest.assignedReviewer', 'purchaseRequest.approvalHistory.actor', 'selectedQuote', 'supplier', 'createdBy', 'items.item']);
         });
+    }
+
+    /**
+     * Convert rebar parcel or bar units to tons for commercial Purchase Order pricing.
+     */
+    protected function normalizePoItemUnitAndQuantity(float $quantity, string $uom, ?string $specifications): array
+    {
+        $uomUpper = strtoupper(trim($uom));
+        $cleanSpec = trim((string) ($specifications ?? ''));
+
+        // Check if PARCEL (طرد حديد = 1.940 طن)
+        if ($uomUpper === 'PARCEL' || mb_strpos($uomUpper, 'طرد') !== false || mb_strpos(mb_strtolower($uom), 'طرد') !== false) {
+            $tons = round($quantity * 1.940, 3);
+            $note = "(ما يعادل {$quantity} طرد حديد - زنة الطرد 1.940 طن)";
+            if ($cleanSpec !== '' && mb_strpos($cleanSpec, 'ما يعادل') === false) {
+                $cleanSpec .= ' - ' . $note;
+            } elseif ($cleanSpec === '') {
+                $cleanSpec = $note;
+            }
+            return [$tons, 'TON', $cleanSpec];
+        }
+
+        // Check rebar bars
+        $barWeights = [
+            'BAR_2_5LINIA' => 0.0047,
+            'BAR_3LINIA'   => 0.0074,
+            'BAR_4LINIA'   => 0.0104,
+            'BAR_5LINIA'   => 0.0190,
+        ];
+
+        foreach ($barWeights as $code => $weight) {
+            if ($uomUpper === $code) {
+                $tons = round($quantity * $weight, 3);
+                $note = "(ما يعادل {$quantity} سيخ حديد - زنة السيخ " . ($weight * 1000) . " كجم)";
+                if ($cleanSpec !== '' && mb_strpos($cleanSpec, 'ما يعادل') === false) {
+                    $cleanSpec .= ' - ' . $note;
+                } elseif ($cleanSpec === '') {
+                    $cleanSpec = $note;
+                }
+                return [$tons, 'TON', $cleanSpec];
+            }
+        }
+
+        return [$quantity, $uom, $cleanSpec ?: null];
     }
 
     /**

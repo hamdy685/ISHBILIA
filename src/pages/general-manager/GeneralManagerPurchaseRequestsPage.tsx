@@ -25,21 +25,36 @@ import { UnifiedNotesCard } from '../../components/common/UnifiedNotesCard';
 import { formatCleanNumber } from '../../utils/numberFormat';
 
 interface DraftItemState extends PurchaseRequestItemFormInput {
+  id?: number;
   isExcluded?: boolean;
+  supplier_id?: number | null;
+  supplier_name?: string;
+  estimated_unit_price?: number;
+  estimated_line_total?: number;
 }
 
 const toDraftItems = (request: PurchaseRequest): DraftItemState[] =>
-  (request.items || []).map((item) => ({
-    item_id: item.item_id ?? null,
-    item_description: item.item_description,
-    item_reference: item.item_reference || '',
-    region: item.region || '',
-    quantity: item.quantity,
-    uom: item.uom || 'PCS',
-    specifications: item.specifications || '',
-    notes: item.notes || '',
-    isExcluded: false,
-  }));
+  (request.items || []).map((item) => {
+    const qty = Number(item.quantity) || 0;
+    const unitPrice = Number(item.estimated_unit_price) > 0 ? Number(item.estimated_unit_price) : 0;
+    const lineTotal = Number(item.estimated_line_total) > 0 ? Number(item.estimated_line_total) : Math.round(qty * unitPrice * 100) / 100;
+    return {
+      id: item.id,
+      item_id: item.item_id ?? null,
+      item_description: item.item_description,
+      item_reference: item.item_reference || '',
+      region: item.region || '',
+      quantity: item.quantity,
+      uom: item.uom || 'PCS',
+      specifications: item.specifications || '',
+      notes: item.notes || '',
+      isExcluded: false,
+      supplier_id: item.supplier_id || request.direct_supplier_id || request.direct_supplier?.id || null,
+      supplier_name: item.supplier?.company_name || request.direct_supplier?.company_name || '',
+      estimated_unit_price: unitPrice,
+      estimated_line_total: lineTotal,
+    };
+  });
 
 export const isPrReturnedFromProcurement = (request: PurchaseRequest | null | undefined): boolean => {
   if (!request) return false;
@@ -148,9 +163,18 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
     setIsRejectModalOpen(false);
   };
 
-  const updateItem = (index: number, field: keyof PurchaseRequestItemFormInput, value: any) => {
+  const updateItem = (index: number, field: keyof PurchaseRequestItemFormInput | keyof DraftItemState, value: any) => {
     setDraftItems((items) =>
-      items.map((item, itemIndex) => (itemIndex === index ? { ...item, [field]: value } : item)),
+      items.map((item, itemIndex) => {
+        if (itemIndex !== index) return item;
+        const updated = { ...item, [field]: value };
+        if (field === 'quantity' || field === 'estimated_unit_price') {
+          const qty = Number(field === 'quantity' ? value : updated.quantity) || 0;
+          const price = Number(field === 'estimated_unit_price' ? value : updated.estimated_unit_price) || 0;
+          updated.estimated_line_total = Math.round(qty * price * 100) / 100;
+        }
+        return updated;
+      }),
     );
   };
 
@@ -167,6 +191,10 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
   };
 
   const activeApprovedItems = draftItems.filter((item) => !item.isExcluded);
+  const activeApprovedTotal = activeApprovedItems.reduce(
+    (sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.estimated_unit_price) || 0),
+    0
+  );
 
   const filteredRequests = requests.filter((request) => {
     const search = searchTerm.trim().toLowerCase();
@@ -214,13 +242,15 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
             item.item_description !== original.item_description ||
             Number(item.quantity) !== Number(original.quantity) ||
             item.item_reference !== (original.item_reference || '') ||
-            item.region !== (original.region || '')
+            item.region !== (original.region || '') ||
+            Number(item.estimated_unit_price || 0) !== Number(original.estimated_unit_price || 0)
           );
         });
 
       if (isModified) {
-        // Send the updated clean items (only approved ones)
+        // Send the updated clean items (only approved ones) with preserved supplier and pricing
         const cleanedItems: PurchaseRequestItemFormInput[] = activeApprovedItems.map((item) => ({
+          id: item.id,
           item_id: item.item_id ?? null,
           item_description: item.item_description,
           item_reference: item.item_reference || 'قطعة عامة',
@@ -229,6 +259,9 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
           uom: item.uom || 'PCS',
           specifications: item.specifications || '',
           notes: item.notes || '',
+          supplier_id: item.supplier_id || undefined,
+          estimated_unit_price: Number(item.estimated_unit_price) >= 0 ? Number(item.estimated_unit_price) : undefined,
+          estimated_line_total: Math.round((Number(item.quantity) || 0) * (Number(item.estimated_unit_price) || 0) * 100) / 100,
         }));
 
         await updateGeneralManagerPurchaseRequestApi(selected.id, {
@@ -689,7 +722,7 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
                 {/* Items Table */}
                 <div className="space-y-3">
                   <div className="hidden min-w-0 md:block overflow-x-auto rounded-xl border border-slate-800">
-                    <table className="min-w-[900px] w-full text-right text-xs">
+                    <table className="min-w-[1050px] w-full text-right text-xs">
                       <thead className="bg-slate-950 text-slate-300">
                         <tr>
                           <th className="px-3 py-2.5 whitespace-nowrap font-bold">الحالة</th>
@@ -698,12 +731,16 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
                           <th className="px-3 py-2.5 whitespace-nowrap font-bold">رقم القطعة</th>
                           <th className="px-3 py-2.5 whitespace-nowrap font-bold">المنطقة</th>
                           <th className="px-3 py-2.5 whitespace-nowrap font-bold">الكمية</th>
+                          <th className="px-3 py-2.5 whitespace-nowrap font-bold">المورد (المشتريات)</th>
+                          <th className="px-3 py-2.5 whitespace-nowrap font-bold">سعر الوحدة (ج.م)</th>
+                          <th className="px-3 py-2.5 whitespace-nowrap font-bold">إجمالي البند (ج.م)</th>
                           <th className="px-3 py-2.5 whitespace-nowrap font-bold text-center">التحكم بالبند</th>
                         </tr>
                       </thead>
                       <tbody>
                         {draftItems.map((item, index) => {
                           const isExcluded = item.isExcluded;
+                          const lineTotal = (Number(item.quantity) || 0) * (Number(item.estimated_unit_price) || 0);
                           return (
                             <tr
                               key={index}
@@ -724,7 +761,7 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
                                   </span>
                                 )}
                               </td>
-                              <td className="px-3 py-2.5">
+                              <td className="px-3 py-2.5 min-w-[140px]">
                                 <input
                                   disabled={isExcluded}
                                   value={item.item_description}
@@ -732,7 +769,7 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
                                   className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1 text-slate-100 disabled:bg-slate-950 disabled:text-slate-500"
                                 />
                               </td>
-                              <td className="px-3 py-2.5">
+                              <td className="px-3 py-2.5 min-w-[130px]">
                                 <input
                                   disabled={isExcluded}
                                   value={item.specifications || ''}
@@ -746,7 +783,7 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
                                   disabled={isExcluded}
                                   value={item.item_reference || ''}
                                   onChange={(e) => updateItem(index, 'item_reference', e.target.value)}
-                                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1 text-slate-100 font-mono text-xs disabled:bg-slate-950 disabled:text-slate-500"
+                                  className="w-24 rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1 text-slate-100 font-mono text-xs disabled:bg-slate-950 disabled:text-slate-500"
                                 />
                               </td>
                               <td className="px-3 py-2.5">
@@ -754,7 +791,7 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
                                   disabled={isExcluded}
                                   value={item.region || ''}
                                   onChange={(e) => updateItem(index, 'region', e.target.value)}
-                                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1 text-slate-100 disabled:bg-slate-950 disabled:text-slate-500"
+                                  className="w-24 rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1 text-slate-100 disabled:bg-slate-950 disabled:text-slate-500"
                                 />
                               </td>
                               <td className="px-3 py-2.5 whitespace-nowrap">
@@ -770,6 +807,26 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
                                   />
                                   <span className="text-xs text-slate-400">{getUnitLabel(item.uom)}</span>
                                 </div>
+                              </td>
+                              <td className="px-3 py-2.5 whitespace-nowrap">
+                                <span className="inline-flex items-center gap-1 rounded-md bg-emerald-950/40 border border-emerald-800/50 px-2 py-1 text-xs font-bold text-emerald-300">
+                                  🏢 {item.supplier_name || selected.direct_supplier?.company_name || 'عروض أسعار'}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2.5 whitespace-nowrap">
+                                <input
+                                  disabled={isExcluded}
+                                  type="number"
+                                  min="0"
+                                  step="any"
+                                  value={item.estimated_unit_price ?? ''}
+                                  onChange={(e) => updateItem(index, 'estimated_unit_price', e.target.value === '' ? 0 : Number(e.target.value))}
+                                  placeholder="0.00"
+                                  className="w-24 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-slate-100 font-bold disabled:bg-slate-950 disabled:text-slate-500"
+                                />
+                              </td>
+                              <td className="px-3 py-2.5 whitespace-nowrap font-mono font-bold text-amber-300">
+                                {formatCleanNumber(lineTotal)} ج.م
                               </td>
                               <td className="px-3 py-2.5 text-center whitespace-nowrap">
                                 <div className="flex items-center justify-center gap-1.5">
@@ -799,6 +856,18 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
                           );
                         })}
                       </tbody>
+                      {activeApprovedTotal > 0 && (
+                        <tfoot className="bg-slate-950 border-t-2 border-slate-700 text-xs">
+                          <tr>
+                            <td colSpan={7} className="px-3 py-2.5 text-left font-bold text-slate-300">
+                              إجمالي القيمة التقديرية للبنود المعتمدة:
+                            </td>
+                            <td colSpan={3} className="px-3 py-2.5 text-amber-300 font-mono text-sm font-black">
+                              {formatCleanNumber(activeApprovedTotal)} ج.م
+                            </td>
+                          </tr>
+                        </tfoot>
+                      )}
                     </table>
                   </div>
 
@@ -806,6 +875,7 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
                   <div className="space-y-3 md:hidden">
                     {draftItems.map((item, index) => {
                       const isExcluded = item.isExcluded;
+                      const lineTotal = (Number(item.quantity) || 0) * (Number(item.estimated_unit_price) || 0);
                       return (
                         <article
                           key={`mobile-draft-item-${index}`}
@@ -849,16 +919,53 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
                                 />
                               </div>
                               <div>
-                                <label className="text-slate-400 block mb-1">الكمية</label>
+                                <label className="text-slate-400 block mb-1">المنطقة</label>
+                                <input
+                                  disabled={isExcluded}
+                                  value={item.region || ''}
+                                  onChange={(e) => updateItem(index, 'region', e.target.value)}
+                                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-slate-100"
+                                />
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-slate-400 block mb-1">الكمية ({getUnitLabel(item.uom)})</label>
                                 <input
                                   disabled={isExcluded}
                                   type="number"
                                   min="0.01"
+                                  step="any"
                                   value={item.quantity}
                                   onChange={(e) => updateItem(index, 'quantity', e.target.value)}
                                   className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-slate-100 font-bold"
                                 />
                               </div>
+                              <div>
+                                <label className="text-slate-400 block mb-1">سعر الوحدة (ج.م)</label>
+                                <input
+                                  disabled={isExcluded}
+                                  type="number"
+                                  min="0"
+                                  step="any"
+                                  value={item.estimated_unit_price ?? ''}
+                                  onChange={(e) => updateItem(index, 'estimated_unit_price', e.target.value === '' ? 0 : Number(e.target.value))}
+                                  placeholder="0.00"
+                                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-slate-100 font-bold"
+                                />
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-between border-t border-slate-800/80 pt-2 text-xs">
+                              <span className="text-slate-400">المورد المقترح:</span>
+                              <span className="font-bold text-emerald-300">
+                                {item.supplier_name || selected.direct_supplier?.company_name || 'عروض أسعار'}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between border-t border-slate-800/80 pt-2 text-xs">
+                              <span className="text-slate-400">إجمالي البند:</span>
+                              <span className="font-mono font-bold text-amber-300">
+                                {formatCleanNumber(lineTotal)} ج.م
+                              </span>
                             </div>
                           </div>
 
@@ -886,6 +993,17 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
                       );
                     })}
                   </div>
+
+                  {activeApprovedTotal > 0 && (
+                    <div className="flex items-center justify-between rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 md:hidden">
+                      <span className="text-xs font-bold text-amber-200">
+                        💰 إجمالي القيمة التقديرية المعتمدة:
+                      </span>
+                      <span className="font-mono font-black text-amber-300 text-sm">
+                        {formatCleanNumber(activeApprovedTotal)} ج.م
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 

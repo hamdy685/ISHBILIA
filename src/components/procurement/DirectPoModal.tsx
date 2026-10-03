@@ -4,10 +4,11 @@ import { getSuppliersApi } from '../../api/suppliers';
 import { createDirectPoApi, getProcurementDepartmentsApi, getProcurementSiteEngineersApi, ProcurementDepartmentOption, ProcurementSiteEngineerOption } from '../../api/procurement';
 import { Supplier } from '../../types/purchaseOrder';
 import { parseApiError } from '../../utils/apiError';
-import { DEFAULT_PR_UNIT_CODES, getUnitOptions } from '../../utils/units';
+import { DEFAULT_PR_UNIT_CODES, getUnitLabel, getUnitOptions } from '../../utils/units';
 import { SearchableSelect } from '../ui/FormField';
 import { SupplierSelectWithQuickAdd } from '../common/SupplierSelectWithQuickAdd';
-import { formatCleanNumber } from '../../utils/numberFormat';
+import { formatCleanNumber, formatCleanQty } from '../../utils/numberFormat';
+import { isRebarUnit, calculateRebarTons } from '../../utils/rebar';
 
 interface ItemRow {
   item_id?: number | null;
@@ -181,16 +182,37 @@ export const DirectPoModal: React.FC<DirectPoModalProps> = ({ isOpen, onClose, o
         department_id: Number(departmentId),
         site_engineer_user_id: Number(siteEngineerId),
         delivery_date: deliveryDate || undefined,
-        items: items.map(item => ({
-          item_id: item.item_id || null,
-          item_description: item.item_description.trim(),
-          item_reference: item.item_reference.trim() || '',
-          region: item.region.trim() || '',
-          quantity: Number(item.quantity),
-          uom: item.uom,
-          unit_price: Number(item.unit_price),
-          specifications: item.specifications.trim() || undefined,
-        })),
+        items: items.map(item => {
+          const qty = Number(item.quantity);
+          const uomUpper = (item.uom || '').trim().toUpperCase();
+          const isRebar = isRebarUnit(item.uom) || uomUpper === 'PARCEL' || (item.uom || '').includes('طرد');
+          let finalQty = qty;
+          let finalUom = item.uom;
+          let finalSpec = item.specifications.trim();
+
+          if (isRebar && finalUom !== 'TON' && finalUom !== 'طن') {
+            const tons = calculateRebarTons(qty, item.uom);
+            if (tons > 0) {
+              finalQty = tons;
+              finalUom = 'TON';
+              const extra = (uomUpper === 'PARCEL' || (item.uom || '').includes('طرد'))
+                ? `(ما يعادل ${formatCleanQty(qty)} طرد حديد - زنة الطرد 1.940 طن)`
+                : `(ما يعادل ${formatCleanQty(qty)} سيخ حديد ${getUnitLabel(item.uom)})`;
+              finalSpec = finalSpec ? `${finalSpec} - ${extra}` : extra;
+            }
+          }
+
+          return {
+            item_id: item.item_id || null,
+            item_description: item.item_description.trim(),
+            item_reference: item.item_reference.trim() || '',
+            region: item.region.trim() || '',
+            quantity: finalQty,
+            uom: finalUom,
+            unit_price: Number(item.unit_price),
+            specifications: finalSpec || undefined,
+          };
+        }),
       });
       onSuccess(result.id);
       onClose();

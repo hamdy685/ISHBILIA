@@ -187,6 +187,11 @@ class AccountingPurchaseRequestService
         // Legacy fallback: accept a top-level supplier_id for backward compatibility
         $globalSupplierId = (int) ($financialData['supplier_id'] ?? 0);
         if (! is_array($submittedItems) || count($submittedItems) === 0) {
+            $existingTotal = (float) $pr->items->sum('estimated_line_total');
+            $hasSuppliers = $pr->items->isNotEmpty() && $pr->items->every(fn ($item) => (int) $item->supplier_id > 0);
+            if ($existingTotal > 0 && $hasSuppliers) {
+                return round($existingTotal, 2);
+            }
             throw ValidationException::withMessages(['financial_data.items' => ['يجب إدخال البيانات المالية لجميع بنود الطلب قبل الاعتماد.']]);
         }
 
@@ -199,9 +204,11 @@ class AccountingPurchaseRequestService
         $supplierIds = collect();
         foreach ($requestItemsById as $prItemId => $prItem) {
             $input = $submittedById->get((string) $prItemId);
-            $quantity = (float) ($input['quantity'] ?? 0);
-            $unitPrice = (float) ($input['unit_price'] ?? -1);
-            $itemSupplierId = (int) ($input['supplier_id'] ?? $globalSupplierId);
+            $quantity = (float) ($input['quantity'] ?? $prItem->quantity);
+            $unitPrice = isset($input['unit_price']) && $input['unit_price'] !== '' && (float) $input['unit_price'] >= 0
+                ? (float) $input['unit_price']
+                : (float) ($prItem->estimated_unit_price ?? -1);
+            $itemSupplierId = (int) ($input['supplier_id'] ?? $prItem->supplier_id ?? $globalSupplierId);
 
             if ($itemSupplierId <= 0) {
                 throw ValidationException::withMessages(["financial_data.items.{$prItemId}.supplier_id" => ['يجب اختيار المورد لكل بند.']]);

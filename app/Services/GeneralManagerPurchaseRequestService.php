@@ -25,6 +25,7 @@ class GeneralManagerPurchaseRequestService
                 'assignedReviewer.roles',
                 'siteEngineer.roles',
                 'items.item',
+                'items.supplier',
                 'approvalHistory.actor.roles',
                 'quotes.supplier',
                 'quotes.recommendations.user.roles',
@@ -51,6 +52,7 @@ class GeneralManagerPurchaseRequestService
                 'assignedReviewer.roles',
                 'siteEngineer.roles',
                 'items.item',
+                'items.supplier',
                 'approvalHistory.actor.roles',
                 'quotes.supplier',
                 'quotes.recommendations.user.roles',
@@ -98,7 +100,11 @@ class GeneralManagerPurchaseRequestService
                     ]);
                 }
 
+                $existingItems = $pr->items->keyBy('id');
                 $normalizedItems = [];
+                $totalEstimatedCost = 0.0;
+                $primarySupplierId = $pr->direct_supplier_id;
+
                 foreach ($items as $index => $item) {
                     $reference = trim((string) ($item['item_reference'] ?? ''));
                     $region = trim((string) ($item['region'] ?? ''));
@@ -120,26 +126,53 @@ class GeneralManagerPurchaseRequestService
                         ]);
                     }
 
+                    $existingItem = !empty($item['id']) ? $existingItems->get((int) $item['id']) : ($pr->items[$index] ?? null);
+
+                    $supplierId = array_key_exists('supplier_id', $item)
+                        ? (!empty($item['supplier_id']) ? (int) $item['supplier_id'] : null)
+                        : ($existingItem?->supplier_id ?? null);
+
+                    $unitPrice = array_key_exists('estimated_unit_price', $item) && $item['estimated_unit_price'] !== null && $item['estimated_unit_price'] !== ''
+                        ? (float) $item['estimated_unit_price']
+                        : (float) ($existingItem?->estimated_unit_price ?? 0.0);
+
+                    $lineTotal = round($quantity * $unitPrice, 2);
+                    $totalEstimatedCost += $lineTotal;
+                    if ($supplierId && !$primarySupplierId) {
+                        $primarySupplierId = $supplierId;
+                    }
+
                     $normalizedItems[] = [
-                        'item_id' => $item['item_id'] ?? null,
-                        'item_description' => $item['item_description'] ?? '',
+                        'item_id' => $item['item_id'] ?? $existingItem?->item_id ?? null,
+                        'item_description' => $item['item_description'] ?? $existingItem?->item_description ?? '',
                         'item_reference' => $reference,
                         'region' => $region,
                         'quantity' => $quantity,
-                        'uom' => $item['uom'] ?? 'PCS',
-                        'specifications' => $item['specifications'] ?? null,
-                        'notes' => $item['notes'] ?? null,
+                        'uom' => $item['uom'] ?? $existingItem?->uom ?? 'PCS',
+                        'specifications' => $item['specifications'] ?? $existingItem?->specifications ?? null,
+                        'notes' => $item['notes'] ?? $existingItem?->notes ?? null,
+                        'supplier_id' => $supplierId,
+                        'estimated_unit_price' => $unitPrice,
+                        'estimated_line_total' => $lineTotal,
                     ];
                 }
 
                 $pr->items()->delete();
-                foreach ($normalizedItems as $item) {
-                    $pr->items()->create($item);
+                foreach ($normalizedItems as $normItem) {
+                    $pr->items()->create($normItem);
+                }
+
+                if ($primarySupplierId) {
+                    $updateFields['direct_supplier_id'] = $primarySupplierId;
+                }
+                if ($totalEstimatedCost > 0) {
+                    $updateFields['total_estimated_cost'] = round($totalEstimatedCost, 2);
                 }
             }
 
-            // Executive edits intentionally go directly to procurement, without returning to the reviewer.
-            $updateFields['status'] = 'PENDING_PROCUREMENT_APPROVAL';
+            $isDirect = ($pr->procurement_route === 'DIRECT') || (!empty($primarySupplierId) && $totalEstimatedCost > 0);
+            $nextStatus = $isDirect ? 'PENDING_ACCOUNTING_APPROVAL' : 'PENDING_PROCUREMENT_APPROVAL';
+            $updateFields['status'] = $nextStatus;
             $pr->update($updateFields);
 
             app(NotificationService::class)->markEntityNotificationsAsRead($pr);
@@ -150,8 +183,8 @@ class GeneralManagerPurchaseRequestService
                 'actor_user_id' => $executive->id,
                 'action' => 'EDITED_BY_EXECUTIVE',
                 'from_state' => $oldState,
-                'to_state' => 'PENDING_PROCUREMENT_APPROVAL',
-                'comments' => $data['comment'] ?? 'تم تعديل الطلب من المدير التنفيذي وإرساله للمشتريات.',
+                'to_state' => $nextStatus,
+                'comments' => $data['comment'] ?? ($isDirect ? 'تم اعتماد وتعديل الطلب من المدير التنفيذي وإحالته للإدارة المالية.' : 'تم تعديل الطلب من المدير التنفيذي وإرساله للمشتريات.'),
             ]);
 
             AuditLog::create([
@@ -160,10 +193,21 @@ class GeneralManagerPurchaseRequestService
                 'entity_id' => $pr->id,
                 'action' => 'EDITED_BY_EXECUTIVE',
                 'old_value' => json_encode(['status' => $oldState], JSON_UNESCAPED_UNICODE),
-                'new_value' => json_encode(['status' => 'PENDING_PROCUREMENT_APPROVAL'], JSON_UNESCAPED_UNICODE),
+                'new_value' => json_encode(['status' => $nextStatus], JSON_UNESCAPED_UNICODE),
             ]);
 
-            $this->notifyProcurement($pr, 'تم تعديل طلب الشراء من المدير التنفيذي وإرساله إلى مدير المشتريات.');
+            if ($isDirect) {
+                $notificationService = app(NotificationService::class);
+                $notificationService->queueUsers(
+                    $notificationService->resolveUsersWithPermission('purchase_request.accounting_view'),
+                    'purchase_request_pending_accounting_approval',
+                    'طلب شراء معتمد تنفيذيًا بانتظار الموافقة المالية',
+                    "اعتمد المدير التنفيذي الطلب {$pr->request_number} بعد مراجعة البنود، وهو الآن بانتظار موافقة الإدارة المالية.",
+                    $pr
+                );
+            } else {
+                $this->notifyProcurement($pr, 'تم تعديل طلب الشراء من المدير التنفيذي وإرساله إلى مدير المشتريات.');
+            }
 
             return $pr->fresh([
                 'requester',
@@ -172,6 +216,7 @@ class GeneralManagerPurchaseRequestService
                 'assignedReviewer',
                 'siteEngineer',
                 'items.item',
+                'items.supplier',
                 'approvalHistory',
             ]);
         });
@@ -247,7 +292,7 @@ class GeneralManagerPurchaseRequestService
                 $this->notifyProcurement($pr, "اعتمد {$actorTitle} طلب الشراء، وهو بانتظار إجراء مدير المشتريات.");
             }
 
-            return $pr->fresh(['requester', 'department', 'assignedReviewer', 'siteEngineer', 'items.item', 'approvalHistory']);
+            return $pr->fresh(['requester', 'department', 'assignedReviewer', 'siteEngineer', 'items.item', 'items.supplier', 'approvalHistory']);
         });
     }
 
@@ -304,7 +349,7 @@ class GeneralManagerPurchaseRequestService
                 $pr
             );
 
-            return $pr->fresh(['requester', 'department', 'assignedReviewer', 'siteEngineer', 'items.item', 'approvalHistory']);
+            return $pr->fresh(['requester', 'department', 'assignedReviewer', 'siteEngineer', 'items.item', 'items.supplier', 'approvalHistory']);
         });
     }
 

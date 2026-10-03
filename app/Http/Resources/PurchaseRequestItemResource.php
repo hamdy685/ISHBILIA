@@ -20,16 +20,15 @@ class PurchaseRequestItemResource extends JsonResource
                 ];
             }),
             'supplier_id' => $this->supplier_id,
-            'supplier' => $this->whenLoaded('supplier', function () {
-                if (! $this->supplier) {
-                    return null;
-                }
-                return [
-                    'id' => $this->supplier->id,
-                    'company_name' => $this->supplier->company_name,
-                    'code' => $this->supplier->code ?? null,
-                ];
-            }),
+            'supplier' => $this->relationLoaded('supplier') && $this->supplier ? [
+                'id' => $this->supplier->id,
+                'company_name' => $this->supplier->company_name,
+                'code' => $this->supplier->code ?? null,
+            ] : ($this->supplier_id && $this->supplier ? [
+                'id' => $this->supplier->id,
+                'company_name' => $this->supplier->company_name,
+                'code' => $this->supplier->code ?? null,
+            ] : null),
             'item_description' => $this->item_description,
             'item_reference' => $this->item_reference,
             'region' => $this->region,

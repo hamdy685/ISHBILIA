@@ -34,6 +34,8 @@ class UpdatePurchaseRequestRequest extends FormRequest
             'items.*.uom' => ['nullable', 'string', 'max:20'],
             'items.*.specifications' => ['nullable', 'string'],
             'items.*.notes' => ['nullable', 'string'],
+            'items.*.supplier_id' => ['nullable', 'integer', 'exists:suppliers,id'],
+            'items.*.estimated_unit_price' => ['nullable', 'numeric', 'min:0'],
         ];
     }
 

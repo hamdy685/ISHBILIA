@@ -17,8 +17,9 @@ import { getUnitLabel } from '../../utils/units';
 import { tafqeetCurrency } from '../../utils/tafqeet';
 import { UnifiedNotesCard } from '../../components/common/UnifiedNotesCard';
 import { SupplierSelectWithQuickAdd } from '../../components/common/SupplierSelectWithQuickAdd';
-import { formatCleanNumber } from '../../utils/numberFormat';
+import { formatCleanNumber, formatCleanQty } from '../../utils/numberFormat';
 import { CombinedPoPrPrintModal, CombinedPrintData } from '../../components/procurement/CombinedPoPrPrintModal';
+import { isRebarUnit, calculateRebarTons } from '../../utils/rebar';
 
 const getLocalDateIso = () => {
   const now = new Date();
@@ -38,6 +39,9 @@ interface PoItemInput {
   unit_price: number | string;
   specifications: string;
   supplier_id?: number | null;
+  raw_pr_quantity?: number;
+  raw_pr_uom?: string;
+  is_rebar_converted?: boolean;
 }
 
 export const CreatePurchaseOrderPage: React.FC = () => {
@@ -91,21 +95,54 @@ export const CreatePurchaseOrderPage: React.FC = () => {
           setSupplierId(initialSupplierId);
 
           if (prData && prData.items) {
-            // Keep ALL approved PR items in the unified Purchase Order
+            // Keep ALL approved PR items in the unified Purchase Order with automatic rebar-to-ton conversion
             setPoItems(
-              prData.items.map((i) => ({
-                pr_item_id: i.id,
-                item_id: i.item_id || null,
-                item_description: i.item_description,
-                item_reference: i.item_reference || '',
-                region: i.region || '',
-                original_quantity: parseFloat(i.quantity) || 1,
-                quantity: parseFloat(i.quantity) || 1,
-                uom: i.uom || 'PCS',
-                unit_price: Number(prData.selected_quote?.unit_price || i.estimated_unit_price || 0),
-                specifications: i.specifications || '',
-                supplier_id: i.supplier_id ? Number(i.supplier_id) : (initialSupplierId ? Number(initialSupplierId) : null),
-              }))
+              prData.items.map((i) => {
+                const rawQty = parseFloat(i.quantity) || 1;
+                const uomUpper = (i.uom || '').trim().toUpperCase();
+                const isRebar = isRebarUnit(i.uom) || uomUpper === 'PARCEL' || (i.uom || '').includes('طرد');
+
+                let finalQty = rawQty;
+                let finalUom = i.uom || 'PCS';
+                let isConverted = false;
+                let extraSpec = '';
+
+                if (isRebar && uomUpper !== 'TON' && uomUpper !== 'طن') {
+                  const tons = calculateRebarTons(rawQty, i.uom);
+                  if (tons > 0) {
+                    finalQty = tons;
+                    finalUom = 'TON';
+                    isConverted = true;
+                    if (uomUpper === 'PARCEL' || (i.uom || '').includes('طرد')) {
+                      extraSpec = `(ما يعادل ${formatCleanQty(rawQty)} طرد حديد - زنة الطرد 1.940 طن)`;
+                    } else {
+                      extraSpec = `(ما يعادل ${formatCleanQty(rawQty)} سيخ حديد ${getUnitLabel(i.uom)})`;
+                    }
+                  }
+                }
+
+                let specifications = (i.specifications || '').trim();
+                if (extraSpec && !specifications.includes('ما يعادل')) {
+                  specifications = specifications ? `${specifications} - ${extraSpec}` : extraSpec;
+                }
+
+                return {
+                  pr_item_id: i.id,
+                  item_id: i.item_id || null,
+                  item_description: i.item_description,
+                  item_reference: i.item_reference || '',
+                  region: i.region || '',
+                  original_quantity: finalQty,
+                  quantity: finalQty,
+                  uom: finalUom,
+                  unit_price: Number(prData.selected_quote?.unit_price || i.estimated_unit_price || 0),
+                  specifications,
+                  supplier_id: i.supplier_id ? Number(i.supplier_id) : (initialSupplierId ? Number(initialSupplierId) : null),
+                  raw_pr_quantity: rawQty,
+                  raw_pr_uom: i.uom || 'PCS',
+                  is_rebar_converted: isConverted,
+                };
+              })
             );
           }
         }
@@ -632,8 +669,16 @@ export const CreatePurchaseOrderPage: React.FC = () => {
 
           {/* Commercial Line Items */}
           <div className="space-y-3 pt-2">
-            <h3 className="text-xs font-bold text-slate-200">جدول البنود التجارية والأسعار (بالجنيه المصري EGP / ج.م):</h3>
-            
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <h3 className="text-xs font-bold text-slate-200">جدول البنود التجارية والأسعار (بالجنيه المصري EGP / ج.م):</h3>
+              {poItems.some((i) => i.is_rebar_converted) && (
+                <span className="rounded-lg bg-emerald-950/80 border border-emerald-700/60 px-2.5 py-1 text-[11px] font-bold text-emerald-300 flex items-center gap-1.5 shadow-sm">
+                  <span>🔄</span>
+                  <span>تم تحويل حديد التسليح تلقائياً من (طرد) إلى (طن)</span>
+                </span>
+              )}
+            </div>
+
             {/* Desktop Table */}
             <div className="hidden min-w-0 md:block overflow-x-auto rounded-lg border border-slate-800 bg-slate-900/60">
               <table className="w-full text-right text-xs text-slate-200 border-collapse">
@@ -705,15 +750,27 @@ export const CreatePurchaseOrderPage: React.FC = () => {
                             ))}
                           </select>
                         </td>
-                        <td className="p-3 text-slate-400">{getUnitLabel(item.uom)}</td>
+                        <td className="p-3 text-slate-300 font-bold whitespace-nowrap">
+                          <span>{getUnitLabel(item.uom)}</span>
+                          {item.is_rebar_converted && (
+                            <span className="text-[10px] text-emerald-400 block font-normal">(محوّل لطن)</span>
+                          )}
+                        </td>
                         <td className="p-3 font-mono font-semibold text-slate-400">
-                          {item.original_quantity.toLocaleString()}
+                          {item.is_rebar_converted ? (
+                            <div>
+                              <span className="text-slate-200 font-bold">{item.raw_pr_quantity} {getUnitLabel(item.raw_pr_uom)}</span>
+                              <div className="text-[10px] text-cyan-400 font-bold">≈ {item.original_quantity} طن</div>
+                            </div>
+                          ) : (
+                            item.original_quantity.toLocaleString()
+                          )}
                         </td>
                         <td className="p-3">
                           <input
                             type="number"
-                            step="0.01"
-                            min="0.01"
+                            step="0.001"
+                            min="0.001"
                             required
                             value={item.quantity ?? ''}
                             onFocus={(e) => e.target.select()}
@@ -740,7 +797,8 @@ export const CreatePurchaseOrderPage: React.FC = () => {
                             onFocus={(e) => e.target.select()}
                             readOnly={Boolean(pr?.selected_quote?.id)}
                             onChange={(e) => handleItemPriceChange(index, e.target.value)}
-                            placeholder="0.00"
+                            placeholder={item.uom === 'TON' ? 'سعر الطن...' : '0.00'}
+                            title={item.uom === 'TON' ? 'سعر الطن بالجنيه المصري' : 'سعر الوحدة'}
                             className="w-32 bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-emerald-400 font-mono font-bold focus:border-cyan-500 focus:outline-none"
                           />
                         </td>
@@ -820,13 +878,19 @@ export const CreatePurchaseOrderPage: React.FC = () => {
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="text-[10px] text-slate-400 font-semibold">الكمية</label>
-                          <span className="text-[10px] text-slate-500 font-mono">PR: {item.original_quantity}</span>
+                          <label className="text-[10px] text-slate-400 font-semibold">
+                            الكمية ({getUnitLabel(item.uom)})
+                          </label>
+                          <span className="text-[10px] text-slate-500 font-mono">
+                            {item.is_rebar_converted
+                              ? `${item.raw_pr_quantity} طرد`
+                              : `PR: ${item.original_quantity}`}
+                          </span>
                         </div>
                         <input
                           type="number"
-                          step="0.01"
-                          min="0.01"
+                          step="0.001"
+                          min="0.001"
                           required
                           value={item.quantity ?? ''}
                           onFocus={(e) => e.target.select()}
@@ -836,7 +900,9 @@ export const CreatePurchaseOrderPage: React.FC = () => {
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="text-[10px] text-slate-400 font-semibold">السعر (ج.م)</label>
+                          <label className="text-[10px] text-slate-400 font-semibold">
+                            {item.uom === 'TON' ? 'سعر الطن (ج.م)' : 'السعر (ج.م)'}
+                          </label>
                           {isQtyChanged && (
                             <span className={`text-[10px] font-mono font-bold ${diff > 0 ? 'text-amber-400' : 'text-rose-400'}`}>
                               {diff > 0 ? `+${formatCleanNumber(diff)}` : formatCleanNumber(diff)}
@@ -852,7 +918,7 @@ export const CreatePurchaseOrderPage: React.FC = () => {
                           onFocus={(e) => e.target.select()}
                           readOnly={Boolean(pr?.selected_quote?.id)}
                           onChange={(e) => handleItemPriceChange(index, e.target.value)}
-                          placeholder="0.00"
+                          placeholder={item.uom === 'TON' ? 'سعر الطن...' : '0.00'}
                           className="h-10 w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 text-xs text-emerald-400 font-mono font-bold"
                         />
                       </div>

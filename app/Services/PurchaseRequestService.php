@@ -95,6 +95,11 @@ class PurchaseRequestService
                 ]);
             }
 
+            $unitPrice = isset($item['estimated_unit_price']) && $item['estimated_unit_price'] !== '' && $item['estimated_unit_price'] !== null
+                ? (float) $item['estimated_unit_price']
+                : null;
+            $lineTotal = ($unitPrice !== null) ? round($quantity * $unitPrice, 2) : null;
+
             $normalizedItems[] = [
                 'item_id' => $item['item_id'] ?? null,
                 'item_description' => $item['item_description'] ?? '',
@@ -104,6 +109,9 @@ class PurchaseRequestService
                 'uom' => $item['uom'] ?? 'PCS',
                 'specifications' => $item['specifications'] ?? null,
                 'notes' => $item['notes'] ?? null,
+                'supplier_id' => !empty($item['supplier_id']) ? (int) $item['supplier_id'] : null,
+                'estimated_unit_price' => $unitPrice,
+                'estimated_line_total' => $lineTotal,
             ];
         }
 
@@ -267,7 +275,7 @@ class PurchaseRequestService
                 ], JSON_UNESCAPED_UNICODE),
             ]);
 
-            return $pr->load(['requester.roles', 'requester:id,name,email,department_id', 'department:id,name,code', 'assignedReviewer:id,name,email,department_id', 'siteEngineer:id,name,email,department_id', 'landParcel', 'items.item']);
+            return $pr->load(['requester.roles', 'requester:id,name,email,department_id', 'department:id,name,code', 'assignedReviewer:id,name,email,department_id', 'siteEngineer:id,name,email,department_id', 'landParcel', 'items.item', 'items.supplier']);
         });
     }
 
@@ -395,11 +403,34 @@ class PurchaseRequestService
             }
 
             if (array_key_exists('items', $data)) {
+                $existingItems = $request->items->keyBy('id');
                 $normalizedItems = $this->normalizeItems($data['items'], $isOffice, $parcelReference, $region);
+
+                $totalCost = 0.0;
+                $primarySupplierId = $request->direct_supplier_id;
 
                 // Re-create items
                 $request->items()->delete();
-                foreach ($normalizedItems as $itemData) {
+                foreach ($normalizedItems as $index => $itemData) {
+                    $existingItem = !empty($data['items'][$index]['id'])
+                        ? $existingItems->get((int) $data['items'][$index]['id'])
+                        : ($request->items[$index] ?? null);
+
+                    $supplierId = $itemData['supplier_id']
+                        ?? (!empty($data['items'][$index]['supplier_id']) ? (int) $data['items'][$index]['supplier_id'] : null)
+                        ?? $existingItem?->supplier_id;
+
+                    $unitPrice = $itemData['estimated_unit_price']
+                        ?? (isset($data['items'][$index]['estimated_unit_price']) ? (float) $data['items'][$index]['estimated_unit_price'] : ($existingItem?->estimated_unit_price !== null ? (float) $existingItem->estimated_unit_price : null));
+
+                    $lineTotal = ($unitPrice !== null) ? round((float) $itemData['quantity'] * $unitPrice, 2) : null;
+                    if ($lineTotal !== null) {
+                        $totalCost += $lineTotal;
+                    }
+                    if ($supplierId && !$primarySupplierId) {
+                        $primarySupplierId = $supplierId;
+                    }
+
                     $request->items()->create([
                         'item_id' => $itemData['item_id'] ?? null,
                         'item_description' => $itemData['item_description'],
@@ -409,7 +440,17 @@ class PurchaseRequestService
                         'uom' => $itemData['uom'],
                         'specifications' => $itemData['specifications'] ?? null,
                         'notes' => $itemData['notes'] ?? null,
+                        'supplier_id' => $supplierId,
+                        'estimated_unit_price' => $unitPrice,
+                        'estimated_line_total' => $lineTotal,
                     ]);
+                }
+
+                if ($primarySupplierId && !$request->direct_supplier_id) {
+                    $updateFields['direct_supplier_id'] = $primarySupplierId;
+                }
+                if ($totalCost > 0) {
+                    $updateFields['total_estimated_cost'] = round($totalCost, 2);
                 }
             } else {
                 // Keep existing items in sync if parcel/region changed
@@ -421,7 +462,7 @@ class PurchaseRequestService
 
             $request->update($updateFields);
 
-            return $request->fresh(['requester.roles', 'requester:id,name,email,department_id', 'department:id,name,code', 'targetDepartment.manager:id,name,email,department_id', 'targetDepartment.siteEngineer:id,name,email,department_id', 'assignedReviewer:id,name,email,department_id', 'siteEngineer:id,name,email,department_id', 'landParcel', 'items.item']);
+            return $request->fresh(['requester.roles', 'requester:id,name,email,department_id', 'department:id,name,code', 'targetDepartment.manager:id,name,email,department_id', 'targetDepartment.siteEngineer:id,name,email,department_id', 'assignedReviewer:id,name,email,department_id', 'siteEngineer:id,name,email,department_id', 'landParcel', 'items.item', 'items.supplier']);
         });
     }
 
@@ -601,7 +642,7 @@ class PurchaseRequestService
                 );
             }
 
-            return $request->fresh(['requester.roles', 'requester:id,name,email,department_id', 'department:id,name,code', 'targetDepartment.manager:id,name,email,department_id', 'targetDepartment.siteEngineer:id,name,email,department_id', 'assignedReviewer:id,name,email,department_id', 'siteEngineer:id,name,email,department_id', 'items.item']);
+            return $request->fresh(['requester.roles', 'requester:id,name,email,department_id', 'department:id,name,code', 'targetDepartment.manager:id,name,email,department_id', 'targetDepartment.siteEngineer:id,name,email,department_id', 'assignedReviewer:id,name,email,department_id', 'siteEngineer:id,name,email,department_id', 'items.item', 'items.supplier']);
         });
     }
 
@@ -627,6 +668,7 @@ class PurchaseRequestService
                 'assignedReviewer:id,name,email,department_id',
                 'siteEngineer:id,name,email,department_id',
                 'items.item',
+                'items.supplier',
                 'approvalHistory.actor',
                 'purchaseOrders:id,po_number,purchase_request_id,status,grand_total',
                 'supplements',

@@ -78,6 +78,7 @@ class ReviewerPurchaseRequestService
             'targetDepartment.siteEngineer',
             'assignedReviewer',
             'items.item',
+            'items.supplier',
         ])
             ->where('status', '!=', 'DRAFT');
 

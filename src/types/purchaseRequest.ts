@@ -315,6 +315,7 @@ export interface ApprovalHistoryEntry {
 }
 
 export interface PurchaseRequestItemFormInput {
+  id?: number;
   item_id?: number | null;
   item_description: string;
   item_reference?: string;
@@ -323,6 +324,9 @@ export interface PurchaseRequestItemFormInput {
   uom?: string;
   specifications?: string;
   notes?: string;
+  supplier_id?: number | null;
+  estimated_unit_price?: number | string | null;
+  estimated_line_total?: number | string | null;
 }
 
 export interface CreatePurchaseRequestPayload {
