@@ -981,9 +981,19 @@ export const CreatePurchaseOrderPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => navigate(-1)}
-                className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-4 py-2.5 rounded-lg font-medium"
+                className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-4 py-2.5 rounded-lg font-medium transition"
               >
                 إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCombinedPrintModal(true)}
+                disabled={!prId || poItems.length === 0}
+                className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white text-xs px-5 py-2.5 rounded-lg font-black shadow-lg shadow-amber-900/30 transition-all border border-amber-500/30 disabled:opacity-50 cursor-pointer"
+                title="طباعة نموذج A4 مدمج يضم طلب الشراء وأمر الشراء (بدون إذن استلام) مطابق للنموذج المعتمد"
+              >
+                <span className="text-sm">🖨️</span>
+                <span>طباعة المستند المدمج</span>
               </button>
               <button
                 type="submit"

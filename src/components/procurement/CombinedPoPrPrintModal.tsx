@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { printDocumentOnly } from '../../utils/print';
 import { formatCleanNumber, formatCleanQty } from '../../utils/numberFormat';
 import { getUnitLabel } from '../../utils/units';
+import { CombinedPrintTemplate } from './CombinedPrintTemplate';
 
 export interface CombinedPrintItem {
   id?: number;
@@ -219,182 +220,36 @@ export const CombinedPoPrPrintModal: React.FC<CombinedPoPrPrintModalProps> = ({
                 OPTION 1: ورقة واحدة مدمجة (A4 واحدة شاملة للطلب والأمر)
                ════════════════════════════════════════════════════════════ */}
             {viewMode === 'SINGLE_PAGE_COMBINED' && (
-              <section className="p-4 sm:p-6 bg-white text-black flex flex-col justify-between" style={{ minHeight: '270mm', pageBreakInside: 'avoid' }}>
-                {/* ── UPPER HALF: طلب الشراء (بدون بيانات مالية) ── */}
-                <div className="border-b-2 border-dashed border-slate-800 pb-4 mb-4">
-                  {/* PR Header */}
-                  <div className="flex items-start justify-between gap-2 pb-1.5">
-                    <div className="text-left shrink-0 w-1/4">
-                      <img src="/eshbelia-logo.png" alt="شركة إشبيلية" className="h-12 w-auto object-contain" onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none'; }} />
-                      <div className="text-[8px] text-amber-700 font-bold text-center w-12 mt-0.5">ISHBILIA إشبيلية</div>
-                    </div>
-                    <div className="text-center self-center w-2/4">
-                      <h2 className="text-2xl font-black text-black">طلب شراء</h2>
-                      <div className="text-[10px] text-slate-600 font-bold">(بدون بيانات مالية)</div>
-                    </div>
-                    <div className="text-right text-[11px] font-bold text-black space-y-0.5 w-1/4 shrink-0" dir="rtl">
-                      <div className="flex items-center justify-end gap-1"><span className="font-mono">{prDateFormatted}</span><span>/التاريخ</span></div>
-                      <div className="flex items-center justify-end gap-1"><span className="font-mono">{requestNumber}</span><span>/رقم الطلب</span></div>
-                      <div className="flex items-center justify-end gap-1"><span className="font-normal truncate">{projectOrRegion}</span><span>/المشروع</span></div>
-                      <div className="flex items-center justify-end gap-1"><span className="font-normal truncate">{purpose}</span><span>/غرض الشراء</span></div>
-                    </div>
-                  </div>
-
-                  {/* PR Table (NO FINANCIAL DATA) */}
-                  <table className="w-full border-collapse border-2 border-black text-right text-[11px] mt-1" style={{ border: '2px solid #000' }}>
-                    <thead>
-                      <tr className="bg-[#5B9BD5] bg-header-blue text-black font-black text-center" style={{ backgroundColor: '#5B9BD5' }}>
-                        <th className="border border-black p-1 w-8 text-center font-black">م</th>
-                        <th className="border border-black p-1 text-right font-black">الصنف</th>
-                        <th className="border border-black p-1 w-14 text-center font-black">الوحدة</th>
-                        <th className="border border-black p-1 w-14 text-center font-black">الكمية</th>
-                        <th className="border border-black p-1 w-28 text-center font-black">الموقع / قطعة الأرض</th>
-                        <th className="border border-black p-1 text-right font-black">المواصفات الفنية والملاحظات</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {items.map((item, idx) => (
-                        <tr key={idx} className="h-6 border border-black">
-                          <td className="border border-black p-1 text-center font-mono font-bold">{idx + 1}</td>
-                          <td className="border border-black p-1 font-bold">{item.item_description}</td>
-                          <td className="border border-black p-1 text-center">{getUnitLabel(item.uom || 'PCS')}</td>
-                          <td className="border border-black p-1 text-center font-mono font-black">{formatCleanQty(item.quantity)}</td>
-                          <td className="border border-black p-1 text-center font-mono">{item.item_reference || data.projectOrParcel || '—'}</td>
-                          <td className="border border-black p-1 text-[10px] text-slate-700">{item.specifications || item.region || '—'}</td>
-                        </tr>
-                      ))}
-                      {/* Pad empty rows if fewer than 4 */}
-                      {Array.from({ length: Math.max(4 - items.length, 0) }, (_, i) => (
-                        <tr key={`pr-pad-${i}`} className="h-6 border border-black">
-                          <td className="border border-black p-1 text-center font-mono text-slate-400">{items.length + i + 1}</td>
-                          <td className="border border-black p-1">&nbsp;</td>
-                          <td className="border border-black p-1">&nbsp;</td>
-                          <td className="border border-black p-1">&nbsp;</td>
-                          <td className="border border-black p-1">&nbsp;</td>
-                          <td className="border border-black p-1">&nbsp;</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-
-                  {/* PR Signatures */}
-                  <div className="flex items-center justify-between text-center px-4 pt-3 text-xs">
-                    <div className="w-1/3">
-                      <span className="font-bold">مقدم الطلب:</span> {data.requesterName || 'المهندس الطالب'}
-                      <div className="border-b border-black w-24 mx-auto mt-2"></div>
-                    </div>
-                    <div className="w-1/3">
-                      <span className="font-bold">رئيس القسم / المراجع:</span> {data.reviewerName || 'المراجعة الفنية'}
-                      <div className="border-b border-black w-24 mx-auto mt-2"></div>
-                    </div>
-                    <div className="w-1/3">
-                      <span className="font-bold">يعتمد &amp;:</span> {data.executiveApproverName || 'المدير العام'}
-                      <div className="border-b border-black w-24 mx-auto mt-2"></div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* ── LOWER HALF: أمر الشراء (مع الأسعار والمورد والإجمالي الأصفر) ── */}
-                <div>
-                  {/* PO Header */}
-                  <div className="flex items-start justify-between gap-2 pb-1.5">
-                    <div className="text-left shrink-0 w-1/4">
-                      <img src="/eshbelia-logo.png" alt="شركة إشبيلية" className="h-12 w-auto object-contain" onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none'; }} />
-                      <div className="text-[8px] text-amber-700 font-bold text-center w-12 mt-0.5">ISHBILIA إشبيلية</div>
-                    </div>
-                    <div className="text-center self-center w-2/4">
-                      <h2 className="text-2xl font-black text-black">أمر شراء</h2>
-                    </div>
-                    <div className="text-right text-[11px] font-bold text-black space-y-0.5 w-1/4 shrink-0" dir="rtl">
-                      <div className="flex items-center justify-end gap-1"><span className="font-mono">{poDateFormatted}</span><span>/التاريخ</span></div>
-                      <div className="flex items-center justify-end gap-1"><span className="font-mono">{orderNumber}</span><span>/رقم الطلب</span></div>
-                      <div className="flex items-center justify-end gap-1"><span className="font-normal truncate">{projectOrRegion}</span><span>/المشروع</span></div>
-                      <div className="flex items-center justify-end gap-1"><span className="font-normal truncate">{purpose}</span><span>/غرض الشراء</span></div>
-                    </div>
-                  </div>
-
-                  {/* PO Table */}
-                  <table className="w-full border-collapse border-2 border-black text-right text-[11px] mt-1" style={{ border: '2px solid #000' }}>
-                    <thead>
-                      <tr className="bg-[#5B9BD5] bg-header-blue text-black font-black text-center" style={{ backgroundColor: '#5B9BD5' }}>
-                        <th className="border border-black p-1 w-8 text-center font-black">م</th>
-                        <th className="border border-black p-1 text-right font-black">الصنف</th>
-                        <th className="border border-black p-1 w-14 text-center font-black">الوحدة</th>
-                        <th className="border border-black p-1 w-14 text-center font-black">الكمية</th>
-                        <th className="border border-black p-1 w-16 text-center font-black">السعر</th>
-                        <th className="border border-black p-1 w-20 text-center font-black">الاجمالى</th>
-                        <th className="border border-black p-1 w-32 text-right font-black">ملاحظات</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {items.map((item, idx) => {
-                        const qty = Number(item.quantity) || 0;
-                        const price = Number(item.unit_price) || 0;
-                        const lineTotal = Math.round(qty * price * 100) / 100;
-                        return (
-                          <tr key={idx} className="h-6 border border-black">
-                            <td className="border border-black p-1 text-center font-mono font-bold">{idx + 1}</td>
-                            <td className="border border-black p-1 font-bold">{item.item_description}</td>
-                            <td className="border border-black p-1 text-center">{getUnitLabel(item.uom || 'PCS')}</td>
-                            <td className="border border-black p-1 text-center font-mono font-black">{formatCleanQty(qty)}</td>
-                            <td className="border border-black p-1 text-center font-mono font-bold">{price > 0 ? formatCleanNumber(price) : ''}</td>
-                            <td className="border border-black p-1 text-center font-mono font-black">{lineTotal > 0 ? formatCleanNumber(lineTotal) : '0'}</td>
-                            <td className="border border-black p-1 text-[10px]">
-                              {idx === 0 ? <strong className="text-black">مورد / {data.supplierName || '—'}</strong> : (item.item_reference ? `قطعة ${item.item_reference}` : '')}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                      {/* Pad empty rows if fewer than 4 */}
-                      {Array.from({ length: Math.max(4 - items.length, 0) }, (_, i) => (
-                        <tr key={`po-pad-${i}`} className="h-6 border border-black">
-                          <td className="border border-black p-1 text-center font-mono text-slate-400">{items.length + i + 1}</td>
-                          <td className="border border-black p-1">&nbsp;</td>
-                          <td className="border border-black p-1">&nbsp;</td>
-                          <td className="border border-black p-1">&nbsp;</td>
-                          <td className="border border-black p-1">&nbsp;</td>
-                          <td className="border border-black p-1">&nbsp;</td>
-                          <td className="border border-black p-1 text-[10px]">{i === 0 && items.length === 0 ? `مورد / ${data.supplierName}` : ''}</td>
-                        </tr>
-                      ))}
-
-                      {/* Yellow Total Row */}
-                      <tr className="border-2 border-black" style={{ borderTop: '2px solid #000' }}>
-                        <td colSpan={4} className="border border-black p-1.5 text-center font-black text-sm tracking-wider bg-white">
-                          الأجـــــــــــــــــمالـــــــــي
-                        </td>
-                        <td
-                          colSpan={2}
-                          className="border-2 border-black p-1.5 text-center font-mono font-black text-base bg-[#FFFF00] bg-yellow-total text-black"
-                          style={{ backgroundColor: '#FFFF00', border: '2px solid #000' }}
-                        >
-                          {formatCleanNumber(data.grandTotal)}
-                        </td>
-                        <td className="border border-black p-1.5 bg-white"></td>
-                      </tr>
-                    </tbody>
-                  </table>
-
-                  {/* PO 3 Signatures */}
-                  <div className="flex items-center justify-between text-center px-6 pt-4 text-xs">
-                    <div className="w-1/3">
-                      <div className="font-black text-sm">المشتريات</div>
-                      <div className="border-b border-black w-24 mx-auto mt-2"></div>
-                      <div className="text-[10px] text-slate-600 mt-1">م. أحمد بدوي</div>
-                    </div>
-                    <div className="w-1/3">
-                      <div className="font-black text-sm">الحسابات</div>
-                      <div className="border-b border-black w-24 mx-auto mt-2"></div>
-                      <div className="text-[10px] text-slate-600 mt-1">الإدارة المالية</div>
-                    </div>
-                    <div className="w-1/3">
-                      <div className="font-black text-sm">يعتمد &amp;</div>
-                      <div className="border-b border-black w-24 mx-auto mt-2"></div>
-                      <div className="text-[10px] text-slate-600 mt-1">{data.executiveApproverName || 'المهندس محمد عبدالكريم'}</div>
-                    </div>
-                  </div>
-                </div>
-              </section>
+              <CombinedPrintTemplate
+                prNumber={data.prNumber}
+                manualPrNumber={data.manualPrNumber}
+                prDate={data.prDate}
+                departmentName={data.departmentName}
+                projectOrParcel={data.projectOrParcel}
+                region={data.region}
+                purpose={purpose}
+                requesterName={data.requesterName}
+                qualityReviewerName="الجودة"
+                procurementReviewerName="المشتريات"
+                executiveApproverName={data.executiveApproverName}
+                poNumber={data.poNumber}
+                manualPoNumber={data.manualPoNumber}
+                poDate={data.poDate}
+                supplierName={data.supplierName}
+                deliveryDate={data.deliveryDate}
+                paymentTerms={data.paymentTerms}
+                items={items.map((it) => ({
+                  id: it.id,
+                  item_description: it.item_description,
+                  item_reference: it.item_reference,
+                  region: it.region,
+                  quantity: it.quantity,
+                  uom: it.uom,
+                  unit_price: it.unit_price,
+                  specifications: it.specifications,
+                }))}
+                grandTotal={data.grandTotal}
+              />
             )}
 
             {/* ════════════════════════════════════════════════════════════
