@@ -25,7 +25,10 @@ export interface CombinedPrintData {
   requesterName?: string;
   departmentName?: string;
   reviewerName?: string;
+  qualityReviewerName?: string;
+  procurementReviewerName?: string;
   executiveApproverName?: string;
+  accountantName?: string;
   projectOrParcel?: string;
   region?: string;
   dateNeeded?: string;
@@ -228,10 +231,11 @@ export const CombinedPoPrPrintModal: React.FC<CombinedPoPrPrintModalProps> = ({
                 projectOrParcel={data.projectOrParcel}
                 region={data.region}
                 purpose={purpose}
-                requesterName={data.requesterName}
-                qualityReviewerName="الجودة"
-                procurementReviewerName="المشتريات"
-                executiveApproverName={data.executiveApproverName}
+                requesterName={data.requesterName || 'م. كامل'}
+                qualityReviewerName={data.qualityReviewerName || (data.reviewerName && data.reviewerName !== '—' ? data.reviewerName : 'م. أحمد جودة')}
+                procurementReviewerName={data.procurementReviewerName || 'م. أحمد بدوي'}
+                executiveApproverName={data.executiveApproverName && data.executiveApproverName !== '—' && !data.executiveApproverName.includes('المدير') ? data.executiveApproverName : 'م. كريم'}
+                accountantName={data.accountantName || 'أ. حسن'}
                 poNumber={data.poNumber}
                 manualPoNumber={data.manualPoNumber}
                 poDate={data.poDate}
