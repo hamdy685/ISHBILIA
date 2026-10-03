@@ -11,6 +11,7 @@ import { PurchasesReportView } from './PurchasesReportView';
 import { useAuth } from '../../context/AuthContext';
 import { formatCleanNumber, formatCleanQty } from '../../utils/numberFormat';
 import { printDocumentOnly } from '../../utils/print';
+import { ArabicDatePicker, ArabicMonthPicker, formatDateDMY } from '../../components/common/ArabicDatePicker';
 
 const PURCHASE_ORDER_STATUS_LABELS: Record<string, string> = {
   PO_DRAFT: 'مسودة أمر شراء',
@@ -165,7 +166,7 @@ export const UniversalReportsPage: React.FC = () => {
       return `التقرير الشهري - ${d.toLocaleDateString('ar-EG', { year: 'numeric', month: 'long' })}`;
     }
     if (reportType === 'custom') {
-      return `فترة مخصصة: من ${customFrom} إلى ${customTo}`;
+      return `فترة مخصصة: من ${formatDateDMY(customFrom)} إلى ${formatDateDMY(customTo)}`;
     }
     const periodMap: Record<string, string> = {
       '30': 'آخر 30 يوم',
@@ -881,12 +882,10 @@ export const UniversalReportsPage: React.FC = () => {
               {/* Daily Picker */}
               {reportType === 'daily' && (
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-slate-300">اختر اليوم:</span>
-                  <input
-                    type="date"
+                  <ArabicDatePicker
                     value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    className="rounded-xl border border-emerald-600/50 bg-slate-900 px-3 py-1.5 text-xs font-bold text-emerald-300 focus:border-emerald-400 focus:outline-none"
+                    onChange={setSelectedDate}
+                    label="اختر اليوم:"
                   />
                   <button
                     type="button"
@@ -901,12 +900,10 @@ export const UniversalReportsPage: React.FC = () => {
               {/* Monthly Picker */}
               {reportType === 'monthly' && (
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-slate-300">اختر الشهر:</span>
-                  <input
-                    type="month"
+                  <ArabicMonthPicker
                     value={selectedMonth}
-                    onChange={(e) => setSelectedMonth(e.target.value)}
-                    className="rounded-xl border border-cyan-600/50 bg-slate-900 px-3 py-1.5 text-xs font-bold text-cyan-300 focus:border-cyan-400 focus:outline-none"
+                    onChange={setSelectedMonth}
+                    label="اختر الشهر:"
                   />
                   <button
                     type="button"
@@ -921,19 +918,16 @@ export const UniversalReportsPage: React.FC = () => {
               {/* Custom Range Pickers */}
               {reportType === 'custom' && (
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-bold text-slate-300">من:</span>
-                  <input
-                    type="date"
+                  <ArabicDatePicker
                     value={customFrom}
-                    onChange={(e) => setCustomFrom(e.target.value)}
-                    className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-bold text-slate-200 focus:outline-none"
+                    onChange={setCustomFrom}
+                    label="من:"
                   />
-                  <span className="text-xs font-bold text-slate-300">إلى:</span>
-                  <input
-                    type="date"
+                  <span className="text-xs font-bold text-slate-400">إلى:</span>
+                  <ArabicDatePicker
                     value={customTo}
-                    onChange={(e) => setCustomTo(e.target.value)}
-                    className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-bold text-slate-200 focus:outline-none"
+                    onChange={setCustomTo}
+                    label=""
                   />
                 </div>
               )}

@@ -16,6 +16,12 @@ import { parseApiError } from '../../utils/apiError';
 import { getUnitLabel } from '../../utils/units';
 import { printDocumentOnly } from '../../utils/print';
 import { useDebounce } from '../../hooks/useDebounce';
+import {
+  ArabicDatePicker,
+  ArabicMonthPicker,
+  formatDateDMY,
+  clampDateToValidMonthDay,
+} from '../../components/common/ArabicDatePicker';
 
 export type ColumnFilters = Record<string, string>;
 
@@ -56,9 +62,9 @@ export const PurchasesReportView: React.FC = () => {
   // Period filter states
   const [filterType, setFilterType] = useState<'daily' | 'monthly' | 'custom'>('monthly');
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().toISOString().slice(0, 7));
-  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [fromDate, setFromDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [toDate, setToDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [selectedDate, setSelectedDate] = useState(() => clampDateToValidMonthDay(getTodayInputDate()));
+  const [fromDate, setFromDate] = useState(() => clampDateToValidMonthDay(getTodayInputDate()));
+  const [toDate, setToDate] = useState(() => clampDateToValidMonthDay(getTodayInputDate()));
   const [selectedDepartment, setSelectedDepartment] = useState<string>('ALL');
   const [accountingFilter, setAccountingFilter] = useState<'ALL' | 'VERIFIED_ONLY' | 'PENDING'>('ALL');
 
@@ -158,11 +164,11 @@ export const PurchasesReportView: React.FC = () => {
 
     if (filterType === 'monthly') {
       const [y, m] = selectedMonth.split('-');
-      timePeriod = `لشهر ${m}-${y}`;
+      timePeriod = `لشهر ${m}/${y}`;
     } else if (filterType === 'daily') {
-      timePeriod = `ليوم ${selectedDate}`;
+      timePeriod = `ليوم ${formatDateDMY(selectedDate)}`;
     } else {
-      timePeriod = `للفترة من ${fromDate} إلى ${toDate}`;
+      timePeriod = `للفترة من ${formatDateDMY(fromDate)} إلى ${formatDateDMY(toDate)}`;
     }
 
     return `تقرير مشتريات ${deptPrefix} ${timePeriod}`;
@@ -906,43 +912,33 @@ export const PurchasesReportView: React.FC = () => {
 
               {/* Date Input */}
               {filterType === 'monthly' && (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] font-bold text-slate-400">الشهر:</span>
-                  <input
-                    type="month"
-                    value={selectedMonth}
-                    onChange={(e) => setSelectedMonth(e.target.value)}
-                    className="rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1 text-xs font-mono font-bold text-slate-200 focus:border-emerald-400 focus:outline-none"
-                  />
-                </div>
+                <ArabicMonthPicker
+                  value={selectedMonth}
+                  onChange={setSelectedMonth}
+                  label="الشهر:"
+                />
               )}
 
               {filterType === 'daily' && (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] font-bold text-slate-400">اليوم:</span>
-                  <input
-                    type="date"
-                    value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    className="rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1 text-xs font-mono font-bold text-slate-200 focus:border-emerald-400 focus:outline-none"
-                  />
-                </div>
+                <ArabicDatePicker
+                  value={selectedDate}
+                  onChange={setSelectedDate}
+                  label="اليوم:"
+                />
               )}
 
               {filterType === 'custom' && (
                 <div className="flex items-center gap-2">
-                  <input
-                    type="date"
+                  <ArabicDatePicker
                     value={fromDate}
-                    onChange={(e) => setFromDate(e.target.value)}
-                    className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-xs font-mono text-slate-200 focus:border-emerald-400 focus:outline-none"
+                    onChange={setFromDate}
+                    label="من:"
                   />
-                  <span className="text-slate-500">إلى</span>
-                  <input
-                    type="date"
+                  <span className="text-slate-500 font-bold text-xs select-none">إلى</span>
+                  <ArabicDatePicker
                     value={toDate}
-                    onChange={(e) => setToDate(e.target.value)}
-                    className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-xs font-mono text-slate-200 focus:border-emerald-400 focus:outline-none"
+                    onChange={setToDate}
+                    label="إلى:"
                   />
                 </div>
               )}
