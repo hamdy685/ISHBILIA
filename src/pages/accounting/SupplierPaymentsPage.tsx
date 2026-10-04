@@ -27,7 +27,7 @@ import { getUnitLabel } from '../../utils/units';
 import LandAllocationEditor, { LandAllocationDraft } from '../../components/accounting/LandAllocationEditor';
 import { SupplementItemBadge } from '../../components/common/SupplementItemBadge';
 import { ThreeWayMatchPrintModal } from '../../components/accounting/ThreeWayMatchPrintModal';
-import { formatCleanNumber } from '../../utils/numberFormat';
+import { formatCleanNumber, formatCleanQty } from '../../utils/numberFormat';
 import { printDocumentOnly } from '../../utils/print';
 
 const today = getTodayInputDate;
@@ -35,10 +35,21 @@ const cleanDate = (d?: string | null) => d ? String(d).slice(0, 10) : '—';
 const money = (value: string | number | null | undefined) => `${formatCleanNumber(value)} ج.م`;
 
 
-const receiptValue = (receipt: ApprovedReceipt) => (receipt.items || []).reduce((sum, item) => {
-  const poItem = item.purchase_order_item;
-  return sum + Number(item.received_quantity || 0) * Number(poItem?.unit_price || 0);
-}, 0);
+const receiptValue = (receipt: ApprovedReceipt) => {
+  const po = receipt.purchase_order;
+  if (po && (po.finalized_at || (po.status && !['PO_DRAFT', 'REJECTED', 'CANCELLED'].includes(po.status) && Number(po.grand_total) > 0))) {
+    return Number(po.grand_total);
+  }
+  return (receipt.items || []).reduce((sum, item) => {
+    const poItem = item.purchase_order_item;
+    const finalQty = poItem?.quantity !== undefined ? Number(poItem.quantity) : Number(item.received_quantity || 0);
+    const unitPrice = Number(poItem?.unit_price || 0);
+    const lineTotal = poItem?.line_total !== undefined && Number(poItem.line_total) > 0
+      ? Number(poItem.line_total)
+      : Math.round(finalQty * unitPrice * 100) / 100;
+    return sum + lineTotal;
+  }, 0);
+};
 
 export const SupplierPaymentsPage: React.FC = () => {
   const { hasRole } = useAuth();
@@ -549,6 +560,12 @@ export const SupplierPaymentsPage: React.FC = () => {
                   <TableBody>
                     {(documentPreview.items || []).map((item) => {
                       const poItem = item.purchase_order_item;
+                      const finalQty = poItem?.quantity !== undefined ? Number(poItem.quantity) : Number(item.ordered_quantity || 0);
+                      const unitPrice = Number(poItem?.unit_price || 0);
+                      const finalLineTotal = poItem?.line_total !== undefined && Number(poItem.line_total) > 0
+                        ? Number(poItem.line_total)
+                        : Math.round(finalQty * unitPrice * 100) / 100;
+
                       return (
                         <TableRow key={item.id}>
                           <TableCell className="font-bold text-slate-100">
@@ -563,11 +580,11 @@ export const SupplierPaymentsPage: React.FC = () => {
                           <TableCell className="font-mono font-bold text-cyan-300">{poItem?.item_reference || '—'}</TableCell>
                           <TableCell className="text-slate-200">{poItem?.region || '—'}</TableCell>
                           <TableCell className="font-mono font-bold text-slate-200">{poItem?.pr_item?.quantity ?? '—'}</TableCell>
-                          <TableCell className="font-mono font-bold text-cyan-200">{item.ordered_quantity}</TableCell>
-                          <TableCell className="font-mono font-black text-emerald-300">{item.received_quantity}</TableCell>
+                          <TableCell className="font-mono font-bold text-cyan-200">{formatCleanQty(finalQty)}</TableCell>
+                          <TableCell className="font-mono font-black text-emerald-300">{formatCleanQty(item.received_quantity)}</TableCell>
                           <TableCell className="font-bold text-slate-200">{getUnitLabel(poItem?.uom)}</TableCell>
-                          <TableCell className="font-mono font-bold text-slate-200">{money(poItem?.unit_price)}</TableCell>
-                          <TableCell className="font-mono font-black text-emerald-300">{money(Number(item.received_quantity || 0) * Number(poItem?.unit_price || 0))}</TableCell>
+                          <TableCell className="font-mono font-bold text-slate-200">{money(unitPrice)}</TableCell>
+                          <TableCell className="font-mono font-black text-emerald-300">{money(finalLineTotal)}</TableCell>
                           <TableCell className="max-w-xs whitespace-normal text-xs text-slate-300">
                             <div>مواصفات: {poItem?.specifications || poItem?.pr_item?.specifications || '—'}</div>
                             <div>ملاحظات: {item.notes || poItem?.pr_item?.notes || '—'}</div>
@@ -581,7 +598,11 @@ export const SupplierPaymentsPage: React.FC = () => {
               <div className="space-y-3 md:hidden">
                 {(documentPreview.items || []).map((item, idx) => {
                   const poItem = item.purchase_order_item;
-                  const lineTotal = Number(item.received_quantity || 0) * Number(poItem?.unit_price || 0);
+                  const finalQty = poItem?.quantity !== undefined ? Number(poItem.quantity) : Number(item.ordered_quantity || 0);
+                  const unitPrice = Number(poItem?.unit_price || 0);
+                  const lineTotal = poItem?.line_total !== undefined && Number(poItem.line_total) > 0
+                    ? Number(poItem.line_total)
+                    : Math.round(finalQty * unitPrice * 100) / 100;
                   return (
                     <article key={`mobile-preview-item-${item.id}`} className="rounded-xl border border-slate-800 bg-slate-900/90 p-3.5 space-y-3">
                       <div className="flex items-start justify-between gap-2 border-b border-slate-800 pb-2">
@@ -603,11 +624,11 @@ export const SupplierPaymentsPage: React.FC = () => {
                       </div>
                       <div className="grid grid-cols-3 gap-1.5 rounded-lg bg-slate-950/80 p-2.5 text-center text-xs border border-slate-800/60">
                         <div><span className="text-[10px] text-slate-400 font-bold block">الكمية المطلوبة (PR)</span><strong className="font-mono text-slate-100 font-bold">{poItem?.pr_item?.quantity ?? '—'}</strong></div>
-                        <div><span className="text-[10px] text-slate-400 font-bold block">كمية أمر الشراء (PO)</span><strong className="font-mono text-cyan-300 font-bold">{item.ordered_quantity}</strong></div>
-                        <div><span className="text-[10px] text-slate-400 font-bold block">الكمية المستلمة</span><strong className="font-mono text-emerald-400 font-black">{item.received_quantity}</strong></div>
+                        <div><span className="text-[10px] text-slate-400 font-bold block">كمية أمر الشراء (PO)</span><strong className="font-mono text-cyan-300 font-bold">{formatCleanQty(finalQty)}</strong></div>
+                        <div><span className="text-[10px] text-slate-400 font-bold block">الكمية المستلمة</span><strong className="font-mono text-emerald-400 font-black">{formatCleanQty(item.received_quantity)}</strong></div>
                       </div>
                       <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-800/60">
-                        <div><span className="text-slate-400 font-bold text-[10px]">سعر الوحدة: </span><span className="font-mono text-slate-200 font-bold">{money(poItem?.unit_price)}</span></div>
+                        <div><span className="text-slate-400 font-bold text-[10px]">سعر الوحدة: </span><span className="font-mono text-slate-200 font-bold">{money(unitPrice)}</span></div>
                         <div><span className="text-slate-400 font-bold text-[10px]">الإجمالي: </span><strong className="font-mono text-emerald-400 font-black">{money(lineTotal)}</strong></div>
                       </div>
                       {(poItem?.specifications || item.notes) && (

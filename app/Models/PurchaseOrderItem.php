@@ -41,6 +41,34 @@ class PurchaseOrderItem extends Model
         ];
     }
 
+    protected static function booted(): void
+    {
+        static::saving(function (PurchaseOrderItem $item): void {
+            if ($item->quantity !== null && $item->unit_price !== null) {
+                $item->line_total = round((float) $item->quantity * (float) $item->unit_price, 2);
+            }
+        });
+    }
+
+    public function getFinalQuantityAttribute(): float
+    {
+        return (float) ($this->quantity ?? 0);
+    }
+
+    public function getFinalUnitPriceAttribute(): float
+    {
+        return (float) ($this->unit_price ?? 0);
+    }
+
+    public function getFinalLineTotalAttribute(): float
+    {
+        if ($this->line_total !== null && (float) $this->line_total > 0) {
+            return (float) $this->line_total;
+        }
+
+        return round($this->final_quantity * $this->final_unit_price, 2);
+    }
+
     public function purchaseOrder(): BelongsTo
     {
         return $this->belongsTo(PurchaseOrder::class, 'purchase_order_id');

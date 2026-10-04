@@ -33,7 +33,10 @@ class PurchaseOrderItemResource extends JsonResource
                 return $this->pr_item_id && $this->relationLoaded('prItem') && $this->prItem ? number_format((float) $this->prItem->quantity, 2, '.', '') : null;
             }),
             'unit_price'       => number_format((float) $this->unit_price,  2, '.', ''),
-            'line_total'       => number_format((float) $this->line_total,  2, '.', ''),
+            'line_total'       => number_format((float) ($this->line_total > 0 ? $this->line_total : round((float)$this->quantity * (float)$this->unit_price, 2)),  2, '.', ''),
+            'final_quantity'   => number_format((float) $this->quantity, 2, '.', ''),
+            'final_unit_price' => number_format((float) $this->unit_price, 2, '.', ''),
+            'final_line_total' => number_format((float) ($this->line_total > 0 ? $this->line_total : round((float)$this->quantity * (float)$this->unit_price, 2)), 2, '.', ''),
             'specifications'   => $this->specifications,
             'is_supplementary' => (bool) $this->is_supplementary,
             'supplement_batch' => $this->supplement_batch ? (int) $this->supplement_batch : null,

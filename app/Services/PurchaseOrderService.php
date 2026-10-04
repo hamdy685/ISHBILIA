@@ -655,6 +655,34 @@ class PurchaseOrderService
                 'finalization_notes'   => $notes,
             ]);
 
+            // Synchronize approved receipt items so that receipt matches the finalized Actual PO definitively
+            $approvedReceipts = $lockedPo->receipts()->where('status', 'APPROVED')->get();
+            if ($approvedReceipts->isNotEmpty()) {
+                $poItems = $lockedPo->items()->get();
+                $poItemIds = $poItems->pluck('id')->all();
+
+                foreach ($approvedReceipts as $receipt) {
+                    $receipt->items()->whereNotIn('purchase_order_item_id', $poItemIds)->delete();
+
+                    foreach ($poItems as $poItem) {
+                        $receiptItem = $receipt->items()->where('purchase_order_item_id', $poItem->id)->first();
+                        if ($receiptItem) {
+                            $receiptItem->update([
+                                'ordered_quantity' => $poItem->quantity,
+                                'received_quantity' => $poItem->quantity,
+                            ]);
+                        } else {
+                            $receipt->items()->create([
+                                'purchase_order_item_id' => $poItem->id,
+                                'ordered_quantity' => $poItem->quantity,
+                                'received_quantity' => $poItem->quantity,
+                                'notes' => 'تم اعتماده في أمر الشراء الفعلي',
+                            ]);
+                        }
+                    }
+                }
+            }
+
             ApprovalHistory::create([
                 'target_type' => PurchaseOrder::class,
                 'target_id'   => $lockedPo->id,

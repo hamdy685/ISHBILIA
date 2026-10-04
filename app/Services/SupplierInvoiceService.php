@@ -709,10 +709,24 @@ class SupplierInvoiceService
         );
     }
 
-    private function calculateReceiptValue(PurchaseReceipt $receipt): float
+    public function calculateReceiptValue(PurchaseReceipt $receipt): float
     {
+        $po = $receipt->purchaseOrder;
+        if ($po) {
+            // When an Actual PO is issued/finalized, its grand total is the authoritative Single Source of Truth
+            if ($po->isActualPo() || ((float) $po->grand_total > 0 && $po->status !== 'PO_DRAFT')) {
+                return (float) $po->grand_total;
+            }
+        }
+
         return round($receipt->items->sum(function ($receiptItem): float {
-            return (float) $receiptItem->received_quantity * (float) ($receiptItem->purchaseOrderItem?->unit_price ?? 0);
+            $poItem = $receiptItem->purchaseOrderItem;
+            if ($poItem && (float) $poItem->line_total > 0) {
+                return (float) $poItem->line_total;
+            }
+            $qty = (float) ($poItem?->quantity ?? $receiptItem->received_quantity);
+            $price = (float) ($poItem?->unit_price ?? 0);
+            return round($qty * $price, 2);
         }), 2);
     }
 

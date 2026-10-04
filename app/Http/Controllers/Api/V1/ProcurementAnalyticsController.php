@@ -402,8 +402,8 @@ class ProcurementAnalyticsController extends Controller
                         'quantity' => (float) $item->quantity,
                         'uom' => $item->uom,
                         'unit_price' => number_format((float) ($item->unit_price ?? 0), 2, '.', ''),
-                        'line_total' => number_format((float) ($item->line_total ?? $item->grand_total ?? 0), 2, '.', ''),
-                        'grand_total' => number_format((float) ($item->line_total ?? $item->grand_total ?? 0), 2, '.', ''),
+                        'line_total' => number_format((float) ($item->line_total > 0 ? $item->line_total : round((float)$item->quantity * (float)$item->unit_price, 2)), 2, '.', ''),
+                        'grand_total' => number_format((float) ($item->line_total > 0 ? $item->line_total : round((float)$item->quantity * (float)$item->unit_price, 2)), 2, '.', ''),
                     ])->values(),
                 ];
             })->values(),
