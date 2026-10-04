@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { isChunkLoadError } from '../utils/lazyImportWithRetry';
 
 export interface GlobalErrorFallbackProps {
   error?: Error | null;
@@ -10,6 +11,7 @@ export const GlobalErrorFallback: React.FC<GlobalErrorFallbackProps> = ({
   resetErrorBoundary,
 }) => {
   const [showDetails, setShowDetails] = useState(false);
+  const isChunkError = isChunkLoadError(error);
 
   const handleReload = () => {
     if (resetErrorBoundary) {
@@ -43,21 +45,26 @@ export const GlobalErrorFallback: React.FC<GlobalErrorFallbackProps> = ({
         <div className="relative mx-auto w-20 h-20 flex items-center justify-center">
           <div className="absolute inset-0 rounded-2xl bg-gradient-to-tr from-amber-500/20 to-gold-500/30 blur-xl animate-pulse" />
           <div className="relative w-full h-full rounded-2xl border border-gold-400/40 bg-gradient-to-b from-slate-800/90 to-slate-950 flex items-center justify-center text-3xl shadow-inner shadow-gold-500/10">
-            🛡️
+            {isChunkError ? '🚀' : '🛡️'}
           </div>
         </div>
 
         {/* Header Titles */}
         <div className="space-y-2">
-          <span className="inline-block px-3 py-1 rounded-full text-[11px] font-black tracking-widest text-[#d4a84e] bg-[#2a2111]/80 border border-[#c7a45b]/30">
-            جدار حماية النظام • PRE-PRODUCTION GUARD
+          <span className={`inline-block px-3 py-1 rounded-full text-[11px] font-black tracking-widest ${
+            isChunkError
+              ? 'text-cyan-300 bg-cyan-950/80 border border-cyan-500/30'
+              : 'text-[#d4a84e] bg-[#2a2111]/80 border border-[#c7a45b]/30'
+          }`}>
+            {isChunkError ? 'تحديث النظام • SYSTEM UPDATE' : 'جدار حماية النظام • PRE-PRODUCTION GUARD'}
           </span>
           <h1 className="text-xl sm:text-2xl font-black text-slate-100 tracking-tight">
-            واجهة النظام واجهت حالة غير متوقعة
+            {isChunkError ? 'تم إطلاق تحديث جديد في النظام' : 'واجهة النظام واجهت حالة غير متوقعة'}
           </h1>
           <p className="text-xs sm:text-sm text-slate-300/80 leading-relaxed max-w-md mx-auto">
-            تم اعتراض الخطأ بنجاح لحماية الجلسة والبيانات التشغيلية من أي تلف.
-            يمكنك إعادة تحميل الصفحة لاستئناف العمل فوراً.
+            {isChunkError
+              ? 'تم نشر إصدار محدّث من ملفات النظام على السيرفر. اضغط على الزر أدناه لتحديث الصفحة ومزامنة أحدث ملفات التطبيق فوراً.'
+              : 'تم اعتراض الخطأ بنجاح لحماية الجلسة والبيانات التشغيلية من أي تلف. يمكنك إعادة تحميل الصفحة لاستئناف العمل فوراً.'}
           </p>
         </div>
 
