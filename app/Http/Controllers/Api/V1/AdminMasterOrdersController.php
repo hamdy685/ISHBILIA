@@ -915,4 +915,279 @@ class AdminMasterOrdersController extends Controller
             'data' => $refreshedPo,
         ]);
     }
+
+    /**
+     * DELETE /api/v1/admin/orders/{id}/force-delete
+     * Sovereign Hard Delete: Completely purges an order and/or purchase request along with its
+     * entire document cycle (items, receipts, invoices, attachments, approvals) with strict audit trail.
+     */
+    public function forceDeleteOrder(Request $request, int $id): JsonResponse
+    {
+        $admin = Auth::user();
+        $reason = trim((string) $request->input('reason', ''));
+        if (empty($reason)) {
+            $reason = 'حذف نهائي سيادي مباشر بواسطة مدير النظام';
+        }
+
+        $entityType = strtolower((string) $request->input('entity_type', 'auto'));
+
+        $po = null;
+        $pr = null;
+
+        if ($entityType === 'request') {
+            $pr = PurchaseRequest::withTrashed()->find($id);
+            if (! $pr) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "طلب الشراء رقم #{$id} غير موجود في النظام.",
+                ], 404);
+            }
+        } elseif ($entityType === 'order') {
+            $po = PurchaseOrder::withTrashed()->find($id);
+            if (! $po) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "أمر الشراء رقم #{$id} غير موجود في النظام.",
+                ], 404);
+            }
+            if ($po->purchase_request_id) {
+                $pr = PurchaseRequest::withTrashed()->find($po->purchase_request_id);
+            }
+        } else {
+            // Auto detection: check PO first, then PR
+            $po = PurchaseOrder::withTrashed()->find($id);
+            if ($po) {
+                if ($po->purchase_request_id) {
+                    $pr = PurchaseRequest::withTrashed()->find($po->purchase_request_id);
+                }
+            } else {
+                $pr = PurchaseRequest::withTrashed()->find($id);
+                if (! $pr) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "المعاملة رقم #{$id} غير موجودة (لا يوجد أمر شراء أو طلب شراء بهذا الرقم).",
+                    ], 404);
+                }
+            }
+        }
+
+        // Collect all related PO IDs and PR IDs
+        $poIds = [];
+        $prIds = [];
+
+        if ($po) {
+            $poIds[] = $po->id;
+        }
+
+        if ($pr) {
+            $prIds[] = $pr->id;
+            // Also find any other POs belonging to this PR
+            $linkedPoIds = PurchaseOrder::withTrashed()
+                ->where('purchase_request_id', $pr->id)
+                ->pluck('id')
+                ->toArray();
+            $poIds = array_merge($poIds, $linkedPoIds);
+        }
+
+        $poIds = array_values(array_unique(array_filter($poIds)));
+        $prIds = array_values(array_unique(array_filter($prIds)));
+
+        // Capture labels and metadata before deletion
+        $poNumbers = ! empty($poIds)
+            ? PurchaseOrder::withTrashed()->whereIn('id', $poIds)->pluck('po_number')->toArray()
+            : [];
+        $prNumbers = ! empty($prIds)
+            ? PurchaseRequest::withTrashed()->whereIn('id', $prIds)->pluck('request_number')->toArray()
+            : [];
+
+        $labels = [];
+        if (! empty($poNumbers)) {
+            $labels[] = 'أمر: ' . implode(', ', $poNumbers);
+        }
+        if (! empty($prNumbers)) {
+            $labels[] = 'طلب: ' . implode(', ', $prNumbers);
+        }
+        $targetLabel = ! empty($labels) ? implode(' | ', $labels) : "معاملة #{$id}";
+
+        try {
+            DB::transaction(function () use ($poIds, $prIds, $admin, $reason, $targetLabel, $poNumbers, $prNumbers, $id) {
+                try {
+                    Schema::disableForeignKeyConstraints();
+                } catch (Throwable) {}
+
+                try {
+                    // 1. Invoices & allocations
+                    $invoiceIds = [];
+                    if (! empty($poIds) && Schema::hasTable('supplier_invoices')) {
+                        $invoiceIds = DB::table('supplier_invoices')->whereIn('purchase_order_id', $poIds)->pluck('id')->toArray();
+                    }
+
+                    // Also receipts linked to POs or PRs
+                    $receiptIds = [];
+                    if (Schema::hasTable('purchase_receipts')) {
+                        $receiptQuery = DB::table('purchase_receipts');
+                        if (! empty($poIds) && ! empty($prIds)) {
+                            $receiptQuery->where(function ($q) use ($poIds, $prIds) {
+                                $q->whereIn('purchase_order_id', $poIds)
+                                    ->orWhereIn('purchase_request_id', $prIds);
+                            });
+                        } elseif (! empty($poIds)) {
+                            $receiptQuery->whereIn('purchase_order_id', $poIds);
+                        } elseif (! empty($prIds)) {
+                            $receiptQuery->whereIn('purchase_request_id', $prIds);
+                        } else {
+                            $receiptQuery->whereRaw('1 = 0');
+                        }
+                        $receiptIds = $receiptQuery->pluck('id')->toArray();
+
+                        if (! empty($receiptIds) && Schema::hasTable('supplier_invoices')) {
+                            $invFromRcpt = DB::table('supplier_invoices')
+                                ->whereIn('purchase_receipt_id', $receiptIds)
+                                ->pluck('id')
+                                ->toArray();
+                            $invoiceIds = array_unique(array_merge($invoiceIds, $invFromRcpt));
+                        }
+                    }
+
+                    if (! empty($invoiceIds)) {
+                        if (Schema::hasTable('supplier_payment_allocations')) {
+                            DB::table('supplier_payment_allocations')->whereIn('supplier_invoice_id', $invoiceIds)->delete();
+                        }
+                        if (Schema::hasTable('supplier_invoice_land_allocations')) {
+                            DB::table('supplier_invoice_land_allocations')->whereIn('supplier_invoice_id', $invoiceIds)->delete();
+                        }
+                        if (Schema::hasTable('attachments')) {
+                            DB::table('attachments')
+                                ->where('attachable_type', \App\Models\SupplierInvoice::class)
+                                ->whereIn('attachable_id', $invoiceIds)
+                                ->delete();
+                        }
+                        DB::table('supplier_invoices')->whereIn('id', $invoiceIds)->delete();
+                    }
+
+                    // 2. Receipts
+                    if (! empty($receiptIds) && Schema::hasTable('purchase_receipts')) {
+                        if (Schema::hasTable('purchase_receipt_items')) {
+                            DB::table('purchase_receipt_items')->whereIn('purchase_receipt_id', $receiptIds)->delete();
+                        }
+                        if (Schema::hasTable('attachments')) {
+                            DB::table('attachments')
+                                ->where('attachable_type', \App\Models\PurchaseReceipt::class)
+                                ->whereIn('attachable_id', $receiptIds)
+                                ->delete();
+                        }
+                        if (Schema::hasTable('notifications')) {
+                            DB::table('notifications')->whereIn('purchase_receipt_id', $receiptIds)->update(['purchase_receipt_id' => null]);
+                        }
+                        DB::table('purchase_receipts')->whereIn('id', $receiptIds)->delete();
+                    }
+
+                    // 3. Purchase Orders
+                    if (! empty($poIds) && Schema::hasTable('purchase_orders')) {
+                        if (Schema::hasTable('purchase_order_items')) {
+                            DB::table('purchase_order_items')->whereIn('purchase_order_id', $poIds)->delete();
+                        }
+                        if (Schema::hasTable('purchase_request_supplements')) {
+                            DB::table('purchase_request_supplements')->whereIn('purchase_order_id', $poIds)->delete();
+                        }
+                        if (Schema::hasTable('approval_histories')) {
+                            DB::table('approval_histories')
+                                ->where('target_type', \App\Models\PurchaseOrder::class)
+                                ->whereIn('target_id', $poIds)
+                                ->delete();
+                        }
+                        if (Schema::hasTable('attachments')) {
+                            DB::table('attachments')
+                                ->where('attachable_type', \App\Models\PurchaseOrder::class)
+                                ->whereIn('attachable_id', $poIds)
+                                ->delete();
+                        }
+                        if (Schema::hasTable('notifications')) {
+                            DB::table('notifications')->whereIn('purchase_order_id', $poIds)->update(['purchase_order_id' => null]);
+                        }
+                        DB::table('purchase_orders')->whereIn('id', $poIds)->delete();
+                    }
+
+                    // 4. Purchase Requests
+                    if (! empty($prIds) && Schema::hasTable('purchase_requests')) {
+                        if (Schema::hasTable('purchase_request_items')) {
+                            DB::table('purchase_request_items')->whereIn('purchase_request_id', $prIds)->delete();
+                        }
+                        if (Schema::hasTable('purchase_request_supplements')) {
+                            DB::table('purchase_request_supplements')->whereIn('purchase_request_id', $prIds)->delete();
+                        }
+                        if (Schema::hasTable('purchase_request_quotes')) {
+                            DB::table('purchase_request_quotes')->whereIn('purchase_request_id', $prIds)->delete();
+                        }
+                        if (Schema::hasTable('approval_histories')) {
+                            DB::table('approval_histories')
+                                ->where('target_type', \App\Models\PurchaseRequest::class)
+                                ->whereIn('target_id', $prIds)
+                                ->delete();
+                        }
+                        if (Schema::hasTable('attachments')) {
+                            DB::table('attachments')
+                                ->where('attachable_type', \App\Models\PurchaseRequest::class)
+                                ->whereIn('attachable_id', $prIds)
+                                ->delete();
+                        }
+                        DB::table('purchase_requests')->whereIn('id', $prIds)->delete();
+                    }
+
+                    // 5. System Audit Trail Logging
+                    app(SystemEventService::class)->record([
+                        'actor_user_id' => $admin->id,
+                        'event_type' => 'admin.force_delete',
+                        'action' => 'ADMIN_FORCE_DELETE',
+                        'entity_type' => ! empty($poIds) ? PurchaseOrder::class : PurchaseRequest::class,
+                        'entity_id' => ! empty($poIds) ? $poIds[0] : ($prIds[0] ?? $id),
+                        'entity_label' => "حذف نهائي للطلب والمعاملة ({$targetLabel})",
+                        'description' => "قام مدير النظام ({$admin->name}) بحذف نهائي وسيادي للمعاملة ({$targetLabel}) وبنودها ودورتها المستندية بالكامل من قاعدة البيانات. سبب التدخل: {$reason}",
+                        'old_values' => [
+                            'po_numbers' => $poNumbers,
+                            'pr_numbers' => $prNumbers,
+                            'po_ids' => $poIds,
+                            'pr_ids' => $prIds,
+                            'receipt_ids' => $receiptIds,
+                            'invoice_ids' => $invoiceIds,
+                        ],
+                        'metadata' => [
+                            'admin_id' => $admin->id,
+                            'admin_name' => $admin->name,
+                            'target_label' => $targetLabel,
+                            'reason' => $reason,
+                            'ip' => request()->ip(),
+                            'deleted_at' => now()->toIso8601String(),
+                        ],
+                    ]);
+                } finally {
+                    try {
+                        Schema::enableForeignKeyConstraints();
+                    } catch (Throwable) {}
+                }
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => "تم الحذف النهائي للطلب والمعاملة ({$targetLabel}) وكافة متعلقاتها ودورتها المستندية بنجاح.",
+                'deleted' => [
+                    'target_label' => $targetLabel,
+                    'po_numbers' => $poNumbers,
+                    'pr_numbers' => $prNumbers,
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('AdminMasterOrdersController@forceDeleteOrder exception: ' . $e->getMessage(), [
+                'id' => $id,
+                'error' => $e->getMessage(),
+                'trace' => substr($e->getTraceAsString(), 0, 1000),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'تعذر إتمام عملية الحذف النهائي: ' . $e->getMessage(),
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
 }

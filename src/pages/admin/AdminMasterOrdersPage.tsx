@@ -12,6 +12,7 @@ import {
   MasterOrdersStats,
 } from '../../api/admin/masterOrders';
 import { AdminForceEditModal } from '../../components/admin/AdminForceEditModal';
+import { AdminForceDeleteModal } from '../../components/admin/AdminForceDeleteModal';
 
 export const AdminMasterOrdersPage: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
@@ -35,6 +36,11 @@ export const AdminMasterOrdersPage: React.FC = () => {
   // Selected Order for Force Edit Modal
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
   const [isForceModalOpen, setIsForceModalOpen] = useState<boolean>(false);
+
+  // Selected Order for Force Delete Modal
+  const [orderToDelete, setOrderToDelete] = useState<MasterOrderRow | null>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
+  const [deleteSuccessAlert, setDeleteSuccessAlert] = useState<string | null>(null);
 
   // Expanded items row state
   const [expandedRowKey, setExpandedRowKey] = useState<string | null>(null);
@@ -88,6 +94,20 @@ export const AdminMasterOrdersPage: React.FC = () => {
   const handleOpenForceEdit = (orderId: number) => {
     setSelectedOrderId(orderId);
     setIsForceModalOpen(true);
+  };
+
+  const handleOpenForceDelete = (order: MasterOrderRow) => {
+    setOrderToDelete(order);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleDeleteSuccess = (deletedKey: string, message: string) => {
+    // Optimistic removal: remove immediately from state
+    setOrders((prev) => prev.filter((o) => o.unique_key !== deletedKey));
+    setDeleteSuccessAlert(message);
+    setTimeout(() => setDeleteSuccessAlert(null), 7000);
+    // Refresh silently in background to update counts & stats
+    fetchOrders(true);
   };
 
   const handleResetFilters = () => {
@@ -212,6 +232,22 @@ export const AdminMasterOrdersPage: React.FC = () => {
           </Link>
         </div>
       </div>
+
+      {deleteSuccessAlert && (
+        <div className="rounded-xl border border-emerald-500/60 bg-emerald-950/60 p-4 text-emerald-200 text-xs sm:text-sm font-bold flex items-center justify-between shadow-lg shadow-emerald-950/40 animate-fade-in">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">✅</span>
+            <span>{deleteSuccessAlert}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setDeleteSuccessAlert(null)}
+            className="text-emerald-400 hover:text-emerald-100 font-bold px-2 py-1 text-sm"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {error && <ErrorMessage error={error} />}
 
@@ -561,28 +597,41 @@ export const AdminMasterOrdersPage: React.FC = () => {
                             </button>
                           </td>
 
-                          {/* Force Edit Sovereign Action */}
+                          {/* Force Edit & Sovereign Delete Actions */}
                           <td className="p-3 text-center">
-                            {order.order_id ? (
-                              <Button
-                                variant="warning"
-                                size="sm"
-                                onClick={() => handleOpenForceEdit(order.order_id!)}
-                                className="text-xs h-8 px-3 font-black shadow-md shadow-amber-950/40 border-amber-400/60 text-slate-950"
-                              >
-                                👑 تعديل سيادي
-                              </Button>
-                            ) : (
-                              <Link to={`/requests/${order.request_id}`}>
+                            <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                              {order.order_id ? (
                                 <Button
-                                  variant="secondary"
+                                  variant="warning"
                                   size="sm"
-                                  className="text-xs h-8 px-3 border-indigo-500/40 text-indigo-300"
+                                  onClick={() => handleOpenForceEdit(order.order_id!)}
+                                  className="text-xs h-8 px-2.5 font-black shadow-md shadow-amber-950/40 border-amber-400/60 text-slate-950"
                                 >
-                                  عرض الطلب
+                                  👑 تعديل سيادي
                                 </Button>
-                              </Link>
-                            )}
+                              ) : (
+                                <Link to={`/requests/${order.request_id}`}>
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    className="text-xs h-8 px-2.5 border-indigo-500/40 text-indigo-300"
+                                  >
+                                    عرض الطلب
+                                  </Button>
+                                </Link>
+                              )}
+
+                              <Button
+                                variant="danger"
+                                size="sm"
+                                onClick={() => handleOpenForceDelete(order)}
+                                className="text-xs h-8 px-2.5 font-black bg-rose-600/90 hover:bg-rose-500 text-white border-rose-500/60 shadow-md shadow-rose-950/40 flex items-center gap-1"
+                                title="حذف نهائي شامل للطلب وكافة دورته المستندية"
+                              >
+                                <span>🗑️</span>
+                                <span>حذف نهائي</span>
+                              </Button>
+                            </div>
                           </td>
                         </tr>
 
@@ -677,20 +726,32 @@ export const AdminMasterOrdersPage: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between">
+                  <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between gap-2 flex-wrap">
                     <span className="text-[11px] text-slate-400 font-mono">
                       {order.created_at ? order.created_at.slice(0, 10) : '—'}
                     </span>
-                    {order.order_id && (
+                    <div className="flex items-center gap-1.5">
+                      {order.order_id && (
+                        <Button
+                          variant="warning"
+                          size="sm"
+                          onClick={() => handleOpenForceEdit(order.order_id!)}
+                          className="text-xs h-8 px-3 font-black shadow-md border-amber-400/60 text-slate-950"
+                        >
+                          👑 تعديل سيادي
+                        </Button>
+                      )}
                       <Button
-                        variant="warning"
+                        variant="danger"
                         size="sm"
-                        onClick={() => handleOpenForceEdit(order.order_id!)}
-                        className="text-xs h-8 px-4 font-black shadow-md border-amber-400/60 text-slate-950"
+                        onClick={() => handleOpenForceDelete(order)}
+                        className="text-xs h-8 px-2.5 font-black bg-rose-600/90 hover:bg-rose-500 text-white border-rose-500/60 shadow-md shadow-rose-950/40 flex items-center gap-1"
+                        title="حذف نهائي شامل للطلب"
                       >
-                        👑 تعديل سيادي
+                        <span>🗑️</span>
+                        <span>حذف نهائي</span>
                       </Button>
-                    )}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -713,6 +774,17 @@ export const AdminMasterOrdersPage: React.FC = () => {
           }}
         />
       )}
+
+      {/* ── Sovereign Force Delete Modal ── */}
+      <AdminForceDeleteModal
+        isOpen={isDeleteModalOpen}
+        order={orderToDelete}
+        onClose={() => {
+          setIsDeleteModalOpen(false);
+          setOrderToDelete(null);
+        }}
+        onSuccess={handleDeleteSuccess}
+      />
     </div>
   );
 };

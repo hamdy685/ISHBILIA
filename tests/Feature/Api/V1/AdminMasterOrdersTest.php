@@ -11,6 +11,7 @@ use App\Models\PurchaseRequest;
 use App\Models\PurchaseRequestItem;
 use App\Models\Role;
 use App\Models\Supplier;
+use App\Models\SupplierInvoice;
 use App\Models\SystemEvent;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
@@ -217,5 +218,144 @@ class AdminMasterOrdersTest extends TestCase
                 'admin_reason' => 'hacking',
             ]);
         $response2->assertForbidden();
+
+        $response3 = $this->actingAs($employee, 'sanctum')
+            ->deleteJson('/api/v1/admin/orders/1/force-delete', [
+                'reason' => 'hacking',
+            ]);
+        $response3->assertForbidden();
+    }
+
+    public function test_admin_can_force_delete_order_and_its_entire_document_cycle(): void
+    {
+        $admin = $this->makeUser('admin', 'admin-delete-test@ashbiliya.com');
+        $dept = Department::create(['name' => 'إدارة التنفيذ', 'code' => 'EXEC2']);
+        $supplier = Supplier::create([
+            'company_name' => 'شركة توريدات الدلتا',
+            'name' => 'محمد الدلتا',
+            'email' => 'delta@example.com',
+            'is_active' => true,
+        ]);
+
+        $pr = PurchaseRequest::create([
+            'request_number' => 'PR-2026-9003',
+            'department_id' => $dept->id,
+            'user_id' => $admin->id,
+            'status' => 'APPROVED_BY_ACCOUNTING',
+            'total_estimated_cost' => 30000,
+        ]);
+
+        $prItem = PurchaseRequestItem::create([
+            'purchase_request_id' => $pr->id,
+            'item_description' => 'طوب أحمر مفرغ',
+            'quantity' => 1000,
+            'uom' => 'PIECE',
+            'estimated_unit_price' => 30,
+            'estimated_line_total' => 30000,
+        ]);
+
+        $po = PurchaseOrder::create([
+            'po_number' => 'PO-2026-9003',
+            'purchase_request_id' => $pr->id,
+            'supplier_id' => $supplier->id,
+            'created_by_user_id' => $admin->id,
+            'status' => 'ISSUED',
+            'subtotal' => 30000,
+            'grand_total' => 30000,
+        ]);
+
+        $poItem = PurchaseOrderItem::create([
+            'purchase_order_id' => $po->id,
+            'item_description' => 'طوب أحمر مفرغ',
+            'quantity' => 1000,
+            'uom' => 'PIECE',
+            'unit_price' => 30,
+            'line_total' => 30000,
+        ]);
+
+        $receipt = PurchaseReceipt::create([
+            'purchase_order_id' => $po->id,
+            'purchase_request_id' => $pr->id,
+            'receipt_number' => 'GRN-2026-9003',
+            'status' => 'APPROVED',
+        ]);
+
+        $receiptItem = PurchaseReceiptItem::create([
+            'purchase_receipt_id' => $receipt->id,
+            'purchase_order_item_id' => $poItem->id,
+            'ordered_quantity' => 1000,
+            'received_quantity' => 1000,
+            'uom' => 'PIECE',
+        ]);
+
+        $invoice = SupplierInvoice::create([
+            'supplier_id' => $supplier->id,
+            'purchase_order_id' => $po->id,
+            'purchase_receipt_id' => $receipt->id,
+            'created_by_user_id' => $admin->id,
+            'invoice_number' => 'INV-2026-9003',
+            'amount' => 30000,
+            'status' => 'PENDING',
+            'invoice_date' => now()->toDateString(),
+        ]);
+
+        $response = $this->actingAs($admin, 'sanctum')
+            ->deleteJson("/api/v1/admin/orders/{$po->id}/force-delete", [
+                'reason' => 'طلب تجريبي تم إلغاؤه نهائياً',
+            ]);
+
+        $response->assertOk()
+            ->assertJsonPath('success', true);
+
+        // Verify cascading hard deletion of entire cycle
+        $this->assertDatabaseMissing('purchase_orders', ['id' => $po->id]);
+        $this->assertDatabaseMissing('purchase_order_items', ['id' => $poItem->id]);
+        $this->assertDatabaseMissing('purchase_receipts', ['id' => $receipt->id]);
+        $this->assertDatabaseMissing('purchase_receipt_items', ['id' => $receiptItem->id]);
+        $this->assertDatabaseMissing('supplier_invoices', ['id' => $invoice->id]);
+        $this->assertDatabaseMissing('purchase_requests', ['id' => $pr->id]);
+        $this->assertDatabaseMissing('purchase_request_items', ['id' => $prItem->id]);
+
+        // Verify System Audit Trail Event was recorded
+        $auditEvent = SystemEvent::where('action', 'ADMIN_FORCE_DELETE')->latest('id')->first();
+        $this->assertNotNull($auditEvent);
+        $this->assertEquals($admin->id, $auditEvent->actor_user_id);
+        $this->assertStringContainsString('طلب تجريبي تم إلغاؤه نهائياً', $auditEvent->description);
+    }
+
+    public function test_admin_can_force_delete_standalone_purchase_request(): void
+    {
+        $admin = $this->makeUser('admin', 'admin-pr-del@ashbiliya.com');
+        $dept = Department::create(['name' => 'إدارة الخدمات', 'code' => 'SERV']);
+
+        $pr = PurchaseRequest::create([
+            'request_number' => 'PR-2026-9004',
+            'department_id' => $dept->id,
+            'user_id' => $admin->id,
+            'status' => 'SUBMITTED',
+            'total_estimated_cost' => 5000,
+        ]);
+
+        $prItem = PurchaseRequestItem::create([
+            'purchase_request_id' => $pr->id,
+            'item_description' => 'أدوات مكتبية وقرطاسية',
+            'quantity' => 10,
+            'uom' => 'SET',
+            'estimated_unit_price' => 500,
+            'estimated_line_total' => 5000,
+        ]);
+
+        $response = $this->actingAs($admin, 'sanctum')
+            ->deleteJson("/api/v1/admin/orders/{$pr->id}/force-delete", [
+                'entity_type' => 'request',
+                'reason' => 'طلب مكرر بالخطأ',
+            ]);
+
+        $response->assertOk()
+            ->assertJsonPath('success', true);
+
+        $this->assertDatabaseMissing('purchase_requests', ['id' => $pr->id]);
+        $this->assertDatabaseMissing('purchase_request_items', ['id' => $prItem->id]);
     }
 }
+

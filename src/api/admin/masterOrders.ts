@@ -213,3 +213,32 @@ export const forceUpdateOrderApi = async (
     throw error;
   }
 };
+
+export interface ForceDeleteOrderPayload {
+  reason?: string;
+  entity_type?: 'order' | 'request' | 'auto';
+}
+
+export const forceDeleteMasterOrderApi = async (
+  id: number,
+  payload?: ForceDeleteOrderPayload
+): Promise<{ success: boolean; message: string; deleted?: any }> => {
+  try {
+    const response = await apiClient.delete<{ success: boolean; message: string; deleted?: any }>(
+      `/admin/orders/${id}/force-delete`,
+      { data: payload }
+    );
+    return response.data;
+  } catch (error: any) {
+    console.error(`❌ [Admin Master Orders API Error] forceDeleteMasterOrderApi failed for order #${id}:`, {
+      endpoint: `/admin/orders/${id}/force-delete`,
+      payload,
+      status: error?.response?.status,
+      data: error?.response?.data,
+      laravelMessage: error?.response?.data?.message || error?.response?.data?.error,
+      originalError: error,
+    });
+    throw error;
+  }
+};
+

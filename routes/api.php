@@ -464,6 +464,7 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(functi
     Route::get('/all-orders-master', [AdminMasterOrdersController::class, 'index']);
     Route::get('/orders/{id}/details', [AdminMasterOrdersController::class, 'showOrder']);
     Route::put('/orders/{id}/force-update', [AdminMasterOrdersController::class, 'forceUpdateOrder']);
+    Route::delete('/orders/{id}/force-delete', [AdminMasterOrdersController::class, 'forceDeleteOrder']);
 });
 
 // Admin System Management Routes
