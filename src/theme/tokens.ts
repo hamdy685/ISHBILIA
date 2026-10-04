@@ -137,6 +137,12 @@ export const statusConfigs: Record<string, StatusConfig> = {
     badgeClass: 'bg-amber-950/80 text-amber-300 border-amber-800/80',
     dotClass: 'bg-amber-400',
   },
+  PENDING_ACTUAL_PO: {
+    labelAr: 'بانتظار أمر الشراء الفعلي',
+    labelEn: 'Pending Actual PO',
+    badgeClass: 'bg-indigo-950/80 text-indigo-300 border-indigo-700/80',
+    dotClass: 'bg-indigo-400',
+  },
   RETURNED_TO_PROCUREMENT: {
     labelAr: 'معاد للمشتريات',
     labelEn: 'Returned to Procurement',

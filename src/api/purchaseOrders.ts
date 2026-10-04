@@ -1,5 +1,5 @@
 import apiClient, { cachedGetData, invalidateCachedGet } from './client';
-import { PurchaseOrder, PurchaseOrderItemPayload, PurchaseOrderPayload } from '../types/purchaseOrder';
+import { PurchaseOrder, PurchaseOrderItemPayload, PurchaseOrderPayload, FinalizeActualPoPayload } from '../types/purchaseOrder';
 
 const base = '/procurement/purchase-orders';
 
@@ -85,5 +85,17 @@ export interface CombinedPoPrDocument {
 
 export const getCombinedPoPrDocumentApi = async (id: number): Promise<CombinedPoPrDocument> => {
   const response = await apiClient.get<{ data: CombinedPoPrDocument }>(`${base}/${id}/combined-document`);
+  return response.data.data;
+};
+
+export const getPendingActualPosApi = async (params: { page?: number; per_page?: number; search?: string } = {}): Promise<PurchaseOrderPage> => {
+  const response = await apiClient.get<PurchaseOrderPage>('/procurement/pending-actual-pos', { params });
+  return response.data;
+};
+
+export const finalizeActualPurchaseOrderApi = async (id: number, payload: FinalizeActualPoPayload): Promise<PurchaseOrder> => {
+  const response = await apiClient.post<{ message: string; data: PurchaseOrder }>(`${base}/${id}/finalize`, payload);
+  invalidateCachedGet(base);
+  invalidateCachedGet('/procurement/pending-actual-pos');
   return response.data.data;
 };

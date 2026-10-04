@@ -18,8 +18,16 @@ class AccountingPurchaseOrderService
     {
         $allowedCodes = $user ? app(SupplierInvoiceService::class)->getAllowedDepartmentCodesForAccountant($user) : null;
 
-        return PurchaseOrder::with(['purchaseRequest.requester', 'purchaseRequest.department', 'purchaseRequest.assignedReviewer', 'purchaseRequest.approvalHistory.actor', 'supplier', 'createdBy', 'accountingReviewer', 'items.item:id,name,sku'])
+        return PurchaseOrder::with(['purchaseRequest.requester', 'purchaseRequest.department', 'purchaseRequest.assignedReviewer', 'purchaseRequest.approvalHistory.actor', 'supplier', 'createdBy', 'accountingReviewer', 'items.item:id,name,sku', 'finalizedBy'])
             ->whereIn('status', ['ISSUED', 'PENDING_ACCOUNTING_REVIEW', 'APPROVED_BY_ACCOUNTING', 'RETURNED_TO_PROCUREMENT'])
+            ->where('status', '!=', 'PENDING_ACTUAL_PO')
+            ->where(function ($query) {
+                // Must be either finalized by procurement (actual PO), or have approved receipt, or legacy/no receipt required
+                $query->whereNotNull('finalized_at')
+                    ->orWhereHas('receipts', fn ($rq) => $rq->where('status', 'APPROVED'))
+                    ->orWhereHas('purchaseRequest', fn ($pq) => $pq->where('requires_warehouse_receipt', false))
+                    ->orWhereIn('status', ['APPROVED_BY_ACCOUNTING', 'RETURNED_TO_PROCUREMENT']);
+            })
             ->when($allowedCodes !== null, function ($query) use ($allowedCodes) {
                 $query->whereHas('purchaseRequest.department', function ($dq) use ($allowedCodes) {
                     $dq->whereIn('code', $allowedCodes);

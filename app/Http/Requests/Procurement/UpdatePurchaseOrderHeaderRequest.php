@@ -22,6 +22,19 @@ class UpdatePurchaseOrderHeaderRequest extends FormRequest
             'budget_code' => ['nullable', 'string', 'max:50'],
             'financial_notes' => ['nullable', 'string'],
             'notes' => ['nullable', 'string'],
+            'finalization_notes' => ['nullable', 'string'],
+            'items' => ['sometimes', 'array'],
+            'items.*.id' => ['nullable', 'integer'],
+            'items.*.item_id' => ['nullable', 'integer'],
+            'items.*.pr_item_id' => ['nullable', 'integer'],
+            'items.*.item_description' => ['sometimes', 'required', 'string', 'max:500'],
+            'items.*.item_reference' => ['sometimes', 'required', 'string', 'max:100'],
+            'items.*.region' => ['sometimes', 'required', 'string', 'max:150'],
+            'items.*.quantity' => ['sometimes', 'required', 'numeric', 'gt:0'],
+            'items.*.unit_price' => ['sometimes', 'required', 'numeric', 'gte:0'],
+            'items.*.uom' => ['nullable', 'string', 'max:20'],
+            'items.*.specifications' => ['nullable', 'string'],
+            'items.*.supplier_id' => ['nullable', 'integer'],
         ];
     }
 

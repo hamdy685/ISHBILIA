@@ -168,6 +168,32 @@ export const ProcurementDashboardPage: React.FC = () => {
               })),
             })),
           ...pos
+            .filter((p) => p.status === 'PENDING_ACTUAL_PO')
+            .map((po) => ({
+              id: `po-actual-${po.id}`,
+              rawId: po.id,
+              type: 'PO' as const,
+              code: po.po_number,
+              title: `📦 إذن الاستلام معتمد — مطلوب إصدار أمر الشراء الفعلي (${po.supplier?.company_name || 'المورد'})`,
+              subtitle: 'الموقع أتم الاستلام — يرجى مطابقة وتعديل الأسعار والكميات لإصدار الأمر الفعلي للحسابات',
+              department: po.department?.name || po.purchase_request?.department?.name,
+              supplier: po.supplier?.company_name,
+              amount: Number(po.grand_total || 0),
+              urgency: 'CRITICAL' as const,
+              reason: 'تم استلام البضاعة واعتماد إذن الاستلام بالموقع — أمر الشراء بانتظار إصدار الأمر الفعلي من المشتريات لإرساله للإدارة المالية.',
+              actionUrl: `/procurement/purchase-orders/${po.id}/edit`,
+              actionLabel: '⚡ إصدار أمر الشراء الفعلي',
+              timeAgo: po.updated_at ? po.updated_at.slice(0, 10) : undefined,
+              items_count: po.items?.length || 0,
+              items_list: po.items?.map((it: any) => ({
+                description: it.item_description || it.item?.name || 'بند توريد',
+                quantity: it.quantity,
+                uom: it.uom,
+                unit_price: it.unit_price,
+                line_total: it.line_total,
+              })),
+            })),
+          ...pos
             .filter((p) => p.status === 'RETURNED_TO_PROCUREMENT')
             .map((po) => ({
               id: `po-ret-${po.id}`,
@@ -224,27 +250,27 @@ export const ProcurementDashboardPage: React.FC = () => {
           clickableHint="إصدار أوامر شراء ←"
         />
         <KpiCard
+          title="بانتظار الإصدار الفعلي"
+          value={countStatus('PENDING_ACTUAL_PO')}
+          subtext="استلام معتمد بالـ GRN"
+          accentColor="indigo"
+          to="/procurement/purchase-orders?status=PENDING_ACTUAL_PO"
+          clickableHint="إصدار الأوامر الفعلية ←"
+        />
+        <KpiCard
           title="أوامر مسودة DRAFT"
           value={countStatus('PO_DRAFT')}
           subtext="قيد التحرير"
           accentColor="slate"
-          to="/procurement/manager?tab=1&status=PO_DRAFT"
+          to="/procurement/purchase-orders?status=PO_DRAFT"
           clickableHint="عرض المسودات ←"
-        />
-        <KpiCard
-          title="مراجعة المحاسبة"
-          value={countStatus('PENDING_ACCOUNTING_REVIEW')}
-          subtext="لدى الحسابات"
-          accentColor="amber"
-          to="/procurement/manager?tab=1&status=PENDING_ACCOUNTING_REVIEW"
-          clickableHint="متابعة الحسابات ←"
         />
         <KpiCard
           title="أوامر معادة للمشتريات"
           value={countStatus('RETURNED_TO_PROCUREMENT')}
           subtext="تطلب تعديل"
           accentColor="rose"
-          to="/procurement/manager?tab=1&status=RETURNED_TO_PROCUREMENT"
+          to="/procurement/purchase-orders?status=RETURNED_TO_PROCUREMENT"
           clickableHint="تعديل وإعادة إرسال ←"
         />
         <KpiCard
@@ -252,7 +278,7 @@ export const ProcurementDashboardPage: React.FC = () => {
           value={countStatus('FINAL_APPROVED')}
           subtext="جاهزة للتوريد"
           accentColor="emerald"
-          to="/procurement/manager?tab=1&status=FINAL_APPROVED"
+          to="/procurement/purchase-orders?status=FINAL_APPROVED"
           clickableHint="متابعة التوريدات ←"
         />
       </div>

@@ -39,6 +39,10 @@ class PurchaseOrder extends Model
         'reviewed_at_accounting',
         'notes',
         'rejection_reason',
+        // Actual PO finalisation fields
+        'finalized_by_user_id',
+        'finalized_at',
+        'finalization_notes',
     ];
 
     protected function casts(): array
@@ -49,6 +53,7 @@ class PurchaseOrder extends Model
             'delivery_date' => 'date',
             'actual_delivery_date' => 'date',
             'reviewed_at_accounting' => 'datetime',
+            'finalized_at' => 'datetime',
         ];
     }
 
@@ -93,6 +98,11 @@ class PurchaseOrder extends Model
     public function accountingReviewer(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reviewed_by_accounting_user_id');
+    }
+
+    public function finalizedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'finalized_by_user_id');
     }
 
     public function items(): HasMany

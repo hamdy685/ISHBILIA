@@ -175,6 +175,7 @@ class PurchaseReceiptService
             $purchaseOrder->update([
                 'delivery_status' => 'DELIVERED',
                 'actual_delivery_date' => $receivedAt ?: now()->toDateString(),
+                'status' => 'PENDING_ACTUAL_PO',
             ]);
 
             ApprovalHistory::create([
@@ -184,48 +185,22 @@ class PurchaseReceiptService
                 'action' => 'SITE_RECEIPT_APPROVED',
                 'from_state' => 'PENDING_RECEIPT',
                 'to_state' => 'APPROVED',
-                'comments' => $notes ?: 'سجل أمين المخزن / المستلم الكميات الفعلية المستلمة واعتمد إذن الاستلام نهائياً ونقله للحسابات.',
+                'comments' => $notes ?: 'سجل أمين المخزن / المستلم الكميات الفعلية المستلمة واعتمد إذن الاستلام نهائياً وأعادها لإدارة المشتريات لإصدار أمر الشراء الفعلي.',
             ]);
 
             $notificationService = app(NotificationService::class);
-            $accountants = $notificationService->resolveUsersWithPermission('purchase_order.view_accounting');
 
-            $purchaseOrder->loadMissing('purchaseRequest.department');
-            $deptCode = $purchaseOrder->purchaseRequest?->department?->code;
-            $deptAccountants = collect();
-            if ($deptCode) {
-                foreach (\App\Services\SupplierInvoiceService::ACCOUNTANT_DEPARTMENT_MAPPINGS as $roleSlug => $deptCodes) {
-                    if (in_array($deptCode, $deptCodes, true)) {
-                        $deptAccountants = User::whereHas('roles', fn ($q) => $q->where('slug', $roleSlug))
-                            ->where('is_active', true)
-                            ->get();
-                        break;
-                    }
-                }
-            }
+            // Notify Procurement Managers to issue the Actual PO
+            $procurementUsers = $notificationService->resolveUsersWithPermission('purchase_order.create');
 
-            $targetAccountants = $deptAccountants->isNotEmpty() ? $deptAccountants : $accountants;
-
-            $notificationService->queueAccountingWithPurchaseOrderAndReceipt(
-                $targetAccountants,
-                $purchaseOrder,
-                $receipt
-            );
-
-            // Notify Financial Director for informational awareness only
-            if ($deptAccountants->isNotEmpty()) {
-                $financialDirectors = $accountants->reject(function ($u) {
-                    return $u->hasRole('site_accountant') || $u->hasRole('licenses_accountant') || $u->hasRole('buffet_accountant');
-                });
-                foreach ($financialDirectors as $director) {
-                    $notificationService->queueNotification(
-                        $director,
-                        'purchase_order_and_receipt_approved_info',
-                        'إشعار للعلم: إذن استلام معتمد جاهز للفوترة',
-                        "تم اعتماد إذن الاستلام {$receipt->receipt_number} لأمر الشراء {$purchaseOrder->po_number}، وهو بانتظار تسجيل الفاتورة من قِبل محاسب القسم المختص (للعلم فقط).",
-                        $purchaseOrder
-                    );
-                }
+            if ($procurementUsers->isNotEmpty()) {
+                $notificationService->queueUsers(
+                    $procurementUsers,
+                    'grn_approved_pending_actual_po',
+                    'إذن استلام معتمد — بانتظار إصدار أمر الشراء الفعلي',
+                    "تم اعتماد إذن الاستلام {$receipt->receipt_number} لأمر الشراء {$purchaseOrder->po_number}. يرجى مراجعة الكميات المستلمة وإصدار أمر الشراء الفعلي.",
+                    $purchaseOrder
+                );
             }
 
             // Notify site engineer for informational awareness if different from keeper
@@ -235,7 +210,7 @@ class PurchaseReceiptService
                     $siteEngineer,
                     'purchase_receipt_approved_site_engineer',
                     'تم تسجيل واعتماد استلام بالموقع',
-                    "تم تسجيل واعتماد إذن الاستلام {$receipt->receipt_number} لأمر الشراء {$purchaseOrder->po_number} بعد انتهاء الصبة ونقله للحسابات.",
+                    "تم تسجيل واعتماد إذن الاستلام {$receipt->receipt_number} لأمر الشراء {$purchaseOrder->po_number} وأُعيد الملف لإدارة المشتريات.",
                     $receipt
                 );
             }
@@ -328,6 +303,7 @@ class PurchaseReceiptService
             $receipt->purchaseOrder->update([
                 'delivery_status' => 'DELIVERED',
                 'actual_delivery_date' => $receipt->received_at ?: now()->toDateString(),
+                'status' => 'PENDING_ACTUAL_PO',
             ]);
 
             app(NotificationService::class)->markEntityNotificationsAsRead($receipt);
@@ -340,48 +316,22 @@ class PurchaseReceiptService
                 'action' => 'SITE_ENGINEER_RECEIPT_APPROVED',
                 'from_state' => 'PENDING_SITE_ENGINEER',
                 'to_state' => 'APPROVED',
-                'comments' => $notes ?? 'اعتمد مهندس الموقع الكميات المستلمة.',
+                'comments' => $notes ?? 'اعتمد مهندس الموقع الكميات المستلمة وأُعيد الملف لإدارة المشتريات لإصدار أمر الشراء الفعلي.',
             ]);
 
             $notificationService = app(NotificationService::class);
-            $accountants = $notificationService->resolveUsersWithPermission('purchase_order.view_accounting');
 
-            $receipt->purchaseOrder->loadMissing('purchaseRequest.department');
-            $deptCode = $receipt->purchaseOrder->purchaseRequest?->department?->code;
-            $deptAccountants = collect();
-            if ($deptCode) {
-                foreach (\App\Services\SupplierInvoiceService::ACCOUNTANT_DEPARTMENT_MAPPINGS as $roleSlug => $deptCodes) {
-                    if (in_array($deptCode, $deptCodes, true)) {
-                        $deptAccountants = User::whereHas('roles', fn ($q) => $q->where('slug', $roleSlug))
-                            ->where('is_active', true)
-                            ->get();
-                        break;
-                    }
-                }
-            }
+            // Notify Procurement Managers to issue the Actual PO
+            $procurementUsers = $notificationService->resolveUsersWithPermission('purchase_order.create');
 
-            $targetAccountants = $deptAccountants->isNotEmpty() ? $deptAccountants : $accountants;
-
-            $notificationService->queueAccountingWithPurchaseOrderAndReceipt(
-                $targetAccountants,
-                $receipt->purchaseOrder,
-                $receipt
-            );
-
-            // Notify Financial Director for informational awareness only (no invoice registration action)
-            if ($deptAccountants->isNotEmpty()) {
-                $financialDirectors = $accountants->reject(function ($u) {
-                    return $u->hasRole('site_accountant') || $u->hasRole('licenses_accountant') || $u->hasRole('buffet_accountant');
-                });
-                foreach ($financialDirectors as $director) {
-                    $notificationService->queueNotification(
-                        $director,
-                        'purchase_order_and_receipt_approved_info',
-                        'إشعار للعلم: إذن استلام معتمد جاهز للفوترة',
-                        "تم اعتماد إذن الاستلام {$receipt->receipt_number} لأمر الشراء {$receipt->purchaseOrder->po_number}، وهو بانتظار تسجيل الفاتورة من قِبل محاسب القسم المختص (للعلم فقط).",
-                        $receipt->purchaseOrder
-                    );
-                }
+            if ($procurementUsers->isNotEmpty()) {
+                $notificationService->queueUsers(
+                    $procurementUsers,
+                    'grn_approved_pending_actual_po',
+                    'إذن استلام معتمد — بانتظار إصدار أمر الشراء الفعلي',
+                    "اعتمد مهندس الموقع إذن الاستلام {$receipt->receipt_number} لأمر الشراء {$receipt->purchaseOrder->po_number}. يرجى مراجعة الكميات وإصدار أمر الشراء الفعلي.",
+                    $receipt->purchaseOrder
+                );
             }
 
             if ($receipt->warehouse_keeper_user_id) {

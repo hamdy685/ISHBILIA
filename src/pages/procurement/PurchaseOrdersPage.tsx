@@ -82,6 +82,7 @@ export const PurchaseOrdersPage: React.FC = () => {
 
   const statusTabs = [
     { key: 'ALL', label: 'الكل' },
+    { key: 'PENDING_ACTUAL_PO', label: 'بانتظار الإصدار الفعلي' },
     { key: 'ISSUED', label: 'تم الإصدار' },
     { key: 'PO_DRAFT', label: 'مسودة تاريخية' },
     { key: 'PENDING_ACCOUNTING_REVIEW', label: 'بانتظار مراجعة الحسابات' },
@@ -199,7 +200,7 @@ export const PurchaseOrdersPage: React.FC = () => {
           </TableHeader>
           <TableBody>
             {visibleOrders.map(po => {
-              const canEdit = ['PO_DRAFT', 'RETURNED_TO_PROCUREMENT'].includes(po.status);
+              const canEdit = po.status !== 'REJECTED';
               return (
                 <TableRow key={po.id}>
                   <TableCell className="font-mono font-bold text-cyan-400">
@@ -229,6 +230,13 @@ export const PurchaseOrdersPage: React.FC = () => {
                           عرض التفاصيل
                         </Button>
                       </Link>
+                      {po.status === 'PENDING_ACTUAL_PO' && (
+                        <Link to={`/procurement/purchase-orders/${po.id}/edit`}>
+                          <Button variant="primary" size="sm" className="px-2.5 py-0.5 text-[10px] bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold shadow-md shadow-emerald-900/30">
+                            ⚡ إصدار الأمر الفعلي
+                          </Button>
+                        </Link>
+                      )}
                       {canEdit && (
                         <Link to={`/procurement/purchase-orders/${po.id}/edit`}>
                           <Button variant="warning" size="sm" className="px-2 py-0.5 text-[10px] bg-amber-950/60 text-amber-300 border-amber-800/60 hover:bg-amber-900/60">
@@ -265,7 +273,7 @@ export const PurchaseOrdersPage: React.FC = () => {
       {!loading && orders.length > 0 && (
         <div className="space-y-3 md:hidden">
           {orders.map((po) => {
-            const canEdit = ['PO_DRAFT', 'RETURNED_TO_PROCUREMENT'].includes(po.status);
+            const canEdit = po.status !== 'REJECTED';
             return (
               <article key={`mobile-${po.id}`} className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
                 <div className="flex items-start justify-between gap-3">
@@ -283,6 +291,13 @@ export const PurchaseOrdersPage: React.FC = () => {
                 </dl>
                 <div className="mt-4 flex flex-wrap gap-2">
                   <Link to={`/procurement/purchase-orders/${po.id}`}><Button variant="secondary" size="sm">عرض التفاصيل</Button></Link>
+                  {po.status === 'PENDING_ACTUAL_PO' && (
+                    <Link to={`/procurement/purchase-orders/${po.id}/edit`}>
+                      <Button variant="primary" size="sm" className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold">
+                        ⚡ إصدار الأمر الفعلي
+                      </Button>
+                    </Link>
+                  )}
                   {canEdit && <Link to={`/procurement/purchase-orders/${po.id}/edit`}><Button variant="warning" size="sm">تعديل</Button></Link>}
                   <Button variant="ghost" size="sm" onClick={() => setSelectedPrintPo(po)}>طباعة PO</Button>
                   <Button variant="ghost" size="sm" className="text-cyan-300 border border-slate-700" onClick={() => setSelectedCyclePo(po)}>🖨️ طباعة الدورة (3 في 1)</Button>

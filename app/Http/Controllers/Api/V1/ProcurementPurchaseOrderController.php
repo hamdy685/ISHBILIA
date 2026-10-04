@@ -341,8 +341,8 @@ class ProcurementPurchaseOrderController extends Controller
     {
         $po = PurchaseOrder::where('id', (int) $id)->firstOrFail();
 
-        if ($po->status !== 'PO_DRAFT' && $po->status !== 'RETURNED_TO_PROCUREMENT') {
-            return response()->json(['message' => 'Only draft or returned purchase orders can be edited.'], 409);
+        if (! in_array($po->status, ['PO_DRAFT', 'RETURNED_TO_PROCUREMENT', 'PENDING_ACTUAL_PO', 'ISSUED', 'PENDING_ACCOUNTING_REVIEW', 'APPROVED_BY_ACCOUNTING'], true)) {
+            return response()->json(['message' => 'لا يمكن تعديل أمر الشراء في هذه الحالة.'], 409);
         }
 
         try {
@@ -362,8 +362,8 @@ class ProcurementPurchaseOrderController extends Controller
         $po = PurchaseOrder::findOrFail((int) $id);
         $item = PurchaseOrderItem::findOrFail((int) $itemId);
 
-        if ($po->status !== 'PO_DRAFT' && $po->status !== 'RETURNED_TO_PROCUREMENT') {
-            return response()->json(['message' => 'Only draft or returned purchase orders can be edited.'], 409);
+        if (! in_array($po->status, ['PO_DRAFT', 'RETURNED_TO_PROCUREMENT', 'PENDING_ACTUAL_PO', 'ISSUED', 'PENDING_ACCOUNTING_REVIEW', 'APPROVED_BY_ACCOUNTING'], true)) {
+            return response()->json(['message' => 'لا يمكن تعديل أمر الشراء في هذه الحالة.'], 409);
         }
 
         if ($item->purchase_order_id !== $po->id) {
@@ -381,8 +381,8 @@ class ProcurementPurchaseOrderController extends Controller
     {
         $po = PurchaseOrder::findOrFail((int) $id);
 
-        if ($po->status !== 'PO_DRAFT' && $po->status !== 'RETURNED_TO_PROCUREMENT') {
-            return response()->json(['message' => 'Only draft or returned purchase orders can be edited.'], 409);
+        if (! in_array($po->status, ['PO_DRAFT', 'RETURNED_TO_PROCUREMENT', 'PENDING_ACTUAL_PO', 'ISSUED', 'PENDING_ACCOUNTING_REVIEW', 'APPROVED_BY_ACCOUNTING'], true)) {
+            return response()->json(['message' => 'لا يمكن تعديل أمر الشراء في هذه الحالة.'], 409);
         }
 
         $updatedPo = $this->poService->addItem($request->user(), $po, $request->validated());
@@ -397,8 +397,8 @@ class ProcurementPurchaseOrderController extends Controller
         $po = PurchaseOrder::findOrFail((int) $id);
         $item = PurchaseOrderItem::findOrFail((int) $itemId);
 
-        if ($po->status !== 'PO_DRAFT' && $po->status !== 'RETURNED_TO_PROCUREMENT') {
-            return response()->json(['message' => 'Only draft or returned purchase orders can be edited.'], 409);
+        if (! in_array($po->status, ['PO_DRAFT', 'RETURNED_TO_PROCUREMENT', 'PENDING_ACTUAL_PO', 'ISSUED', 'PENDING_ACCOUNTING_REVIEW', 'APPROVED_BY_ACCOUNTING'], true)) {
+            return response()->json(['message' => 'لا يمكن تعديل أمر الشراء في هذه الحالة.'], 409);
         }
 
         if ($item->purchase_order_id !== $po->id) {
@@ -520,5 +520,96 @@ class ProcurementPurchaseOrderController extends Controller
             'data' => new PurchaseOrderResource($po->fresh(['purchaseRequest.requester', 'purchaseRequest.department', 'supplier', 'createdBy', 'items.prItem'])),
         ]);
     }
-}
+    /**
+     * List Purchase Orders pending the Actual PO issuance after GRN approval.
+     * These are POs in PENDING_ACTUAL_PO status waiting for procurement to finalise.
+     */
+    public function indexPendingActualPos(Request $request): AnonymousResourceCollection
+    {
+        $perPage = min(max((int) $request->query('per_page', 15), 1), 100);
+        $search  = trim((string) $request->query('search', ''));
 
+        $query = PurchaseOrder::with([
+            'purchaseRequest.requester',
+            'purchaseRequest.department',
+            'purchaseRequest.assignedReviewer',
+            'supplier',
+            'createdBy',
+            'items.item',
+            'receipts.items.purchaseOrderItem',
+            'receipts.warehouseKeeper',
+            'receipts.siteEngineer',
+        ])
+        ->where('status', 'PENDING_ACTUAL_PO')
+        ->when($search !== '', function ($q) use ($search) {
+            $term = '%' . mb_substr($search, 0, 100) . '%';
+            $q->where(function ($sq) use ($term) {
+                $sq->where('po_number', 'like', $term)
+                   ->orWhereHas('supplier', fn ($s) => $s->where('company_name', 'like', $term))
+                   ->orWhereHas('purchaseRequest', function ($prQ) use ($term) {
+                       $prQ->where('request_number', 'like', $term)
+                           ->orWhereHas('requester', fn ($u) => $u->where('name', 'like', $term))
+                           ->orWhereHas('department', fn ($d) => $d->where('name', 'like', $term));
+                   });
+            });
+        })
+        ->orderBy('updated_at', 'desc');
+
+        return PurchaseOrderResource::collection($query->paginate($perPage)->withQueryString());
+    }
+
+    /**
+     * Finalise the Actual Purchase Order after GRN approval.
+     * Procurement provides the definitive item list (full sync: update/delete/add).
+     * After finalisation the PO moves to ISSUED and accounting is notified.
+     */
+    public function finalizeActualPo(Request $request, string|int $id): JsonResponse
+    {
+        $validated = $request->validate([
+            'items'        => ['required', 'array', 'min:1'],
+            'items.*.id'   => ['nullable', 'integer'],
+            'items.*.item_id' => ['nullable', 'integer', 'exists:items,id'],
+            'items.*.pr_item_id' => ['nullable', 'integer', 'exists:purchase_request_items,id'],
+            'items.*.item_description' => ['required', 'string', 'max:500'],
+            'items.*.item_reference'   => ['required', 'string', 'max:100'],
+            'items.*.region'           => ['required', 'string', 'max:150'],
+            'items.*.quantity'         => ['required', 'numeric', 'gt:0'],
+            'items.*.uom'              => ['nullable', 'string', 'max:20'],
+            'items.*.unit_price'       => ['required', 'numeric', 'gte:0'],
+            'items.*.specifications'   => ['nullable', 'string'],
+            'items.*.supplier_id'      => ['nullable', 'integer', 'exists:suppliers,id'],
+            'notes'                    => ['nullable', 'string', 'max:3000'],
+        ]);
+
+        $po = PurchaseOrder::with([
+            'purchaseRequest.requester',
+            'purchaseRequest.department',
+            'supplier',
+            'createdBy',
+            'items',
+            'receipts',
+        ])->findOrFail((int) $id);
+
+        if ($po->status !== 'PENDING_ACTUAL_PO') {
+            return response()->json([
+                'message' => 'لا يمكن إصدار أمر الشراء الفعلي لأمر شراء ليس في مرحلة بانتظار الإصدار الفعلي.',
+            ], 409);
+        }
+
+        try {
+            $finalizedPo = $this->poService->finalizeActualPo(
+                $request->user(),
+                $po,
+                $validated['items'],
+                $validated['notes'] ?? null
+            );
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 409);
+        }
+
+        return response()->json([
+            'message' => 'تم إصدار أمر الشراء الفعلي بنجاح وإرساله للحسابات.',
+            'data'    => new PurchaseOrderResource($finalizedPo),
+        ]);
+    }
+}

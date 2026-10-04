@@ -316,14 +316,14 @@ class PurchaseOrderService
      */
     public function updateHeader(User $user, PurchaseOrder $po, array $data): PurchaseOrder
     {
-        if ($po->status !== 'PO_DRAFT' && $po->status !== 'RETURNED_TO_PROCUREMENT') {
-            throw new \RuntimeException('Only draft or returned purchase orders can be edited.');
+        if (! in_array($po->status, ['PO_DRAFT', 'RETURNED_TO_PROCUREMENT', 'PENDING_ACTUAL_PO', 'ISSUED', 'PENDING_ACCOUNTING_REVIEW', 'APPROVED_BY_ACCOUNTING'], true)) {
+            throw new \RuntimeException('لا يمكن تعديل أمر شراء بهذه الحالة.');
         }
 
         return DB::transaction(function () use ($user, $po, $data) {
             $lockedPo = PurchaseOrder::where('id', $po->id)->lockForUpdate()->first();
 
-            $allowedFields = ['supplier_id', 'payment_terms', 'delivery_terms', 'delivery_date', 'budget_code', 'financial_notes', 'notes'];
+            $allowedFields = ['supplier_id', 'payment_terms', 'delivery_terms', 'delivery_date', 'budget_code', 'financial_notes', 'notes', 'finalization_notes'];
             $updateFields = [];
 
             foreach ($allowedFields as $field) {
@@ -351,17 +351,21 @@ class PurchaseOrderService
                 $lockedPo->update($updateFields);
             }
 
+            if (! empty($data['items']) && is_array($data['items'])) {
+                $this->syncPoItems($user, $lockedPo, $data['items']);
+            }
+
             return $lockedPo->fresh(['purchaseRequest.requester', 'purchaseRequest.department', 'purchaseRequest.assignedReviewer', 'purchaseRequest.approvalHistory.actor', 'selectedQuote', 'supplier', 'createdBy', 'items.item']);
         });
     }
 
     /**
-     * Update commercial line item details on a draft PO.
+     * Update commercial line item details on a PO.
      */
     public function updateItem(User $user, PurchaseOrder $po, PurchaseOrderItem $item, array $data): PurchaseOrder
     {
-        if ($po->status !== 'PO_DRAFT' && $po->status !== 'RETURNED_TO_PROCUREMENT') {
-            throw new \RuntimeException('Only draft or returned purchase orders can be edited.');
+        if (! in_array($po->status, ['PO_DRAFT', 'RETURNED_TO_PROCUREMENT', 'PENDING_ACTUAL_PO', 'ISSUED', 'PENDING_ACCOUNTING_REVIEW', 'APPROVED_BY_ACCOUNTING'], true)) {
+            throw new \RuntimeException('لا يمكن تعديل أمر شراء بهذه الحالة.');
         }
 
         if ($item->purchase_order_id !== $po->id) {
@@ -419,12 +423,12 @@ class PurchaseOrderService
     }
 
     /**
-     * Add line item to a draft PO.
+     * Add line item to a PO.
      */
     public function addItem(User $user, PurchaseOrder $po, array $data): PurchaseOrder
     {
-        if ($po->status !== 'PO_DRAFT' && $po->status !== 'RETURNED_TO_PROCUREMENT') {
-            throw new \RuntimeException('Only draft or returned purchase orders can be edited.');
+        if (! in_array($po->status, ['PO_DRAFT', 'RETURNED_TO_PROCUREMENT', 'PENDING_ACTUAL_PO', 'ISSUED', 'PENDING_ACCOUNTING_REVIEW', 'APPROVED_BY_ACCOUNTING'], true)) {
+            throw new \RuntimeException('لا يمكن تعديل أمر شراء بهذه الحالة.');
         }
 
         return DB::transaction(function () use ($user, $po, $data) {
@@ -468,12 +472,12 @@ class PurchaseOrderService
     }
 
     /**
-     * Delete line item from a draft PO.
+     * Delete line item from a PO.
      */
     public function deleteItem(User $user, PurchaseOrder $po, PurchaseOrderItem $item): PurchaseOrder
     {
-        if ($po->status !== 'PO_DRAFT' && $po->status !== 'RETURNED_TO_PROCUREMENT') {
-            throw new \RuntimeException('Only draft or returned purchase orders can be edited.');
+        if (! in_array($po->status, ['PO_DRAFT', 'RETURNED_TO_PROCUREMENT', 'PENDING_ACTUAL_PO', 'ISSUED', 'PENDING_ACCOUNTING_REVIEW', 'APPROVED_BY_ACCOUNTING'], true)) {
+            throw new \RuntimeException('لا يمكن تعديل أمر شراء بهذه الحالة.');
         }
 
         if ($item->purchase_order_id !== $po->id) {
@@ -498,6 +502,229 @@ class PurchaseOrderService
             $this->recalculateTotals($lockedPo);
 
             return $lockedPo->fresh(['purchaseRequest.requester', 'purchaseRequest.department', 'purchaseRequest.assignedReviewer', 'purchaseRequest.approvalHistory.actor', 'selectedQuote', 'supplier', 'createdBy', 'items.item']);
+        });
+    }
+
+    /**
+     * Synchronize line items of a Purchase Order with an incoming items array.
+     * Deletes removed items, updates existing items, creates new items, and recalculates totals.
+     */
+    public function syncPoItems(User $user, PurchaseOrder $lockedPo, array $items): float
+    {
+        $existingItems = $lockedPo->items()->get()->keyBy('id');
+        $incomingIds   = collect($items)->pluck('id')->filter()->map(fn ($v) => (int) $v);
+
+        // Delete items that were removed
+        foreach ($existingItems as $existingId => $existingItem) {
+            if (! $incomingIds->contains($existingId)) {
+                AuditLog::create([
+                    'user_id'     => $user->id,
+                    'entity_type' => PurchaseOrderItem::class,
+                    'entity_id'   => $existingItem->id,
+                    'action'      => 'PO_ITEM_REMOVED',
+                    'field_name'  => 'item_description',
+                    'old_value'   => $existingItem->item_description,
+                    'new_value'   => null,
+                ]);
+                $existingItem->delete();
+            }
+        }
+
+        $grandTotal = 0.0;
+
+        foreach ($items as $input) {
+            $qty       = max(0.001, (float) ($input['quantity'] ?? 0));
+            $unitPrice = max(0.0,  (float) ($input['unit_price'] ?? 0));
+            $lineTotal = round($qty * $unitPrice, 2);
+            $grandTotal += $lineTotal;
+
+            $existingItemId = !empty($input['id']) ? (int) $input['id'] : null;
+            $existingItem   = ($existingItemId && $existingItems->has($existingItemId)) ? $existingItems->get($existingItemId) : null;
+
+            $rawRef = !empty($input['item_reference']) ? $input['item_reference'] : ($existingItem?->item_reference ?? 'عام');
+            $rawReg = !empty($input['region']) ? $input['region'] : ($existingItem?->region ?? 'عام');
+
+            [$itemReference, $region] = $this->requireReferenceFields(
+                $rawRef,
+                $rawReg,
+                'item'
+            );
+
+            if ($existingItem) {
+                // Update existing item
+                $existingItem->update([
+                    'item_description' => $input['item_description'] ?? $existingItem->item_description,
+                    'item_reference'   => $itemReference,
+                    'region'           => $region,
+                    'quantity'         => $qty,
+                    'uom'              => $input['uom'] ?? $existingItem->uom,
+                    'unit_price'       => $unitPrice,
+                    'line_total'       => $lineTotal,
+                    'specifications'   => array_key_exists('specifications', $input) ? $input['specifications'] : $existingItem->specifications,
+                ]);
+
+                AuditLog::create([
+                    'user_id'     => $user->id,
+                    'entity_type' => PurchaseOrderItem::class,
+                    'entity_id'   => $existingItem->id,
+                    'action'      => 'PO_ITEM_UPDATED',
+                    'field_name'  => 'line_total',
+                    'old_value'   => (string) $existingItem->getOriginal('line_total'),
+                    'new_value'   => (string) $lineTotal,
+                ]);
+            } else {
+                // Create new item added by procurement
+                $newItem = $lockedPo->items()->create([
+                    'item_id'          => $input['item_id'] ?? null,
+                    'pr_item_id'       => $input['pr_item_id'] ?? null,
+                    'item_description' => $input['item_description'] ?? 'بند جديد',
+                    'item_reference'   => $itemReference,
+                    'region'           => $region,
+                    'quantity'         => $qty,
+                    'uom'              => $input['uom'] ?? 'PCS',
+                    'unit_price'       => $unitPrice,
+                    'line_total'       => $lineTotal,
+                    'specifications'   => $input['specifications'] ?? null,
+                    'supplier_id'      => $input['supplier_id'] ?? $lockedPo->supplier_id ?? null,
+                ]);
+
+                AuditLog::create([
+                    'user_id'     => $user->id,
+                    'entity_type' => PurchaseOrderItem::class,
+                    'entity_id'   => $newItem->id,
+                    'action'      => 'PO_ITEM_ADDED',
+                    'field_name'  => 'item_description',
+                    'old_value'   => null,
+                    'new_value'   => $newItem->item_description,
+                ]);
+            }
+        }
+
+        $this->recalculateTotals($lockedPo);
+
+        return round($grandTotal, 2);
+    }
+
+    /**
+     * Finalise the Actual Purchase Order after GRN approval.
+     *
+     * Procurement provides the definitive set of line items (reflecting what was
+     * actually delivered / accepted). All existing items are replaced via a full
+     * sync: items omitted from $items are deleted, existing items are updated,
+     * and new items (no 'id') are inserted.
+     *
+     * After finalisation the PO transitions:
+     *   PENDING_ACTUAL_PO → ISSUED   (then accounting sees it via ISSUED status)
+     *
+     * The GRN received_quantity values are passed through from the UI as a display
+     * hint only (stored in notes if they differ) — they do NOT overwrite anything.
+     */
+    public function finalizeActualPo(
+        User $user,
+        PurchaseOrder $po,
+        array $items,
+        ?string $notes = null
+    ): PurchaseOrder {
+        if ($po->status !== 'PENDING_ACTUAL_PO') {
+            throw new \RuntimeException('لا يمكن إصدار أمر الشراء الفعلي إلا بعد اعتماد إذن الاستلام وانتقال الملف لمرحلة بانتظار الإصدار الفعلي.');
+        }
+
+        if (empty($items)) {
+            throw ValidationException::withMessages([
+                'items' => ['يجب توفير بند واحد على الأقل في أمر الشراء الفعلي.'],
+            ]);
+        }
+
+        return DB::transaction(function () use ($user, $po, $items, $notes) {
+            $lockedPo = PurchaseOrder::where('id', $po->id)->lockForUpdate()->firstOrFail();
+
+            if ($lockedPo->status !== 'PENDING_ACTUAL_PO') {
+                throw new \RuntimeException('تغيرت حالة أمر الشراء أثناء المعالجة. أعد المحاولة.');
+            }
+
+            // ── Full items sync ──────────────────────────────────────────────────
+            $grandTotal = $this->syncPoItems($user, $lockedPo, $items);
+
+            // Update PO totals and transition to ISSUED so accounting can see it
+            $lockedPo->update([
+                'status'               => 'ISSUED',
+                'subtotal'             => round($grandTotal, 2),
+                'grand_total'          => round($grandTotal, 2),
+                'finalized_by_user_id' => $user->id,
+                'finalized_at'         => now(),
+                'finalization_notes'   => $notes,
+            ]);
+
+            ApprovalHistory::create([
+                'target_type' => PurchaseOrder::class,
+                'target_id'   => $lockedPo->id,
+                'actor_user_id' => $user->id,
+                'action'      => 'ACTUAL_PO_FINALIZED',
+                'from_state'  => 'PENDING_ACTUAL_PO',
+                'to_state'    => 'ISSUED',
+                'comments'    => $notes ?? 'أصدر مدير المشتريات أمر الشراء الفعلي بعد اعتماد إذن الاستلام وأرسله للحسابات.',
+            ]);
+
+            AuditLog::create([
+                'user_id'     => $user->id,
+                'entity_type' => PurchaseOrder::class,
+                'entity_id'   => $lockedPo->id,
+                'action'      => 'ACTUAL_PO_FINALIZED',
+                'field_name'  => 'status',
+                'old_value'   => 'PENDING_ACTUAL_PO',
+                'new_value'   => 'ISSUED',
+            ]);
+
+            // Notify accountants about the finalised PO
+            $notificationService = app(NotificationService::class);
+            $accountants = $notificationService->resolveUsersWithPermission('purchase_order.view_accounting');
+
+            $lockedPo->loadMissing('purchaseRequest.department');
+            $deptCode = $lockedPo->purchaseRequest?->department?->code;
+            $deptAccountants = collect();
+            if ($deptCode) {
+                foreach (SupplierInvoiceService::ACCOUNTANT_DEPARTMENT_MAPPINGS as $roleSlug => $deptCodes) {
+                    if (in_array($deptCode, $deptCodes, true)) {
+                        $deptAccountants = User::whereHas('roles', fn ($q) => $q->where('slug', $roleSlug))
+                            ->where('is_active', true)
+                            ->get();
+                        break;
+                    }
+                }
+            }
+
+            $targetAccountants = $deptAccountants->isNotEmpty() ? $deptAccountants : $accountants;
+
+            if ($targetAccountants->isNotEmpty()) {
+                $receipt = $lockedPo->receipts()->where('status', 'APPROVED')->latest()->first();
+                if ($receipt) {
+                    $notificationService->queueAccountingWithPurchaseOrderAndReceipt(
+                        $targetAccountants,
+                        $lockedPo,
+                        $receipt
+                    );
+                } else {
+                    $notificationService->queueUsers(
+                        $targetAccountants,
+                        'purchase_order_actual_issued_accounting',
+                        'أمر شراء فعلي جاهز للمراجعة المحاسبية',
+                        "تم إصدار أمر الشراء الفعلي {$lockedPo->po_number} بعد اعتماد إذن الاستلام وهو جاهز للمراجعة المحاسبية.",
+                        $lockedPo
+                    );
+                }
+            }
+
+            app(NotificationService::class)->markEntityNotificationsAsRead($lockedPo, $user);
+
+            return $lockedPo->fresh([
+                'purchaseRequest.requester',
+                'purchaseRequest.department',
+                'purchaseRequest.assignedReviewer',
+                'supplier',
+                'createdBy',
+                'items.item',
+                'receipts.items.purchaseOrderItem',
+            ]);
         });
     }
 

@@ -256,6 +256,13 @@ Route::middleware('auth:sanctum')->prefix('procurement')->group(function () {
     Route::put('/purchase-orders/{id}/delivery', [ProcurementPurchaseOrderController::class, 'updateDeliveryStatus'])
         ->middleware('permission:purchase_order.edit');
 
+    // ── Actual PO Workflow (after GRN approval) ──
+    Route::get('/pending-actual-pos', [ProcurementPurchaseOrderController::class, 'indexPendingActualPos'])
+        ->middleware('permission:purchase_order.view');
+
+    Route::post('/purchase-orders/{id}/finalize', [ProcurementPurchaseOrderController::class, 'finalizeActualPo'])
+        ->middleware('permission:purchase_order.create');
+
     Route::get('/analytics', [ProcurementAnalyticsController::class, 'index'])
         ->middleware('permission:purchase_order.view|purchase_order.view_gm|purchase_order.view_accounting');
 

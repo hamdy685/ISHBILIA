@@ -1,6 +1,7 @@
 export type PurchaseOrderStatus =
   | 'PO_DRAFT'
   | 'ISSUED'
+  | 'PENDING_ACTUAL_PO'
   | 'PENDING_ACCOUNTING_REVIEW'
   | 'RETURNED_TO_PROCUREMENT'
   | 'APPROVED_BY_ACCOUNTING'
@@ -172,6 +173,14 @@ export interface PurchaseOrder {
   budget_code?: string | null;
   financial_notes?: string | null;
   notes?: string | null;
+  finalized_by_user_id?: number | null;
+  finalized_at?: string | null;
+  finalization_notes?: string | null;
+  finalized_by?: {
+    id: number;
+    name: string;
+    email?: string;
+  } | null;
   rejection_reason?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -252,8 +261,10 @@ export interface PurchaseOrderPayload {
   budget_code?: string;
   financial_notes?: string;
   notes?: string;
+  finalization_notes?: string;
   items?: Array<{
-    pr_item_id?: number;
+    id?: number;
+    pr_item_id?: number | null;
     item_id?: number | null;
     item_description?: string;
     item_reference?: string;
@@ -262,9 +273,8 @@ export interface PurchaseOrderPayload {
     uom?: string;
     unit_price?: number;
     specifications?: string;
-    supplier_id?: number;
+    supplier_id?: number | null;
   }>;
-
 }
 
 export interface PurchaseOrderItemPayload {
@@ -276,4 +286,23 @@ export interface PurchaseOrderItemPayload {
   uom?: string;
   unit_price: number | string;
   specifications?: string;
+}
+
+export interface FinalizeActualPoItemPayload {
+  id?: number | null;
+  item_id?: number | null;
+  pr_item_id?: number | null;
+  item_description: string;
+  item_reference: string;
+  region: string;
+  quantity: number;
+  uom?: string | null;
+  unit_price: number;
+  specifications?: string | null;
+  supplier_id?: number | null;
+}
+
+export interface FinalizeActualPoPayload {
+  items: FinalizeActualPoItemPayload[];
+  notes?: string;
 }

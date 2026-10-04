@@ -82,6 +82,16 @@ class PurchaseOrderResource extends JsonResource
             'budget_code' => $this->budget_code,
             'financial_notes' => $this->financial_notes,
             'notes' => $this->notes,
+            'finalized_by_user_id' => $this->finalized_by_user_id,
+            'finalized_at' => $this->finalized_at ? $this->finalized_at->toIso8601String() : null,
+            'finalization_notes' => $this->finalization_notes,
+            'finalized_by' => $this->whenLoaded('finalizedBy', function () {
+                return $this->finalizedBy ? [
+                    'id' => $this->finalizedBy->id,
+                    'name' => $this->finalizedBy->name,
+                    'email' => $this->finalizedBy->email,
+                ] : null;
+            }),
             'rejection_reason' => $this->rejection_reason,
             'created_at' => $this->created_at ? $this->created_at->toIso8601String() : null,
             'updated_at' => $this->updated_at ? $this->updated_at->toIso8601String() : null,

@@ -63,7 +63,9 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
     );
   }
 
-  const isEditable = ['PO_DRAFT', 'RETURNED_TO_PROCUREMENT'].includes(po.status);
+  const isPendingActual = po.status === 'PENDING_ACTUAL_PO';
+  const isDraftOrReturned = ['PO_DRAFT', 'RETURNED_TO_PROCUREMENT'].includes(po.status);
+  const isEditable = po.status !== 'REJECTED';
 
   const handleSubmitToAccounting = async () => {
     if (submitting) return;
@@ -112,6 +114,14 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
 
         {/* Responsive Actions: Sticky bottom on mobile, inline in header on desktop */}
         <div className="fixed bottom-0 inset-x-0 z-30 flex items-center justify-between gap-2 border-t border-slate-800 bg-slate-900/95 p-3 shadow-2xl backdrop-blur md:static md:z-auto md:flex md:w-auto md:justify-start md:border-0 md:bg-transparent md:p-0 md:shadow-none md:backdrop-blur-none">
+          {isPendingActual && hasPermission('purchase_order.edit') && (
+            <Link to={`/procurement/purchase-orders/${po.id}/edit`} className="flex-1 md:flex-none">
+              <Button variant="primary" size="md" className="w-full md:w-auto min-h-10 text-xs font-black bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-950/40">
+                ⚡ مراجعة وإصدار أمر الشراء الفعلي
+              </Button>
+            </Link>
+          )}
+
           {isEditable && hasPermission('purchase_order.edit') && (
             <Link to={`/procurement/purchase-orders/${po.id}/edit`} className="flex-1 md:flex-none">
               <Button variant="warning" size="md" className="w-full md:w-auto min-h-10 text-xs bg-amber-950/60 text-amber-300 border-amber-800/60 hover:bg-amber-900/60">
@@ -120,7 +130,7 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
             </Link>
           )}
 
-          {isEditable && hasPermission('purchase_order.edit') && (
+          {isDraftOrReturned && hasPermission('purchase_order.edit') && (
             <Button
               variant="primary"
               size="md"
@@ -153,6 +163,43 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
       </div>
 
       {error && <ErrorMessage error={error} />}
+
+      {/* ── Actual PO Callout Banner ── */}
+      {isPendingActual && (
+        <div className="rounded-2xl border-2 border-indigo-500/50 bg-gradient-to-r from-indigo-950/40 via-slate-900 to-slate-950 p-5 shadow-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <span className="text-3xl">📦</span>
+            <div>
+              <h3 className="text-sm font-black text-indigo-300">
+                إذن الاستلام معتمد — بانتظار إصدار أمر الشراء الفعلي (Actual PO)
+              </h3>
+              <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                تم اعتماد الاستلام في الموقع من قبل أمين المخزن ومهندس الموقع. يرجى مراجعة البنود ومطابقة الكميات والأسعار الفعلية لإصدار الأمر الفعلي النهائي وإرساله للحسابات.
+              </p>
+            </div>
+          </div>
+          <Link to={`/procurement/purchase-orders/${po.id}/edit`}>
+            <Button variant="primary" size="md" className="whitespace-nowrap font-black bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 text-white shadow-lg">
+              ⚡ مراجعة وإصدار الأمر الفعلي ←
+            </Button>
+          </Link>
+        </div>
+      )}
+
+      {/* ── Finalized Actual PO Banner (if already finalized) ── */}
+      {po.finalized_at && (
+        <div className="rounded-xl border border-emerald-500/40 bg-emerald-950/30 p-3.5 flex items-center justify-between gap-3 text-xs text-emerald-300">
+          <div className="flex items-center gap-2">
+            <span>✅</span>
+            <span>
+              تم إصدار هذا الأمر كـ <strong>أمر شراء فعلي</strong> بتاريخ{' '}
+              <strong className="font-mono">{po.finalized_at.slice(0, 10)}</strong>
+              {po.finalized_by?.name ? ` بواسطة ${po.finalized_by.name}` : ''}
+              {po.finalization_notes ? ` — ملاحظات: ${po.finalization_notes}` : ''}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Metadata Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
