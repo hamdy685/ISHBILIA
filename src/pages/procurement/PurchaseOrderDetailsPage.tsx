@@ -116,8 +116,8 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
         <div className="fixed bottom-0 inset-x-0 z-30 flex items-center justify-between gap-2 border-t border-slate-800 bg-slate-900/95 p-3 shadow-2xl backdrop-blur md:static md:z-auto md:flex md:w-auto md:justify-start md:border-0 md:bg-transparent md:p-0 md:shadow-none md:backdrop-blur-none">
           {isPendingActual && hasPermission('purchase_order.edit') && (
             <Link to={`/procurement/purchase-orders/${po.id}/edit`} className="flex-1 md:flex-none">
-              <Button variant="primary" size="md" className="w-full md:w-auto min-h-10 text-xs font-black bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-950/40">
-                ⚡ مراجعة وإصدار أمر الشراء الفعلي
+              <Button variant="primary" size="md" className="w-full md:w-auto min-h-10 text-xs font-black bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 hover:from-amber-500 hover:to-orange-500 text-white shadow-lg shadow-amber-950/50 border border-amber-400/50">
+                ⚡ إنشاء أمر الشراء الفعلي
               </Button>
             </Link>
           )}

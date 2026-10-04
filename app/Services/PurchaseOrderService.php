@@ -720,10 +720,16 @@ class PurchaseOrderService
                 'purchaseRequest.requester',
                 'purchaseRequest.department',
                 'purchaseRequest.assignedReviewer',
+                'purchaseRequest.approvalHistory.actor',
                 'supplier',
                 'createdBy',
+                'finalizedBy',
                 'items.item',
+                'items.supplier',
                 'receipts.items.purchaseOrderItem',
+                'receipts.warehouseKeeper',
+                'receipts.siteEngineer',
+                'receipts.receiver',
             ]);
         });
     }

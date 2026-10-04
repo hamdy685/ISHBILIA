@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getApprovedPurchaseRequestsApi, getProcurementAnalyticsApi, ProcurementAnalyticsResponse } from '../../api/procurement';
-import { getPurchaseOrdersApi } from '../../api/purchaseOrders';
+import { getPurchaseOrdersApi, getPendingActualPosApi } from '../../api/purchaseOrders';
 import { PurchaseOrder } from '../../types/purchaseOrder';
 import { PurchaseRequest } from '../../types/purchaseRequest';
 import PurchaseOrderStatusBadge from '../../components/procurement/PurchaseOrderStatusBadge';
@@ -19,6 +19,7 @@ export const ProcurementDashboardPage: React.FC = () => {
   const navigate = useNavigate();
   const [prs, setPrs] = useState<PurchaseRequest[]>([]);
   const [pos, setPos] = useState<PurchaseOrder[]>([]);
+  const [pendingActualPos, setPendingActualPos] = useState<PurchaseOrder[]>([]);
   const [analytics, setAnalytics] = useState<ProcurementAnalyticsResponse | null>(null);
   const [period, setPeriod] = useState<string>('90');
   const [loading, setLoading] = useState<boolean>(true);
@@ -29,14 +30,16 @@ export const ProcurementDashboardPage: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [approvedPrs, allPosPage, analyticsData] = await Promise.all([
+      const [approvedPrs, allPosPage, analyticsData, pendingActualPage] = await Promise.all([
         getApprovedPurchaseRequestsApi(),
         getPurchaseOrdersApi({ page: 1, per_page: 15 }),
-        getProcurementAnalyticsApi(period)
+        getProcurementAnalyticsApi(period),
+        getPendingActualPosApi({ per_page: 20 }),
       ]);
       setPrs(approvedPrs || []);
       setPos(allPosPage?.data || []);
       setAnalytics(analyticsData);
+      setPendingActualPos(pendingActualPage?.data || []);
     } catch (err) {
       console.error('Error loading procurement dashboard:', err);
     } finally {
@@ -65,6 +68,21 @@ export const ProcurementDashboardPage: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Distinct Button for Actual PO */}
+          <Link to="/procurement/purchase-orders?status=PENDING_ACTUAL_PO">
+            <button
+              type="button"
+              className="relative inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-black shadow-lg transition-all duration-200 cursor-pointer bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 hover:from-amber-500 hover:to-orange-500 text-white shadow-amber-950/50 border border-amber-400/50 active:scale-95"
+            >
+              <span className="text-sm">⚡</span>
+              <span>إنشاء أمر الشراء الفعلي</span>
+              {pendingActualPos.length > 0 && (
+                <span className="inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-black leading-none text-amber-950 bg-amber-300 rounded-full shadow animate-pulse">
+                  {pendingActualPos.length}
+                </span>
+              )}
+            </button>
+          </Link>
           <Button
             variant="primary"
             size="sm"
@@ -251,9 +269,9 @@ export const ProcurementDashboardPage: React.FC = () => {
         />
         <KpiCard
           title="بانتظار الإصدار الفعلي"
-          value={countStatus('PENDING_ACTUAL_PO')}
+          value={pendingActualPos.length || countStatus('PENDING_ACTUAL_PO')}
           subtext="استلام معتمد بالـ GRN"
-          accentColor="indigo"
+          accentColor="amber"
           to="/procurement/purchase-orders?status=PENDING_ACTUAL_PO"
           clickableHint="إصدار الأوامر الفعلية ←"
         />
@@ -282,6 +300,148 @@ export const ProcurementDashboardPage: React.FC = () => {
           clickableHint="متابعة التوريدات ←"
         />
       </div>
+
+      {/* ── قسم أوامر الشراء الفعلية المعتمدة بالـ GRN (مطلوب إصدار أمر الشراء الفعلي) ── */}
+      <section className="rounded-2xl border-2 border-amber-500/50 bg-gradient-to-br from-amber-950/30 via-slate-900 to-slate-950 p-5 shadow-xl shadow-amber-950/20">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-amber-900/40">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-xl shadow-inner shrink-0">
+              ⚡
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-base font-black text-slate-100">
+                  قسم أوامر الشراء الفعلية (بانتظار الإصدار النهائي)
+                </h2>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse">
+                  استلام معتمد بالـ GRN
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                الطلبات المستلمة بالموقع والمعتمد إذن استلامها، تتطلب مطابقة الكميات وتعديل الأسعار لإصدار أمر الشراء الفعلي النهائي للحسابات.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <Link to="/procurement/purchase-orders?status=PENDING_ACTUAL_PO">
+              <Button variant="secondary" size="sm" className="text-xs border-amber-700/50 hover:bg-amber-950/40 text-amber-300">
+                أرشيف الأوامر الفعلية ({pendingActualPos.length}) ←
+              </Button>
+            </Link>
+          </div>
+        </div>
+
+        {pendingActualPos.length === 0 ? (
+          <div className="text-center py-6 text-slate-400 text-xs bg-slate-900/60 rounded-xl border border-slate-800/80 mt-4">
+            🎉 لا توجد طلبات معلقة بانتظار إصدار أمر الشراء الفعلي حالياً. تم استكمال جميع الاستلامات المعتمدة وتحويلها للحسابات.
+          </div>
+        ) : (
+          <div className="mt-4 space-y-3">
+            {/* Desktop Table */}
+            <div className="hidden md:block overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-amber-900/30">
+                    <TableHead className="text-amber-200">رقم أمر الشراء</TableHead>
+                    <TableHead className="text-amber-200">طلب الشراء والقسم</TableHead>
+                    <TableHead className="text-amber-200">المورد</TableHead>
+                    <TableHead className="text-amber-200">إذن الاستلام المعتمد بالموقع</TableHead>
+                    <TableHead className="text-amber-200">تاريخ الاستلام</TableHead>
+                    <TableHead className="text-amber-200">الحالة الحالية</TableHead>
+                    <TableHead className="text-amber-200 text-center">الإجراء المباشر</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {pendingActualPos.slice(0, 6).map((po) => {
+                    const latestReceipt = po.receipts && po.receipts.length > 0 ? po.receipts[0] : null;
+                    return (
+                      <TableRow key={`pending-actual-${po.id}`} className="hover:bg-amber-950/20 border-b border-amber-900/20">
+                        <TableCell className="font-mono font-bold text-amber-300">
+                          <Link to={`/procurement/purchase-orders/${po.id}`} className="hover:underline">
+                            {po.po_number}
+                          </Link>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-xs font-semibold text-slate-200">{po.purchase_request?.request_number || 'مباشر'}</div>
+                          <div className="text-[11px] text-slate-400">{po.purchase_request?.department?.name || po.department?.name || '—'}</div>
+                        </TableCell>
+                        <TableCell className="text-slate-200 font-medium">
+                          {po.supplier?.company_name || 'غير محدد'}
+                        </TableCell>
+                        <TableCell>
+                          {latestReceipt ? (
+                            <div className="space-y-0.5">
+                              <span className="font-mono text-xs font-bold text-cyan-300">{latestReceipt.receipt_number}</span>
+                              {latestReceipt.site_engineer && (
+                                <div className="text-[10px] text-slate-400">اعتماد: {latestReceipt.site_engineer.name}</div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 text-xs">معتمد بالـ GRN</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs text-slate-400">
+                          {latestReceipt?.received_at || po.actual_delivery_date || '—'}
+                        </TableCell>
+                        <TableCell>
+                          <PurchaseOrderStatusBadge status={po.status} />
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Link to={`/procurement/purchase-orders/${po.id}/edit`}>
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black shadow-md transition-all cursor-pointer bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white shadow-amber-900/40 border border-amber-400/40 active:scale-95"
+                            >
+                              <span>⚡ إنشاء أمر الشراء الفعلي</span>
+                            </button>
+                          </Link>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Mobile Cards */}
+            <div className="md:hidden space-y-3">
+              {pendingActualPos.slice(0, 6).map((po) => {
+                const latestReceipt = po.receipts && po.receipts.length > 0 ? po.receipts[0] : null;
+                return (
+                  <article key={`mobile-pending-actual-${po.id}`} className="rounded-xl border border-amber-500/40 bg-slate-900/80 p-4 shadow">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <Link to={`/procurement/purchase-orders/${po.id}`} className="font-mono text-sm font-black text-amber-300 hover:underline">
+                          {po.po_number}
+                        </Link>
+                        <p className="text-xs text-slate-400 mt-0.5">{po.purchase_request?.request_number || 'أمر مباشر'} • {po.supplier?.company_name}</p>
+                      </div>
+                      <PurchaseOrderStatusBadge status={po.status} />
+                    </div>
+                    {latestReceipt && (
+                      <div className="mt-3 p-2 bg-amber-950/30 rounded border border-amber-900/40 text-[11px] text-slate-300 flex justify-between">
+                        <span>إذن الاستلام: <strong className="font-mono text-cyan-300">{latestReceipt.receipt_number}</strong></span>
+                        <span>تاريخ: {latestReceipt.received_at || '—'}</span>
+                      </div>
+                    )}
+                    <div className="mt-3">
+                      <Link to={`/procurement/purchase-orders/${po.id}/edit`} className="block">
+                        <button
+                          type="button"
+                          className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-black shadow-md bg-gradient-to-r from-amber-600 to-orange-600 text-white"
+                        >
+                          <span>⚡ إنشاء أمر الشراء الفعلي</span>
+                        </button>
+                      </Link>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </section>
 
       {!loading && <ProcurementCharts orders={pos} />}
 

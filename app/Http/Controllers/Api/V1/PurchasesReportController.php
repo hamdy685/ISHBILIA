@@ -51,7 +51,7 @@ class PurchasesReportController extends Controller
         $departmentId = $request->filled('department_id') && $request->query('department_id') !== 'ALL'
             ? (int) $request->query('department_id')
             : null;
-        $accountingFilter = (string) $request->query('accounting_filter', 'VERIFIED_ONLY'); // 'VERIFIED_ONLY' | 'ALL' | 'PENDING'
+        $accountingFilter = (string) $request->query('accounting_filter', 'ALL'); // 'VERIFIED_ONLY' | 'ALL' | 'PENDING'
         $actualOnly = $request->boolean('actual_only', true); // أوامر الشراء الفعلية فقط (الافتراضي نعم لحماية التقارير المالية)
         $dateBasis = (string) $request->query('date_basis', 'po_date'); // 'po_date' | 'delivery_date' | 'pr_date'
         if (! in_array($dateBasis, ['po_date', 'delivery_date', 'pr_date'], true)) {
@@ -161,19 +161,25 @@ class PurchasesReportController extends Controller
             if ($dateBasis === 'po_date') {
                 // تاريخ أمر الشراء (الافتراضي: تاريخ الأمر أو تاريخ التوريد الفعلي أو تاريخ الاستلام أو تاريخ الفاتورة)
                 $ordersQuery->where(function ($q) use ($startDateStr, $endDateStr) {
-                    $q->whereBetween('created_at', [$startDateStr, $endDateStr])
+                    $q->whereDate('created_at', '>=', $startDateStr)->whereDate('created_at', '<=', $endDateStr)
                         ->orWhere(function ($dq) use ($startDateStr, $endDateStr) {
                             $dq->whereNotNull('actual_delivery_date')
-                                ->whereBetween('actual_delivery_date', [$startDateStr, $endDateStr]);
+                                ->whereDate('actual_delivery_date', '>=', $startDateStr)
+                                ->whereDate('actual_delivery_date', '<=', $endDateStr);
                         })
                         ->orWhereHas('purchaseReceipts', function ($rq) use ($startDateStr, $endDateStr) {
-                            $rq->whereBetween('received_at', [$startDateStr, $endDateStr]);
+                            $rq->whereDate('received_at', '>=', $startDateStr)
+                                ->whereDate('received_at', '<=', $endDateStr);
                         })
                         ->orWhereHas('supplierInvoices', function ($iq) use ($startDateStr, $endDateStr) {
                             $iq->whereNotIn('status', ['VOIDED', 'CANCELLED'])
                                 ->where(function ($dateQ) use ($startDateStr, $endDateStr) {
-                                    $dateQ->whereBetween('invoice_date', [$startDateStr, $endDateStr])
-                                        ->orWhereBetween('created_at', [$startDateStr, $endDateStr]);
+                                    $dateQ->whereDate('invoice_date', '>=', $startDateStr)
+                                        ->whereDate('invoice_date', '<=', $endDateStr)
+                                        ->orWhere(function ($cq) use ($startDateStr, $endDateStr) {
+                                            $cq->whereDate('created_at', '>=', $startDateStr)
+                                                ->whereDate('created_at', '<=', $endDateStr);
+                                        });
                                 });
                         });
                 });
@@ -269,20 +275,7 @@ class PurchasesReportController extends Controller
                 foreach ($poItems as $poItem) {
                     $prItem = $poItem->prItem ?? (property_exists($poItem, 'prItem') ? null : $poItem);
 
-                    // كميات أمر الشراء هي المعتمدة للحسابات
-                    $poQty = (float) ($poItem->quantity ?? 1);
-                    $unitPrice = (float) ($poItem->unit_price ?? $poItem->estimated_unit_price ?? 0);
-                    $lineTotal = (float) ($poItem->line_total > 0 ? $poItem->line_total : round($poQty * $unitPrice, 2));
-
-                    $rowParcelRef = $poItem->item_reference
-                        ?: ($prItem?->item_reference ?: $defaultParcelRef);
-                    $rowRegion = $poItem->region
-                        ?: ($prItem?->region ?: $defaultRegion);
-
-                    $works = $poItem->specifications
-                        ?: ($prItem?->specifications ?: ($requestModel?->notes ?: '—'));
-
-                    // الاستلام الفعلي بالموقع كمعلومة استرشادية فقط
+                    // الاستلام الفعلي بالموقع كمعلومة استرشادية للحسابات
                     $matchingReceiptItem = null;
                     if ($approvedReceipt && $approvedReceipt->items->isNotEmpty()) {
                         $matchingReceiptItem = $approvedReceipt->items->first(function ($ri) use ($poItem) {
@@ -291,6 +284,23 @@ class PurchasesReportController extends Controller
                         });
                     }
                     $receivedQty = $matchingReceiptItem ? (float) $matchingReceiptItem->received_quantity : null;
+
+                    // كميات أمر الشراء هي المعتمدة للحسابات (وفي الأوامر السابقة غير المعتمد لها أمر شراء فعلي نعتمد كمية الاستلام إذا سجلت فاتورة)
+                    $poQty = (float) ($poItem->quantity ?? 1);
+                    $effectiveQty = ($receivedQty !== null && $primaryInvoice !== null && ! $order->finalized_at)
+                        ? $receivedQty
+                        : $poQty;
+
+                    $unitPrice = (float) ($poItem->unit_price ?? $poItem->estimated_unit_price ?? 0);
+                    $lineTotal = (float) ($poItem->line_total > 0 && $effectiveQty == $poQty ? $poItem->line_total : round($effectiveQty * $unitPrice, 2));
+
+                    $rowParcelRef = $poItem->item_reference
+                        ?: ($prItem?->item_reference ?: $defaultParcelRef);
+                    $rowRegion = $poItem->region
+                        ?: ($prItem?->region ?: $defaultRegion);
+
+                    $works = $poItem->specifications
+                        ?: ($prItem?->specifications ?: ($requestModel?->notes ?: '—'));
 
                     $reportRows[] = [
                         'id' => "PO-{$order->id}-ITEM-{$poItem->id}",
@@ -318,7 +328,7 @@ class PurchasesReportController extends Controller
                         'item_name' => $poItem->item_description ?? ($poItem->item?->name ?? '—'),
                         'uom' => $poItem->uom ?? '—',
                         // كمية وأسعار أمر الشراء (الأساس المالي والمحاسبي)
-                        'quantity' => $poQty,
+                        'quantity' => $effectiveQty,
                         'unit_price' => $unitPrice,
                         'total_price' => $lineTotal,
                         // بيانات الاستلام الفعلي بالموقع (بيان استرشادي للحسابات)

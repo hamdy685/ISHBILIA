@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { getPurchaseOrdersApi, PurchaseOrderPaginationMeta } from '../../api/purchaseOrders';
+import { getPurchaseOrdersApi, getPendingActualPosApi, PurchaseOrderPaginationMeta } from '../../api/purchaseOrders';
 import { PurchaseOrder, المورد } from '../../types/purchaseOrder';
 import { getSuppliersApi } from '../../api/suppliers';
 import PurchaseOrderStatusBadge from '../../components/procurement/PurchaseOrderStatusBadge';
@@ -26,6 +26,7 @@ export const PurchaseOrdersPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const [supplierFilter, setSupplierFilter] = useState('ALL');
+  const [pendingActualCount, setPendingActualCount] = useState<number>(0);
   const today = getTodayInputDate();
   const defaultDateFrom = getDefaultDateFrom();
   const [dateFrom, setDateFrom] = useState(defaultDateFrom);
@@ -51,17 +52,23 @@ export const PurchaseOrdersPage: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const result = await getPurchaseOrdersApi({
-        page: requestedPage,
-        per_page: 15,
-        ...(searchTerm.trim() ? { search: searchTerm.trim() } : {}),
-        ...(selectedStatus !== 'ALL' ? { status: selectedStatus } : {}),
-        ...(supplierFilter !== 'ALL' ? { supplier_id: Number(supplierFilter) } : {}),
-        ...(dateFrom && !ignoreDefaultDateForSearch ? { date_from: dateFrom } : {}),
-        ...(dateTo && !ignoreDefaultDateForSearch ? { date_to: dateTo } : {}),
-      });
+      const [result, pendingRes] = await Promise.all([
+        getPurchaseOrdersApi({
+          page: requestedPage,
+          per_page: 15,
+          ...(searchTerm.trim() ? { search: searchTerm.trim() } : {}),
+          ...(selectedStatus !== 'ALL' ? { status: selectedStatus } : {}),
+          ...(supplierFilter !== 'ALL' ? { supplier_id: Number(supplierFilter) } : {}),
+          ...(dateFrom && !ignoreDefaultDateForSearch ? { date_from: dateFrom } : {}),
+          ...(dateTo && !ignoreDefaultDateForSearch ? { date_to: dateTo } : {}),
+        }),
+        getPendingActualPosApi({ per_page: 1 }).catch(() => null),
+      ]);
       setOrders(result.data || []);
       setPageMeta(result.meta);
+      if (pendingRes?.meta?.total !== undefined) {
+        setPendingActualCount(pendingRes.meta.total);
+      }
     } catch (err) {
       const parsed = parseApiError(err);
       setError(parsed.message);
@@ -119,14 +126,65 @@ export const PurchaseOrdersPage: React.FC = () => {
           </p>
         </div>
 
-        <Button
-          variant="primary"
-          size="md"
-          onClick={() => setIsDirectPoModalOpen(true)}
-        >
-          + أمر شراء مباشر
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Distinct Button for Actual PO */}
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedStatus('PENDING_ACTUAL_PO');
+              setPage(1);
+            }}
+            className="relative inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-black shadow-lg transition-all duration-200 cursor-pointer bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 hover:from-amber-500 hover:to-orange-500 text-white shadow-amber-950/50 border border-amber-400/50 active:scale-95"
+          >
+            <span className="text-sm">⚡</span>
+            <span>إنشاء أمر الشراء الفعلي</span>
+            {pendingActualCount > 0 && (
+              <span className="inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-black leading-none text-amber-950 bg-amber-300 rounded-full shadow animate-pulse">
+                {pendingActualCount}
+              </span>
+            )}
+          </button>
+
+          <Button
+            variant="primary"
+            size="md"
+            onClick={() => setIsDirectPoModalOpen(true)}
+          >
+            + أمر شراء مباشر
+          </Button>
+        </div>
       </div>
+
+      {/* Banner alerting about Pending Actual POs */}
+      {pendingActualCount > 0 && selectedStatus !== 'PENDING_ACTUAL_PO' && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-gradient-to-r from-amber-950/60 via-slate-900 to-slate-900 border-2 border-amber-500/40 rounded-xl text-xs text-amber-200 shadow-xl shadow-amber-950/30">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-lg shrink-0">
+              ⚡
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-bold text-amber-300">
+                  يوجد {pendingActualCount} أمر شراء معتمد إذن استلامها بالموقع (GRN)
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse">
+                  بانتظار أمر الشراء الفعلي
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                تتطلب مراجعة الأسعار والكميات لإصدار أمر الشراء الفعلي النهائي وتحويل الملف للإدارة المالية.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => { setSelectedStatus('PENDING_ACTUAL_PO'); setPage(1); }}
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-amber-200 bg-amber-900/40 border border-amber-700/60 hover:bg-amber-800/50 transition-colors shrink-0 cursor-pointer"
+          >
+            عرض الأوامر الفعلية المطلوبة ({pendingActualCount}) ←
+          </button>
+        </div>
+      )}
 
       {error && <ErrorMessage error={error} />}
 
@@ -161,15 +219,20 @@ export const PurchaseOrdersPage: React.FC = () => {
         <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-800">
           {statusTabs.map(tab => {
             const active = selectedStatus === tab.key;
+            const isActualTab = tab.key === 'PENDING_ACTUAL_PO';
             return (
               <Button
                 key={tab.key}
-                variant={active ? 'primary' : 'outline'}
+                variant={active ? (isActualTab ? 'warning' : 'primary') : 'outline'}
                 size="sm"
                 onClick={() => { setSelectedStatus(tab.key); setPage(1); }}
-                className="text-[11px]"
+                className={`text-[11px] ${isActualTab && !active ? 'border-amber-600/60 text-amber-300 hover:bg-amber-950/30' : ''} ${isActualTab && active ? 'bg-amber-600 text-white border-amber-500 shadow-md shadow-amber-950/50' : ''}`}
               >
-                {tab.label}{active ? ` (${pageMeta.total.toLocaleString('ar-EG')})` : ''}
+                {isActualTab && <span className="ml-1">⚡</span>}
+                {tab.label}
+                {active
+                  ? ` (${pageMeta.total.toLocaleString('ar-EG')})`
+                  : (isActualTab && pendingActualCount > 0 ? ` (${pendingActualCount.toLocaleString('ar-EG')})` : '')}
               </Button>
             );
           })}
@@ -201,8 +264,12 @@ export const PurchaseOrdersPage: React.FC = () => {
           <TableBody>
             {visibleOrders.map(po => {
               const canEdit = po.status !== 'REJECTED';
+              const isActualPo = po.status === 'PENDING_ACTUAL_PO';
               return (
-                <TableRow key={po.id}>
+                <TableRow
+                  key={po.id}
+                  className={isActualPo ? 'bg-amber-950/20 border-r-4 border-r-amber-500 hover:bg-amber-950/30' : ''}
+                >
                   <TableCell className="font-mono font-bold text-cyan-400">
                     <Link to={`/procurement/purchase-orders/${po.id}`} className="hover:underline">
                       {po.po_number}
@@ -230,11 +297,14 @@ export const PurchaseOrdersPage: React.FC = () => {
                           عرض التفاصيل
                         </Button>
                       </Link>
-                      {po.status === 'PENDING_ACTUAL_PO' && (
+                      {isActualPo && (
                         <Link to={`/procurement/purchase-orders/${po.id}/edit`}>
-                          <Button variant="primary" size="sm" className="px-2.5 py-0.5 text-[10px] bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold shadow-md shadow-emerald-900/30">
-                            ⚡ إصدار الأمر الفعلي
-                          </Button>
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-black rounded-md shadow-md bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white cursor-pointer border border-amber-400/40 active:scale-95 shadow-amber-950/40"
+                          >
+                            <span>⚡ إنشاء أمر الشراء الفعلي</span>
+                          </button>
                         </Link>
                       )}
                       {canEdit && (
@@ -274,8 +344,15 @@ export const PurchaseOrdersPage: React.FC = () => {
         <div className="space-y-3 md:hidden">
           {orders.map((po) => {
             const canEdit = po.status !== 'REJECTED';
+            const isActualPo = po.status === 'PENDING_ACTUAL_PO';
             return (
-              <article key={`mobile-${po.id}`} className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+              <article
+                key={`mobile-${po.id}`}
+                className={isActualPo
+                  ? 'rounded-xl border-2 border-amber-500/50 bg-gradient-to-br from-amber-950/30 via-slate-900 to-slate-950 p-4 shadow-xl shadow-amber-950/20'
+                  : 'rounded-xl border border-slate-800 bg-slate-900/70 p-4'
+                }
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <Link to={`/procurement/purchase-orders/${po.id}`} className="font-mono text-sm font-black text-cyan-300 hover:underline">{po.po_number}</Link>
@@ -291,11 +368,14 @@ export const PurchaseOrdersPage: React.FC = () => {
                 </dl>
                 <div className="mt-4 flex flex-wrap gap-2">
                   <Link to={`/procurement/purchase-orders/${po.id}`}><Button variant="secondary" size="sm">عرض التفاصيل</Button></Link>
-                  {po.status === 'PENDING_ACTUAL_PO' && (
-                    <Link to={`/procurement/purchase-orders/${po.id}/edit`}>
-                      <Button variant="primary" size="sm" className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold">
-                        ⚡ إصدار الأمر الفعلي
-                      </Button>
+                  {isActualPo && (
+                    <Link to={`/procurement/purchase-orders/${po.id}/edit`} className="w-full">
+                      <button
+                        type="button"
+                        className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-black rounded-lg shadow-md bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white cursor-pointer border border-amber-400/40 shadow-amber-950/40"
+                      >
+                        <span>⚡ إنشاء أمر الشراء الفعلي</span>
+                      </button>
                     </Link>
                   )}
                   {canEdit && <Link to={`/procurement/purchase-orders/${po.id}/edit`}><Button variant="warning" size="sm">تعديل</Button></Link>}

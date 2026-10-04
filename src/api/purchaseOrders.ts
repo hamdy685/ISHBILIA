@@ -81,6 +81,8 @@ export const submitPurchaseOrderApi = async (id: number) => {
 export interface CombinedPoPrDocument {
   purchase_order: PurchaseOrder;
   purchase_request: any;
+  receipt?: any;
+  receipts?: any[];
 }
 
 export const getCombinedPoPrDocumentApi = async (id: number): Promise<CombinedPoPrDocument> => {

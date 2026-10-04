@@ -273,7 +273,7 @@ class ProcurementPurchaseOrderController extends Controller
     }
 
     /**
-     * Get combined Purchase Request + Purchase Order document (strictly excluding receipts/GRN).
+     * Get combined Purchase Request + Actual Purchase Order + Site Receipt (GRN) document.
      */
     public function combinedDocument(Request $request, string|int $id): JsonResponse
     {
@@ -285,14 +285,26 @@ class ProcurementPurchaseOrderController extends Controller
             'purchaseRequest.items.item',
             'supplier',
             'createdBy',
+            'finalizedBy',
             'items.item',
             'items.supplier',
+            'receipts.items.purchaseOrderItem',
+            'receipts.warehouseKeeper',
+            'receipts.siteEngineer',
+            'receipts.receiver',
         ])->findOrFail((int) $id);
+
+        $poResource = new PurchaseOrderResource($po);
+        $prResource = new PurchaseRequestResource($po->purchaseRequest);
+        $receipts = $poResource['receipts'] ?? [];
+        $latestReceipt = !empty($receipts) ? $receipts[0] : null;
 
         return response()->json([
             'data' => [
-                'purchase_order' => new PurchaseOrderResource($po),
-                'purchase_request' => new PurchaseRequestResource($po->purchaseRequest),
+                'purchase_order' => $poResource,
+                'purchase_request' => $prResource,
+                'receipt' => $latestReceipt,
+                'receipts' => $receipts,
             ],
         ]);
     }
