@@ -42,16 +42,15 @@ class PurchasesReportController extends Controller
 
         if (! $isAllowed) {
             return response()->json([
-                'message' => 'غير مصرح لك بالوصول لتقرير المشتريات المحاسبي. هذا التقرير مخصص للحسابات والمدير التنفيذي ومدير المشتريات فقط.',
-            ], 403);
-        }
-
-        // 2. Parse Date / Period Filters
-        $filterType = (string) $request->query('filter_type', 'monthly'); // 'daily' | 'monthly' | 'custom'
+                'message' => 'غير مصرح لك بالوصول لتقرير المشتريات المحاسبي. هذا التقرير مخصص للحسابات والمدير التنفيذي ومدير المشت        $filterType = (string) $request->query('filter_type', 'monthly'); // 'daily' | 'monthly' | 'custom'
         $departmentId = $request->filled('department_id') && $request->query('department_id') !== 'ALL'
             ? (int) $request->query('department_id')
             : null;
         $accountingFilter = (string) $request->query('accounting_filter', 'VERIFIED_ONLY'); // 'VERIFIED_ONLY' | 'ALL' | 'PENDING'
+        $dateBasis = (string) $request->query('date_basis', 'po_date'); // 'po_date' | 'delivery_date' | 'pr_date'
+        if (! in_array($dateBasis, ['po_date', 'delivery_date', 'pr_date'], true)) {
+            $dateBasis = 'po_date';
+        }
 
         $startDate = null;
         $endDate = null;
@@ -131,68 +130,56 @@ class PurchasesReportController extends Controller
                 });
             });
 
-        // التقارير المحاسبية للمشتريات
+        // 3.1 فلترة الحالة المحاسبية (مسقط ومسجل / بانتظار الحسابات / الكل)
         if ($accountingFilter === 'PENDING') {
             // أوامر الشراء الصادرة التي لم يسجل لها المحاسب فاتورة بعد
             $ordersQuery->whereDoesntHave('supplierInvoices', function ($iq) {
                 $iq->whereNotIn('status', ['VOIDED', 'CANCELLED']);
             });
-
-            if ($startDate !== null && $endDate !== null) {
-                $startDateStr = $startDate->toDateString();
-                $endDateStr = $endDate->toDateString();
-                $ordersQuery->where(function ($q) use ($startDateStr, $endDateStr) {
-                    $q->whereDate('created_at', '>=', $startDateStr)
-                        ->whereDate('created_at', '<=', $endDateStr);
-                });
-            }
-        } elseif ($accountingFilter === 'ALL') {
-            // جميع أوامر الشراء (المسقطة والمفتوحة بانتظار التسجيل)
-            if ($startDate !== null && $endDate !== null) {
-                $startDateStr = $startDate->toDateString();
-                $endDateStr = $endDate->toDateString();
-                $ordersQuery->where(function ($q) use ($startDateStr, $endDateStr) {
-                    $q->whereBetween('created_at', [$startDateStr, $endDateStr])
-                        ->orWhereHas('supplierInvoices', function ($iq) use ($startDateStr, $endDateStr) {
-                            $iq->whereNotIn('status', ['VOIDED', 'CANCELLED'])
-                                ->where(function ($dateQ) use ($startDateStr, $endDateStr) {
-                                    $dateQ->whereBetween('invoice_date', [$startDateStr, $endDateStr])
-                                        ->orWhereBetween('created_at', [$startDateStr, $endDateStr]);
-                                });
-                        });
-                });
-            }
-        } else {
-            // الافتراضي والرسمي (VERIFIED_ONLY): فقط الأوامر التي سجل لها المحاسب فاتورة مورد معتمدة
+        } elseif ($accountingFilter === 'VERIFIED_ONLY') {
+            // الافتراضي والرسمي: فقط الأوامر التي سجل لها المحاسب فاتورة مورد معتمدة
             $ordersQuery->whereHas('supplierInvoices', function ($iq) {
                 $iq->whereNotIn('status', ['VOIDED', 'CANCELLED']);
             });
+        }
 
-            // تصفية التاريخ بناءً على تاريخ الفاتورة المسجلة بالحسابات أو تاريخ استلام الموقع
-            if ($startDate !== null && $endDate !== null) {
-                $startDateStr = $startDate->toDateString();
-                $endDateStr = $endDate->toDateString();
+        // 3.2 فلترة التاريخ بناءً على اختيار المستخدم (أمر الشراء / تاريخ التوريد / طلب الشراء)
+        if ($startDate !== null && $endDate !== null) {
+            $startDateStr = $startDate->toDateString();
+            $endDateStr = $endDate->toDateString();
 
-                $ordersQuery->whereHas('supplierInvoices', function ($iq) use ($startDateStr, $endDateStr) {
-                    $iq->whereNotIn('status', ['VOIDED', 'CANCELLED'])
-                        ->where(function ($dateQ) use ($startDateStr, $endDateStr) {
-                            $dateQ->where(function ($sub) use ($startDateStr, $endDateStr) {
-                                $sub->whereNotNull('invoice_date')
-                                    ->whereDate('invoice_date', '>=', $startDateStr)
-                                    ->whereDate('invoice_date', '<=', $endDateStr);
-                            })->orWhere(function ($sub) use ($startDateStr, $endDateStr) {
-                                $sub->whereNull('invoice_date')
-                                    ->whereDate('created_at', '>=', $startDateStr)
-                                    ->whereDate('created_at', '<=', $endDateStr);
-                            });
-                        });
+            if ($dateBasis === 'po_date') {
+                // تاريخ أمر الشراء (الافتراضي)
+                $ordersQuery->whereDate('created_at', '>=', $startDateStr)
+                    ->whereDate('created_at', '<=', $endDateStr);
+            } elseif ($dateBasis === 'delivery_date') {
+                // تاريخ التوريد / الاستلام الفعلي بالموقع
+                $ordersQuery->where(function ($dq) use ($startDateStr, $endDateStr) {
+                    $dq->whereHas('purchaseReceipts', function ($rq) use ($startDateStr, $endDateStr) {
+                        $rq->whereDate('received_at', '>=', $startDateStr)
+                            ->whereDate('received_at', '<=', $endDateStr);
+                    })->orWhere(function ($oq) use ($startDateStr, $endDateStr) {
+                        $oq->whereNotNull('delivery_date')
+                            ->whereDate('delivery_date', '>=', $startDateStr)
+                            ->whereDate('delivery_date', '<=', $endDateStr);
+                    })->orWhere(function ($oq) use ($startDateStr, $endDateStr) {
+                        $oq->whereNotNull('actual_delivery_date')
+                            ->whereDate('actual_delivery_date', '>=', $startDateStr)
+                            ->whereDate('actual_delivery_date', '<=', $endDateStr);
+                    });
+                });
+            } elseif ($dateBasis === 'pr_date') {
+                // تاريخ طلب الشراء الأساسي
+                $ordersQuery->whereHas('purchaseRequest', function ($pq) use ($startDateStr, $endDateStr) {
+                    $pq->whereDate('created_at', '>=', $startDateStr)
+                        ->whereDate('created_at', '<=', $endDateStr);
                 });
             }
         }
 
         $orders = $ordersQuery->orderByDesc('created_at')->get();
 
-        // 4. Transform into the 12 exact report columns per item
+        // 4. Transform into the exact report columns per item based on Purchase Order
         $reportRows = [];
 
         foreach ($orders as $order) {
@@ -220,7 +207,6 @@ class PurchasesReportController extends Controller
 
             $activeInvoices = $order->supplierInvoices->filter(fn ($inv) => ! in_array($inv->status, ['VOIDED', 'CANCELLED'], true));
 
-            // في الوضع الافتراضي أو المعتمد: نضمن عدم ظهور أي أمر لم يسجل له المحاسب فاتورة
             if ($accountingFilter === 'VERIFIED_ONLY' && $activeInvoices->isEmpty()) {
                 continue;
             }
@@ -229,192 +215,39 @@ class PurchasesReportController extends Controller
                 continue;
             }
 
-            if ($activeInvoices->isNotEmpty() && $accountingFilter !== 'PENDING') {
-                foreach ($activeInvoices as $invoice) {
-                    // التحقق من تاريخ الفاتورة ضمن الفترة المحددة
-                    if ($startDate !== null && $endDate !== null) {
-                        $invDateStr = $invoice->invoice_date?->toDateString() ?? $invoice->created_at?->toDateString();
-                        if ($invDateStr && ($invDateStr < $startDateStr || $invDateStr > $endDateStr)) {
-                            continue;
-                        }
-                    }
+            $primaryInvoice = $activeInvoices->first();
+            $approvedReceipt = $order->purchaseReceipts->where('status', 'APPROVED')->first()
+                ?? $order->purchaseReceipts->first();
 
-                    $receipt = $invoice->purchaseReceipt
-                        ?? $order->purchaseReceipts->firstWhere('id', $invoice->purchase_receipt_id)
-                        ?? $order->purchaseReceipts->where('status', 'APPROVED')->first()
-                        ?? $order->purchaseReceipts->first();
+            // Order dates
+            $poDate = $order->created_at?->format('Y-m-d');
+            $prDate = $requestModel?->created_at?->format('Y-m-d');
+            $deliveryDate = $approvedReceipt?->received_at?->format('Y-m-d')
+                ?? $primaryInvoice?->invoice_date?->format('Y-m-d')
+                ?? $order->actual_delivery_date?->format('Y-m-d')
+                ?? $order->delivery_date?->format('Y-m-d')
+                ?? $order->created_at?->format('Y-m-d');
 
-                    // إذا كان إذن الاستلام يحتوي على بنود استلام معتمدة
-                    if ($receipt && $receipt->items->isNotEmpty()) {
-                        foreach ($receipt->items as $receiptItem) {
-                            $poItem = $receiptItem->purchaseOrderItem;
-                            $prItem = $poItem?->prItem;
+            $primaryDate = match ($dateBasis) {
+                'delivery_date' => $deliveryDate,
+                'pr_date' => $prDate ?? $poDate,
+                default => $poDate,
+            };
 
-                            $receivedQty = (float) $receiptItem->received_quantity;
-                            $unitPrice = (float) ($poItem?->unit_price ?? 0);
-                            $lineTotal = round($receivedQty * $unitPrice, 2);
+            // Purchase Order items - authoritative quantities & financial figures
+            $poItems = $order->items;
+            if ($poItems->isEmpty() && $requestModel && $requestModel->items->isNotEmpty()) {
+                $poItems = $requestModel->items;
+            }
 
-                            $rowParcelRef = $poItem?->item_reference
-                                ?: ($prItem?->item_reference ?: $defaultParcelRef);
-                            $rowRegion = $poItem?->region
-                                ?: ($prItem?->region ?: $defaultRegion);
+            if ($poItems->isNotEmpty()) {
+                foreach ($poItems as $poItem) {
+                    $prItem = $poItem->prItem ?? (property_exists($poItem, 'prItem') ? null : $poItem);
 
-                            $works = $poItem?->specifications
-                                ?: ($prItem?->specifications ?: ($requestModel?->notes ?: '—'));
-
-                            $deliveryDate = $receipt->received_at?->format('Y-m-d')
-                                ?? $invoice->invoice_date?->format('Y-m-d')
-                                ?? $order->actual_delivery_date?->format('Y-m-d')
-                                ?? $order->created_at?->format('Y-m-d');
-
-                            $reportRows[] = [
-                                'id' => "INV-{$invoice->id}-REC-{$receiptItem->id}",
-                                'invoice_id' => $invoice->id,
-                                'receipt_id' => $receipt->id,
-                                'receipt_number' => $receipt->receipt_number,
-                                'photo_url' => $receipt->photo_url,
-                                'purchase_order_id' => $order->id,
-                                'grand_total' => (float) $order->grand_total,
-                                // 1. تاريخ التوريد
-                                'delivery_date' => $deliveryDate,
-                                'delivery_date_formatted' => $deliveryDate ? Carbon::parse($deliveryDate)->format('d/m/Y') : '—',
-                                // 2. رقم أمر الشراء
-                                'po_number' => $order->po_number,
-                                'po_number_short' => preg_replace('/^PO-\d{4}-0*/', '', $order->po_number) ?: $order->po_number,
-                                // 3. الصنف
-                                'item_name' => $poItem?->item_description ?? ($poItem?->item?->name ?? '—'),
-                                // 4. الوحدة
-                                'uom' => $poItem?->uom ?? '—',
-                                // 5. الكمية (المستلمة المعتمدة لدى الحسابات)
-                                'quantity' => $receivedQty,
-                                // 6. سعر الوحدة
-                                'unit_price' => $unitPrice,
-                                // 7. سعر الكمية (الإجمالي)
-                                'total_price' => $lineTotal,
-                                // 8. أسم المورد
-                                'supplier_name' => $order->supplier?->company_name ?? $order->supplier?->name ?? '—',
-                                'supplier_id' => $order->supplier_id,
-                                // 9. رقم القطعة
-                                'parcel_reference' => $rowParcelRef ?: '—',
-                                // 10. إسم المنطقة
-                                'region' => $rowRegion ?: '—',
-                                // 11. القسم
-                                'department_id' => $deptId,
-                                'department_name' => $deptName,
-                                // 12. الاعمال
-                                'works' => $works ?: '—',
-                                // Extra metadata
-                                'accounting_status' => 'VERIFIED',
-                                'accounting_status_label' => 'مسقط ومسجل بالحسابات',
-                                'invoice_number' => $invoice->invoice_number,
-                                'matching_status' => $invoice->matching_status,
-                                'accountant_name' => $invoice->createdBy?->name ?? 'الحسابات',
-                                'order_status' => $order->status,
-                                'created_at' => $order->created_at?->toIso8601String(),
-                            ];
-                        }
-                    } elseif ($order->items->isNotEmpty()) {
-                        // في حال عدم تفصيل بنود الاستلام، تفصيل بنود أمر الشراء المعتمدة مع الفاتورة
-                        foreach ($order->items as $poItem) {
-                            $prItem = $poItem->prItem;
-
-                            $qty = (float) $poItem->quantity;
-                            $unitPrice = (float) $poItem->unit_price;
-                            $lineTotal = (float) ($poItem->line_total > 0 ? $poItem->line_total : round($qty * $unitPrice, 2));
-
-                            $rowParcelRef = $poItem->item_reference
-                                ?: ($prItem?->item_reference ?: $defaultParcelRef);
-                            $rowRegion = $poItem->region
-                                ?: ($prItem?->region ?: $defaultRegion);
-
-                            $works = $poItem->specifications
-                                ?: ($prItem?->specifications ?: ($requestModel?->notes ?: '—'));
-
-                            $deliveryDate = $invoice->invoice_date?->format('Y-m-d')
-                                ?? $order->actual_delivery_date?->format('Y-m-d')
-                                ?? $order->created_at?->format('Y-m-d');
-
-                            $reportRows[] = [
-                                'id' => "INV-{$invoice->id}-ITEM-{$poItem->id}",
-                                'invoice_id' => $invoice->id,
-                                'receipt_id' => $receipt?->id,
-                                'receipt_number' => $receipt?->receipt_number,
-                                'photo_url' => $receipt?->photo_url,
-                                'purchase_order_id' => $order->id,
-                                'grand_total' => (float) $order->grand_total,
-                                'delivery_date' => $deliveryDate,
-                                'delivery_date_formatted' => $deliveryDate ? Carbon::parse($deliveryDate)->format('d/m/Y') : '—',
-                                'po_number' => $order->po_number,
-                                'po_number_short' => preg_replace('/^PO-\d{4}-0*/', '', $order->po_number) ?: $order->po_number,
-                                'item_name' => $poItem->item_description ?? '—',
-                                'uom' => $poItem->uom ?? '—',
-                                'quantity' => $qty,
-                                'unit_price' => $unitPrice,
-                                'total_price' => $lineTotal,
-                                'supplier_name' => $order->supplier?->company_name ?? $order->supplier?->name ?? '—',
-                                'supplier_id' => $order->supplier_id,
-                                'parcel_reference' => $rowParcelRef ?: '—',
-                                'region' => $rowRegion ?: '—',
-                                'department_id' => $deptId,
-                                'department_name' => $deptName,
-                                'works' => $works ?: '—',
-                                'accounting_status' => 'VERIFIED',
-                                'accounting_status_label' => 'مسقط ومسجل بالحسابات',
-                                'invoice_number' => $invoice->invoice_number,
-                                'matching_status' => $invoice->matching_status,
-                                'accountant_name' => $invoice->createdBy?->name ?? 'الحسابات',
-                                'order_status' => $order->status,
-                                'created_at' => $order->created_at?->toIso8601String(),
-                            ];
-                        }
-                    } else {
-                        // سطر مفرد يمثل الفاتورة المسجلة
-                        $deliveryDate = $invoice->invoice_date?->format('Y-m-d') ?? $order->created_at?->format('Y-m-d');
-                        $reportRows[] = [
-                            'id' => "INV-{$invoice->id}",
-                            'invoice_id' => $invoice->id,
-                            'receipt_id' => $receipt?->id,
-                            'receipt_number' => $receipt?->receipt_number,
-                            'photo_url' => $receipt?->photo_url,
-                            'purchase_order_id' => $order->id,
-                            'grand_total' => (float) $order->grand_total,
-                            'delivery_date' => $deliveryDate,
-                            'delivery_date_formatted' => $deliveryDate ? Carbon::parse($deliveryDate)->format('d/m/Y') : '—',
-                            'po_number' => $order->po_number,
-                            'po_number_short' => preg_replace('/^PO-\d{4}-0*/', '', $order->po_number) ?: $order->po_number,
-                            'item_name' => 'فاتورة مشتريات مورد #' . $invoice->invoice_number,
-                            'uom' => 'إجمالي',
-                            'quantity' => 1,
-                            'unit_price' => (float) $invoice->amount,
-                            'total_price' => (float) $invoice->amount,
-                            'supplier_name' => $order->supplier?->company_name ?? $order->supplier?->name ?? '—',
-                            'supplier_id' => $order->supplier_id,
-                            'parcel_reference' => $defaultParcelRef,
-                            'region' => $defaultRegion,
-                            'department_id' => $deptId,
-                            'department_name' => $deptName,
-                            'works' => $requestModel?->notes ?: '—',
-                            'accounting_status' => 'VERIFIED',
-                            'accounting_status_label' => 'مسقط ومسجل بالحسابات',
-                            'invoice_number' => $invoice->invoice_number,
-                            'matching_status' => $invoice->matching_status,
-                            'accountant_name' => $invoice->createdBy?->name ?? 'الحسابات',
-                            'order_status' => $order->status,
-                            'created_at' => $order->created_at?->toIso8601String(),
-                        ];
-                    }
-                }
-            } elseif ($activeInvoices->isEmpty() && $accountingFilter !== 'VERIFIED_ONLY') {
-                // تظهر عند اختيار "بانتظار تسجيل الفاتورة" أو "جميع المشتريات"
-                $latestReceipt = $order->purchaseReceipts->where('status', 'APPROVED')->first()
-                    ?? $order->purchaseReceipts->first();
-
-                foreach ($order->items as $poItem) {
-                    $prItem = $poItem->prItem;
-
-                    $qty = (float) $poItem->quantity;
-                    $unitPrice = (float) $poItem->unit_price;
-                    $lineTotal = (float) ($poItem->line_total > 0 ? $poItem->line_total : round($qty * $unitPrice, 2));
+                    // كميات أمر الشراء هي المعتمدة للحسابات
+                    $poQty = (float) ($poItem->quantity ?? 1);
+                    $unitPrice = (float) ($poItem->unit_price ?? $poItem->estimated_unit_price ?? 0);
+                    $lineTotal = (float) ($poItem->line_total > 0 ? $poItem->line_total : round($poQty * $unitPrice, 2));
 
                     $rowParcelRef = $poItem->item_reference
                         ?: ($prItem?->item_reference ?: $defaultParcelRef);
@@ -424,28 +257,111 @@ class PurchasesReportController extends Controller
                     $works = $poItem->specifications
                         ?: ($prItem?->specifications ?: ($requestModel?->notes ?: '—'));
 
-                    $deliveryDate = $order->actual_delivery_date?->format('Y-m-d')
-                        ?? $order->delivery_date?->format('Y-m-d')
-                        ?? $order->created_at?->format('Y-m-d');
+                    // الاستلام الفعلي بالموقع كمعلومة استرشادية فقط
+                    $matchingReceiptItem = null;
+                    if ($approvedReceipt && $approvedReceipt->items->isNotEmpty()) {
+                        $matchingReceiptItem = $approvedReceipt->items->first(function ($ri) use ($poItem) {
+                            return $ri->purchase_order_item_id == $poItem->id
+                                || ($ri->purchaseOrderItem && $ri->purchaseOrderItem->item_description === $poItem->item_description);
+                        });
+                    }
+                    $receivedQty = $matchingReceiptItem ? (float) $matchingReceiptItem->received_quantity : null;
 
                     $reportRows[] = [
                         'id' => "PO-{$order->id}-ITEM-{$poItem->id}",
-                        'invoice_id' => null,
-                        'receipt_id' => $latestReceipt?->id,
-                        'receipt_number' => $latestReceipt?->receipt_number,
-                        'photo_url' => $latestReceipt?->photo_url,
+                        'invoice_id' => $primaryInvoice?->id,
+                        'receipt_id' => $approvedReceipt?->id,
+                        'receipt_number' => $approvedReceipt?->receipt_number,
+                        'photo_url' => $approvedReceipt?->photo_url,
                         'purchase_order_id' => $order->id,
                         'grand_total' => (float) $order->grand_total,
+                        // التواريخ حسب الفلترة
+                        'date_basis' => $dateBasis,
+                        'primary_date' => $primaryDate,
+                        'primary_date_formatted' => $primaryDate ? Carbon::parse($primaryDate)->format('d/m/Y') : '—',
+                        'po_date' => $poDate,
+                        'po_date_formatted' => $poDate ? Carbon::parse($poDate)->format('d/m/Y') : '—',
+                        'pr_date' => $prDate,
+                        'pr_date_formatted' => $prDate ? Carbon::parse($prDate)->format('d/m/Y') : '—',
                         'delivery_date' => $deliveryDate,
                         'delivery_date_formatted' => $deliveryDate ? Carbon::parse($deliveryDate)->format('d/m/Y') : '—',
+                        // الأرقام المرجعية
                         'po_number' => $order->po_number,
                         'po_number_short' => preg_replace('/^PO-\d{4}-0*/', '', $order->po_number) ?: $order->po_number,
-                        'item_name' => $poItem->item_description ?? '—',
+                        'pr_number' => $requestModel?->request_number,
+                        // الصنف والوحدة
+                        'item_name' => $poItem->item_description ?? ($poItem->item?->name ?? '—'),
                         'uom' => $poItem->uom ?? '—',
-                        'quantity' => $qty,
+                        // كمية وأسعار أمر الشراء (الأساس المالي والمحاسبي)
+                        'quantity' => $poQty,
                         'unit_price' => $unitPrice,
                         'total_price' => $lineTotal,
+                        // بيانات الاستلام الفعلي بالموقع (بيان استرشادي للحسابات)
+                        'received_quantity' => $receivedQty,
+                        'receipt_status' => $approvedReceipt?->status,
+                        // المورد والموقع
                         'supplier_name' => $order->supplier?->company_name ?? $order->supplier?->name ?? '—',
+                        'supplier_id' => $order->supplier_id,
+                        'parcel_reference' => $rowParcelRef ?: '—',
+                        'region' => $rowRegion ?: '—',
+                        'department_id' => $deptId,
+                        'department_name' => $deptName,
+                        'works' => $works ?: '—',
+                        // الحالة المحاسبية
+                        'accounting_status' => $primaryInvoice ? 'VERIFIED' : 'PENDING',
+                        'accounting_status_label' => $primaryInvoice ? 'مسقط ومسجل بالحسابات' : 'صادر - بانتظار تسجيل الحسابات',
+                        'invoice_number' => $primaryInvoice?->invoice_number,
+                        'matching_status' => $primaryInvoice?->matching_status,
+                        'accountant_name' => $primaryInvoice?->createdBy?->name ?? ($primaryInvoice ? 'الحسابات' : null),
+                        'order_status' => $order->status,
+                        'created_at' => $order->created_at?->toIso8601String(),
+                    ];
+                }
+            } else {
+                // حالة أمر بدون تفصيل بنود
+                $reportRows[] = [
+                    'id' => "PO-{$order->id}",
+                    'invoice_id' => $primaryInvoice?->id,
+                    'receipt_id' => $approvedReceipt?->id,
+                    'receipt_number' => $approvedReceipt?->receipt_number,
+                    'photo_url' => $approvedReceipt?->photo_url,
+                    'purchase_order_id' => $order->id,
+                    'grand_total' => (float) $order->grand_total,
+                    'date_basis' => $dateBasis,
+                    'primary_date' => $primaryDate,
+                    'primary_date_formatted' => $primaryDate ? Carbon::parse($primaryDate)->format('d/m/Y') : '—',
+                    'po_date' => $poDate,
+                    'po_date_formatted' => $poDate ? Carbon::parse($poDate)->format('d/m/Y') : '—',
+                    'pr_date' => $prDate,
+                    'pr_date_formatted' => $prDate ? Carbon::parse($prDate)->format('d/m/Y') : '—',
+                    'delivery_date' => $deliveryDate,
+                    'delivery_date_formatted' => $deliveryDate ? Carbon::parse($deliveryDate)->format('d/m/Y') : '—',
+                    'po_number' => $order->po_number,
+                    'po_number_short' => preg_replace('/^PO-\d{4}-0*/', '', $order->po_number) ?: $order->po_number,
+                    'pr_number' => $requestModel?->request_number,
+                    'item_name' => 'أمر شراء #' . $order->po_number,
+                    'uom' => 'إجمالي',
+                    'quantity' => 1,
+                    'unit_price' => (float) $order->grand_total,
+                    'total_price' => (float) $order->grand_total,
+                    'received_quantity' => null,
+                    'supplier_name' => $order->supplier?->company_name ?? $order->supplier?->name ?? '—',
+                    'supplier_id' => $order->supplier_id,
+                    'parcel_reference' => $defaultParcelRef,
+                    'region' => $defaultRegion,
+                    'department_id' => $deptId,
+                    'department_name' => $deptName,
+                    'works' => $requestModel?->notes ?: '—',
+                    'accounting_status' => $primaryInvoice ? 'VERIFIED' : 'PENDING',
+                    'accounting_status_label' => $primaryInvoice ? 'مسقط ومسجل بالحسابات' : 'صادر - بانتظار تسجيل الحسابات',
+                    'invoice_number' => $primaryInvoice?->invoice_number,
+                    'matching_status' => $primaryInvoice?->matching_status,
+                    'accountant_name' => $primaryInvoice?->createdBy?->name ?? null,
+                    'order_status' => $order->status,
+                    'created_at' => $order->created_at?->toIso8601String(),
+                ];
+            }
+        }                'supplier_name' => $order->supplier?->company_name ?? $order->supplier?->name ?? '—',
                         'supplier_id' => $order->supplier_id,
                         'parcel_reference' => $rowParcelRef ?: '—',
                         'region' => $rowRegion ?: '—',
@@ -491,6 +407,7 @@ class PurchasesReportController extends Controller
         return response()->json([
             'filters' => [
                 'filter_type' => $filterType,
+                'date_basis' => $dateBasis,
                 'date' => $request->query('date'),
                 'month' => $request->query('month', now()->format('Y-m')),
                 'from_date' => $request->query('from_date'),

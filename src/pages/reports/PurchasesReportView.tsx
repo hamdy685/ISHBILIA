@@ -61,6 +61,7 @@ const formatCleanQty = (val: number | string | null | undefined) => {
 export const PurchasesReportView: React.FC = () => {
   // Period filter states
   const [filterType, setFilterType] = useState<'daily' | 'monthly' | 'custom'>('monthly');
+  const [dateBasis, setDateBasis] = useState<'po_date' | 'delivery_date' | 'pr_date'>('po_date');
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [selectedDate, setSelectedDate] = useState(() => clampDateToValidMonthDay(getTodayInputDate()));
   const [fromDate, setFromDate] = useState(() => clampDateToValidMonthDay(getTodayInputDate()));
@@ -123,6 +124,7 @@ export const PurchasesReportView: React.FC = () => {
     try {
       const response = await getPurchasesReportApi({
         filter_type: filterType,
+        date_basis: dateBasis,
         month: filterType === 'monthly' ? selectedMonth : undefined,
         date: filterType === 'daily' ? selectedDate : undefined,
         from_date: filterType === 'custom' ? fromDate : undefined,
@@ -144,11 +146,11 @@ export const PurchasesReportView: React.FC = () => {
   // Reset to page 1 on filter changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [filterType, selectedMonth, selectedDate, fromDate, toDate, selectedDepartment, accountingFilter]);
+  }, [filterType, dateBasis, selectedMonth, selectedDate, fromDate, toDate, selectedDepartment, accountingFilter]);
 
   useEffect(() => {
     void loadReport();
-  }, [filterType, selectedMonth, selectedDate, fromDate, toDate, selectedDepartment, accountingFilter, currentPage, pageSize]);
+  }, [filterType, dateBasis, selectedMonth, selectedDate, fromDate, toDate, selectedDepartment, accountingFilter, currentPage, pageSize]);
 
   // Selected Department Name for dynamic title
   const activeDepartmentName = useMemo(() => {
@@ -171,8 +173,9 @@ export const PurchasesReportView: React.FC = () => {
       timePeriod = `للفترة من ${formatDateDMY(fromDate)} إلى ${formatDateDMY(toDate)}`;
     }
 
-    return `تقرير مشتريات ${deptPrefix} ${timePeriod}`;
-  }, [activeDepartmentName, filterType, selectedMonth, selectedDate, fromDate, toDate]);
+    const basisLabel = dateBasis === 'po_date' ? '(بأمر الشراء)' : (dateBasis === 'pr_date' ? '(بطلب الشراء)' : '(بالتوريد)');
+    return `تقرير مشتريات ${deptPrefix} ${timePeriod} ${basisLabel}`;
+  }, [activeDepartmentName, filterType, dateBasis, selectedMonth, selectedDate, fromDate, toDate]);
 
   // Client-side filtering by column inputs with multi-column AND logic (every)
   // Protected against null/undefined values and crashes
@@ -473,8 +476,9 @@ export const PurchasesReportView: React.FC = () => {
   const handleExportCSV = () => {
     if (!filteredRows.length) return;
 
+    const dateHeader = dateBasis === 'po_date' ? 'تاريخ أمر الشراء' : (dateBasis === 'pr_date' ? 'تاريخ طلب الشراء' : 'تاريخ التوريد');
     const headers = [
-      'تاريخ التوريد',
+      dateHeader,
       'رقم أمر الشراء',
       'الصنف',
       'الوحدة',
@@ -497,9 +501,15 @@ export const PurchasesReportView: React.FC = () => {
         ? `مسجلة (${r.invoice_number || ''})`
         : 'بانتظار التسجيل';
 
+      const rowDate = dateBasis === 'po_date'
+        ? (r.po_date_formatted || r.po_date || '—')
+        : (dateBasis === 'pr_date'
+          ? (r.pr_date_formatted || r.pr_date || '—')
+          : (r.delivery_date_formatted || r.delivery_date || '—'));
+
       lines.push(
         [
-          `"${r.delivery_date_formatted || r.delivery_date || '—'}"`,
+          `"${rowDate}"`,
           `"${r.po_number || '—'}"`,
           `"${(r.item_name || '—').replace(/"/g, '""')}"`,
           `"${r.uom || '—'}"`,
@@ -548,8 +558,9 @@ export const PurchasesReportView: React.FC = () => {
   const handleCopyClipboard = () => {
     if (!filteredRows.length) return;
 
+    const dateHeader = dateBasis === 'po_date' ? 'تاريخ أمر الشراء' : (dateBasis === 'pr_date' ? 'تاريخ طلب الشراء' : 'تاريخ التوريد');
     const headers = [
-      'تاريخ التوريد',
+      dateHeader,
       'رقم أمر الشراء',
       'الصنف',
       'الوحدة',
@@ -570,9 +581,15 @@ export const PurchasesReportView: React.FC = () => {
         ? `مسجلة (${r.invoice_number || ''})`
         : 'بانتظار التسجيل';
 
+      const rowDate = dateBasis === 'po_date'
+        ? (r.po_date_formatted || r.po_date || '—')
+        : (dateBasis === 'pr_date'
+          ? (r.pr_date_formatted || r.pr_date || '—')
+          : (r.delivery_date_formatted || r.delivery_date || '—'));
+
       lines.push(
         [
-          r.delivery_date_formatted || r.delivery_date || '—',
+          rowDate,
           r.po_number || '—',
           r.item_name || '—',
           r.uom || '—',
@@ -650,7 +667,9 @@ export const PurchasesReportView: React.FC = () => {
           <thead>
             <tr className="bg-slate-100 border-b border-black font-black text-black">
               <th className="border border-black px-1 py-1.5 text-center w-7">م</th>
-              <th className="border border-black px-2 py-1.5 text-center whitespace-nowrap">تاريخ التوريد</th>
+              <th className="border border-black px-2 py-1.5 text-center whitespace-nowrap">
+                {dateBasis === 'po_date' ? 'تاريخ أمر الشراء' : (dateBasis === 'pr_date' ? 'تاريخ طلب الشراء' : 'تاريخ التوريد')}
+              </th>
               <th className="border border-black px-2 py-1.5 text-center whitespace-nowrap">رقم أمر الشراء</th>
               <th className="border border-black px-2 py-1.5">الصنف</th>
               <th className="border border-black px-1.5 py-1.5 text-center">الوحدة</th>
@@ -670,7 +689,11 @@ export const PurchasesReportView: React.FC = () => {
               <tr key={row.id} className="border-b border-black bg-white">
                 <td className="border border-black px-1 py-1 text-center font-bold font-mono">{idx + 1}</td>
                 <td className="border border-black px-2 py-1 text-center font-mono whitespace-nowrap">
-                  {row.delivery_date_formatted || row.delivery_date}
+                  {dateBasis === 'po_date'
+                    ? (row.po_date_formatted || row.po_date || '—')
+                    : (dateBasis === 'pr_date'
+                      ? (row.pr_date_formatted || row.pr_date || '—')
+                      : (row.delivery_date_formatted || row.delivery_date || '—'))}
                 </td>
                 <td className="border border-black px-2 py-1 text-center font-mono font-bold whitespace-nowrap">
                   {row.po_number_short || row.po_number}
@@ -678,7 +701,12 @@ export const PurchasesReportView: React.FC = () => {
                 <td className="border border-black px-2 py-1 font-bold text-black">{row.item_name}</td>
                 <td className="border border-black px-1.5 py-1 text-center">{getUnitLabel(row.uom) || row.uom}</td>
                 <td className="border border-black px-2 py-1 text-center font-mono font-bold" dir="ltr">
-                  {formatCleanQty(row.quantity)}
+                  <div>{formatCleanQty(row.quantity)}</div>
+                  {row.received_quantity !== undefined && row.received_quantity !== null && (
+                    <div className="text-[8px] text-slate-600 font-sans" dir="rtl">
+                      (مستلم: {formatCleanQty(row.received_quantity)})
+                    </div>
+                  )}
                 </td>
                 <td className="border border-black px-2 py-1 text-center font-mono" dir="ltr">
                   {formatCleanNumber(row.unit_price)}
@@ -959,6 +987,23 @@ export const PurchasesReportView: React.FC = () => {
                   ))}
                 </select>
               </div>
+
+              {/* Date Basis Dropdown */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-bold text-slate-400">البحث بالتاريخ حسب:</span>
+                <select
+                  value={dateBasis}
+                  onChange={(e) => {
+                    setDateBasis(e.target.value as any);
+                    setCurrentPage(1);
+                  }}
+                  className="rounded-lg border border-emerald-500/60 bg-slate-900 px-2.5 py-1 text-xs font-bold text-emerald-300 focus:border-emerald-400 focus:outline-none shadow-sm"
+                >
+                  <option value="po_date">📝 أمر الشراء (تاريخ الأمر)</option>
+                  <option value="delivery_date">🚚 التوريد (تاريخ الاستلام)</option>
+                  <option value="pr_date">📋 طلب الشراء (تاريخ الطلب)</option>
+                </select>
+              </div>
             </div>
 
             {/* Filter Toggle Button */}
@@ -1101,11 +1146,13 @@ export const PurchasesReportView: React.FC = () => {
                   {/* 2. Formal 13-Column Title Headers from Handwritten Note */}
                   <tr className="bg-[#f8fafc] text-slate-900 font-black text-[11.5px] border-b-2 border-slate-400 whitespace-nowrap">
                     <th className="border border-slate-300 px-1 py-2 text-center w-8 bg-[#e2e8f0]">م</th>
-                    <th className="border border-slate-300 px-2.5 py-2 text-center whitespace-nowrap min-w-[90px]">تاريخ التوريد</th>
+                    <th className="border border-slate-300 px-2.5 py-2 text-center whitespace-nowrap min-w-[100px]">
+                      {dateBasis === 'po_date' ? 'تاريخ أمر الشراء' : (dateBasis === 'pr_date' ? 'تاريخ طلب الشراء' : 'تاريخ التوريد')}
+                    </th>
                     <th className="border border-slate-300 px-2.5 py-2 text-center whitespace-nowrap min-w-[110px]">رقم أمر الشراء</th>
                     <th className="border border-slate-300 px-3 py-2 min-w-[170px]">الصنف</th>
                     <th className="border border-slate-300 px-2 py-2 text-center w-16">الوحدة</th>
-                    <th className="border border-slate-300 px-2.5 py-2 text-center w-20">الكمية</th>
+                    <th className="border border-slate-300 px-2.5 py-2 text-center w-24">الكمية</th>
                     <th className="border border-slate-300 px-2.5 py-2 text-center w-24">سعر الوحدة</th>
                     <th className="border border-slate-300 px-3 py-2 text-center w-28 bg-emerald-50 text-emerald-900">سعر الكمية</th>
                     <th className="border border-slate-300 px-3 py-2 min-w-[140px]">أسم المورد</th>
@@ -1270,12 +1317,23 @@ export const PurchasesReportView: React.FC = () => {
                           {rowNumber}
                         </td>
 
-                        {/* A: تاريخ التوريد */}
+                        {/* A: التاريخ المحدد */}
                         <td
                           onClick={() => setSelectedCell(`A${rowNumber}`)}
                           className="border border-slate-300 px-2.5 py-2 text-center font-mono text-slate-800 whitespace-nowrap text-[11px]"
                         >
-                          {row.delivery_date_formatted || row.delivery_date}
+                          <div className="font-bold">
+                            {dateBasis === 'po_date'
+                              ? (row.po_date_formatted || row.po_date || '—')
+                              : (dateBasis === 'pr_date'
+                                ? (row.pr_date_formatted || row.pr_date || '—')
+                                : (row.delivery_date_formatted || row.delivery_date || '—'))}
+                          </div>
+                          {dateBasis !== 'delivery_date' && row.delivery_date && (
+                            <div className="text-[9.5px] text-slate-500 font-normal">
+                              توريد: {row.delivery_date_formatted || row.delivery_date}
+                            </div>
+                          )}
                         </td>
 
                         {/* B: رقم أمر الشراء */}
@@ -1310,7 +1368,12 @@ export const PurchasesReportView: React.FC = () => {
                           className="border border-slate-300 px-2.5 py-2 text-center font-mono font-extrabold text-slate-900"
                           dir="ltr"
                         >
-                          {formatCleanQty(row.quantity)}
+                          <div>{formatCleanQty(row.quantity)}</div>
+                          {row.received_quantity !== undefined && row.received_quantity !== null && (
+                            <div className="text-[9.5px] font-medium text-slate-500 font-sans mt-0.5" dir="rtl">
+                              المستلم: <span className="font-mono font-bold text-slate-700">{formatCleanQty(row.received_quantity)}</span>
+                            </div>
+                          )}
                         </td>
 
                         {/* F: سعر الوحدة */}

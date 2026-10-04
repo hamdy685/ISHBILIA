@@ -2,9 +2,17 @@ import { apiClient } from './client';
 
 export interface PurchasesReportRow {
   id: string;
-  invoice_id: number;
-  receipt_id: number;
+  invoice_id?: number | null;
+  receipt_id?: number | null;
   purchase_order_id: number;
+  date_basis?: string;
+  primary_date?: string;
+  primary_date_formatted?: string;
+  po_date?: string;
+  po_date_formatted?: string;
+  pr_number?: string;
+  pr_date?: string;
+  pr_date_formatted?: string;
   delivery_date: string;
   delivery_date_formatted: string;
   po_number: string;
@@ -14,6 +22,8 @@ export interface PurchasesReportRow {
   quantity: number;
   unit_price: number;
   total_price: number;
+  received_quantity?: number | null;
+  receipt_status?: string | null;
   supplier_name: string;
   supplier_id: number;
   parcel_reference: string;
@@ -52,6 +62,7 @@ export interface PurchasesReportDepartment {
 export interface PurchasesReportResponse {
   filters: {
     filter_type: 'daily' | 'monthly' | 'custom';
+    date_basis?: 'po_date' | 'delivery_date' | 'pr_date';
     date?: string;
     month?: string;
     from_date?: string;
@@ -75,6 +86,7 @@ export interface PurchasesReportResponse {
 
 export interface PurchasesReportParams {
   filter_type?: 'daily' | 'monthly' | 'custom';
+  date_basis?: 'po_date' | 'delivery_date' | 'pr_date';
   date?: string;
   month?: string;
   from_date?: string;
@@ -92,6 +104,7 @@ export const getPurchasesReportApi = async (
   const queryParams = new URLSearchParams();
 
   if (params.filter_type) queryParams.set('filter_type', params.filter_type);
+  if (params.date_basis) queryParams.set('date_basis', params.date_basis);
   if (params.date) queryParams.set('date', params.date);
   if (params.month) queryParams.set('month', params.month);
   if (params.from_date) queryParams.set('from_date', params.from_date);

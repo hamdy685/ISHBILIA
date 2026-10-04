@@ -29,13 +29,17 @@ class ProcurementAnalyticsController extends Controller
     {
         $period = (string) $request->query('period', '90');
         $status = $request->query('status');
+        $dateBasis = (string) $request->query('date_basis', 'po_date');
+        if (! in_array($dateBasis, ['po_date', 'delivery_date', 'pr_date'], true)) {
+            $dateBasis = 'po_date';
+        }
 
         [$startDate, $endDate, $dateLabel] = $this->resolveDateRange($request);
 
         $user = $request->user();
         $allowedDepartmentCodes = app(\App\Services\SupplierInvoiceService::class)->getAllowedDepartmentCodesForAccountant($user);
 
-        $cacheKey = 'procurement:analytics:v5:' . ($user->hasRole('execution_manager') ? 'exec_mgr_' . $user->id . ':' : '') . ($allowedDepartmentCodes !== null ? 'dept_acc_' . ($user->id ?? 0) . ':' : '') . md5(json_encode($request->all()));
+        $cacheKey = 'procurement:analytics:v6:' . $dateBasis . ':' . ($user->hasRole('execution_manager') ? 'exec_mgr_' . $user->id . ':' : '') . ($allowedDepartmentCodes !== null ? 'dept_acc_' . ($user->id ?? 0) . ':' : '') . md5(json_encode($request->all()));
 
         if (Cache::has($cacheKey)) {
             return response()->json(Cache::get($cacheKey));
@@ -44,8 +48,30 @@ class ProcurementAnalyticsController extends Controller
         // الاستعلام الأساسي لتتبع مسار أوامر الشراء (Funnel)
         $basePurchaseOrderQuery = PurchaseOrder::query()
             ->select(['id', 'po_number', 'purchase_request_id', 'supplier_id', 'created_by_user_id', 'status', 'grand_total', 'delivery_status', 'delivery_date', 'actual_delivery_date', 'created_at', 'updated_at'])
-            ->when($startDate !== null, fn ($query) => $query->where('created_at', '>=', $startDate))
-            ->when($endDate !== null, fn ($query) => $query->where('created_at', '<=', $endDate))
+            ->when($startDate !== null && $endDate !== null, function ($query) use ($startDate, $endDate, $dateBasis) {
+                $startDateStr = $startDate->toDateString();
+                $endDateStr = $endDate->toDateString();
+                if ($dateBasis === 'delivery_date') {
+                    $query->where(function ($dq) use ($startDateStr, $endDateStr) {
+                        $dq->whereHas('purchaseReceipts', function ($rq) use ($startDateStr, $endDateStr) {
+                            $rq->whereDate('received_at', '>=', $startDateStr)
+                                ->whereDate('received_at', '<=', $endDateStr);
+                        })->orWhere(function ($oq) use ($startDateStr, $endDateStr) {
+                            $oq->whereNotNull('delivery_date')
+                                ->whereDate('delivery_date', '>=', $startDateStr)
+                                ->whereDate('delivery_date', '<=', $endDateStr);
+                        });
+                    });
+                } elseif ($dateBasis === 'pr_date') {
+                    $query->whereHas('purchaseRequest', function ($pq) use ($startDateStr, $endDateStr) {
+                        $pq->whereDate('created_at', '>=', $startDateStr)
+                            ->whereDate('created_at', '<=', $endDateStr);
+                    });
+                } else {
+                    $query->whereDate('created_at', '>=', $startDateStr)
+                        ->whereDate('created_at', '<=', $endDateStr);
+                }
+            })
             ->when($allowedDepartmentCodes !== null, function ($q) use ($allowedDepartmentCodes) {
                 $q->whereHas('purchaseRequest.department', function ($dq) use ($allowedDepartmentCodes) {
                     $dq->whereIn('code', $allowedDepartmentCodes);
