@@ -7,6 +7,7 @@ import { DirectAccountingFinancialData } from '../../api/procurement';
 import { getUnitLabel } from '../../utils/units';
 import { SupplierSelectWithQuickAdd } from '../common/SupplierSelectWithQuickAdd';
 import { SupplementItemBadge } from '../common/SupplementItemBadge';
+import { SmartKgPricingInput } from '../common/SmartKgPricingInput';
 
 interface DirectAccountingReviewModalProps {
   request: PurchaseRequest | null;
@@ -179,6 +180,7 @@ export const DirectAccountingReviewModal: React.FC<DirectAccountingReviewModalPr
         one_time_supplier_name: item.one_time_supplier_name || undefined,
         quantity: Number(item.quantity),
         unit_price: Number(item.unit_price),
+        uom: item.uom || undefined,
       })),
       notes: notes.trim() || null,
     });
@@ -386,23 +388,28 @@ export const DirectAccountingReviewModal: React.FC<DirectAccountingReviewModalPr
                         <span className="text-[11px] font-bold text-amber-300">{getUnitLabel(item.uom)}</span>
                       </div>
                     </td>
-                    <td className="border-t border-slate-800 px-3 py-2 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <input
-                          aria-label={`سعر وحدة البند ${index + 1}`}
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={item.unit_price ?? ''}
-                          onFocus={(event) => event.target.select()}
-                          onChange={(event) => updateItem(index, 'unit_price', event.target.value)}
-                          disabled={isSubmitting}
-                          className="h-9 w-28 rounded-md border border-emerald-500/60 bg-[#0b1424] px-2 text-center font-mono text-xs text-slate-100 outline-none focus:border-emerald-300 disabled:opacity-60"
-                        />
-                        <span className="text-[10px] text-slate-400 font-bold">ج.م</span>
-                      </div>
+                    <td className="border-t border-slate-800 px-3 py-2 text-center align-top min-w-[200px]">
+                      <SmartKgPricingInput
+                        unitPrice={item.unit_price}
+                        quantity={item.quantity}
+                        uom={item.uom}
+                        itemDescription={item.item_description}
+                        disabled={isSubmitting}
+                        onChangeUnitPrice={(newPrice) => updateItem(index, 'unit_price', String(newPrice))}
+                        onConvertToTon={(newQty, tonPrice) => {
+                          setItems((cur) => cur.map((it, i) => i === index ? {
+                            ...it,
+                            quantity: newQty,
+                            uom: 'TON',
+                            unit_price: tonPrice,
+                          } : it));
+                        }}
+                        onConvertToKgPrice={(newKgPrice) => {
+                          updateItem(index, 'unit_price', String(newKgPrice));
+                        }}
+                      />
                     </td>
-                    <td className="border-t border-slate-800 px-3 py-3 text-center font-mono font-black text-emerald-300 text-sm">
+                    <td className="border-t border-slate-800 px-3 py-3 text-center font-mono font-black text-emerald-300 text-sm align-top">
                       {formatAmount(lineTotal(item.quantity, item.unit_price))} ج.م
                     </td>
                   </tr>
@@ -476,20 +483,30 @@ export const DirectAccountingReviewModal: React.FC<DirectAccountingReviewModalPr
                       className="mt-1 min-h-11 w-full rounded-xl border border-cyan-500/60 bg-[#0b1424] px-3 py-2 text-center font-mono text-sm text-slate-100 outline-none focus:border-cyan-300 disabled:opacity-60"
                     />
                   </label>
-                  <label className="text-xs font-bold text-slate-300">
-                    سعر الوحدة (ج.م)
-                    <input
-                      aria-label={`سعر وحدة البند ${index + 1}`}
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={item.unit_price ?? ''}
-                      onFocus={(event) => event.target.select()}
-                      onChange={(event) => updateItem(index, 'unit_price', event.target.value)}
+                  <div className="mt-3">
+                    <label className="text-xs font-bold text-slate-300 block mb-1">
+                      سعر الوحدة ({item.uom === 'TON' ? 'ج.م/طن' : 'ج.م'})
+                    </label>
+                    <SmartKgPricingInput
+                      unitPrice={item.unit_price}
+                      quantity={item.quantity}
+                      uom={item.uom}
+                      itemDescription={item.item_description}
                       disabled={isSubmitting}
-                      className="mt-1 min-h-11 w-full rounded-xl border border-emerald-500/60 bg-[#0b1424] px-3 py-2 text-center font-mono text-sm text-slate-100 outline-none focus:border-emerald-300 disabled:opacity-60"
+                      onChangeUnitPrice={(newPrice) => updateItem(index, 'unit_price', String(newPrice))}
+                      onConvertToTon={(newQty, tonPrice) => {
+                        setItems((cur) => cur.map((it, i) => i === index ? {
+                          ...it,
+                          quantity: newQty,
+                          uom: 'TON',
+                          unit_price: tonPrice,
+                        } : it));
+                      }}
+                      onConvertToKgPrice={(newKgPrice) => {
+                        updateItem(index, 'unit_price', String(newKgPrice));
+                      }}
                     />
-                  </label>
+                  </div>
                 </div>
                 <div className="mt-3 flex items-center justify-between rounded-lg border border-emerald-700/50 bg-emerald-950/20 px-3 py-2 text-xs">
                   <span className="text-slate-400 font-medium">إجمالي البند</span>

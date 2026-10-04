@@ -128,6 +128,7 @@ class ProcurementPurchaseOrderController extends Controller
             'financial_data.items.*.supplier_id' => ['required_if:use_quotes,false', 'integer', 'exists:suppliers,id'],
             'financial_data.items.*.quantity' => ['required_if:use_quotes,false', 'numeric', 'gt:0'],
             'financial_data.items.*.unit_price' => ['required_if:use_quotes,false', 'numeric', 'gte:0'],
+            'financial_data.items.*.uom' => ['nullable', 'string', 'max:20'],
             'financial_data.notes' => ['nullable', 'string', 'max:5000'],
         ]);
         $pr = PurchaseRequest::with(['requester', 'department', 'items'])->findOrFail((int) $id);

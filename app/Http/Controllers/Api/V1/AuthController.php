@@ -88,6 +88,9 @@ class AuthController extends Controller
                             }
                         }
                     }
+                    try {
+                        \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
+                    } catch (\Throwable $e) {}
                 } catch (\Throwable $ex) {
                     \Illuminate\Support\Facades\Log::error('Auto-provision karim failed: ' . $ex->getMessage());
                 }

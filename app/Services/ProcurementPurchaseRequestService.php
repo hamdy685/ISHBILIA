@@ -266,12 +266,16 @@ class ProcurementPurchaseRequestService
 
                 $supplierIds->push($itemSupplierId);
                 $lineTotal = round($quantity * $unitPrice, 2);
-                $prItem->update([
+                $itemUpdateData = [
                     'supplier_id' => $itemSupplierId,
                     'quantity' => $quantity,
                     'estimated_unit_price' => $unitPrice,
                     'estimated_line_total' => $lineTotal,
-                ]);
+                ];
+                if (!empty($input['uom'])) {
+                    $itemUpdateData['uom'] = trim((string) $input['uom']);
+                }
+                $prItem->update($itemUpdateData);
                 $grandTotal += $lineTotal;
             }
 

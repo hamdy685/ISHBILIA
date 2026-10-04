@@ -23,6 +23,7 @@ import { getUnitLabel } from '../../utils/units';
 import { getSummaryParcels, getSummaryRegions, getSummaryQuantities } from '../../utils/formatRequestSummary';
 import { UnifiedNotesCard } from '../../components/common/UnifiedNotesCard';
 import { formatCleanNumber } from '../../utils/numberFormat';
+import { SmartKgPricingInput } from '../../components/common/SmartKgPricingInput';
 
 interface DraftItemState extends PurchaseRequestItemFormInput {
   id?: number;
@@ -813,19 +814,29 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
                                   🏢 {item.supplier_name || selected.direct_supplier?.company_name || 'عروض أسعار'}
                                 </span>
                               </td>
-                              <td className="px-3 py-2.5 whitespace-nowrap">
-                                <input
+                              <td className="px-3 py-2.5 whitespace-nowrap align-top min-w-[200px]">
+                                <SmartKgPricingInput
+                                  unitPrice={item.estimated_unit_price ?? 0}
+                                  quantity={item.quantity}
+                                  uom={item.uom}
+                                  itemDescription={item.item_description}
                                   disabled={isExcluded}
-                                  type="number"
-                                  min="0"
-                                  step="any"
-                                  value={item.estimated_unit_price ?? ''}
-                                  onChange={(e) => updateItem(index, 'estimated_unit_price', e.target.value === '' ? 0 : Number(e.target.value))}
-                                  placeholder="0.00"
-                                  className="w-24 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-slate-100 font-bold disabled:bg-slate-950 disabled:text-slate-500"
+                                  onChangeUnitPrice={(newPrice) => updateItem(index, 'estimated_unit_price', newPrice)}
+                                  onConvertToTon={(newQty, tonPrice) => {
+                                    setDraftItems((prev) => prev.map((it, i) => i === index ? {
+                                      ...it,
+                                      quantity: newQty,
+                                      uom: 'TON',
+                                      estimated_unit_price: tonPrice,
+                                      estimated_line_total: Math.round(newQty * tonPrice * 100) / 100,
+                                    } : it));
+                                  }}
+                                  onConvertToKgPrice={(newKgPrice) => {
+                                    updateItem(index, 'estimated_unit_price', newKgPrice);
+                                  }}
                                 />
                               </td>
-                              <td className="px-3 py-2.5 whitespace-nowrap font-mono font-bold text-amber-300">
+                              <td className="px-3 py-2.5 whitespace-nowrap font-mono font-bold text-amber-300 align-top">
                                 {formatCleanNumber(lineTotal)} ج.م
                               </td>
                               <td className="px-3 py-2.5 text-center whitespace-nowrap">
@@ -941,17 +952,29 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
                                   className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-slate-100 font-bold"
                                 />
                               </div>
-                              <div>
-                                <label className="text-slate-400 block mb-1">سعر الوحدة (ج.م)</label>
-                                <input
+                              <div className="mt-2">
+                                <label className="text-slate-400 block mb-1">
+                                  سعر الوحدة ({item.uom === 'TON' ? 'ج.م/طن' : 'ج.م'})
+                                </label>
+                                <SmartKgPricingInput
+                                  unitPrice={item.estimated_unit_price ?? 0}
+                                  quantity={item.quantity}
+                                  uom={item.uom}
+                                  itemDescription={item.item_description}
                                   disabled={isExcluded}
-                                  type="number"
-                                  min="0"
-                                  step="any"
-                                  value={item.estimated_unit_price ?? ''}
-                                  onChange={(e) => updateItem(index, 'estimated_unit_price', e.target.value === '' ? 0 : Number(e.target.value))}
-                                  placeholder="0.00"
-                                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-slate-100 font-bold"
+                                  onChangeUnitPrice={(newPrice) => updateItem(index, 'estimated_unit_price', newPrice)}
+                                  onConvertToTon={(newQty, tonPrice) => {
+                                    setDraftItems((prev) => prev.map((it, i) => i === index ? {
+                                      ...it,
+                                      quantity: newQty,
+                                      uom: 'TON',
+                                      estimated_unit_price: tonPrice,
+                                      estimated_line_total: Math.round(newQty * tonPrice * 100) / 100,
+                                    } : it));
+                                  }}
+                                  onConvertToKgPrice={(newKgPrice) => {
+                                    updateItem(index, 'estimated_unit_price', newKgPrice);
+                                  }}
                                 />
                               </div>
                             </div>

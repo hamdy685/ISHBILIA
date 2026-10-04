@@ -190,6 +190,7 @@ export interface DirectAccountingFinancialData {
     one_time_supplier_name?: string;
     quantity: number;
     unit_price: number;
+    uom?: string;
   }>;
   notes?: string | null;
 }
