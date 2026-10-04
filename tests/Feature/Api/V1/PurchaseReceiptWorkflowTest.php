@@ -24,6 +24,7 @@ class PurchaseReceiptWorkflowTest extends TestCase
     private User $siteEngineer;
     private User $accountant;
     private User $siteAccountant;
+    private User $procurementManager;
     private PurchaseOrder $purchaseOrder;
 
     protected function setUp(): void
@@ -35,6 +36,7 @@ class PurchaseReceiptWorkflowTest extends TestCase
         $this->siteEngineer = $this->makeUser('site@test', 'مهندس الموقع', 'site_engineer', $department->id);
         $this->accountant = $this->makeUser('accounting@test', 'الحسابات', 'accountant', $department->id);
         $this->siteAccountant = $this->makeUser('site-acct@test', 'حسابات التنفيذ', 'site_accountant', $department->id);
+        $this->procurementManager = $this->makeUser('procurement@test', 'مسؤول المشتريات', 'procurement_manager', $department->id);
         $employee = $this->makeUser('employee-receipt@test', 'الموظف', 'employee', $department->id);
         $supplier = Supplier::create(['code' => 'RECEIPT-SUP', 'company_name' => 'مورد الاستلام', 'is_active' => true]);
 
@@ -90,10 +92,11 @@ class PurchaseReceiptWorkflowTest extends TestCase
         $approved = app(PurchaseReceiptService::class)->approveBySiteEngineer($this->siteEngineer, $receipt, 'تمت مطابقة الاستلام بالموقع.');
         $this->assertSame('APPROVED', $approved->status);
         $this->assertSame('DELIVERED', $this->purchaseOrder->fresh()->delivery_status);
-        // Department accountant (site_accountant) should receive the notification for EXECUTION dept
+        $this->assertSame('PENDING_ACTUAL_PO', $this->purchaseOrder->fresh()->status);
+        // Procurement manager should receive notification to issue actual PO
         $this->assertDatabaseHas('notifications', [
-            'user_id' => $this->siteAccountant->id,
-            'type' => 'purchase_order_and_receipt_ready_accounting',
+            'user_id' => $this->procurementManager->id,
+            'type' => 'grn_approved_pending_actual_po',
         ]);
     }
 
@@ -191,17 +194,16 @@ class PurchaseReceiptWorkflowTest extends TestCase
 
         $this->assertSame('APPROVED', $approvedReceipt->status);
         $this->assertSame('DELIVERED', $buildingsPo->fresh()->delivery_status);
-        // BUILDINGS maps to site_accountant in ACCOUNTANT_DEPARTMENT_MAPPINGS
+        $this->assertSame('PENDING_ACTUAL_PO', $buildingsPo->fresh()->status);
         $this->assertDatabaseHas('notifications', [
-            'user_id' => $this->siteAccountant->id,
-            'type' => 'purchase_order_and_receipt_ready_accounting',
+            'type' => 'grn_approved_pending_actual_po',
         ]);
     }
 
     public function test_po_issued_for_buildings_automatically_creates_direct_site_receipt(): void
     {
         $buildingsDept = Department::create(['name' => 'المباني', 'code' => 'BUILDINGS', 'is_active' => true]);
-        $procurementUser = $this->makeUser('procurement@test', 'مدير المشتريات', 'procurement_manager', $buildingsDept->id);
+        $procurementUser = $this->makeUser('procurement-bld@test', 'مدير المشتريات المباني', 'procurement_manager', $buildingsDept->id);
         $buildingsEngineer = $this->makeUser('engineer-bld2@test', 'مهندس موقع المباني 2', 'site_engineer', $buildingsDept->id);
 
         $buildingsPr = PurchaseRequest::create([

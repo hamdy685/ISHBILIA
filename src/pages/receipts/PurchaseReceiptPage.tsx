@@ -250,7 +250,7 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
         photo_base64: photo?.base64,
         photo_name: photo?.name,
       });
-      setSuccessMessage(`تم تسجيل استلام أمر الشراء ${order.po_number} واعتماده نهائياً ونقله للحسابات بنجاح!`);
+      setSuccessMessage(`تم تسجيل استلام أمر الشراء ${order.po_number} وإرساله للمستلم/مهندس الموقع للفحص والاعتماد.`);
       await load();
     } catch (err) {
       setError(parseApiError(err).message);
@@ -278,7 +278,7 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
         site_engineer_notes: notes[receipt.id],
         items,
       });
-      setSuccessMessage(`تم اعتماد إذن الاستلام ${receipt.receipt_number} وإرساله للحسابات لصرف الدفعات.`);
+      setSuccessMessage(`تم اعتماد إذن الاستلام ${receipt.receipt_number} وإرساله للمشتريات لإصدار أمر الشراء الفعلي.`);
       await load();
     } catch (err) {
       setError(parseApiError(err).message);
@@ -326,7 +326,7 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
               <p className="text-xs sm:text-sm text-slate-400 mt-1">
                 {mode === 'warehouse'
                   ? 'قم بفحص بضاعة الموردين ومطابقة الأصناف والمواصفات، وسجل الكميات المستلمة أو راجع أرشيف الاستلامات المعتمدة.'
-                  : 'راجع استلام المخزن وافحص المواد هندسياً وفنياً في الموقع للتأكد من مطابقتها قبل الاعتماد النهائي وإرسالها للحسابات.'}
+                  : 'راجع استلام المخزن وافحص المواد هندسياً وفنياً في الموقع للتأكد من مطابقتها قبل الاعتماد النهائي وإرسالها للمشتريات لإصدار أمر الشراء الفعلي.'}
               </p>
             </div>
           </div>
@@ -1151,7 +1151,7 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                             onClick={() => approveReceipt(receipt)}
                             className="w-full font-black text-base sm:text-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 py-3.5 rounded-2xl shadow-xl shadow-emerald-950/60 flex items-center justify-center gap-2"
                           >
-                            <span>✓</span> اعتماد مطابق للموقع وإرسال للحسابات لصرف الدفعات
+                            <span>✓</span> اعتماد مطابق للموقع وإرسال للمشتريات لإصدار أمر الشراء الفعلي
                           </Button>
                         </div>
                       </div>
@@ -1164,7 +1164,7 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                 <span className="text-4xl block">🏗️</span>
                 <p className="text-base font-bold text-slate-200">لا توجد أذونات استلام بانتظار الاعتماد الميداني</p>
                 <p className="text-xs text-slate-500">
-                  تظهر هنا أذونات الاستلام المسجلة من أمين المخزن لاعتمادها هندسياً قبل إرسالها للحسابات.
+                  تظهر هنا أذونات الاستلام المسجلة من أمين المخزن لاعتمادها هندسياً قبل إرسالها للمشتريات لإصدار أمر الشراء الفعلي.
                 </p>
               </div>
             )

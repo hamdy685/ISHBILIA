@@ -149,10 +149,10 @@ class ActualPoEndToEndWorkflowTest extends TestCase
         $this->assertFalse($preliminaryPo->isActualPo());
 
         // ─────────────────────────────────────────────────────────────
-        // 3. WAREHOUSE CREATES GRN & SITE ENGINEER APPROVES GRN
+        // 3. WAREHOUSE CREATES GRN (status → PENDING_SITE_ENGINEER)
         // ─────────────────────────────────────────────────────────────
         // Warehouse / Site receiver records actual 8 tons (instead of 10)
-        $approvedReceipt = app(PurchaseReceiptService::class)->createByWarehouse(
+        $pendingReceipt = app(PurchaseReceiptService::class)->createByWarehouse(
             $this->warehouseKeeper,
             $preliminaryPo,
             [
@@ -162,6 +162,24 @@ class ActualPoEndToEndWorkflowTest extends TestCase
                     'notes' => 'تم استلام وتفريغ 8 أطنان بالموقع بنجاح',
                 ],
             ]
+        );
+
+        $this->assertSame('PENDING_SITE_ENGINEER', $pendingReceipt->status);
+        $this->assertSame('IN_RECEIPT', $preliminaryPo->fresh()->delivery_status);
+
+        // Site engineer receives notification
+        $this->assertDatabaseHas('notifications', [
+            'user_id' => $this->siteEngineer->id,
+            'type' => 'purchase_receipt_pending_site_engineer',
+        ]);
+
+        // ─────────────────────────────────────────────────────────────
+        // 3b. SITE ENGINEER APPROVES GRN (status → APPROVED, PO → PENDING_ACTUAL_PO)
+        // ─────────────────────────────────────────────────────────────
+        $approvedReceipt = app(PurchaseReceiptService::class)->approveBySiteEngineer(
+            $this->siteEngineer,
+            $pendingReceipt,
+            'تمت مطابقة الكميات والمواصفات بالموقع'
         );
 
         $this->assertSame('APPROVED', $approvedReceipt->status);

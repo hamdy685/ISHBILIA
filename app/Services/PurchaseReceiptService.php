@@ -122,12 +122,10 @@ class PurchaseReceiptService
                 'warehouse_keeper_user_id' => $warehouseKeeper->id,
                 'site_engineer_user_id' => $siteEngineerId,
                 'receipt_number' => 'GRN-' . now()->format('YmdHis') . '-' . $purchaseOrder->id,
-                'status' => 'APPROVED',
+                'status' => 'PENDING_SITE_ENGINEER',
                 'received_at' => $receivedAt ?: now()->toDateString(),
                 'warehouse_submitted_at' => now(),
-                'site_engineer_approved_at' => now(),
                 'warehouse_notes' => $notes,
-                'site_engineer_notes' => $notes,
                 'photo_path' => $photoData['path'] ?? null,
                 'photo_name' => $photoData['name'] ?? null,
                 'photo_size' => $photoData['size'] ?? null,
@@ -172,45 +170,28 @@ class PurchaseReceiptService
                 ]);
             }
 
-            $purchaseOrder->update([
-                'delivery_status' => 'DELIVERED',
-                'actual_delivery_date' => $receivedAt ?: now()->toDateString(),
-                'status' => 'PENDING_ACTUAL_PO',
-            ]);
+            $purchaseOrder->update(['delivery_status' => 'IN_RECEIPT']);
 
             ApprovalHistory::create([
                 'target_type' => PurchaseReceipt::class,
                 'target_id' => $receipt->id,
                 'actor_user_id' => $warehouseKeeper->id,
-                'action' => 'SITE_RECEIPT_APPROVED',
-                'from_state' => 'PENDING_RECEIPT',
-                'to_state' => 'APPROVED',
-                'comments' => $notes ?: 'سجل أمين المخزن / المستلم الكميات الفعلية المستلمة واعتمد إذن الاستلام نهائياً وأعادها لإدارة المشتريات لإصدار أمر الشراء الفعلي.',
+                'action' => 'WAREHOUSE_RECEIPT_SUBMITTED',
+                'from_state' => 'PENDING_WAREHOUSE',
+                'to_state' => 'PENDING_SITE_ENGINEER',
+                'comments' => $notes ?: 'سجل أمين المخزن الكميات المستلمة وأرسل إذن الاستلام للمستلم/مهندس الموقع للفحص والاعتماد.',
             ]);
 
             $notificationService = app(NotificationService::class);
 
-            // Notify Procurement Managers to issue the Actual PO
-            $procurementUsers = $notificationService->resolveUsersWithPermission('purchase_order.create');
-
-            if ($procurementUsers->isNotEmpty()) {
-                $notificationService->queueUsers(
-                    $procurementUsers,
-                    'grn_approved_pending_actual_po',
-                    'إذن استلام معتمد — بانتظار إصدار أمر الشراء الفعلي',
-                    "تم اعتماد إذن الاستلام {$receipt->receipt_number} لأمر الشراء {$purchaseOrder->po_number}. يرجى مراجعة الكميات المستلمة وإصدار أمر الشراء الفعلي.",
-                    $purchaseOrder
-                );
-            }
-
-            // Notify site engineer for informational awareness if different from keeper
+            // Notify the assigned site engineer / receiver to review and approve the receipt
             $siteEngineer = User::find($siteEngineerId);
-            if ($siteEngineer && (int) $siteEngineer->id !== (int) $warehouseKeeper->id) {
+            if ($siteEngineer) {
                 $notificationService->queueNotification(
                     $siteEngineer,
-                    'purchase_receipt_approved_site_engineer',
-                    'تم تسجيل واعتماد استلام بالموقع',
-                    "تم تسجيل واعتماد إذن الاستلام {$receipt->receipt_number} لأمر الشراء {$purchaseOrder->po_number} وأُعيد الملف لإدارة المشتريات.",
+                    'purchase_receipt_pending_site_engineer',
+                    'إذن استلام بانتظار اعتمادك',
+                    "إذن الاستلام {$receipt->receipt_number} لأمر الشراء {$purchaseOrder->po_number} بانتظار فحصك واعتمادك.",
                     $receipt
                 );
             }
