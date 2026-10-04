@@ -12,8 +12,9 @@ import { parseApiError } from '../../utils/apiError';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { CurrencyDisplay } from '../../components/ui/CurrencyDisplay';
-import { SearchableSelect } from '../../components/ui/SearchableSelect';
-import { getUnitLabel } from '../../utils/units';
+import { getUnitLabel, getUnitOptions, DEFAULT_PR_UNIT_CODES } from '../../utils/units';
+
+const UNIT_OPTIONS = getUnitOptions(DEFAULT_PR_UNIT_CODES);
 import { tafqeetCurrency } from '../../utils/tafqeet';
 import { UnifiedNotesCard } from '../../components/common/UnifiedNotesCard';
 import { SupplierSelectWithQuickAdd } from '../../components/common/SupplierSelectWithQuickAdd';
@@ -188,6 +189,14 @@ export const CreatePurchaseOrderPage: React.FC = () => {
     setPoItems((prev) => {
       const updated = [...prev];
       updated[index] = { ...updated[index], unit_price: val === '' ? '' : (parseFloat(val) || 0) };
+      return updated;
+    });
+  };
+
+  const handleItemUomChange = (index: number, val: string) => {
+    setPoItems((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], uom: val };
       return updated;
     });
   };
@@ -742,7 +751,21 @@ export const CreatePurchaseOrderPage: React.FC = () => {
                           </select>
                         </td>
                         <td className="p-3 text-slate-300 font-bold whitespace-nowrap">
-                          <span>{getUnitLabel(item.uom)}</span>
+                          <select
+                            value={item.uom || ''}
+                            onChange={(e) => handleItemUomChange(index, e.target.value)}
+                            className="w-28 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-100 focus:border-cyan-500 focus:outline-none cursor-pointer"
+                            title="تعديل وحدة القياس"
+                          >
+                            {item.uom && !DEFAULT_PR_UNIT_CODES.includes(item.uom) && (
+                              <option value={item.uom}>{getUnitLabel(item.uom)}</option>
+                            )}
+                            {UNIT_OPTIONS.map((u) => (
+                              <option key={u.value} value={u.value}>
+                                {u.label}
+                              </option>
+                            ))}
+                          </select>
                           {item.is_rebar_converted && (
                             <span className="text-[10px] text-emerald-400 block font-normal">(محوّل لطن)</span>
                           )}
@@ -866,11 +889,11 @@ export const CreatePurchaseOrderPage: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="grid grid-cols-3 gap-2 text-xs">
                       <div>
                         <div className="flex items-center justify-between mb-1">
                           <label className="text-[10px] text-slate-400 font-semibold">
-                            الكمية ({getUnitLabel(item.uom)})
+                            الكمية
                           </label>
                           <span className="text-[10px] text-slate-500 font-mono">
                             {item.is_rebar_converted
@@ -890,9 +913,28 @@ export const CreatePurchaseOrderPage: React.FC = () => {
                         />
                       </div>
                       <div>
+                        <label className="text-[10px] text-slate-400 font-semibold block mb-1">
+                          الوحدة
+                        </label>
+                        <select
+                          value={item.uom || ''}
+                          onChange={(e) => handleItemUomChange(index, e.target.value)}
+                          className="h-10 w-full bg-slate-950 border border-slate-700 rounded-lg px-1 text-xs text-slate-100"
+                        >
+                          {item.uom && !DEFAULT_PR_UNIT_CODES.includes(item.uom) && (
+                            <option value={item.uom}>{getUnitLabel(item.uom)}</option>
+                          )}
+                          {UNIT_OPTIONS.map((u) => (
+                            <option key={u.value} value={u.value}>
+                              {u.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
                         <div className="flex items-center justify-between mb-1">
                           <label className="text-[10px] text-slate-400 font-semibold">
-                            {item.uom === 'TON' ? 'سعر الطن (ج.م)' : 'السعر (ج.م)'}
+                            {item.uom === 'TON' ? 'سعر الطن' : 'السعر (ج.م)'}
                           </label>
                           {isQtyChanged && (
                             <span className={`text-[10px] font-mono font-bold ${diff > 0 ? 'text-amber-400' : 'text-rose-400'}`}>

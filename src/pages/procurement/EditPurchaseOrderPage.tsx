@@ -14,7 +14,9 @@ import { parseApiError } from '../../utils/apiError';
 import { SupplierSelectWithQuickAdd } from '../../components/common/SupplierSelectWithQuickAdd';
 import { formatCleanNumber } from '../../utils/numberFormat';
 import PurchaseOrderStatusBadge from '../../components/procurement/PurchaseOrderStatusBadge';
-import { getUnitLabel } from '../../utils/units';
+import { getUnitLabel, getUnitOptions, DEFAULT_PR_UNIT_CODES } from '../../utils/units';
+
+const UNIT_OPTIONS = getUnitOptions(DEFAULT_PR_UNIT_CODES);
 
 interface EditableItem {
   id?: number;
@@ -705,9 +707,28 @@ export const EditPurchaseOrderPage: React.FC = () => {
 
                     {/* UOM */}
                     <td className="p-3">
-                      <span className="px-2 py-1 rounded bg-slate-900 border border-slate-800 text-[11px] text-slate-300 font-mono">
-                        {getUnitLabel(item.uom)}
-                      </span>
+                      {isEditable ? (
+                        <select
+                          disabled={busy}
+                          value={item.uom || ''}
+                          onChange={(e) => handleItemFieldChange(idx, 'uom', e.target.value)}
+                          className="w-28 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:border-cyan-500 font-medium cursor-pointer"
+                          title="تعديل وحدة القياس"
+                        >
+                          {item.uom && !DEFAULT_PR_UNIT_CODES.includes(item.uom) && (
+                            <option value={item.uom}>{getUnitLabel(item.uom)}</option>
+                          )}
+                          {UNIT_OPTIONS.map((u) => (
+                            <option key={u.value} value={u.value}>
+                              {u.label}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="px-2 py-1 rounded bg-slate-900 border border-slate-800 text-[11px] text-slate-300 font-mono">
+                          {getUnitLabel(item.uom)}
+                        </span>
+                      )}
                     </td>
 
                     {/* Unit Price */}
@@ -816,7 +837,7 @@ export const EditPurchaseOrderPage: React.FC = () => {
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="grid grid-cols-3 gap-2 text-xs">
                   <div>
                     <label className="block text-[10px] text-slate-500 mb-0.5">الكمية الفعلية</label>
                     <input
@@ -827,6 +848,28 @@ export const EditPurchaseOrderPage: React.FC = () => {
                       onChange={(e) => handleItemFieldChange(idx, 'quantity', Number(e.target.value))}
                       className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs font-mono text-slate-100"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-500 mb-0.5">الوحدة</label>
+                    {isEditable ? (
+                      <select
+                        disabled={busy}
+                        value={item.uom || ''}
+                        onChange={(e) => handleItemFieldChange(idx, 'uom', e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-700 rounded px-1.5 py-1 text-xs text-slate-200"
+                      >
+                        {item.uom && !DEFAULT_PR_UNIT_CODES.includes(item.uom) && (
+                          <option value={item.uom}>{getUnitLabel(item.uom)}</option>
+                        )}
+                        {UNIT_OPTIONS.map((u) => (
+                          <option key={u.value} value={u.value}>
+                            {u.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="p-1 text-xs text-slate-300 font-mono">{getUnitLabel(item.uom)}</div>
+                    )}
                   </div>
                   <div>
                     <label className="block text-[10px] text-slate-500 mb-0.5">سعر الوحدة</label>
@@ -919,12 +962,20 @@ export const EditPurchaseOrderPage: React.FC = () => {
 
               <div className="md:col-span-2">
                 <label className="block text-[11px] font-semibold text-slate-400 mb-1">الوحدة</label>
-                <input
-                  type="text"
+                <select
                   value={newItemUom}
                   onChange={(e) => setNewItemUom(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 text-center"
-                />
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 cursor-pointer"
+                >
+                  {newItemUom && !DEFAULT_PR_UNIT_CODES.includes(newItemUom) && (
+                    <option value={newItemUom}>{getUnitLabel(newItemUom)}</option>
+                  )}
+                  {UNIT_OPTIONS.map((u) => (
+                    <option key={u.value} value={u.value}>
+                      {u.label}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="sm:col-span-2 md:col-span-12 flex justify-end">
