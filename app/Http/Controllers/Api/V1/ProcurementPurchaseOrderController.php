@@ -225,6 +225,8 @@ class ProcurementPurchaseOrderController extends Controller
                 'createdBy',
                 'items.item',
                 'items.supplier',
+                'receipts.warehouseKeeper',
+                'receipts.siteEngineer',
             ])
             ->when($status !== '', fn ($query) => $query->where('status', $status))
             ->when($supplierId > 0, fn ($query) => $query->where('supplier_id', $supplierId))

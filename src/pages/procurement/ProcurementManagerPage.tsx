@@ -27,6 +27,7 @@ import SupplierModal from '../../components/procurement/SupplierModal';
 import DirectPoModal from '../../components/procurement/DirectPoModal';
 import DirectAccountingReviewModal from '../../components/procurement/DirectAccountingReviewModal';
 import PurchaseQuotesModal from '../../components/procurement/PurchaseQuotesModal';
+import ThreeWayMatchPrintModal from '../../components/accounting/ThreeWayMatchPrintModal';
 import { PrDetailsModal } from '../../components/procurement/PrDetailsModal';
 import ProcurementCharts from '../../components/procurement/ProcurementCharts';
 import { getUnitLabel } from '../../utils/units';
@@ -108,6 +109,9 @@ export const ProcurementManagerPage: React.FC = () => {
   const [quotePrs, setQuotePrs] = useState<PurchaseRequest[]>([]);
   const [approvedPrs, setApprovedPrs] = useState<PurchaseRequest[]>([]);
   const [pos, setPos] = useState<PurchaseOrder[]>([]);
+  const [pendingActualPos, setPendingActualPos] = useState<PurchaseOrder[]>([]);
+  const [cyclePrintPo, setCyclePrintPo] = useState<PurchaseOrder | null>(null);
+  const [actualPoSearch, setActualPoSearch] = useState<string>('');
   const [poPage, setPoPage] = useState(1);
   const [poMeta, setPoMeta] = useState<PurchaseOrderPaginationMeta>({ current_page: 1, from: null, last_page: 1, per_page: 15, to: null, total: 0 });
   const [poDetails, setPoDetails] = useState<Record<number, PurchaseOrder>>({});
@@ -184,11 +188,12 @@ export const ProcurementManagerPage: React.FC = () => {
     const path = location.pathname;
     const tabParam = searchParams.get('tab');
     if (tabParam === 'approved-quotes' || tabParam === '2') setActiveTab(2);
+    else if (tabParam === 'actual-pos' || tabParam === '5') setActiveTab(5);
     else if (path.includes('/purchase-requests')) setActiveTab(0);
     else if (path.includes('/purchase-orders')) setActiveTab(1);
     else if (path.includes('/suppliers')) setActiveTab(3);
     else if (path.includes('/reports')) setActiveTab(4);
-    else setActiveTab(0);
+    else if (tabParam !== 'actual-pos' && tabParam !== '5') setActiveTab(0);
   }, [location.pathname, searchParams]);
 
   // ── Supplement Deep-Link Handler ──
@@ -242,7 +247,7 @@ export const ProcurementManagerPage: React.FC = () => {
     };
 
     try {
-      const [pending, quotePending, approved, ordersPage, supplierData, departmentData, catalogData, report] = await Promise.all([
+      const [pending, quotePending, approved, ordersPage, actualOrdersPage, supplierData, departmentData, catalogData, report] = await Promise.all([
         safeLoad('طلبات الاعتماد', getPendingProcurementApprovalApi(), []),
         safeLoad('عروض الأسعار', getPendingQuoteRequestsApi(), []),
         safeLoad('الطلبات المعتمدة', getApprovedByProcurementPrsApi(), []),
@@ -255,6 +260,10 @@ export const ProcurementManagerPage: React.FC = () => {
           ...(poDateFrom && !ignoreDefaultPoDateForSearch ? { date_from: poDateFrom } : {}),
           ...(poDateTo && !ignoreDefaultPoDateForSearch ? { date_to: poDateTo } : {}),
         }), null),
+        safeLoad('أوامر الشراء الفعلية', getPurchaseOrdersApi({
+          status: 'PENDING_ACTUAL_PO',
+          per_page: 50,
+        }), null),
         safeLoad('الموردون', getSuppliersApi(), []),
         safeLoad('الأقسام', getProcurementDepartmentsApi(), []),
         safeLoad('كتالوج الأصناف', getProcurementCatalogItemsApi(), []),
@@ -265,6 +274,7 @@ export const ProcurementManagerPage: React.FC = () => {
       setQuotePrs(quotePending || []);
       setApprovedPrs(approved || []);
       setPos(ordersPage?.data || []);
+      setPendingActualPos(actualOrdersPage?.data || []);
       if (ordersPage?.meta) setPoMeta(ordersPage.meta);
       setSuppliers(supplierData || []);
       setDepartments(departmentData || []);
@@ -543,6 +553,23 @@ export const ProcurementManagerPage: React.FC = () => {
         <div className="flex flex-wrap gap-2">
           <Button variant={activeTab === 0 ? 'primary' : 'secondary'} size="sm" onClick={() => navigate('/procurement/purchase-requests')}>الطلبات المعلقة ({queueRows.length})</Button>
           <Button variant={activeTab === 2 ? 'primary' : 'secondary'} size="sm" onClick={() => { setActiveTab(2); setSearchParams({ tab: 'approved-quotes' }, { replace: true }); }}>الأسعار المعتمدة ({selectedQuotePrs.length})</Button>
+          <Button
+            variant={activeTab === 5 ? 'primary' : 'secondary'}
+            size="sm"
+            onClick={() => { setActiveTab(5); setSearchParams({ tab: 'actual-pos' }, { replace: true }); }}
+            className={`font-black transition-all ${
+              pendingActualPos.length > 0
+                ? 'border-indigo-500/80 bg-indigo-950/40 text-indigo-200 shadow-md shadow-indigo-950/40'
+                : ''
+            }`}
+          >
+            <span>⚡ أوامر الشراء الفعلية</span>
+            {pendingActualPos.length > 0 && (
+              <span className="mr-1.5 rounded-full bg-emerald-500 text-slate-950 px-2 py-0.5 text-[10px] font-black animate-pulse font-mono">
+                {pendingActualPos.length}
+              </span>
+            )}
+          </Button>
           <Button variant={activeTab === 1 ? 'primary' : 'secondary'} size="sm" onClick={() => navigate('/procurement/purchase-orders')}>أرشيف أوامر الشراء</Button>
           <Button variant={activeTab === 3 ? 'primary' : 'secondary'} size="sm" onClick={() => navigate('/procurement/suppliers')}>إدارة الموردين</Button>
           <Button variant={activeTab === 4 ? 'primary' : 'secondary'} size="sm" onClick={() => navigate('/procurement/reports')}>التقارير والتحليلات</Button>
@@ -593,7 +620,7 @@ export const ProcurementManagerPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
           {/* Card 1: Pending Route */}
           <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-3.5 flex flex-col justify-between gap-2.5 hover:border-amber-500/60 transition-colors">
             <div>
@@ -668,8 +695,180 @@ export const ProcurementManagerPage: React.FC = () => {
               إنشاء أوامر الشراء ({approvedPrs.length}) ←
             </Button>
           </div>
+
+          {/* Card 4: Actual PO Pending */}
+          <div className={`rounded-xl border p-3.5 flex flex-col justify-between gap-2.5 transition-all shadow-lg ${
+            pendingActualPos.length > 0 
+              ? 'border-indigo-500/70 bg-gradient-to-b from-indigo-950/50 via-slate-900 to-slate-950 shadow-indigo-950/40 hover:border-indigo-400' 
+              : 'border-slate-800 bg-slate-950/80 hover:border-indigo-500/60'
+          }`}>
+            <div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-indigo-300 font-black flex items-center gap-1.5">
+                  <span>⚡</span> إصدار أمر الشراء الفعلي
+                </span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                  pendingActualPos.length > 0 
+                    ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-mono animate-pulse' 
+                    : 'bg-slate-800 text-slate-400'
+                }`}>
+                  {pendingActualPos.length} أمر بانتظار الفعلي
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-300 mt-1 leading-5">
+                أذونات استلام معتمدة بالموقع تحتاج مطابقة الكميات والأسعار وإصدار الأمر الفعلي للحسابات.
+              </p>
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              className={`w-full text-xs font-black shadow-md ${
+                pendingActualPos.length > 0
+                  ? 'bg-gradient-to-r from-indigo-600 via-teal-600 to-emerald-600 hover:from-indigo-500 text-white shadow-indigo-950/50'
+                  : 'border-indigo-800/60 text-indigo-200 hover:bg-indigo-950'
+              }`}
+              onClick={() => {
+                const sectionEl = document.getElementById('pending-actual-pos-window');
+                if (sectionEl) {
+                  sectionEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                } else {
+                  setActiveTab(5);
+                  setSearchParams({ tab: 'actual-pos' }, { replace: true });
+                }
+              }}
+            >
+              إصدار أوامر الشراء الفعلية ({pendingActualPos.length}) ←
+            </Button>
+          </div>
         </div>
       </div>
+
+      {/* ── نافذة أوامر الشراء الفعلية بانتظار الإصدار (Actual PO Window) ── */}
+      {activeTab === 0 && pendingActualPos.length > 0 && (
+        <div id="pending-actual-pos-window" className="rounded-2xl border-2 border-indigo-500/60 bg-gradient-to-r from-indigo-950/60 via-slate-900 to-slate-950 p-4 sm:p-5 shadow-2xl space-y-4 animate-fade-in scroll-mt-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-indigo-900/50 pb-3">
+            <div className="flex items-center gap-3">
+              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-600/30 border border-indigo-500/50 text-indigo-300 text-2xl font-black shadow-inner">
+                📦
+              </span>
+              <div>
+                <h3 className="text-sm sm:text-base font-black text-indigo-200 flex items-center gap-2">
+                  <span>أوامر شراء معتمدة الاستلام — بانتظار إصدار أمر الشراء الفعلي (Actual PO)</span>
+                  <span className="rounded-full bg-emerald-500 text-slate-950 px-2.5 py-0.5 text-xs font-black font-mono animate-pulse">
+                    {pendingActualPos.length} أمر جاهز
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  تم فحص واعتماد الاستلام بالموقع من قبل أمين المخزن ومهندس الموقع. بصفتك إدارة المشتريات، راجع الكميات والأسعار واعتمد الأمر الفعلي لإرساله للحسابات.
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setActiveTab(5);
+                setSearchParams({ tab: 'actual-pos' }, { replace: true });
+              }}
+              className="text-xs font-bold border-indigo-700/60 text-indigo-300 hover:bg-indigo-950 shrink-0 cursor-pointer"
+            >
+              عرض الجدول الكامل ({pendingActualPos.length}) ←
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {pendingActualPos.map((po) => {
+              const latestReceipt = po.receipts?.[0];
+              const itemsCount = po.items?.length || 0;
+              return (
+                <div
+                  key={`pending-actual-card-${po.id}`}
+                  className="rounded-xl border border-indigo-500/40 bg-slate-950/90 p-4 flex flex-col justify-between gap-3 hover:border-indigo-400 hover:shadow-indigo-950/40 transition-all shadow-md group"
+                >
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-base font-black text-cyan-300">
+                        {po.po_number}
+                      </span>
+                      <span className="rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 px-2.5 py-0.5 text-[11px] font-black">
+                        استلام معتمد بالموقع
+                      </span>
+                    </div>
+
+                    <div className="text-xs text-slate-300 font-bold">
+                      🏢 المورد: <span className="text-slate-100">{po.supplier?.company_name || '—'}</span>
+                    </div>
+
+                    {po.purchase_request && (
+                      <div className="text-xs text-slate-400 flex items-center justify-between">
+                        <span>📋 الطلب: <strong className="font-mono text-cyan-400">{po.purchase_request.request_number}</strong></span>
+                        {po.department?.name && <span className="text-[11px] text-slate-400 bg-slate-900 border border-slate-800 px-2 py-0.5 rounded-md">{po.department.name}</span>}
+                      </div>
+                    )}
+
+                    {latestReceipt && (
+                      <div className="rounded-lg bg-slate-900/90 border border-slate-800 p-2.5 text-[11px] text-slate-300 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span>📑 إذن الاستلام:</span>
+                          <strong className="text-amber-300 font-mono text-xs">{latestReceipt.receipt_number}</strong>
+                        </div>
+                        {latestReceipt.site_engineer && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-400">👷 معتمد الموقع:</span>
+                            <strong className="text-slate-200">{latestReceipt.site_engineer.name}</strong>
+                          </div>
+                        )}
+                        {latestReceipt.warehouse_keeper && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-400">📦 أمين المخزن:</span>
+                            <strong className="text-slate-300">{latestReceipt.warehouse_keeper.name}</strong>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-800">
+                      <span className="text-slate-400">{itemsCount} بنود توريد</span>
+                      <span className="font-mono font-black text-emerald-400 text-sm">
+                        {fmtAmount(po.grand_total)} ج.م
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1 border-t border-slate-900">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => navigate(`/procurement/purchase-orders/${po.id}/edit`)}
+                      className="w-full text-xs font-black bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 text-white shadow-md shadow-emerald-950/40 flex items-center justify-center gap-1.5 py-2.5 rounded-xl cursor-pointer"
+                    >
+                      <span>⚡</span> إصدار أمر الشراء الفعلي
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setCyclePrintPo(po)}
+                      className="text-xs text-cyan-300 border-cyan-800/60 hover:bg-cyan-950/50 px-2.5 py-2.5 rounded-xl shrink-0 cursor-pointer"
+                      title="طباعة ومعاينة الدورة (3 في 1)"
+                    >
+                      🖨️
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => navigate(`/procurement/purchase-orders/${po.id}`)}
+                      className="text-xs text-slate-300 hover:text-white px-2.5 py-2.5 rounded-xl shrink-0 cursor-pointer"
+                      title="عرض تفاصيل أمر الشراء"
+                    >
+                      🔍
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {activeTab === 0 && (
         <section id="procurement-queue-section" className="space-y-4 scroll-mt-6">
@@ -682,6 +881,22 @@ export const ProcurementManagerPage: React.FC = () => {
               <span className="rounded-full border border-cyan-700/50 bg-cyan-950/30 px-3 py-1.5 text-cyan-300">اختيار المسار: {queueRows.filter((row) => row.stage === 'PENDING_ROUTE').length}</span>
               <span className="rounded-full border border-amber-700/50 bg-amber-950/30 px-3 py-1.5 text-amber-300">تجهيز العروض: {queueRows.filter((row) => row.stage === 'QUOTE_SETUP').length}</span>
               <span className="rounded-full border border-emerald-700/50 bg-emerald-950/30 px-3 py-1.5 text-emerald-300">جاهز لأمر الشراء: {queueRows.filter((row) => row.stage === 'READY_FOR_PO').length}</span>
+              {pendingActualPos.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const el = document.getElementById('pending-actual-pos-window');
+                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    else {
+                      setActiveTab(5);
+                      setSearchParams({ tab: 'actual-pos' }, { replace: true });
+                    }
+                  }}
+                  className="rounded-full border border-indigo-500/80 bg-indigo-950/50 px-3 py-1.5 text-indigo-300 hover:bg-indigo-900/60 shadow-sm shadow-indigo-950/40 cursor-pointer animate-pulse font-black"
+                >
+                  ⚡ أوامر الشراء الفعلية: {pendingActualPos.length}
+                </button>
+              )}
             </div>
           </div>
 
@@ -1066,6 +1281,182 @@ export const ProcurementManagerPage: React.FC = () => {
         </section>
       )}
 
+      {activeTab === 5 && (
+        <section className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+            <div>
+              <h2 className="text-base font-black text-indigo-300 flex items-center gap-2">
+                <span>⚡ أوامر الشراء الفعلية — بانتظار المراجعة والإصدار للحسابات ({pendingActualPos.length})</span>
+              </h2>
+              <p className="mt-1 text-xs text-slate-400">
+                هذه الأوامر تم فحص واستلام بضاعتها بالموقع واعتماد إذن الاستلام نهائياً. يرجى مراجعة الكميات والأسعار وإصدار الأمر الفعلي النهائي ليتمكن المحاسب من مطابقة الفاتورة والصرف.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void loadData()}
+                disabled={refreshing}
+                className="text-xs"
+              >
+                {refreshing ? 'جاري التحديث...' : '🔄 تحديث'}
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <input
+              type="text"
+              placeholder="بحث برقم الأمر، رقم الطلب، المورد، إذن الاستلام..."
+              value={actualPoSearch}
+              onChange={(e) => setActualPoSearch(e.target.value)}
+              className="w-full rounded-xl border border-slate-800 bg-slate-900 px-4 py-2.5 text-xs text-slate-200 focus:border-indigo-400 focus:outline-none"
+            />
+
+            {(() => {
+              const filteredActualPos = pendingActualPos.filter((po) => {
+                if (!actualPoSearch.trim()) return true;
+                const term = actualPoSearch.trim().toLowerCase();
+                const latestReceipt = po.receipts?.[0];
+                return (
+                  po.po_number.toLowerCase().includes(term) ||
+                  (po.supplier?.company_name && po.supplier.company_name.toLowerCase().includes(term)) ||
+                  (po.purchase_request?.request_number && po.purchase_request.request_number.toLowerCase().includes(term)) ||
+                  (latestReceipt?.receipt_number && latestReceipt.receipt_number.toLowerCase().includes(term))
+                );
+              });
+
+              if (filteredActualPos.length === 0) {
+                return (
+                  <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-900/40 p-12 text-center text-slate-400 space-y-2">
+                    <span className="text-3xl block">📦</span>
+                    <p className="text-sm font-bold text-slate-300">
+                      {pendingActualPos.length === 0
+                        ? 'لا توجد أوامر شراء بانتظار الإصدار الفعلي حالياً.'
+                        : 'لم نجد أوامر مطابقة لكلمات البحث.'}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      تظهر هنا أوامر الشراء فور فحصها واعتمادها هندسياً في الموقع من قبل مهندسي الموقع.
+                    </p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="space-y-3">
+                  {filteredActualPos.map((po) => {
+                    const latestReceipt = po.receipts?.[0];
+                    return (
+                      <article
+                        key={`actual-po-row-${po.id}`}
+                        className="rounded-2xl border border-indigo-500/40 bg-gradient-to-b from-slate-900/90 to-slate-950/90 p-4 sm:p-5 shadow-xl hover:border-indigo-400 transition-all space-y-4"
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+                          <div className="flex flex-wrap items-center gap-3">
+                            <span className="font-mono text-lg font-black text-cyan-300">
+                              {po.po_number}
+                            </span>
+                            <span className="rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 px-3 py-0.5 text-xs font-black">
+                              بانتظار أمر الشراء الفعلي
+                            </span>
+                            {po.purchase_request && (
+                              <span className="rounded-full bg-slate-800 border border-slate-700 px-3 py-0.5 text-xs font-bold text-slate-300">
+                                الطلب: <strong className="font-mono text-cyan-400">{po.purchase_request.request_number}</strong>
+                              </span>
+                            )}
+                            {po.department?.name && (
+                              <span className="rounded-full bg-slate-800 border border-slate-700 px-3 py-0.5 text-xs font-bold text-slate-300">
+                                {po.department.name}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={() => navigate(`/procurement/purchase-orders/${po.id}/edit`)}
+                              className="font-black text-xs bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 text-white shadow-lg shadow-emerald-950/50 flex items-center gap-1.5 px-4 py-2 cursor-pointer"
+                            >
+                              <span>⚡</span> مراجعة وإصدار الأمر الفعلي ←
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => setCyclePrintPo(po)}
+                              className="text-xs text-cyan-300 border-cyan-800/60 hover:bg-cyan-950/50 cursor-pointer"
+                              title="طباعة الدورة (3 في 1)"
+                            >
+                              🖨️ طباعة الدورة
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => navigate(`/procurement/purchase-orders/${po.id}`)}
+                              className="text-xs cursor-pointer"
+                            >
+                              🔍 التفاصيل
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                          <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-3">
+                            <span className="text-slate-400 block text-[11px]">المورد</span>
+                            <span className="font-bold text-slate-100 text-sm mt-0.5 block">{po.supplier?.company_name || '—'}</span>
+                          </div>
+
+                          <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-3">
+                            <span className="text-slate-400 block text-[11px]">إذن الاستلام المعتمد (GRN)</span>
+                            <span className="font-mono font-bold text-amber-300 text-sm mt-0.5 block">{latestReceipt?.receipt_number || '—'}</span>
+                          </div>
+
+                          <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-3">
+                            <span className="text-slate-400 block text-[11px]">المعتمد بالموقع</span>
+                            <span className="font-bold text-slate-200 text-xs mt-0.5 block">
+                              {latestReceipt?.site_engineer?.name ? `👷 ${latestReceipt.site_engineer.name}` : '—'}
+                              {latestReceipt?.warehouse_keeper?.name && <span className="text-slate-400 block text-[10px]">📦 أمين المخزن: {latestReceipt.warehouse_keeper.name}</span>}
+                            </span>
+                          </div>
+
+                          <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-3 flex flex-col justify-between">
+                            <span className="text-slate-400 block text-[11px]">الإجمالي المبدئي للأمر</span>
+                            <span className="font-mono font-black text-emerald-400 text-base mt-0.5 block">
+                              {fmtAmount(po.grand_total)} ج.م
+                            </span>
+                          </div>
+                        </div>
+
+                        {po.items && po.items.length > 0 && (
+                          <div className="rounded-xl border border-slate-800/80 bg-slate-900/60 p-3 space-y-1.5">
+                            <div className="text-[11px] font-bold text-slate-400 flex items-center justify-between">
+                              <span>بنود التوريد المستلمة ({po.items.length}):</span>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {po.items.map((it: any, idx: number) => (
+                                <span
+                                  key={`po-item-badge-${it.id || idx}`}
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-950 px-2.5 py-1 text-xs text-slate-200"
+                                >
+                                  <span>📦</span>
+                                  <strong className="text-white">{it.item_description || it.item?.name || 'بند'}</strong>
+                                  <span className="text-cyan-300 font-mono font-bold">({it.quantity} {getUnitLabel(it.uom)})</span>
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </article>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </div>
+        </section>
+      )}
+
       <PurchaseQuotesModal isOpen={Boolean(quoteRequest)} request={quoteRequest} suppliers={suppliers} onClose={() => { setQuoteRequest(null); void loadData(); }} onSupplierCreated={(supplier) => setSuppliers(current => current.some(item => item.id === supplier.id) ? current : [...current, supplier])} onSuccess={() => { setQuoteRequest(null); void loadData(); }} />
       <DirectPoModal isOpen={directPoOpen} onClose={() => setDirectPoOpen(false)} onSuccess={() => { setActiveTab(0); void loadData(); }} />
       {selectedPrintPo && <PurchaseOrderPrintModal po={selectedPrintPo} isOpen={true} onClose={() => setSelectedPrintPo(null)} />}
@@ -1132,6 +1523,15 @@ export const ProcurementManagerPage: React.FC = () => {
             <span className="text-sm font-bold text-amber-300">جارٍ تحميل بيانات الكمالة...</span>
           </div>
         </div>
+      )}
+
+      {/* 3-in-1 Combined Cycle Print Modal */}
+      {cyclePrintPo && (
+        <ThreeWayMatchPrintModal
+          po={cyclePrintPo}
+          isOpen={Boolean(cyclePrintPo)}
+          onClose={() => setCyclePrintPo(null)}
+        />
       )}
     </div>
   );

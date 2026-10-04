@@ -258,6 +258,23 @@ export const resolveNotificationAction = (
     }
   }
 
+  // 0.1 Dedicated check for GRN Approved Pending Actual PO (Procurement)
+  if (type.includes('grn_approved_pending_actual_po') || title.includes('أمر الشراء الفعلي') || message.includes('أمر الشراء الفعلي')) {
+    const poId = info.poId || notification.purchase_order_id || data.purchase_order_id;
+    if (roleSlugs.includes('procurement_manager') || roleSlugs.includes('admin')) {
+      return {
+        url: poId ? `/procurement/purchase-orders/${poId}/edit` : '/procurement?tab=actual-pos',
+        actionLabel: '⚡ إصدار أمر الشراء الفعلي',
+        icon: '📦',
+        badgeLabel: 'بانتظار أمر فعلي',
+        docType: 'PO',
+        docNumber: info.docNumber,
+        isActionable: true,
+        priority: 'URGENT',
+      };
+    }
+  }
+
   // 1. Explicit Target URL override if specified directly by backend
   if (notification.target_url && notification.target_url !== '/' && notification.target_url !== '/notifications') {
     let targetUrl = notification.target_url;
