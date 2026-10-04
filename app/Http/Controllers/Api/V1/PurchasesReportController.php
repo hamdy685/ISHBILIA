@@ -42,7 +42,12 @@ class PurchasesReportController extends Controller
 
         if (! $isAllowed) {
             return response()->json([
-                'message' => 'غير مصرح لك بالوصول لتقرير المشتريات المحاسبي. هذا التقرير مخصص للحسابات والمدير التنفيذي ومدير المشت        $filterType = (string) $request->query('filter_type', 'monthly'); // 'daily' | 'monthly' | 'custom'
+                'message' => 'غير مصرح لك بالوصول لتقرير المشتريات المحاسبي. هذا التقرير مخصص للحسابات والمدير التنفيذي ومدير المشتريات فقط.',
+            ], 403);
+        }
+
+        // 2. Parse Date / Period Filters
+        $filterType = (string) $request->query('filter_type', 'monthly'); // 'daily' | 'monthly' | 'custom'
         $departmentId = $request->filled('department_id') && $request->query('department_id') !== 'ALL'
             ? (int) $request->query('department_id')
             : null;
@@ -360,23 +365,6 @@ class PurchasesReportController extends Controller
                     'order_status' => $order->status,
                     'created_at' => $order->created_at?->toIso8601String(),
                 ];
-            }
-        }                'supplier_name' => $order->supplier?->company_name ?? $order->supplier?->name ?? '—',
-                        'supplier_id' => $order->supplier_id,
-                        'parcel_reference' => $rowParcelRef ?: '—',
-                        'region' => $rowRegion ?: '—',
-                        'department_id' => $deptId,
-                        'department_name' => $deptName,
-                        'works' => $works ?: '—',
-                        'accounting_status' => 'PENDING',
-                        'accounting_status_label' => 'صادر - بانتظار تسجيل الحسابات',
-                        'invoice_number' => null,
-                        'matching_status' => null,
-                        'accountant_name' => null,
-                        'order_status' => $order->status,
-                        'created_at' => $order->created_at?->toIso8601String(),
-                    ];
-                }
             }
         }
 
