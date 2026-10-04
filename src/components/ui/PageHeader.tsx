@@ -12,6 +12,7 @@ const PAGE_TITLES: Array<{ prefix: string; title: string }> = [
   { prefix: '/requests/create', title: 'إنشاء طلب شراء' },
   { prefix: '/requests/favorites', title: 'الطلبات المفضلة وقوالب الطلبات' },
   { prefix: '/requests', title: 'طلبات الشراء' },
+  { prefix: '/admin/master-orders', title: 'التحكم الشامل في الطلبات وأوامر الشراء' },
   { prefix: '/admin/request-tracker', title: 'مركز متابعة الطلبات والتحكم الإداري' },
   { prefix: '/admin/system-monitor', title: 'مراقبة النظام والـDeploy' },
   { prefix: '/admin', title: 'إدارة النظام' },

@@ -315,6 +315,7 @@ export const AuthenticatedLayout: React.FC = () => {
                 return (
                     <>
                         <Link to="/admin" className={linkClassName("/admin")}><span className="ml-2.5 text-sm" aria-hidden="true">⚙️</span> لوحة مدير النظام</Link>
+                        <Link to="/admin/master-orders" className={linkClassName("/admin/master-orders")}><span className="ml-2.5 text-sm" aria-hidden="true">🎛️</span> التحكم الشامل في الطلبات</Link>
                         <Link to="/admin/request-tracker" className={linkClassName("/admin/request-tracker")}><span className="ml-2.5 text-sm" aria-hidden="true">📋</span> مركز متابعة الطلبات</Link>
                         <Link to="/admin/system-monitor" className={linkClassName("/admin/system-monitor")}><span className="ml-2.5 text-sm" aria-hidden="true">🩺</span> مراقبة النظام والـDeploy</Link>
                         <Link to="/admin/users" className={linkClassName("/admin/users")}><span className="ml-2.5 text-sm" aria-hidden="true">👥</span> إدارة المستخدمين</Link>
