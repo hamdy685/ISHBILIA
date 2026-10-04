@@ -459,15 +459,17 @@ Route::middleware('auth:sanctum')->prefix('notifications')->group(function () {
     Route::post('/test-push', [NotificationController::class, 'testPush']);
 });
 
+// Master Orders Control (All Orders & Sovereign Force Override)
+Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(function () {
+    Route::get('/all-orders-master', [AdminMasterOrdersController::class, 'index']);
+    Route::get('/orders/{id}/details', [AdminMasterOrdersController::class, 'showOrder']);
+    Route::put('/orders/{id}/force-update', [AdminMasterOrdersController::class, 'forceUpdateOrder']);
+});
+
 // Admin System Management Routes
 Route::middleware(['auth:sanctum', 'permission:system.users.manage'])->prefix('admin')->group(function () {
     // One-time historical data fixes
     Route::post('/fix-rebar-quantities', [AdminController::class, 'fixHistoricalRebar']);
-
-    // Master Orders Control (All Orders & Sovereign Force Override)
-    Route::get('/all-orders-master', [AdminMasterOrdersController::class, 'index']);
-    Route::get('/orders/{id}/details', [AdminMasterOrdersController::class, 'showOrder']);
-    Route::put('/orders/{id}/force-update', [AdminMasterOrdersController::class, 'forceUpdateOrder']);
 
     // Users
     Route::get('/users', [AdminController::class, 'indexUsers']);

@@ -161,22 +161,55 @@ export const getMasterOrdersApi = async (params: {
   page?: number;
   per_page?: number | string;
 }): Promise<MasterOrdersResponse> => {
-  const response = await apiClient.get<MasterOrdersResponse>('/admin/all-orders-master', { params });
-  return response.data;
+  try {
+    const response = await apiClient.get<MasterOrdersResponse>('/admin/all-orders-master', { params });
+    return response.data;
+  } catch (error: any) {
+    console.error('❌ [Admin Master Orders API Error] getMasterOrdersApi failed:', {
+      endpoint: '/admin/all-orders-master',
+      params,
+      status: error?.response?.status,
+      data: error?.response?.data,
+      laravelMessage: error?.response?.data?.message || error?.response?.data?.error,
+      originalError: error,
+    });
+    throw error;
+  }
 };
 
 export const getOrderMasterDetailsApi = async (id: number): Promise<OrderMasterDetailsResponse> => {
-  const response = await apiClient.get<OrderMasterDetailsResponse>(`/admin/orders/${id}/details`);
-  return response.data;
+  try {
+    const response = await apiClient.get<OrderMasterDetailsResponse>(`/admin/orders/${id}/details`);
+    return response.data;
+  } catch (error: any) {
+    console.error(`❌ [Admin Master Orders API Error] getOrderMasterDetailsApi failed for order #${id}:`, {
+      endpoint: `/admin/orders/${id}/details`,
+      status: error?.response?.status,
+      data: error?.response?.data,
+      originalError: error,
+    });
+    throw error;
+  }
 };
 
 export const forceUpdateOrderApi = async (
   id: number,
   payload: ForceUpdateOrderPayload
 ): Promise<{ success: boolean; message: string; data: any }> => {
-  const response = await apiClient.put<{ success: boolean; message: string; data: any }>(
-    `/admin/orders/${id}/force-update`,
-    payload
-  );
-  return response.data;
+  try {
+    const response = await apiClient.put<{ success: boolean; message: string; data: any }>(
+      `/admin/orders/${id}/force-update`,
+      payload
+    );
+    return response.data;
+  } catch (error: any) {
+    console.error(`❌ [Admin Master Orders API Error] forceUpdateOrderApi failed for order #${id}:`, {
+      endpoint: `/admin/orders/${id}/force-update`,
+      payload,
+      status: error?.response?.status,
+      data: error?.response?.data,
+      originalError: error,
+    });
+    throw error;
+  }
 };

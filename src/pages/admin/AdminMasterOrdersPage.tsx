@@ -62,8 +62,11 @@ export const AdminMasterOrdersPage: React.FC = () => {
         setSuppliers(res.lookups.suppliers || []);
       }
     } catch (err: unknown) {
+      console.error('[AdminMasterOrdersPage] Error fetching master orders:', err);
       const parsed = parseApiError(err);
-      setError(parsed.message);
+      const anyErr = err as any;
+      const detailedMsg = anyErr?.response?.data?.message || anyErr?.response?.data?.error || parsed.message;
+      setError(detailedMsg);
     } finally {
       setLoading(false);
       setRefreshing(false);

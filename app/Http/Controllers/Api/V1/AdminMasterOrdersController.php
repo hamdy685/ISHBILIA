@@ -14,16 +14,65 @@ use App\Models\Supplier;
 use App\Models\SystemEvent;
 use App\Services\SystemEventService;
 use Carbon\Carbon;
+use Carbon\CarbonInterface;
+use DateTimeInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use Throwable;
 
 class AdminMasterOrdersController extends Controller
 {
     /**
+     * Format any date value safely without throwing on strings or nulls.
+     */
+    private static function formatDateSafely(mixed $date): ?string
+    {
+        if (empty($date)) {
+            return null;
+        }
+
+        if ($date instanceof CarbonInterface || $date instanceof DateTimeInterface) {
+            return $date->toDateString();
+        }
+
+        if (is_string($date)) {
+            return substr($date, 0, 10);
+        }
+
+        try {
+            return Carbon::parse($date)->toDateString();
+        } catch (Throwable) {
+            return (string) $date;
+        }
+    }
+
+    /**
+     * Format any datetime value safely to ISO-8601 string.
+     */
+    private static function formatDateTimeSafely(mixed $datetime): ?string
+    {
+        if (empty($datetime)) {
+            return null;
+        }
+
+        if ($datetime instanceof CarbonInterface || $datetime instanceof DateTimeInterface) {
+            return $datetime->toIso8601String();
+        }
+
+        try {
+            return Carbon::parse($datetime)->toIso8601String();
+        } catch (Throwable) {
+            return (string) $datetime;
+        }
+    }
+
+    /**
      * Resolve the normalized procurement cycle stage for an order (or standalone request).
+     * Uses in-memory collection inspections when relations are already eager-loaded to avoid N+1 queries.
      */
     public static function resolveCycleStage(?PurchaseOrder $po, ?PurchaseRequest $pr): array
     {
@@ -38,7 +87,7 @@ class AdminMasterOrdersController extends Controller
             ];
         }
 
-        if (!$po && $pr && in_array($pr->status, ['REJECTED', 'CANCELLED'], true)) {
+        if (! $po && $pr && in_array($pr->status, ['REJECTED', 'CANCELLED'], true)) {
             return [
                 'stage' => 'CANCELLED_OR_REJECTED',
                 'label' => 'طلب ملغي / مرفوض',
@@ -49,7 +98,15 @@ class AdminMasterOrdersController extends Controller
         }
 
         // 2. Invoiced / Settled in Accounting
-        $hasInvoice = $po && $po->supplierInvoices()->whereNotIn('status', ['VOIDED', 'CANCELLED'])->exists();
+        $hasInvoice = false;
+        if ($po) {
+            if ($po->relationLoaded('supplierInvoices')) {
+                $hasInvoice = $po->supplierInvoices->contains(fn ($inv) => ! in_array($inv->status, ['VOIDED', 'CANCELLED'], true));
+            } else {
+                $hasInvoice = $po->supplierInvoices()->whereNotIn('status', ['VOIDED', 'CANCELLED'])->exists();
+            }
+        }
+
         $isAccountingApproved = $po && in_array($po->status, ['APPROVED_BY_ACCOUNTING', 'FINAL_APPROVED'], true);
         if ($hasInvoice || $isAccountingApproved) {
             return [
@@ -62,7 +119,18 @@ class AdminMasterOrdersController extends Controller
         }
 
         // 3. Actual PO Issued & Finalized
-        $isActualPo = $po && ($po->finalized_at !== null || $po->isActualPo());
+        $isActualPo = false;
+        if ($po) {
+            if ($po->finalized_at !== null) {
+                $isActualPo = true;
+            } elseif ($po->relationLoaded('purchaseReceipts') && $po->relationLoaded('supplierInvoices')) {
+                $hasApprovedRcpt = $po->purchaseReceipts->contains(fn ($r) => $r->status === 'APPROVED');
+                $isActualPo = $hasApprovedRcpt || in_array($po->status, ['APPROVED_BY_ACCOUNTING', 'FINAL_APPROVED'], true);
+            } else {
+                $isActualPo = $po->isActualPo();
+            }
+        }
+
         if ($isActualPo) {
             return [
                 'stage' => 'ACTUAL_PO_ISSUED',
@@ -74,7 +142,15 @@ class AdminMasterOrdersController extends Controller
         }
 
         // 4. Pending Actual PO (Site Receipt is APPROVED, awaiting Actual PO from procurement)
-        $hasApprovedReceipt = $po && $po->purchaseReceipts()->where('status', 'APPROVED')->exists();
+        $hasApprovedReceipt = false;
+        if ($po) {
+            if ($po->relationLoaded('purchaseReceipts')) {
+                $hasApprovedReceipt = $po->purchaseReceipts->contains(fn ($r) => $r->status === 'APPROVED');
+            } else {
+                $hasApprovedReceipt = $po->purchaseReceipts()->where('status', 'APPROVED')->exists();
+            }
+        }
+
         if ($hasApprovedReceipt || ($po && $po->status === 'PENDING_ACTUAL_PO')) {
             return [
                 'stage' => 'PENDING_ACTUAL_PO',
@@ -86,7 +162,15 @@ class AdminMasterOrdersController extends Controller
         }
 
         // 5. GRN Pending (Material arrived, receipt pending warehouse or site engineer approval)
-        $hasPendingReceipt = $po && $po->purchaseReceipts()->whereIn('status', ['PENDING', 'SUBMITTED_BY_WAREHOUSE'])->exists();
+        $hasPendingReceipt = false;
+        if ($po) {
+            if ($po->relationLoaded('purchaseReceipts')) {
+                $hasPendingReceipt = $po->purchaseReceipts->contains(fn ($r) => in_array($r->status, ['PENDING', 'SUBMITTED_BY_WAREHOUSE'], true));
+            } else {
+                $hasPendingReceipt = $po->purchaseReceipts()->whereIn('status', ['PENDING', 'SUBMITTED_BY_WAREHOUSE'])->exists();
+            }
+        }
+
         if ($hasPendingReceipt) {
             return [
                 'stage' => 'GRN_PENDING',
@@ -135,301 +219,350 @@ class AdminMasterOrdersController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $search = trim((string) $request->query('search', ''));
-        $stageFilter = (string) $request->query('stage', 'all');
-        $departmentId = $request->query('department_id');
-        $supplierId = $request->query('supplier_id');
-        $dateFrom = $request->query('date_from');
-        $dateTo = $request->query('date_to');
+        try {
+            $search = trim((string) $request->query('search', ''));
+            $stageFilter = (string) $request->query('stage', 'all');
+            $departmentId = $request->query('department_id');
+            $supplierId = $request->query('supplier_id');
+            $dateFrom = $request->query('date_from');
+            $dateTo = $request->query('date_to');
 
-        // 1. Fetch Purchase Orders with relations
-        $poQuery = PurchaseOrder::query()
-            ->with([
-                'purchaseRequest.department',
-                'purchaseRequest.requester',
-                'purchaseRequest.landParcel',
-                'supplier',
-                'items',
-                'purchaseReceipts.items',
-                'supplierInvoices',
-                'createdBy',
-            ]);
-
-        if ($departmentId) {
-            $poQuery->whereHas('purchaseRequest', fn ($q) => $q->where('department_id', $departmentId));
-        }
-
-        if ($supplierId) {
-            $poQuery->where('supplier_id', $supplierId);
-        }
-
-        if ($dateFrom) {
-            $poQuery->whereDate('created_at', '>=', $dateFrom);
-        }
-        if ($dateTo) {
-            $poQuery->whereDate('created_at', '<=', $dateTo);
-        }
-
-        if ($search !== '') {
-            $poQuery->where(function ($q) use ($search) {
-                $q->where('po_number', 'like', "%{$search}%")
-                    ->orWhere('manual_po_number', 'like', "%{$search}%")
-                    ->orWhereHas('supplier', fn ($sq) => $sq->where('company_name', 'like', "%{$search}%")->orWhere('name', 'like', "%{$search}%"))
-                    ->orWhereHas('purchaseRequest', function ($pq) use ($search) {
-                        $pq->where('request_number', 'like', "%{$search}%")
-                            ->orWhere('notes', 'like', "%{$search}%")
-                            ->orWhereHas('requester', fn ($rq) => $rq->where('name', 'like', "%{$search}%"));
-                    })
-                    ->orWhereHas('items', fn ($iq) => $iq->where('item_description', 'like', "%{$search}%")->orWhere('item_reference', 'like', "%{$search}%"));
-            });
-        }
-
-        $allPos = $poQuery->orderByDesc('id')->get();
-
-        // 2. Fetch Standalone Purchase Requests (without active POs) if viewing all or PR-related stages
-        $standalonePrs = collect();
-        if (in_array($stageFilter, ['all', 'pending_po', 'under_review', 'cancelled_or_rejected'], true)) {
-            $prQuery = PurchaseRequest::query()
-                ->whereDoesntHave('purchaseOrders', function ($q) {
-                    $q->whereNotIn('status', ['REJECTED', 'CANCELLED']);
-                })
-                ->with(['department', 'requester', 'landParcel', 'items']);
+            // 1. Fetch Purchase Orders with relations safely
+            $poQuery = PurchaseOrder::query()
+                ->with([
+                    'purchaseRequest.department',
+                    'purchaseRequest.requester',
+                    'purchaseRequest.landParcel',
+                    'supplier',
+                    'items',
+                    'purchaseReceipts.items',
+                    'supplierInvoices',
+                    'createdBy',
+                ]);
 
             if ($departmentId) {
-                $prQuery->where('department_id', $departmentId);
+                $poQuery->whereHas('purchaseRequest', fn ($q) => $q->where('department_id', $departmentId));
             }
+
+            if ($supplierId) {
+                $poQuery->where('supplier_id', $supplierId);
+            }
+
             if ($dateFrom) {
-                $prQuery->whereDate('created_at', '>=', $dateFrom);
+                $poQuery->whereDate('created_at', '>=', $dateFrom);
             }
             if ($dateTo) {
-                $prQuery->whereDate('created_at', '<=', $dateTo);
+                $poQuery->whereDate('created_at', '<=', $dateTo);
             }
+
             if ($search !== '') {
-                $prQuery->where(function ($q) use ($search) {
-                    $q->where('request_number', 'like', "%{$search}%")
-                        ->orWhere('notes', 'like', "%{$search}%")
-                        ->orWhereHas('requester', fn ($rq) => $rq->where('name', 'like', "%{$search}%"))
-                        ->orWhereHas('items', fn ($iq) => $iq->where('item_description', 'like', "%{$search}%")->orWhere('item_reference', 'like', "%{$search}%"));
+                $poQuery->where(function ($q) use ($search) {
+                    $q->where('po_number', 'like', "%{$search}%")
+                        ->orWhere('manual_po_number', 'like', "%{$search}%")
+                        ->orWhereHas('supplier', function ($sq) use ($search) {
+                            $sq->where('company_name', 'like', "%{$search}%")
+                                ->orWhere('contact_name', 'like', "%{$search}%");
+                        })
+                        ->orWhereHas('purchaseRequest', function ($pq) use ($search) {
+                            $pq->where('request_number', 'like', "%{$search}%")
+                                ->orWhere('notes', 'like', "%{$search}%")
+                                ->orWhereHas('requester', fn ($rq) => $rq->where('name', 'like', "%{$search}%"));
+                        })
+                        ->orWhereHas('items', function ($iq) use ($search) {
+                            $iq->where('item_description', 'like', "%{$search}%")
+                                ->orWhere('item_reference', 'like', "%{$search}%");
+                        });
                 });
             }
-            $standalonePrs = $prQuery->orderByDesc('id')->get();
-        }
 
-        // 3. Map orders and requests into unified Master Order representations
-        $masterList = collect();
+            $allPos = $poQuery->orderByDesc('id')->get();
 
-        foreach ($allPos as $po) {
-            $pr = $po->purchaseRequest;
-            $stageInfo = self::resolveCycleStage($po, $pr);
+            // 2. Fetch Standalone Purchase Requests (without active POs) if viewing all or PR-related stages
+            $standalonePrs = collect();
+            if (in_array($stageFilter, ['all', 'pending_po', 'under_review', 'cancelled_or_rejected'], true)) {
+                $prQuery = PurchaseRequest::query()
+                    ->whereDoesntHave('purchaseOrders', function ($q) {
+                        $q->whereNotIn('status', ['REJECTED', 'CANCELLED']);
+                    })
+                    ->with(['department', 'requester', 'landParcel', 'items']);
 
-            // Latest receipt
-            $latestReceipt = $po->purchaseReceipts->sortByDesc('id')->first();
-            // Primary invoice
-            $primaryInvoice = $po->supplierInvoices->first();
+                if ($departmentId) {
+                    $prQuery->where('department_id', $departmentId);
+                }
+                if ($dateFrom) {
+                    $prQuery->whereDate('created_at', '>=', $dateFrom);
+                }
+                if ($dateTo) {
+                    $prQuery->whereDate('created_at', '<=', $dateTo);
+                }
+                if ($search !== '') {
+                    $prQuery->where(function ($q) use ($search) {
+                        $q->where('request_number', 'like', "%{$search}%")
+                            ->orWhere('notes', 'like', "%{$search}%")
+                            ->orWhereHas('requester', fn ($rq) => $rq->where('name', 'like', "%{$search}%"))
+                            ->orWhereHas('items', function ($iq) use ($search) {
+                                $iq->where('item_description', 'like', "%{$search}%")
+                                    ->orWhere('item_reference', 'like', "%{$search}%");
+                            });
+                    });
+                }
+                $standalonePrs = $prQuery->orderByDesc('id')->get();
+            }
 
-            $parcelRef = $po->items->pluck('item_reference')->filter()->first()
-                ?: ($pr?->landParcel?->parcel_reference ?: '—');
-            $region = $po->items->pluck('region')->filter()->first()
-                ?: ($pr?->landParcel?->region ?: ($pr?->department?->name ?? '—'));
+            // 3. Map orders and requests into unified Master Order representations
+            $masterList = collect();
 
-            $isActual = $po->finalized_at !== null || $po->isActualPo();
+            foreach ($allPos as $po) {
+                $pr = $po->purchaseRequest;
+                $stageInfo = self::resolveCycleStage($po, $pr);
 
-            $masterList->push([
-                'unique_key' => "PO-{$po->id}",
-                'order_id' => $po->id,
-                'request_id' => $pr?->id,
-                'po_number' => $po->po_number,
-                'manual_po_number' => $po->manual_po_number,
-                'pr_number' => $pr?->request_number ?? $po->manual_pr_number ?? '—',
-                'department' => [
-                    'id' => $pr?->department?->id,
-                    'name' => $pr?->department?->name ?? 'غير محدد',
-                    'code' => $pr?->department?->code ?? '—',
-                ],
-                'requester' => [
-                    'id' => $pr?->requester?->id,
-                    'name' => $pr?->requester?->name ?? ($po->createdBy?->name ?? '—'),
-                ],
-                'supplier' => [
-                    'id' => $po->supplier?->id,
-                    'name' => $po->supplier?->company_name ?? $po->supplier?->name ?? 'غير محدد',
-                    'code' => $po->supplier?->code ?? '—',
-                ],
-                'project_site' => [
-                    'parcel_reference' => $parcelRef,
-                    'region' => $region,
-                ],
-                'po_status' => $po->status,
-                'pr_status' => $pr?->status ?? '—',
-                'cycle_stage' => $stageInfo['stage'],
-                'cycle_stage_label' => $stageInfo['label'],
-                'cycle_stage_color' => $stageInfo['color'],
-                'cycle_stage_desc' => $stageInfo['description'],
-                'responsible_party' => $stageInfo['responsible'],
-                'is_actual_po' => $isActual,
-                'finalized_at' => $po->finalized_at?->toIso8601String(),
-                'grand_total' => (float) $po->grand_total,
-                'subtotal' => (float) $po->subtotal,
-                'items_count' => $po->items->count(),
-                'items' => $po->items->map(function (PurchaseOrderItem $item) use ($latestReceipt) {
-                    $matchingReceiptItem = $latestReceipt?->items->firstWhere('purchase_order_item_id', $item->id);
-                    return [
+                // Latest receipt
+                $latestReceipt = $po->purchaseReceipts->sortByDesc('id')->first();
+                // Primary invoice
+                $primaryInvoice = $po->supplierInvoices->first();
+
+                $parcelRef = $po->items->pluck('item_reference')->filter()->first()
+                    ?: ($pr?->landParcel?->parcel_reference ?: '—');
+                $region = $po->items->pluck('region')->filter()->first()
+                    ?: ($pr?->landParcel?->region ?: ($pr?->department?->name ?? '—'));
+
+                $isActual = $po->finalized_at !== null || $stageInfo['stage'] === 'ACTUAL_PO_ISSUED' || $stageInfo['stage'] === 'INVOICED';
+
+                $masterList->push([
+                    'unique_key' => "PO-{$po->id}",
+                    'order_id' => $po->id,
+                    'request_id' => $pr?->id,
+                    'po_number' => $po->po_number,
+                    'manual_po_number' => $po->manual_po_number,
+                    'pr_number' => $pr?->request_number ?? $po->manual_pr_number ?? '—',
+                    'department' => [
+                        'id' => $pr?->department?->id,
+                        'name' => $pr?->department?->name ?? 'غير محدد',
+                        'code' => $pr?->department?->code ?? '—',
+                    ],
+                    'requester' => [
+                        'id' => $pr?->requester?->id,
+                        'name' => $pr?->requester?->name ?? ($po->createdBy?->name ?? '—'),
+                    ],
+                    'supplier' => [
+                        'id' => $po->supplier?->id,
+                        'name' => $po->supplier?->company_name ?? $po->supplier?->contact_name ?? 'غير محدد',
+                        'code' => $po->supplier?->tax_number ?? '—',
+                    ],
+                    'project_site' => [
+                        'parcel_reference' => $parcelRef,
+                        'region' => $region,
+                    ],
+                    'po_status' => $po->status,
+                    'pr_status' => $pr?->status ?? '—',
+                    'cycle_stage' => $stageInfo['stage'],
+                    'cycle_stage_label' => $stageInfo['label'],
+                    'cycle_stage_color' => $stageInfo['color'],
+                    'cycle_stage_desc' => $stageInfo['description'],
+                    'responsible_party' => $stageInfo['responsible'],
+                    'is_actual_po' => $isActual,
+                    'finalized_at' => self::formatDateTimeSafely($po->finalized_at),
+                    'grand_total' => (float) ($po->grand_total ?? 0),
+                    'subtotal' => (float) ($po->subtotal ?? 0),
+                    'items_count' => $po->items->count(),
+                    'items' => $po->items->map(function (PurchaseOrderItem $item) use ($latestReceipt) {
+                        $matchingReceiptItem = $latestReceipt?->items->firstWhere('purchase_order_item_id', $item->id);
+                        return [
+                            'id' => $item->id,
+                            'item_description' => $item->item_description,
+                            'item_reference' => $item->item_reference,
+                            'region' => $item->region,
+                            'quantity' => (float) $item->quantity,
+                            'uom' => $item->uom,
+                            'unit_price' => (float) $item->unit_price,
+                            'line_total' => (float) ($item->line_total > 0 ? $item->line_total : round((float)$item->quantity * (float)$item->unit_price, 2)),
+                            'received_quantity' => $matchingReceiptItem ? (float) $matchingReceiptItem->received_quantity : null,
+                            'specifications' => $item->specifications,
+                        ];
+                    })->values(),
+                    'receipt' => $latestReceipt ? [
+                        'id' => $latestReceipt->id,
+                        'receipt_number' => $latestReceipt->receipt_number,
+                        'status' => $latestReceipt->status,
+                        'received_at' => self::formatDateSafely($latestReceipt->received_at),
+                        'photo_url' => $latestReceipt->photo_url,
+                    ] : null,
+                    'invoice' => $primaryInvoice ? [
+                        'id' => $primaryInvoice->id,
+                        'invoice_number' => $primaryInvoice->invoice_number,
+                        'status' => $primaryInvoice->status,
+                        'matching_status' => $primaryInvoice->matching_status,
+                        'amount' => (float) $primaryInvoice->amount,
+                    ] : null,
+                    'delivery_date' => self::formatDateSafely($po->delivery_date),
+                    'actual_delivery_date' => self::formatDateSafely($po->actual_delivery_date),
+                    'notes' => $po->notes,
+                    'financial_notes' => $po->financial_notes,
+                    'created_at' => self::formatDateTimeSafely($po->created_at),
+                    'updated_at' => self::formatDateTimeSafely($po->updated_at),
+                ]);
+            }
+
+            foreach ($standalonePrs as $pr) {
+                $stageInfo = self::resolveCycleStage(null, $pr);
+
+                $parcelRef = $pr->landParcel?->parcel_reference
+                    ?: ($pr->items->pluck('item_reference')->filter()->first() ?: '—');
+                $region = $pr->landParcel?->region
+                    ?: ($pr->items->pluck('region')->filter()->first() ?: ($pr->department?->name ?? '—'));
+
+                $masterList->push([
+                    'unique_key' => "PR-{$pr->id}",
+                    'order_id' => null,
+                    'request_id' => $pr->id,
+                    'po_number' => '— (قيد الاعتماد)',
+                    'manual_po_number' => null,
+                    'pr_number' => $pr->request_number,
+                    'department' => [
+                        'id' => $pr->department?->id,
+                        'name' => $pr->department?->name ?? 'غير محدد',
+                        'code' => $pr->department?->code ?? '—',
+                    ],
+                    'requester' => [
+                        'id' => $pr->requester?->id,
+                        'name' => $pr->requester?->name ?? '—',
+                    ],
+                    'supplier' => [
+                        'id' => null,
+                        'name' => 'لم يُحدد بعد',
+                        'code' => '—',
+                    ],
+                    'project_site' => [
+                        'parcel_reference' => $parcelRef,
+                        'region' => $region,
+                    ],
+                    'po_status' => null,
+                    'pr_status' => $pr->status,
+                    'cycle_stage' => $stageInfo['stage'],
+                    'cycle_stage_label' => $stageInfo['label'],
+                    'cycle_stage_color' => $stageInfo['color'],
+                    'cycle_stage_desc' => $stageInfo['description'],
+                    'responsible_party' => $stageInfo['responsible'],
+                    'is_actual_po' => false,
+                    'finalized_at' => null,
+                    'grand_total' => (float) ($pr->total_estimated_cost ?? 0),
+                    'subtotal' => (float) ($pr->total_estimated_cost ?? 0),
+                    'items_count' => $pr->items->count(),
+                    'items' => $pr->items->map(fn ($item) => [
                         'id' => $item->id,
                         'item_description' => $item->item_description,
                         'item_reference' => $item->item_reference,
                         'region' => $item->region,
                         'quantity' => (float) $item->quantity,
                         'uom' => $item->uom,
-                        'unit_price' => (float) $item->unit_price,
-                        'line_total' => (float) ($item->line_total > 0 ? $item->line_total : round((float)$item->quantity * (float)$item->unit_price, 2)),
-                        'received_quantity' => $matchingReceiptItem ? (float) $matchingReceiptItem->received_quantity : null,
+                        'unit_price' => (float) $item->estimated_unit_price,
+                        'line_total' => (float) ($item->estimated_line_total > 0 ? $item->estimated_line_total : round((float)$item->quantity * (float)$item->estimated_unit_price, 2)),
+                        'received_quantity' => null,
                         'specifications' => $item->specifications,
-                    ];
-                })->values(),
-                'receipt' => $latestReceipt ? [
-                    'id' => $latestReceipt->id,
-                    'receipt_number' => $latestReceipt->receipt_number,
-                    'status' => $latestReceipt->status,
-                    'received_at' => $latestReceipt->received_at?->toDateString(),
-                    'photo_url' => $latestReceipt->photo_url,
-                ] : null,
-                'invoice' => $primaryInvoice ? [
-                    'id' => $primaryInvoice->id,
-                    'invoice_number' => $primaryInvoice->invoice_number,
-                    'status' => $primaryInvoice->status,
-                    'matching_status' => $primaryInvoice->matching_status,
-                    'amount' => (float) $primaryInvoice->amount,
-                ] : null,
-                'delivery_date' => $po->delivery_date?->toDateString(),
-                'actual_delivery_date' => $po->actual_delivery_date?->toDateString(),
-                'notes' => $po->notes,
-                'financial_notes' => $po->financial_notes,
-                'created_at' => $po->created_at?->toIso8601String(),
-                'updated_at' => $po->updated_at?->toIso8601String(),
+                    ])->values(),
+                    'receipt' => null,
+                    'invoice' => null,
+                    'delivery_date' => null,
+                    'actual_delivery_date' => null,
+                    'notes' => $pr->notes,
+                    'financial_notes' => null,
+                    'created_at' => self::formatDateTimeSafely($pr->created_at),
+                    'updated_at' => self::formatDateTimeSafely($pr->updated_at),
+                ]);
+            }
+
+            // 4. Calculate Stage Statistics on the FULL collection
+            $stats = [
+                'total_count' => $masterList->count(),
+                'invoiced_count' => $masterList->where('cycle_stage', 'INVOICED')->count(),
+                'actual_po_count' => $masterList->where('cycle_stage', 'ACTUAL_PO_ISSUED')->count(),
+                'pending_actual_po_count' => $masterList->where('cycle_stage', 'PENDING_ACTUAL_PO')->count(),
+                'grn_pending_count' => $masterList->where('cycle_stage', 'GRN_PENDING')->count(),
+                'po_issued_count' => $masterList->where('cycle_stage', 'PO_ISSUED')->count(),
+                'pending_po_count' => $masterList->where('cycle_stage', 'PENDING_PO')->count(),
+                'under_review_count' => $masterList->where('cycle_stage', 'UNDER_REVIEW')->count(),
+                'rejected_count' => $masterList->where('cycle_stage', 'CANCELLED_OR_REJECTED')->count(),
+                'total_financial_value' => round((float) $masterList->whereNotIn('cycle_stage', ['CANCELLED_OR_REJECTED'])->sum('grand_total'), 2),
+            ];
+
+            // 5. Filter by Stage if requested
+            if ($stageFilter !== 'all' && $stageFilter !== '') {
+                $normalizedFilter = strtoupper(str_replace('-', '_', $stageFilter));
+                $masterList = $masterList->filter(fn ($row) => $row['cycle_stage'] === $normalizedFilter)->values();
+            }
+
+            // Sort: newest created first
+            $sortedList = $masterList->sortByDesc('created_at')->values();
+
+            // 6. Pagination
+            $perPageParam = $request->query('per_page', 50);
+            $isAll = $perPageParam === 'ALL' || $perPageParam === 'all' || (is_numeric($perPageParam) && (int) $perPageParam <= 0);
+            $perPage = $isAll ? max(1, $sortedList->count()) : (int) $perPageParam;
+            $page = max(1, (int) $request->query('page', 1));
+            $totalRows = $sortedList->count();
+            $lastPage = $isAll ? 1 : max(1, (int) ceil($totalRows / $perPage));
+            $sliced = $isAll ? $sortedList : $sortedList->slice(($page - 1) * $perPage, $perPage)->values();
+
+            // Lookups for filters (safe column selections)
+            $departments = Department::orderBy('name')->get(['id', 'name', 'code']);
+            $suppliers = Supplier::where('is_active', true)
+                ->orderBy('company_name')
+                ->get(['id', 'company_name', 'contact_name'])
+                ->map(fn ($s) => [
+                    'id' => $s->id,
+                    'company_name' => $s->company_name,
+                    'name' => $s->company_name ?: $s->contact_name,
+                    'code' => $s->tax_number ?? '—',
+                ])
+                ->values();
+
+            return response()->json([
+                'success' => true,
+                'data' => $sliced,
+                'meta' => [
+                    'current_page' => $page,
+                    'per_page' => $perPage,
+                    'total' => $totalRows,
+                    'last_page' => $lastPage,
+                    'from' => $totalRows > 0 ? (($page - 1) * $perPage + 1) : 0,
+                    'to' => min($page * $perPage, $totalRows),
+                ],
+                'stats' => $stats,
+                'lookups' => [
+                    'departments' => $departments,
+                    'suppliers' => $suppliers,
+                ],
             ]);
-        }
-
-        foreach ($standalonePrs as $pr) {
-            $stageInfo = self::resolveCycleStage(null, $pr);
-
-            $parcelRef = $pr->landParcel?->parcel_reference
-                ?: ($pr->items->pluck('item_reference')->filter()->first() ?: '—');
-            $region = $pr->landParcel?->region
-                ?: ($pr->items->pluck('region')->filter()->first() ?: ($pr->department?->name ?? '—'));
-
-            $masterList->push([
-                'unique_key' => "PR-{$pr->id}",
-                'order_id' => null,
-                'request_id' => $pr->id,
-                'po_number' => '— (قيد الاعتماد)',
-                'manual_po_number' => null,
-                'pr_number' => $pr->request_number,
-                'department' => [
-                    'id' => $pr->department?->id,
-                    'name' => $pr->department?->name ?? 'غير محدد',
-                    'code' => $pr->department?->code ?? '—',
-                ],
-                'requester' => [
-                    'id' => $pr->requester?->id,
-                    'name' => $pr->requester?->name ?? '—',
-                ],
-                'supplier' => [
-                    'id' => null,
-                    'name' => 'لم يُحدد بعد',
-                    'code' => '—',
-                ],
-                'project_site' => [
-                    'parcel_reference' => $parcelRef,
-                    'region' => $region,
-                ],
-                'po_status' => null,
-                'pr_status' => $pr->status,
-                'cycle_stage' => $stageInfo['stage'],
-                'cycle_stage_label' => $stageInfo['label'],
-                'cycle_stage_color' => $stageInfo['color'],
-                'cycle_stage_desc' => $stageInfo['description'],
-                'responsible_party' => $stageInfo['responsible'],
-                'is_actual_po' => false,
-                'finalized_at' => null,
-                'grand_total' => (float) $pr->total_estimated_cost,
-                'subtotal' => (float) $pr->total_estimated_cost,
-                'items_count' => $pr->items->count(),
-                'items' => $pr->items->map(fn ($item) => [
-                    'id' => $item->id,
-                    'item_description' => $item->item_description,
-                    'item_reference' => $item->item_reference,
-                    'region' => $item->region,
-                    'quantity' => (float) $item->quantity,
-                    'uom' => $item->uom,
-                    'unit_price' => (float) $item->estimated_unit_price,
-                    'line_total' => (float) ($item->estimated_line_total > 0 ? $item->estimated_line_total : round((float)$item->quantity * (float)$item->estimated_unit_price, 2)),
-                    'received_quantity' => null,
-                    'specifications' => $item->specifications,
-                ])->values(),
-                'receipt' => null,
-                'invoice' => null,
-                'delivery_date' => null,
-                'actual_delivery_date' => null,
-                'notes' => $pr->notes,
-                'financial_notes' => null,
-                'created_at' => $pr->created_at?->toIso8601String(),
-                'updated_at' => $pr->updated_at?->toIso8601String(),
+        } catch (Throwable $e) {
+            Log::error('AdminMasterOrdersController@index exception: ' . $e->getMessage(), [
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => substr($e->getTraceAsString(), 0, 1000),
             ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء جلب بيانات التحكم الشامل: ' . $e->getMessage(),
+                'error' => $e->getMessage(),
+                'data' => [],
+                'stats' => [
+                    'total_count' => 0,
+                    'invoiced_count' => 0,
+                    'actual_po_count' => 0,
+                    'pending_actual_po_count' => 0,
+                    'grn_pending_count' => 0,
+                    'po_issued_count' => 0,
+                    'pending_po_count' => 0,
+                    'under_review_count' => 0,
+                    'rejected_count' => 0,
+                    'total_financial_value' => 0,
+                ],
+                'lookups' => [
+                    'departments' => [],
+                    'suppliers' => [],
+                ],
+            ], 500);
         }
-
-        // 4. Calculate Stage Statistics on the FULL collection
-        $stats = [
-            'total_count' => $masterList->count(),
-            'invoiced_count' => $masterList->where('cycle_stage', 'INVOICED')->count(),
-            'actual_po_count' => $masterList->where('cycle_stage', 'ACTUAL_PO_ISSUED')->count(),
-            'pending_actual_po_count' => $masterList->where('cycle_stage', 'PENDING_ACTUAL_PO')->count(),
-            'grn_pending_count' => $masterList->where('cycle_stage', 'GRN_PENDING')->count(),
-            'po_issued_count' => $masterList->where('cycle_stage', 'PO_ISSUED')->count(),
-            'pending_po_count' => $masterList->where('cycle_stage', 'PENDING_PO')->count(),
-            'under_review_count' => $masterList->where('cycle_stage', 'UNDER_REVIEW')->count(),
-            'rejected_count' => $masterList->where('cycle_stage', 'CANCELLED_OR_REJECTED')->count(),
-            'total_financial_value' => round((float) $masterList->whereNotIn('cycle_stage', ['CANCELLED_OR_REJECTED'])->sum('grand_total'), 2),
-        ];
-
-        // 5. Filter by Stage if requested
-        if ($stageFilter !== 'all' && $stageFilter !== '') {
-            $normalizedFilter = strtoupper(str_replace('-', '_', $stageFilter));
-            $masterList = $masterList->filter(fn ($row) => $row['cycle_stage'] === $normalizedFilter)->values();
-        }
-
-        // Sort: newest created first
-        $sortedList = $masterList->sortByDesc('created_at')->values();
-
-        // 6. Pagination
-        $perPageParam = $request->query('per_page', 50);
-        $isAll = $perPageParam === 'ALL' || $perPageParam === 'all' || (is_numeric($perPageParam) && (int) $perPageParam <= 0);
-        $perPage = $isAll ? max(1, $sortedList->count()) : (int) $perPageParam;
-        $page = max(1, (int) $request->query('page', 1));
-        $totalRows = $sortedList->count();
-        $lastPage = $isAll ? 1 : max(1, (int) ceil($totalRows / $perPage));
-        $sliced = $isAll ? $sortedList : $sortedList->slice(($page - 1) * $perPage, $perPage)->values();
-
-        // Lookups for filters
-        $departments = Department::orderBy('name')->get(['id', 'name', 'code']);
-        $suppliers = Supplier::where('is_active', true)->orderBy('company_name')->get(['id', 'company_name', 'name', 'code']);
-
-        return response()->json([
-            'success' => true,
-            'data' => $sliced,
-            'meta' => [
-                'current_page' => $page,
-                'per_page' => $perPage,
-                'total' => $totalRows,
-                'last_page' => $lastPage,
-                'from' => $totalRows > 0 ? (($page - 1) * $perPage + 1) : 0,
-                'to' => min($page * $perPage, $totalRows),
-            ],
-            'stats' => $stats,
-            'lookups' => [
-                'departments' => $departments,
-                'suppliers' => $suppliers,
-            ],
-        ]);
     }
 
     /**
@@ -438,62 +571,79 @@ class AdminMasterOrdersController extends Controller
      */
     public function showOrder(int $id): JsonResponse
     {
-        $po = PurchaseOrder::with([
-            'purchaseRequest.department',
-            'purchaseRequest.requester',
-            'purchaseRequest.landParcel',
-            'supplier',
-            'items.item',
-            'purchaseReceipts.items',
-            'supplierInvoices',
-            'approvalHistory.actor',
-            'createdBy',
-        ])->findOrFail($id);
+        try {
+            $po = PurchaseOrder::with([
+                'purchaseRequest.department',
+                'purchaseRequest.requester',
+                'purchaseRequest.landParcel',
+                'supplier',
+                'items.item',
+                'purchaseReceipts.items',
+                'supplierInvoices',
+                'approvalHistory.actor',
+                'createdBy',
+            ])->findOrFail($id);
 
-        $pr = $po->purchaseRequest;
-        $stageInfo = self::resolveCycleStage($po, $pr);
+            $pr = $po->purchaseRequest;
+            $stageInfo = self::resolveCycleStage($po, $pr);
 
-        // Fetch audit events related to this PO or its PR
-        $auditLogs = SystemEvent::query()
-            ->where(function ($q) use ($po, $pr) {
-                $q->where(function ($sub) use ($po) {
-                    $sub->where('entity_type', PurchaseOrder::class)
-                        ->where('entity_id', $po->id);
-                });
-                if ($pr) {
-                    $q->orWhere(function ($sub) use ($pr) {
-                        $sub->where('entity_type', PurchaseRequest::class)
-                            ->where('entity_id', $pr->id);
+            // Fetch audit events related to this PO or its PR
+            $auditLogs = SystemEvent::query()
+                ->where(function ($q) use ($po, $pr) {
+                    $q->where(function ($sub) use ($po) {
+                        $sub->where('entity_type', PurchaseOrder::class)
+                            ->where('entity_id', $po->id);
                     });
-                }
-            })
-            ->with('actor:id,name,email')
-            ->orderByDesc('occurred_at')
-            ->limit(30)
-            ->get();
+                    if ($pr) {
+                        $q->orWhere(function ($sub) use ($pr) {
+                            $sub->where('entity_type', PurchaseRequest::class)
+                                ->where('entity_id', $pr->id);
+                        });
+                    }
+                })
+                ->with('actor:id,name,email')
+                ->orderByDesc('occurred_at')
+                ->limit(30)
+                ->get();
 
-        $availableSuppliers = Supplier::where('is_active', true)->orderBy('company_name')->get(['id', 'company_name', 'name', 'code']);
+            $availableSuppliers = Supplier::where('is_active', true)
+                ->orderBy('company_name')
+                ->get(['id', 'company_name', 'contact_name'])
+                ->map(fn ($s) => [
+                    'id' => $s->id,
+                    'company_name' => $s->company_name,
+                    'name' => $s->company_name ?: $s->contact_name,
+                    'code' => $s->tax_number ?? '—',
+                ])
+                ->values();
 
-        return response()->json([
-            'success' => true,
-            'data' => [
-                'order' => $po,
-                'request' => $pr,
-                'cycle_stage' => $stageInfo,
-                'audit_logs' => $auditLogs,
-                'available_suppliers' => $availableSuppliers,
-                'allowed_statuses' => [
-                    ['value' => 'PO_DRAFT', 'label' => 'مسودة أمر شراء'],
-                    ['value' => 'PENDING_ACCOUNTING_REVIEW', 'label' => 'بانتظار تدقيق الحسابات'],
-                    ['value' => 'ISSUED', 'label' => 'صادر ومعتمد للتوريد (ISSUED)'],
-                    ['value' => 'PENDING_ACTUAL_PO', 'label' => 'تم الاستلام - بانتظار الأمر الفعلي (PENDING_ACTUAL_PO)'],
-                    ['value' => 'APPROVED_BY_ACCOUNTING', 'label' => 'معتمد بالحسابات (APPROVED_BY_ACCOUNTING)'],
-                    ['value' => 'FINAL_APPROVED', 'label' => 'معتمد نهائياً (FINAL_APPROVED)'],
-                    ['value' => 'REJECTED', 'label' => 'مرفوض'],
-                    ['value' => 'CANCELLED', 'label' => 'ملغي'],
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'order' => $po,
+                    'request' => $pr,
+                    'cycle_stage' => $stageInfo,
+                    'audit_logs' => $auditLogs,
+                    'available_suppliers' => $availableSuppliers,
+                    'allowed_statuses' => [
+                        ['value' => 'PO_DRAFT', 'label' => 'مسودة أمر شراء'],
+                        ['value' => 'PENDING_ACCOUNTING_REVIEW', 'label' => 'بانتظار تدقيق الحسابات'],
+                        ['value' => 'ISSUED', 'label' => 'صادر ومعتمد للتوريد (ISSUED)'],
+                        ['value' => 'PENDING_ACTUAL_PO', 'label' => 'تم الاستلام - بانتظار الأمر الفعلي (PENDING_ACTUAL_PO)'],
+                        ['value' => 'APPROVED_BY_ACCOUNTING', 'label' => 'معتمد بالحسابات (APPROVED_BY_ACCOUNTING)'],
+                        ['value' => 'FINAL_APPROVED', 'label' => 'معتمد نهائياً (FINAL_APPROVED)'],
+                        ['value' => 'REJECTED', 'label' => 'مرفوض'],
+                        ['value' => 'CANCELLED', 'label' => 'ملغي'],
+                    ],
                 ],
-            ],
-        ]);
+            ]);
+        } catch (Throwable $e) {
+            Log::error('AdminMasterOrdersController@showOrder exception: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'تعذر جلب تفاصيل أمر الشراء: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 
     /**
@@ -538,9 +688,9 @@ class AdminMasterOrdersController extends Controller
             'supplier_id' => $po->supplier_id,
             'subtotal' => (float) $po->subtotal,
             'grand_total' => (float) $po->grand_total,
-            'delivery_date' => $po->delivery_date?->toDateString(),
-            'actual_delivery_date' => $po->actual_delivery_date?->toDateString(),
-            'finalized_at' => $po->finalized_at?->toIso8601String(),
+            'delivery_date' => self::formatDateSafely($po->delivery_date),
+            'actual_delivery_date' => self::formatDateSafely($po->actual_delivery_date),
+            'finalized_at' => self::formatDateTimeSafely($po->finalized_at),
             'items' => $po->items->map(fn ($it) => [
                 'id' => $it->id,
                 'description' => $it->item_description,
@@ -560,7 +710,7 @@ class AdminMasterOrdersController extends Controller
             $fromStatus = $po->status;
 
             // 1. Update direct PO attributes
-            if (!empty($validated['status'])) {
+            if (! empty($validated['status'])) {
                 $po->status = $validated['status'];
             }
 
@@ -589,7 +739,7 @@ class AdminMasterOrdersController extends Controller
             // Handle Actual PO flag / finalization timestamp
             if (array_key_exists('is_actual_po', $validated)) {
                 if ($validated['is_actual_po']) {
-                    if (!$po->finalized_at) {
+                    if (! $po->finalized_at) {
                         $po->finalized_at = now();
                         $po->finalized_by_user_id = $admin->id;
                     }
@@ -597,17 +747,16 @@ class AdminMasterOrdersController extends Controller
                     $po->finalized_at = null;
                     $po->finalized_by_user_id = null;
                 }
-            } elseif (!empty($validated['finalized_at'])) {
+            } elseif (! empty($validated['finalized_at'])) {
                 $po->finalized_at = Carbon::parse($validated['finalized_at']);
                 $po->finalized_by_user_id = $admin->id;
             }
 
             // 2. Process Items Override
-            $updatedPoItems = collect();
-            if (!empty($validated['items']) && is_array($validated['items'])) {
+            if (! empty($validated['items']) && is_array($validated['items'])) {
                 foreach ($validated['items'] as $itemData) {
                     $itemId = $itemData['id'] ?? null;
-                    $isDelete = !empty($itemData['delete']);
+                    $isDelete = ! empty($itemData['delete']);
 
                     if ($itemId) {
                         $existingItem = PurchaseOrderItem::where('purchase_order_id', $po->id)->find($itemId);
@@ -633,7 +782,6 @@ class AdminMasterOrdersController extends Controller
                                 'line_total' => $lineTotal,
                                 'specifications' => $itemData['specifications'] ?? $existingItem->specifications,
                             ]);
-                            $updatedPoItems->push($existingItem->fresh());
                         }
                     } else {
                         // Create brand new item
@@ -641,7 +789,7 @@ class AdminMasterOrdersController extends Controller
                         $price = (float) $itemData['unit_price'];
                         $lineTotal = round($qty * $price, 2);
 
-                        $newItem = PurchaseOrderItem::create([
+                        PurchaseOrderItem::create([
                             'purchase_order_id' => $po->id,
                             'item_description' => $itemData['item_description'],
                             'item_reference' => $itemData['item_reference'] ?? null,
@@ -652,11 +800,8 @@ class AdminMasterOrdersController extends Controller
                             'line_total' => $lineTotal,
                             'specifications' => $itemData['specifications'] ?? null,
                         ]);
-                        $updatedPoItems->push($newItem);
                     }
                 }
-            } else {
-                $updatedPoItems = $po->items;
             }
 
             // Recalculate totals
@@ -713,9 +858,9 @@ class AdminMasterOrdersController extends Controller
                 'supplier_id' => $po->supplier_id,
                 'subtotal' => (float) $po->subtotal,
                 'grand_total' => (float) $po->grand_total,
-                'delivery_date' => $po->delivery_date?->toDateString(),
-                'actual_delivery_date' => $po->actual_delivery_date?->toDateString(),
-                'finalized_at' => $po->finalized_at?->toIso8601String(),
+                'delivery_date' => self::formatDateSafely($po->delivery_date),
+                'actual_delivery_date' => self::formatDateSafely($po->actual_delivery_date),
+                'finalized_at' => self::formatDateTimeSafely($po->finalized_at),
                 'items' => $freshItems->map(fn ($it) => [
                     'id' => $it->id,
                     'description' => $it->item_description,
