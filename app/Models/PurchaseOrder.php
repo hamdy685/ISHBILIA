@@ -150,8 +150,9 @@ class PurchaseOrder extends Model
         return $query->where(function ($q) {
             $q->whereNotNull('finalized_at')
               ->orWhereIn('status', ['APPROVED_BY_ACCOUNTING', 'FINAL_APPROVED'])
-              ->orWhereHas('supplierInvoices', fn ($iq) => $iq->whereNotIn('status', ['VOIDED', 'CANCELLED']));
-        })->whereNotIn('status', ['PO_DRAFT', 'PENDING_ACTUAL_PO', 'REJECTED']);
+              ->orWhereHas('supplierInvoices', fn ($iq) => $iq->whereNotIn('status', ['VOIDED', 'CANCELLED']))
+              ->orWhereHas('purchaseReceipts', fn ($rq) => $rq->where('status', 'APPROVED'));
+        })->whereNotIn('status', ['PO_DRAFT', 'REJECTED', 'CANCELLED', 'VOIDED']);
     }
 
     /**
@@ -159,10 +160,13 @@ class PurchaseOrder extends Model
      */
     public function isActualPo(): bool
     {
-        if (in_array($this->status, ['PO_DRAFT', 'PENDING_ACTUAL_PO', 'REJECTED'], true)) {
+        if (in_array($this->status, ['PO_DRAFT', 'REJECTED', 'CANCELLED', 'VOIDED'], true)) {
             return false;
         }
 
-        return ! is_null($this->finalized_at) || in_array($this->status, ['APPROVED_BY_ACCOUNTING', 'FINAL_APPROVED'], true);
+        return ! is_null($this->finalized_at)
+            || in_array($this->status, ['APPROVED_BY_ACCOUNTING', 'FINAL_APPROVED'], true)
+            || $this->supplierInvoices()->whereNotIn('status', ['VOIDED', 'CANCELLED'])->exists()
+            || $this->purchaseReceipts()->where('status', 'APPROVED')->exists();
     }
 }

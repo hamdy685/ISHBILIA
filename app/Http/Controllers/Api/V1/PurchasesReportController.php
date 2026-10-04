@@ -159,12 +159,15 @@ class PurchasesReportController extends Controller
             $endDateStr = $endDate->toDateString();
 
             if ($dateBasis === 'po_date') {
-                // تاريخ أمر الشراء (الافتراضي: تاريخ الأمر أو تاريخ التوريد الفعلي أو تاريخ الفاتورة)
+                // تاريخ أمر الشراء (الافتراضي: تاريخ الأمر أو تاريخ التوريد الفعلي أو تاريخ الاستلام أو تاريخ الفاتورة)
                 $ordersQuery->where(function ($q) use ($startDateStr, $endDateStr) {
                     $q->whereBetween('created_at', [$startDateStr, $endDateStr])
                         ->orWhere(function ($dq) use ($startDateStr, $endDateStr) {
                             $dq->whereNotNull('actual_delivery_date')
                                 ->whereBetween('actual_delivery_date', [$startDateStr, $endDateStr]);
+                        })
+                        ->orWhereHas('purchaseReceipts', function ($rq) use ($startDateStr, $endDateStr) {
+                            $rq->whereBetween('received_at', [$startDateStr, $endDateStr]);
                         })
                         ->orWhereHas('supplierInvoices', function ($iq) use ($startDateStr, $endDateStr) {
                             $iq->whereNotIn('status', ['VOIDED', 'CANCELLED'])
