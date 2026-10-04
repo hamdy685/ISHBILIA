@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useAuth } from '../../context/AuthContext';
 import {
   getPurchasesReportApi,
   PurchasesReportResponse,
@@ -59,9 +60,14 @@ const formatCleanQty = (val: number | string | null | undefined) => {
 };
 
 export const PurchasesReportView: React.FC = () => {
+  const { hasRole } = useAuth();
+  const isManagerOrExecutive = hasRole('procurement_manager') || hasRole('general_manager') || hasRole('execution_manager');
+  const canRegisterInvoice = !isManagerOrExecutive && (hasRole('site_accountant') || hasRole('licenses_accountant') || hasRole('buffet_accountant') || hasRole('admin'));
+
   // Period filter states
   const [filterType, setFilterType] = useState<'daily' | 'monthly' | 'custom'>('monthly');
   const [dateBasis, setDateBasis] = useState<'po_date' | 'delivery_date' | 'pr_date'>('po_date');
+  const [actualOnly, setActualOnly] = useState<boolean>(true); // أوامر الشراء الفعلية فقط (الافتراضي نعم)
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [selectedDate, setSelectedDate] = useState(() => clampDateToValidMonthDay(getTodayInputDate()));
   const [fromDate, setFromDate] = useState(() => clampDateToValidMonthDay(getTodayInputDate()));
@@ -131,6 +137,7 @@ export const PurchasesReportView: React.FC = () => {
         to_date: filterType === 'custom' ? toDate : undefined,
         department_id: selectedDepartment !== 'ALL' ? selectedDepartment : undefined,
         accounting_filter: accountingFilter,
+        actual_only: actualOnly,
         page: currentPage,
         per_page: pageSize,
       });
@@ -146,11 +153,11 @@ export const PurchasesReportView: React.FC = () => {
   // Reset to page 1 on filter changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [filterType, dateBasis, selectedMonth, selectedDate, fromDate, toDate, selectedDepartment, accountingFilter]);
+  }, [filterType, dateBasis, actualOnly, selectedMonth, selectedDate, fromDate, toDate, selectedDepartment, accountingFilter]);
 
   useEffect(() => {
     void loadReport();
-  }, [filterType, dateBasis, selectedMonth, selectedDate, fromDate, toDate, selectedDepartment, accountingFilter, currentPage, pageSize]);
+  }, [filterType, dateBasis, actualOnly, selectedMonth, selectedDate, fromDate, toDate, selectedDepartment, accountingFilter, currentPage, pageSize]);
 
   // Selected Department Name for dynamic title
   const activeDepartmentName = useMemo(() => {
@@ -302,6 +309,7 @@ export const PurchasesReportView: React.FC = () => {
 
   // Open invoice modal for a specific PO row
   const handleOpenInvoiceModal = (row: PurchasesReportRow) => {
+    if (!canRegisterInvoice) return;
     setSelectedRowForInvoice(row);
     setInvoiceError(null);
 
@@ -1004,6 +1012,27 @@ export const PurchasesReportView: React.FC = () => {
                   <option value="pr_date">📋 طلب الشراء (تاريخ الطلب)</option>
                 </select>
               </div>
+
+              {/* Actual POs Only Filter (Default: true) */}
+              <label
+                className={`flex items-center gap-1.5 cursor-pointer rounded-lg px-2.5 py-1 text-xs font-bold transition border select-none ${
+                  actualOnly
+                    ? 'bg-cyan-950/70 border-cyan-500/70 text-cyan-300 shadow-sm'
+                    : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
+                }`}
+                title="استبعاد الأوامر المبدئية وحصر التقرير على أوامر الشراء الفعلية المعتمدة لضمان دقة الأرقام المالية"
+              >
+                <input
+                  type="checkbox"
+                  checked={actualOnly}
+                  onChange={(e) => {
+                    setActualOnly(e.target.checked);
+                    setCurrentPage(1);
+                  }}
+                  className="rounded border-slate-700 text-cyan-500 focus:ring-cyan-400 h-3.5 w-3.5 cursor-pointer"
+                />
+                <span>🛡️ أوامر الشراء الفعلية فقط</span>
+              </label>
             </div>
 
             {/* Filter Toggle Button */}
@@ -1167,15 +1196,15 @@ export const PurchasesReportView: React.FC = () => {
 
                   {/* 3. Excel Filter Input Row under each column */}
                   {showColumnFilters && (
-                    <tr className="bg-[#f1f5f9] border-b border-slate-300 text-[10.5px]">
-                      <th className="p-0.5 border border-slate-300 text-center bg-[#e2e8f0] text-slate-400">—</th>
+                    <tr className="bg-gray-50 border-b border-gray-300 text-xs">
+                      <th className="p-0.5 border border-slate-300 text-center bg-gray-100 text-slate-400">—</th>
                       <th className="p-1 border border-slate-300">
                         <input
                           type="text"
                           placeholder="فلتر..."
                           value={colFilters.delivery_date || ''}
                           onChange={(e) => handleUpdateColFilter('delivery_date', e.target.value)}
-                          className="w-full rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[11px] text-slate-800 placeholder-slate-400 focus:border-emerald-600 focus:outline-none"
+                          className="w-full rounded bg-white border border-gray-300 text-gray-700 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 px-1.5 py-0.5 text-xs outline-none transition-all shadow-2xs"
                         />
                       </th>
                       <th className="p-1 border border-slate-300">
@@ -1184,7 +1213,7 @@ export const PurchasesReportView: React.FC = () => {
                           placeholder="الأمر..."
                           value={colFilters.po_number || ''}
                           onChange={(e) => handleUpdateColFilter('po_number', e.target.value)}
-                          className="w-full rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[11px] text-slate-800 placeholder-slate-400 focus:border-emerald-600 focus:outline-none"
+                          className="w-full rounded bg-white border border-gray-300 text-gray-700 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 px-1.5 py-0.5 text-xs outline-none transition-all shadow-2xs"
                         />
                       </th>
                       <th className="p-1 border border-slate-300">
@@ -1193,7 +1222,7 @@ export const PurchasesReportView: React.FC = () => {
                           placeholder="الصنف..."
                           value={colFilters.item_name || ''}
                           onChange={(e) => handleUpdateColFilter('item_name', e.target.value)}
-                          className="w-full rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[11px] text-slate-800 placeholder-slate-400 focus:border-emerald-600 focus:outline-none"
+                          className="w-full rounded bg-white border border-gray-300 text-gray-700 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 px-1.5 py-0.5 text-xs outline-none transition-all shadow-2xs"
                         />
                       </th>
                       <th className="p-1 border border-slate-300">
@@ -1202,7 +1231,7 @@ export const PurchasesReportView: React.FC = () => {
                           placeholder="الوحدة..."
                           value={colFilters.uom || ''}
                           onChange={(e) => handleUpdateColFilter('uom', e.target.value)}
-                          className="w-full rounded border border-slate-300 bg-white px-1 py-0.5 text-[11px] text-center text-slate-800 placeholder-slate-400 focus:border-emerald-600 focus:outline-none"
+                          className="w-full rounded bg-white border border-gray-300 text-gray-700 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 px-1 py-0.5 text-xs text-center outline-none transition-all shadow-2xs"
                         />
                       </th>
                       <th className="p-1 border border-slate-300">
@@ -1211,7 +1240,7 @@ export const PurchasesReportView: React.FC = () => {
                           placeholder="كمية..."
                           value={colFilters.quantity || ''}
                           onChange={(e) => handleUpdateColFilter('quantity', e.target.value)}
-                          className="w-full rounded border border-slate-300 bg-white px-1 py-0.5 text-[11px] text-center text-slate-800 placeholder-slate-400 focus:border-emerald-600 focus:outline-none"
+                          className="w-full rounded bg-white border border-gray-300 text-gray-700 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 px-1 py-0.5 text-xs text-center outline-none transition-all shadow-2xs"
                         />
                       </th>
                       <th className="p-1 border border-slate-300">
@@ -1220,7 +1249,7 @@ export const PurchasesReportView: React.FC = () => {
                           placeholder="سعر..."
                           value={colFilters.unit_price || ''}
                           onChange={(e) => handleUpdateColFilter('unit_price', e.target.value)}
-                          className="w-full rounded border border-slate-300 bg-white px-1 py-0.5 text-[11px] text-center text-slate-800 placeholder-slate-400 focus:border-emerald-600 focus:outline-none"
+                          className="w-full rounded bg-white border border-gray-300 text-gray-700 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 px-1 py-0.5 text-xs text-center outline-none transition-all shadow-2xs"
                         />
                       </th>
                       <th className="p-1 border border-slate-300">
@@ -1229,7 +1258,7 @@ export const PurchasesReportView: React.FC = () => {
                           placeholder="إجمالي..."
                           value={colFilters.total_price || ''}
                           onChange={(e) => handleUpdateColFilter('total_price', e.target.value)}
-                          className="w-full rounded border border-slate-300 bg-white px-1 py-0.5 text-[11px] text-center text-slate-800 placeholder-slate-400 focus:border-emerald-600 focus:outline-none"
+                          className="w-full rounded bg-white border border-gray-300 text-gray-700 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 px-1 py-0.5 text-xs text-center outline-none transition-all shadow-2xs"
                         />
                       </th>
                       <th className="p-1 border border-slate-300">
@@ -1238,7 +1267,7 @@ export const PurchasesReportView: React.FC = () => {
                           placeholder="المورد..."
                           value={colFilters.supplier_name || ''}
                           onChange={(e) => handleUpdateColFilter('supplier_name', e.target.value)}
-                          className="w-full rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[11px] text-slate-800 placeholder-slate-400 focus:border-emerald-600 focus:outline-none"
+                          className="w-full rounded bg-white border border-gray-300 text-gray-700 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 px-1.5 py-0.5 text-xs outline-none transition-all shadow-2xs"
                         />
                       </th>
                       <th className="p-1 border border-slate-300">
@@ -1247,7 +1276,7 @@ export const PurchasesReportView: React.FC = () => {
                           placeholder="قطعة..."
                           value={colFilters.parcel_reference || ''}
                           onChange={(e) => handleUpdateColFilter('parcel_reference', e.target.value)}
-                          className="w-full rounded border border-slate-300 bg-white px-1 py-0.5 text-[11px] text-center text-slate-800 placeholder-slate-400 focus:border-emerald-600 focus:outline-none"
+                          className="w-full rounded bg-white border border-gray-300 text-gray-700 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 px-1 py-0.5 text-xs text-center outline-none transition-all shadow-2xs"
                         />
                       </th>
                       <th className="p-1 border border-slate-300">
@@ -1256,7 +1285,7 @@ export const PurchasesReportView: React.FC = () => {
                           placeholder="منطقة..."
                           value={colFilters.region || ''}
                           onChange={(e) => handleUpdateColFilter('region', e.target.value)}
-                          className="w-full rounded border border-slate-300 bg-white px-1 py-0.5 text-[11px] text-center text-slate-800 placeholder-slate-400 focus:border-emerald-600 focus:outline-none"
+                          className="w-full rounded bg-white border border-gray-300 text-gray-700 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 px-1 py-0.5 text-xs text-center outline-none transition-all shadow-2xs"
                         />
                       </th>
                       <th className="p-1 border border-slate-300">
@@ -1265,7 +1294,7 @@ export const PurchasesReportView: React.FC = () => {
                           placeholder="القسم..."
                           value={colFilters.department_name || ''}
                           onChange={(e) => handleUpdateColFilter('department_name', e.target.value)}
-                          className="w-full rounded border border-slate-300 bg-white px-1 py-0.5 text-[11px] text-center text-slate-800 placeholder-slate-400 focus:border-emerald-600 focus:outline-none"
+                          className="w-full rounded bg-white border border-gray-300 text-gray-700 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 px-1 py-0.5 text-xs text-center outline-none transition-all shadow-2xs"
                         />
                       </th>
                       <th className="p-1 border border-slate-300">
@@ -1274,14 +1303,14 @@ export const PurchasesReportView: React.FC = () => {
                           placeholder="الاعمال..."
                           value={colFilters.works || ''}
                           onChange={(e) => handleUpdateColFilter('works', e.target.value)}
-                          className="w-full rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[11px] text-slate-800 placeholder-slate-400 focus:border-emerald-600 focus:outline-none"
+                          className="w-full rounded bg-white border border-gray-300 text-gray-700 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 px-1.5 py-0.5 text-xs outline-none transition-all shadow-2xs"
                         />
                       </th>
                       <th className="p-1 border border-slate-300">
                         <select
                           value={colFilters.invoice_status || ''}
                           onChange={(e) => handleUpdateColFilter('invoice_status', e.target.value)}
-                          className="w-full rounded border border-slate-300 bg-white px-1 py-0.5 text-[11px] text-center font-bold text-slate-800 focus:border-emerald-600 focus:outline-none"
+                          className="w-full rounded bg-white border border-gray-300 text-gray-700 font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 px-1 py-0.5 text-xs text-center outline-none transition-all shadow-2xs"
                         >
                           <option value="">كل الحالات</option>
                           <option value="VERIFIED">✅ تم التسجيل</option>
@@ -1304,23 +1333,33 @@ export const PurchasesReportView: React.FC = () => {
 
                     const prevRow = idx > 0 ? filteredRows[idx - 1] : null;
                     const isFirstOfGroup = !prevRow || String(prevRow.purchase_order_id || prevRow.po_number) !== poKey;
+                    const nextRow = idx < filteredRows.length - 1 ? filteredRows[idx + 1] : null;
+                    const isLastOfGroup = !nextRow || String(nextRow.purchase_order_id || nextRow.po_number) !== poKey;
+
+                    const rawItemName = (row.item_name || '').trim();
+                    const isFictitiousOrEmpty = !rawItemName || rawItemName === 'صنف 00' || rawItemName === 'صنف 0' || rawItemName === '00' || rawItemName === '0';
+                    const displayItemName = isFictitiousOrEmpty ? '---' : rawItemName;
+
+                    const unitPriceNum = Number(row.unit_price || 0);
+                    const totalPriceNum = Number(row.total_price || 0);
+                    const isUnpriced = totalPriceNum <= 0;
 
                     return (
                       <tr
                         key={row.id}
                         className={`transition-colors ${palette.bg} ${palette.hover} ${
-                          isFirstOfGroup && idx > 0 ? 'border-t-2 border-slate-400' : 'border-t border-slate-200'
-                        }`}
+                          isLastOfGroup ? 'border-b-2 border-gray-300' : 'border-b border-gray-200/70'
+                        } ${isFirstOfGroup && idx > 0 ? 'border-t-2 border-gray-300' : ''}`}
                       >
                         {/* Row Number (Excel Index Column with PO Accent Strip) */}
-                        <td className={`border border-slate-300 px-1.5 py-2 text-center font-mono text-[10px] font-bold select-none ${palette.rowNumBg} ${palette.accentBorder}`}>
+                        <td className={`border border-slate-300 px-1.5 py-1.5 text-center font-mono text-xs font-bold select-none ${palette.rowNumBg} ${palette.accentBorder}`}>
                           {rowNumber}
                         </td>
 
                         {/* A: التاريخ المحدد */}
                         <td
                           onClick={() => setSelectedCell(`A${rowNumber}`)}
-                          className="border border-slate-300 px-2.5 py-2 text-center font-mono text-slate-800 whitespace-nowrap text-[11px]"
+                          className="border border-slate-300 px-2.5 py-1.5 text-center font-mono text-slate-800 whitespace-nowrap text-sm"
                         >
                           <div className="font-bold">
                             {dateBasis === 'po_date'
@@ -1330,7 +1369,7 @@ export const PurchasesReportView: React.FC = () => {
                                 : (row.delivery_date_formatted || row.delivery_date || '—'))}
                           </div>
                           {dateBasis !== 'delivery_date' && row.delivery_date && (
-                            <div className="text-[9.5px] text-slate-500 font-normal">
+                            <div className="text-[10px] text-slate-500 font-normal">
                               توريد: {row.delivery_date_formatted || row.delivery_date}
                             </div>
                           )}
@@ -1339,9 +1378,9 @@ export const PurchasesReportView: React.FC = () => {
                         {/* B: رقم أمر الشراء */}
                         <td
                           onClick={() => setSelectedCell(`B${rowNumber}`)}
-                          className="border border-slate-300 px-2 py-2 text-center font-mono whitespace-nowrap"
+                          className="border border-slate-300 px-2 py-1.5 text-center font-mono whitespace-nowrap"
                         >
-                          <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-black shadow-2xs ${palette.poTag}`}>
+                          <span className={`inline-block px-2 py-0.5 rounded text-xs font-black shadow-2xs ${palette.poTag}`}>
                             {row.po_number_short || row.po_number}
                           </span>
                         </td>
@@ -1349,28 +1388,32 @@ export const PurchasesReportView: React.FC = () => {
                         {/* C: الصنف */}
                         <td
                           onClick={() => setSelectedCell(`C${rowNumber}`)}
-                          className="border border-slate-300 px-3 py-2 font-bold text-slate-900 leading-snug"
+                          className="border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-900 leading-snug"
                         >
-                          {row.item_name}
+                          {isFictitiousOrEmpty ? (
+                            <span className="text-gray-400 font-mono">---</span>
+                          ) : (
+                            displayItemName
+                          )}
                         </td>
 
                         {/* D: الوحدة */}
                         <td
                           onClick={() => setSelectedCell(`D${rowNumber}`)}
-                          className="border border-slate-300 px-2 py-2 text-center text-slate-700 whitespace-nowrap"
+                          className="border border-slate-300 px-2 py-1.5 text-center text-sm text-slate-700 whitespace-nowrap"
                         >
-                          {getUnitLabel(row.uom) || row.uom}
+                          {getUnitLabel(row.uom) || row.uom || '—'}
                         </td>
 
                         {/* E: الكمية */}
                         <td
                           onClick={() => setSelectedCell(`E${rowNumber}`)}
-                          className="border border-slate-300 px-2.5 py-2 text-center font-mono font-extrabold text-slate-900"
+                          className="border border-slate-300 px-2.5 py-1.5 text-center font-mono text-sm font-extrabold text-slate-900"
                           dir="ltr"
                         >
                           <div>{formatCleanQty(row.quantity)}</div>
                           {row.received_quantity !== undefined && row.received_quantity !== null && (
-                            <div className="text-[9.5px] font-medium text-slate-500 font-sans mt-0.5" dir="rtl">
+                            <div className="text-[10px] font-medium text-slate-500 font-sans mt-0.5" dir="rtl">
                               المستلم: <span className="font-mono font-bold text-slate-700">{formatCleanQty(row.received_quantity)}</span>
                             </div>
                           )}
@@ -1379,61 +1422,79 @@ export const PurchasesReportView: React.FC = () => {
                         {/* F: سعر الوحدة */}
                         <td
                           onClick={() => setSelectedCell(`F${rowNumber}`)}
-                          className="border border-slate-300 px-2.5 py-2 text-center font-mono text-slate-800"
+                          className="border border-slate-300 px-2.5 py-1.5 text-center font-mono text-sm text-slate-800"
                           dir="ltr"
                         >
-                          {formatCleanNumber(row.unit_price)}
+                          {unitPriceNum > 0 ? (
+                            formatCleanNumber(row.unit_price)
+                          ) : (
+                            <span className="text-gray-400 text-sm font-normal" title="بانتظار التسعير">-</span>
+                          )}
                         </td>
 
                         {/* G: سعر الكمية (الإجمالي) */}
                         <td
                           onClick={() => setSelectedCell(`G${rowNumber}`)}
-                          className="border border-slate-300 px-3 py-2 text-center font-mono font-black text-emerald-800 bg-emerald-50/50"
+                          className={`border border-slate-300 px-3 py-1.5 text-center font-mono text-sm ${
+                            totalPriceNum > 0
+                              ? 'font-black text-emerald-800 bg-emerald-50/50'
+                              : 'text-gray-400 bg-slate-50/50'
+                          }`}
                           dir="ltr"
                         >
-                          {formatCleanNumber(row.total_price)}
+                          {totalPriceNum > 0 ? (
+                            formatCleanNumber(row.total_price)
+                          ) : (
+                            <span className="text-gray-400 text-xs font-normal" title="غير مسعر">(غير مسعر)</span>
+                          )}
                         </td>
 
                         {/* H: أسم المورد */}
                         <td
                           onClick={() => setSelectedCell(`H${rowNumber}`)}
-                          className="border border-slate-300 px-3 py-2 font-bold text-slate-800"
+                          className="border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-800 max-w-[150px]"
                         >
-                          {row.supplier_name}
+                          <div className="truncate" title={row.supplier_name || '—'}>
+                            {row.supplier_name || '—'}
+                          </div>
                         </td>
 
                         {/* I: رقم القطعة */}
                         <td
                           onClick={() => setSelectedCell(`I${rowNumber}`)}
-                          className="border border-slate-300 px-2 py-2 text-center font-mono font-bold text-amber-800 bg-amber-50/30"
+                          className="border border-slate-300 px-2 py-1.5 text-center font-mono text-sm font-bold text-amber-800 bg-amber-50/30"
                         >
-                          {row.parcel_reference}
+                          {row.parcel_reference || '—'}
                         </td>
 
                         {/* J: إسم المنطقة */}
                         <td
                           onClick={() => setSelectedCell(`J${rowNumber}`)}
-                          className="border border-slate-300 px-2.5 py-2 text-center text-slate-800"
+                          className="border border-slate-300 px-2.5 py-1.5 text-center text-sm text-slate-800 max-w-[120px]"
                         >
-                          {row.region}
+                          <div className="truncate" title={row.region || '—'}>
+                            {row.region || '—'}
+                          </div>
                         </td>
 
                         {/* K: القسم */}
                         <td
                           onClick={() => setSelectedCell(`K${rowNumber}`)}
-                          className="border border-slate-300 px-2.5 py-2 text-center"
+                          className="border border-slate-300 px-2.5 py-1.5 text-center"
                         >
-                          <span className="inline-block rounded bg-slate-200 px-2 py-0.5 text-[11px] font-bold text-slate-800">
-                            {row.department_name}
+                          <span className="inline-block rounded bg-slate-200 px-2 py-0.5 text-xs font-bold text-slate-800">
+                            {row.department_name || '—'}
                           </span>
                         </td>
 
                         {/* L: الاعمال */}
                         <td
                           onClick={() => setSelectedCell(`L${rowNumber}`)}
-                          className="border border-slate-300 px-3 py-2 text-slate-700 leading-snug"
+                          className="border border-slate-300 px-3 py-1.5 text-slate-700 text-sm max-w-[200px]"
                         >
-                          {row.works}
+                          <div className="truncate" title={row.works || '—'}>
+                            {row.works || '—'}
+                          </div>
                         </td>
 
                         {/* M: تسجيل الفاتورة / الحالة */}
@@ -1443,7 +1504,7 @@ export const PurchasesReportView: React.FC = () => {
                         >
                           {row.accounting_status === 'VERIFIED' || row.invoice_number ? (
                             <div className="flex flex-col items-center justify-center gap-0.5">
-                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 border border-emerald-300 px-2.5 py-0.5 text-[11px] font-black text-emerald-800 shadow-2xs">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 border border-emerald-300 px-2.5 py-0.5 text-xs font-bold text-emerald-800 shadow-2xs">
                                 <span className="text-emerald-600 font-bold">✓</span>
                                 <span>تم التسجيل</span>
                               </span>
@@ -1456,19 +1517,39 @@ export const PurchasesReportView: React.FC = () => {
                                 </span>
                               )}
                             </div>
+                          ) : canRegisterInvoice ? (
+                            isUnpriced ? (
+                              <button
+                                type="button"
+                                disabled
+                                className="inline-flex items-center justify-center gap-1 w-full rounded-md bg-gray-200 text-gray-400 border border-gray-300 py-1 px-3 text-xs font-medium cursor-not-allowed select-none shadow-2xs"
+                                title="لا يمكن تسجيل فاتورة لبند غير مسعر (القيمة 0 ج.م)"
+                              >
+                                <span>🧾</span>
+                                <span>تسجيل الفاتورة</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenInvoiceModal(row);
+                                }}
+                                className="inline-flex items-center justify-center gap-1 w-full rounded-md bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white py-1 px-3 text-xs font-bold shadow-2xs transition-all border border-emerald-700 hover:shadow-xs cursor-pointer"
+                                title="تسجيل فاتورة المورد واعتمادها بالحسابات"
+                              >
+                                <span>🧾</span>
+                                <span>تسجيل الفاتورة</span>
+                              </button>
+                            )
                           ) : (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenInvoiceModal(row);
-                              }}
-                              className="inline-flex items-center justify-center gap-1.5 w-full rounded-lg bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-2.5 py-1.5 text-xs font-black shadow-sm transition-all border border-emerald-700 hover:shadow cursor-pointer"
-                              title="تسجيل فاتورة المورد واعتمادها بالحسابات"
+                            <span
+                              className="inline-flex items-center justify-center gap-1 w-full rounded-md bg-slate-100 border border-slate-200 py-1 px-2 text-[11px] font-medium text-slate-500 shadow-2xs"
+                              title="تسجيل الفواتير المالية مسند لمحاسب القسم المختص وفقاً لقاعدة فصل المهام"
                             >
-                              <span>🧾</span>
-                              <span>تسجيل الفاتورة</span>
-                            </button>
+                              <span className="text-slate-400">⏳</span>
+                              <span>(مسند للحسابات)</span>
+                            </span>
                           )}
                         </td>
                       </tr>
@@ -1595,7 +1676,7 @@ export const PurchasesReportView: React.FC = () => {
       </div>
 
       {/* ── 3. UNIFIED INVOICE REGISTRATION MODAL (IN-PAGE POPUP) ── */}
-      {selectedRowForInvoice && createPortal(
+      {canRegisterInvoice && selectedRowForInvoice && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm overflow-y-auto">
           <div
             className="relative w-full max-w-3xl rounded-2xl border border-slate-700 bg-slate-900 text-slate-100 shadow-2xl my-8 overflow-hidden"

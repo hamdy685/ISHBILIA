@@ -52,6 +52,7 @@ class PurchasesReportController extends Controller
             ? (int) $request->query('department_id')
             : null;
         $accountingFilter = (string) $request->query('accounting_filter', 'VERIFIED_ONLY'); // 'VERIFIED_ONLY' | 'ALL' | 'PENDING'
+        $actualOnly = $request->boolean('actual_only', true); // أوامر الشراء الفعلية فقط (الافتراضي نعم لحماية التقارير المالية)
         $dateBasis = (string) $request->query('date_basis', 'po_date'); // 'po_date' | 'delivery_date' | 'pr_date'
         if (! in_array($dateBasis, ['po_date', 'delivery_date', 'pr_date'], true)) {
             $dateBasis = 'po_date';
@@ -123,7 +124,11 @@ class PurchasesReportController extends Controller
                 'supplierInvoices.purchaseReceipt.items.purchaseOrderItem.prItem',
                 'supplierInvoices.createdBy',
             ])
-            ->whereNotIn('status', ['REJECTED', 'PO_DRAFT'])
+            ->when($actualOnly, function ($q) {
+                $q->actualPo();
+            }, function ($q) {
+                $q->whereNotIn('status', ['REJECTED', 'PO_DRAFT']);
+            })
             ->when($allowedDepartmentCodes !== null, function ($q) use ($allowedDepartmentCodes) {
                 $q->whereHas('purchaseRequest.department', function ($dq) use ($allowedDepartmentCodes) {
                     $dq->whereIn('code', $allowedDepartmentCodes);
@@ -154,9 +159,21 @@ class PurchasesReportController extends Controller
             $endDateStr = $endDate->toDateString();
 
             if ($dateBasis === 'po_date') {
-                // تاريخ أمر الشراء (الافتراضي)
-                $ordersQuery->whereDate('created_at', '>=', $startDateStr)
-                    ->whereDate('created_at', '<=', $endDateStr);
+                // تاريخ أمر الشراء (الافتراضي: تاريخ الأمر أو تاريخ التوريد الفعلي أو تاريخ الفاتورة)
+                $ordersQuery->where(function ($q) use ($startDateStr, $endDateStr) {
+                    $q->whereBetween('created_at', [$startDateStr, $endDateStr])
+                        ->orWhere(function ($dq) use ($startDateStr, $endDateStr) {
+                            $dq->whereNotNull('actual_delivery_date')
+                                ->whereBetween('actual_delivery_date', [$startDateStr, $endDateStr]);
+                        })
+                        ->orWhereHas('supplierInvoices', function ($iq) use ($startDateStr, $endDateStr) {
+                            $iq->whereNotIn('status', ['VOIDED', 'CANCELLED'])
+                                ->where(function ($dateQ) use ($startDateStr, $endDateStr) {
+                                    $dateQ->whereBetween('invoice_date', [$startDateStr, $endDateStr])
+                                        ->orWhereBetween('created_at', [$startDateStr, $endDateStr]);
+                                });
+                        });
+                });
             } elseif ($dateBasis === 'delivery_date') {
                 // تاريخ التوريد / الاستلام الفعلي بالموقع
                 $ordersQuery->where(function ($dq) use ($startDateStr, $endDateStr) {
@@ -396,6 +413,7 @@ class PurchasesReportController extends Controller
             'filters' => [
                 'filter_type' => $filterType,
                 'date_basis' => $dateBasis,
+                'actual_only' => $actualOnly,
                 'date' => $request->query('date'),
                 'month' => $request->query('month', now()->format('Y-m')),
                 'from_date' => $request->query('from_date'),

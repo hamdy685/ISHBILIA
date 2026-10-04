@@ -52,6 +52,22 @@ class SupplierInvoiceController extends Controller
         ]);
 
         $user = $request->user();
+
+        // 1. Strict SOD: Procurement Manager, General Manager, Execution Manager must NEVER create invoices
+        if ($user && $user->hasAnyRole(['procurement_manager', 'general_manager', 'execution_manager'])) {
+            return response()->json([
+                'message' => 'غير مصرح لك بتسجيل الفواتير المالية. هذا الإجراء مخصص للإدارة المالية ومحاسبي الأقسام فقط.',
+            ], 403);
+        }
+
+        // 2. Permission check: must have accounting.invoice.create
+        if ($user && ! $user->hasRole('admin') && ! $user->hasPermission('accounting.invoice.create')) {
+            return response()->json([
+                'message' => 'غير مصرح لك بتسجيل الفواتير المالية. هذا الإجراء مخصص للإدارة المالية ومحاسبي الأقسام فقط.',
+            ], 403);
+        }
+
+        // 3. Financial Director restricted (assigned to department accountants)
         if ($user && $user->hasRole('accountant') && ! $user->hasRole('admin') && ! $this->service->isRestrictedDepartmentAccountant($user)) {
             return response()->json([
                 'message' => 'غير مصرح للمدير المالي بتسجيل الفواتير؛ تسجيل الفواتير مسند لمحاسب القسم التابع له أمر الشراء فقط.',
@@ -59,6 +75,8 @@ class SupplierInvoiceController extends Controller
         }
 
         $po = PurchaseOrder::with('purchaseRequest.department')->findOrFail($validated['purchase_order_id']);
+
+        // 4. Scoped department check
         $allowedCodes = $this->service->getAllowedDepartmentCodesForAccountant($request->user());
         if ($allowedCodes !== null) {
             $deptCode = $po->purchaseRequest?->department?->code;

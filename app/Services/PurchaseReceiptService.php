@@ -287,6 +287,9 @@ class PurchaseReceiptService
     public function approveBySiteEngineer(User $siteEngineer, PurchaseReceipt $receipt, ?string $notes = null): PurchaseReceipt
     {
         $receipt->loadMissing(['purchaseOrder', 'items']);
+        if ($receipt->status === 'APPROVED') {
+            return $receipt;
+        }
         if ($receipt->site_engineer_user_id !== $siteEngineer->id) {
             throw new \RuntimeException('هذا الإذن غير مخصص لمهندس الموقع الحالي.');
         }

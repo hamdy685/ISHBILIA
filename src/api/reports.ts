@@ -69,6 +69,7 @@ export interface PurchasesReportResponse {
     to_date?: string;
     department_id?: number | null;
     accounting_filter?: string;
+    actual_only?: boolean;
     date_label?: string;
   };
   pagination?: {
@@ -93,6 +94,7 @@ export interface PurchasesReportParams {
   to_date?: string;
   department_id?: number | string;
   accounting_filter?: 'ALL' | 'VERIFIED_ONLY' | 'PENDING';
+  actual_only?: boolean | string;
   search?: string;
   page?: number;
   per_page?: number | string;
@@ -113,6 +115,9 @@ export const getPurchasesReportApi = async (
     queryParams.set('department_id', String(params.department_id));
   }
   if (params.accounting_filter) queryParams.set('accounting_filter', params.accounting_filter);
+  if (params.actual_only !== undefined) {
+    queryParams.set('actual_only', params.actual_only === false || params.actual_only === '0' ? '0' : '1');
+  }
   if (params.search) queryParams.set('search', params.search);
   if (params.page !== undefined) queryParams.set('page', String(params.page));
   if (params.per_page !== undefined) queryParams.set('per_page', String(params.per_page));

@@ -23,5 +23,9 @@ class AppServiceProvider extends ServiceProvider
             \App\Models\PurchaseRequestItem::class,
             \App\Policies\PurchaseRequestItemPolicy::class
         );
+        \Illuminate\Support\Facades\Gate::policy(
+            \App\Models\SupplierInvoice::class,
+            \App\Policies\SupplierInvoicePolicy::class
+        );
     }
 }

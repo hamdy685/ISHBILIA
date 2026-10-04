@@ -94,18 +94,24 @@ export const GeneralManagerDashboardPage: React.FC = () => {
     return <div className="text-cyan-400 animate-pulse text-xs p-6" dir="rtl">جاري تحميل بيانات لوحة الإدارة العامة...</div>;
   }
 
-  const totalValue = filteredPos.reduce((acc, x) => acc + Number(x.grand_total || 0), 0);
+  const isActualPo = (p: any) =>
+    Boolean(p.finalized_at) ||
+    ['APPROVED_BY_ACCOUNTING', 'FINAL_APPROVED'].includes(p.status) ||
+    (p.status === 'ISSUED' && Boolean(p.finalized_at));
+
+  const actualPos = filteredPos.filter(isActualPo);
+  const totalValue = actualPos.reduce((acc, x) => acc + Number(x.grand_total || 0), 0);
   const pendingGmRequestsCount = requests.length;
 
-  // القسم Spend Breakdown
-  const deptSpendMap = filteredPos.reduce((acc: Record<string, number>, p) => {
+  // القسم Spend Breakdown (Actual POs only to prevent inflated numbers)
+  const deptSpendMap = actualPos.reduce((acc: Record<string, number>, p) => {
     const deptName = p.purchase_request?.department?.name || 'عام';
     acc[deptName] = (acc[deptName] || 0) + Number(p.grand_total || 0);
     return acc;
   }, {});
 
-  // المورد Share Breakdown
-  const supplierSpendMap = filteredPos.reduce((acc: Record<string, number>, p) => {
+  // المورد Share Breakdown (Actual POs only)
+  const supplierSpendMap = actualPos.reduce((acc: Record<string, number>, p) => {
     const supName = p.supplier?.company_name || 'غير محدد';
     acc[supName] = (acc[supName] || 0) + Number(p.grand_total || 0);
     return acc;
@@ -343,7 +349,7 @@ export const GeneralManagerDashboardPage: React.FC = () => {
           clickableHint="عرض أوامر الشراء ←"
         />
         <KpiPill
-          title="إجمالي قيم المشتريات"
+          title="إجمالي أوامر الشراء الفعلية"
           value={<CurrencyDisplay amount={totalValue} amountClassName="font-bold font-mono text-emerald-400 text-xs" />}
           accentColor="emerald"
           icon={<span className="text-xs">💵</span>}

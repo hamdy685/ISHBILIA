@@ -477,11 +477,17 @@ export const ProcurementManagerPage: React.FC = () => {
     });
   }, [pos, reportSearch, reportDepartment, reportSupplier, reportItem, reportDateFrom, reportDateTo]);
 
+  const isActualPo = (po: any) =>
+    Boolean(po.finalized_at) ||
+    ['APPROVED_BY_ACCOUNTING', 'FINAL_APPROVED'].includes(po.status) ||
+    (po.status === 'ISSUED' && Boolean(po.finalized_at));
+
   const reportTotals = useMemo(() => {
-    const totalValue = filteredReportPos.reduce((sum, po) => sum + Number(po.grand_total || 0), 0);
-    const totalQuantity = filteredReportPos.reduce((sum, po) => sum + getReportItems(po).reduce((s, i) => s + Number(i.quantity || 0), 0), 0);
-    const supplierCount = new Set(filteredReportPos.map(po => po.supplier?.company_name || 'غير محدد')).size;
-    return { totalValue, totalQuantity, supplierCount, averageValue: filteredReportPos.length ? totalValue / filteredReportPos.length : 0 };
+    const actualPos = filteredReportPos.filter(isActualPo);
+    const totalValue = actualPos.reduce((sum, po) => sum + Number(po.grand_total || 0), 0);
+    const totalQuantity = actualPos.reduce((sum, po) => sum + getReportItems(po).reduce((s, i) => s + Number(i.quantity || 0), 0), 0);
+    const supplierCount = new Set(actualPos.map(po => po.supplier?.company_name || 'غير محدد')).size;
+    return { totalValue, totalQuantity, supplierCount, averageValue: actualPos.length ? totalValue / actualPos.length : 0 };
   }, [filteredReportPos]);
 
   const reportDepartmentBreakdown = useMemo(() => {
@@ -1030,7 +1036,7 @@ export const ProcurementManagerPage: React.FC = () => {
               <Button variant="primary" size="sm" onClick={() => setReportPrintOpen(true)}>طباعة التقرير</Button>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-6"><KpiCard title="أوامر الشراء" value={filteredReportPos.length} accentColor="cyan" /><KpiCard title="إجمالي المشتريات" value={<CurrencyDisplay amount={reportTotals.totalValue} amountClassName="font-mono text-emerald-300" />} accentColor="emerald" /><KpiCard title="إجمالي الكمية" value={reportTotals.totalQuantity.toLocaleString('ar-EG')} accentColor="amber" /><KpiCard title="متوسط الأمر" value={<CurrencyDisplay amount={reportTotals.averageValue} amountClassName="font-mono text-cyan-300" />} accentColor="cyan" /><KpiCard title="الموردون" value={reportTotals.supplierCount} accentColor="purple" /><KpiCard title="بانتظار الحسابات" value={analytics.metrics.pending_accounting_count} accentColor="rose" /></div>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-6"><KpiCard title="أوامر الشراء" value={filteredReportPos.length} accentColor="cyan" /><KpiCard title="إجمالي أوامر الشراء الفعلية" value={<CurrencyDisplay amount={reportTotals.totalValue} amountClassName="font-mono text-emerald-300" />} accentColor="emerald" /><KpiCard title="إجمالي الكمية" value={reportTotals.totalQuantity.toLocaleString('ar-EG')} accentColor="amber" /><KpiCard title="متوسط الأمر" value={<CurrencyDisplay amount={reportTotals.averageValue} amountClassName="font-mono text-cyan-300" />} accentColor="cyan" /><KpiCard title="الموردون" value={reportTotals.supplierCount} accentColor="purple" /><KpiCard title="بانتظار الحسابات" value={analytics.metrics.pending_accounting_count} accentColor="rose" /></div>
           <TableFilterBar
             searchValue={reportSearch}
             onSearchChange={setReportSearch}

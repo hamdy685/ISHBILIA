@@ -141,4 +141,28 @@ class PurchaseOrder extends Model
             ->where('entity_type', self::class)
             ->orderByDesc('occurred_at');
     }
+
+    /**
+     * Scope to filter only Actual Purchase Orders (excluding preliminary/unfinalized orders).
+     */
+    public function scopeActualPo($query)
+    {
+        return $query->where(function ($q) {
+            $q->whereNotNull('finalized_at')
+              ->orWhereIn('status', ['APPROVED_BY_ACCOUNTING', 'FINAL_APPROVED'])
+              ->orWhereHas('supplierInvoices', fn ($iq) => $iq->whereNotIn('status', ['VOIDED', 'CANCELLED']));
+        })->whereNotIn('status', ['PO_DRAFT', 'PENDING_ACTUAL_PO', 'REJECTED']);
+    }
+
+    /**
+     * Check if this purchase order is an Actual PO.
+     */
+    public function isActualPo(): bool
+    {
+        if (in_array($this->status, ['PO_DRAFT', 'PENDING_ACTUAL_PO', 'REJECTED'], true)) {
+            return false;
+        }
+
+        return ! is_null($this->finalized_at) || in_array($this->status, ['APPROVED_BY_ACCOUNTING', 'FINAL_APPROVED'], true);
+    }
 }

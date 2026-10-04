@@ -27,8 +27,9 @@ export const AccountingPurchaseOrderDetailsPage: React.FC = () => {
   const [cyclePrintPo, setCyclePrintPo] = useState<PurchaseOrder | null>(null);
   const [previewPhoto, setPreviewPhoto] = useState<{ url: string; title: string } | null>(null);
   const { hasRole } = useAuth();
-  const isDepartmentAccountant = hasRole('site_accountant') || hasRole('licenses_accountant') || hasRole('buffet_accountant');
-  const isFinancialDirector = hasRole('accountant') && !isDepartmentAccountant && !hasRole('admin');
+  const isManagerOrExecutive = hasRole('procurement_manager') || hasRole('general_manager') || hasRole('execution_manager');
+  const isDepartmentAccountant = !isManagerOrExecutive && (hasRole('site_accountant') || hasRole('licenses_accountant') || hasRole('buffet_accountant'));
+  const isFinancialDirector = !isManagerOrExecutive && hasRole('accountant') && !isDepartmentAccountant && !hasRole('admin');
 
   const load = async () => {
     if (!id) return;

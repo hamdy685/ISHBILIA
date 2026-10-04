@@ -465,10 +465,15 @@ class SupplierInvoiceService
                   });
             })
             ->whereHas('purchaseOrder', function ($q) use ($allowedCodes) {
-                $q->whereNotIn('status', ['DRAFT', 'CANCELLED', 'VOIDED'])
-                  ->when($allowedCodes !== null, function ($dq) use ($allowedCodes) {
-                      $dq->whereHas('purchaseRequest.department', fn ($d) => $d->whereIn('code', $allowedCodes));
-                  });
+                $q->where(function ($sub) {
+                    $sub->whereNotNull('finalized_at')
+                        ->orWhereIn('status', ['APPROVED_BY_ACCOUNTING', 'FINAL_APPROVED'])
+                        ->orWhereHas('supplierInvoices', fn ($iq) => $iq->whereNotIn('status', ['VOIDED', 'CANCELLED']));
+                })
+                ->whereNotIn('status', ['PO_DRAFT', 'DRAFT', 'CANCELLED', 'VOIDED', 'REJECTED', 'PENDING_ACTUAL_PO'])
+                ->when($allowedCodes !== null, function ($dq) use ($allowedCodes) {
+                    $dq->whereHas('purchaseRequest.department', fn ($d) => $d->whereIn('code', $allowedCodes));
+                });
             })
             ->with([
                 'purchaseOrder.purchaseRequest.department',

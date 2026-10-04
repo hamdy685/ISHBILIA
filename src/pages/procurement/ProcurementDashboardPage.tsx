@@ -234,9 +234,9 @@ export const ProcurementDashboardPage: React.FC = () => {
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <KpiCard
-          title="إجمالي قيم المشتريات"
+          title="إجمالي أوامر الشراء الفعلية"
           value={<CurrencyDisplay amount={analytics?.metrics.total_value || 0} amountClassName="text-base font-bold font-mono text-cyan-400" />}
-          subtext="أمر شراء فعال"
+          subtext="أمر شراء فعلي معتمد"
           accentColor="cyan"
           to="/procurement/reports"
           clickableHint="عرض التقارير ←"

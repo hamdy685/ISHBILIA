@@ -20,6 +20,7 @@ class ProcurementAnalyticsController extends Controller
         'PENDING_ACCOUNTING_REVIEW',
         'RETURNED_TO_PROCUREMENT',
         'ISSUED',
+        'PENDING_ACTUAL_PO',
         'APPROVED_BY_ACCOUNTING',
         'FINAL_APPROVED',
         'REJECTED',
@@ -105,7 +106,8 @@ class ProcurementAnalyticsController extends Controller
                         });
                     });
             })
-            ->whereNotIn('status', ['REJECTED', 'PO_DRAFT'])
+            ->actualPo()
+            ->whereNotIn('status', ['REJECTED', 'PO_DRAFT', 'PENDING_ACTUAL_PO'])
             ->when($allowedDepartmentCodes !== null, function ($q) use ($allowedDepartmentCodes) {
                 $q->whereHas('purchaseRequest.department', function ($dq) use ($allowedDepartmentCodes) {
                     $dq->whereIn('code', $allowedDepartmentCodes);
@@ -162,7 +164,7 @@ class ProcurementAnalyticsController extends Controller
             ->leftJoin('purchase_requests as pr', 'pr.id', '=', 'po.purchase_request_id')
             ->leftJoin('departments as d', 'd.id', '=', 'pr.department_id')
             ->whereNotIn('si.status', ['VOIDED', 'CANCELLED'])
-            ->whereNotIn('po.status', ['REJECTED', 'PO_DRAFT'])
+            ->whereNotIn('po.status', ['REJECTED', 'PO_DRAFT', 'PENDING_ACTUAL_PO'])
             ->when($startDate !== null, function ($q) use ($startDate) {
                 $q->where(function ($sub) use ($startDate) {
                     $sub->whereNotNull('si.invoice_date')->where('si.invoice_date', '>=', $startDate->toDateString())
@@ -184,7 +186,7 @@ class ProcurementAnalyticsController extends Controller
 
         $statusMetrics = (clone $basePurchaseOrderQuery)
             ->select('status')
-            ->selectRaw('COUNT(*) as row_count, COALESCE(SUM(grand_total), 0) as total_value')
+            ->selectRaw('COUNT(*) as row_count, COALESCE(SUM(CASE WHEN (finalized_at IS NOT NULL OR status IN (\'APPROVED_BY_ACCOUNTING\', \'FINAL_APPROVED\')) AND status NOT IN (\'PO_DRAFT\', \'PENDING_ACTUAL_PO\', \'REJECTED\') THEN grand_total ELSE 0 END), 0) as total_value')
             ->groupBy('status')
             ->get();
         $statusBreakdown = $statusMetrics
@@ -256,7 +258,7 @@ class ProcurementAnalyticsController extends Controller
             ->leftJoin('departments as d', 'd.id', '=', 'pr.department_id')
             ->leftJoin('users as creator', 'creator.id', '=', 'po.created_by_user_id')
             ->whereNotIn('si.status', ['VOIDED', 'CANCELLED'])
-            ->whereNotIn('po.status', ['REJECTED', 'PO_DRAFT'])
+            ->whereNotIn('po.status', ['REJECTED', 'PO_DRAFT', 'PENDING_ACTUAL_PO'])
             ->when($startDate !== null, function ($q) use ($startDate) {
                 $q->where(function ($sub) use ($startDate) {
                     $sub->whereNotNull('si.invoice_date')->where('si.invoice_date', '>=', $startDate->toDateString())

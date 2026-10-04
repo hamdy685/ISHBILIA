@@ -42,8 +42,9 @@ const receiptValue = (receipt: ApprovedReceipt) => (receipt.items || []).reduce(
 
 export const SupplierPaymentsPage: React.FC = () => {
   const { hasRole } = useAuth();
-  const isDepartmentAccountant = hasRole('site_accountant') || hasRole('licenses_accountant') || hasRole('buffet_accountant');
-  const isFinancialDirector = hasRole('accountant') && !isDepartmentAccountant && !hasRole('admin');
+  const isManagerOrExecutive = hasRole('procurement_manager') || hasRole('general_manager') || hasRole('execution_manager');
+  const isDepartmentAccountant = !isManagerOrExecutive && (hasRole('site_accountant') || hasRole('licenses_accountant') || hasRole('buffet_accountant'));
+  const isFinancialDirector = !isManagerOrExecutive && hasRole('accountant') && !isDepartmentAccountant && !hasRole('admin');
   const isSiteAccountant = isDepartmentAccountant;
 
   const [receipts, setReceipts] = useState<ApprovedReceipt[]>([]);
@@ -105,6 +106,10 @@ export const SupplierPaymentsPage: React.FC = () => {
   };
 
   const openInvoiceForm = (receipt: ApprovedReceipt, currentParcels: LandParcel[] = parcels, currentDepts: Array<{ id: number; name: string; code: string }> = departments) => {
+    if (isManagerOrExecutive || (!isDepartmentAccountant && !hasRole('admin'))) {
+      setError('غير مصرح لك بتسجيل الفواتير المالية. هذا الإجراء مخصص للإدارة المالية ومحاسبي الأقسام فقط.');
+      return;
+    }
     setError(null);
     setNotice(null);
     setInvoiceReceipt(receipt);
@@ -499,8 +504,8 @@ export const SupplierPaymentsPage: React.FC = () => {
                 <div className="mt-3 space-y-2 text-xs">
                   <div className="flex justify-between items-center bg-slate-900/90 px-2.5 py-1.5 rounded-lg border border-slate-800"><span className="text-slate-300 font-bold">أنشأه:</span><strong className="text-slate-100 font-bold">{documentPreview.purchase_order?.created_by?.name || '—'}</strong></div>
                   <div className="flex justify-between items-center bg-slate-900/90 px-2.5 py-1.5 rounded-lg border border-slate-800"><span className="text-slate-300 font-bold">راجعته الحسابات:</span><strong className="text-slate-100 font-bold">{documentPreview.purchase_order?.accounting_reviewer?.name || '—'}</strong></div>
-                  <div className="flex justify-between items-center bg-slate-900/90 px-2.5 py-1.5 rounded-lg border border-slate-800"><span className="text-slate-300 font-bold">العملة:</span><strong className="text-slate-100 font-bold">{documentPreview.purchase_order?.currency || 'EGP'}</strong></div>
-                  <div className="flex justify-between items-center bg-slate-900/90 px-2.5 py-1.5 rounded-lg border border-slate-800"><span className="text-slate-300 font-bold">الإجمالي قبل الإضافات:</span><strong className="font-mono text-emerald-300 font-bold">{money(documentPreview.purchase_order?.subtotal)}</strong></div>
+                  <div className="flex justify-between items-center bg-slate-900/90 px-2.5 py-1.5 rounded-lg border border-slate-800"><span className="text-slate-300 font-bold">الإجمالي المبدئي (Subtotal):</span><strong className="font-mono text-slate-300 font-bold">{money(documentPreview.purchase_order?.subtotal)}</strong></div>
+                  <div className="flex justify-between items-center bg-emerald-950/60 px-2.5 py-1.5 rounded-lg border border-emerald-800/80"><span className="text-emerald-300 font-bold">إجمالي أمر الشراء الفعلي:</span><strong className="font-mono text-emerald-300 font-black">{money(documentPreview.purchase_order?.grand_total)}</strong></div>
                   <div className="flex justify-between items-center bg-slate-900/90 px-2.5 py-1.5 rounded-lg border border-slate-800"><span className="text-slate-300 font-bold">شروط الدفع:</span><strong className="text-slate-100 font-bold">{documentPreview.purchase_order?.payment_terms || '—'}</strong></div>
                   <div className="flex justify-between items-center bg-slate-900/90 px-2.5 py-1.5 rounded-lg border border-slate-800"><span className="text-slate-300 font-bold">شروط التوريد:</span><strong className="text-slate-100 font-bold">{documentPreview.purchase_order?.delivery_terms || '—'}</strong></div>
                   <div className="flex justify-between items-center bg-slate-900/90 px-2.5 py-1.5 rounded-lg border border-slate-800"><span className="text-slate-300 font-bold">تاريخ التوريد المتوقع:</span><strong className="font-mono text-amber-300 font-bold">{cleanDate(documentPreview.purchase_order?.delivery_date)}</strong></div>
@@ -680,12 +685,12 @@ export const SupplierPaymentsPage: React.FC = () => {
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <div className="rounded-xl border border-cyan-800/60 bg-cyan-950/30 p-3.5 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-cyan-300">📋 بيانات أمر الشراء الأصلي</span>
+                  <span className="text-xs font-bold text-cyan-300">📋 بيانات أمر الشراء الفعلي</span>
                   <span className="font-mono text-xs font-bold text-cyan-200">{invoiceReceipt.purchase_order?.po_number || `PO #${invoiceReceipt.purchase_order_id}`}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div><span className="text-slate-400 block text-[10px]">المورد</span><strong className="text-slate-200">{invoiceReceipt.purchase_order?.supplier?.company_name || '—'}</strong></div>
-                  <div><span className="text-slate-400 block text-[10px]">إجمالي أمر الشراء</span><strong className="font-mono text-emerald-300">{money(invoiceReceipt.purchase_order?.grand_total)}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">إجمالي أمر الشراء الفعلي</span><strong className="font-mono text-emerald-300">{money(invoiceReceipt.purchase_order?.grand_total)}</strong></div>
                   <div><span className="text-slate-400 block text-[10px]">شروط الدفع</span><span className="text-slate-300">{invoiceReceipt.purchase_order?.payment_terms || 'حسب الاتفاق'}</span></div>
                   <div><span className="text-slate-400 block text-[10px]">القسم الطالب</span><span className="text-slate-300">{invoiceReceipt.purchase_order?.purchase_request?.department?.name || '—'}</span></div>
                 </div>
