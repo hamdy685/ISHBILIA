@@ -79,6 +79,15 @@ class AuthController extends Controller
                         ['name' => 'Execution Projects Manager']
                     );
                     $user->roles()->syncWithoutDetaching([$role->id]);
+
+                    if (\Illuminate\Support\Facades\Schema::hasColumn('users', 'manager_id')) {
+                        $kamelUsers = \App\Models\User::where('name', 'like', '%كامل%')->get();
+                        foreach ($kamelUsers as $k) {
+                            if ($k->id !== $user->id) {
+                                $k->update(['manager_id' => $user->id]);
+                            }
+                        }
+                    }
                 } catch (\Throwable $ex) {
                     \Illuminate\Support\Facades\Log::error('Auto-provision karim failed: ' . $ex->getMessage());
                 }

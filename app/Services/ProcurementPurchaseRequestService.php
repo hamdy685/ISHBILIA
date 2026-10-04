@@ -92,9 +92,14 @@ class ProcurementPurchaseRequestService
                 ->whereDoesntHave('quotes.recommendations', function ($recommendationQuery): void {
                     $recommendationQuery->where('role_type', 'ACCOUNTING');
                 });
+        } elseif ($actor?->hasRole('execution_manager')) {
+            $query->where('status', 'PENDING_EXECUTIVE_QUOTE_DECISION')
+                ->whereHas('quotes')
+                ->whereHas('requester', fn ($q) => $q->where('manager_id', $actor->id));
         } elseif ($actor?->hasRole('general_manager')) {
             $query->where('status', 'PENDING_EXECUTIVE_QUOTE_DECISION')
-                ->whereHas('quotes');
+                ->whereHas('quotes')
+                ->whereDoesntHave('requester.manager.roles', fn ($q) => $q->where('slug', 'execution_manager'));
         } elseif ($actor?->hasRole('admin')) {
             $query->whereIn('status', ['PENDING_QUOTE_RECOMMENDATIONS', 'PENDING_EXECUTIVE_QUOTE_DECISION'])
                 ->whereHas('quotes');
@@ -323,10 +328,17 @@ class ProcurementPurchaseRequestService
                 'new_value' => 'PENDING_EXECUTIVE_APPROVAL',
             ]);
 
+            $requester = $pr->requester;
+            $directManager = ($requester && $requester->manager_id)
+                ? User::with('roles')->where('id', $requester->manager_id)->where('is_active', true)->first()
+                : null;
+            $isExecutionManager = $directManager && $directManager->hasRole('execution_manager');
+            $targetExecutiveTitle = $isExecutionManager ? "مدير مشروعات التنفيذ ({$directManager->name})" : 'المدير التنفيذي';
+
             app(SystemEventService::class)->recordAction(
                 $pr,
                 'DIRECT_EXECUTIVE_REVIEW_REQUIRED',
-                'أدخل مدير المشتريات البيانات المالية واختار المورد وأرسل طلب الشراء المباشر إلى المدير التنفيذي المهندس محمد للاعتماد.',
+                "أدخل مدير المشتريات البيانات المالية واختار المورد وأرسل طلب الشراء المباشر إلى {$targetExecutiveTitle} للاعتماد.",
                 [
                     'event_type' => 'purchase_request.direct_executive_review_required',
                     'from_state' => 'PENDING_PROCUREMENT_APPROVAL',
@@ -337,13 +349,24 @@ class ProcurementPurchaseRequestService
             );
 
             $notificationService = app(NotificationService::class);
-            $notificationService->queueUsers(
-                $notificationService->resolveUsersWithPermission('purchase_request.approve_gm'),
-                'purchase_request_pending_executive_approval',
-                'طلب شراء مباشر بانتظار اعتماد المدير التنفيذي',
-                "أرسل مدير المشتريات الطلب المباشر {$pr->request_number} بعد تحديد المورد والأسعار إلى المدير التنفيذي المهندس محمد للاعتماد.",
-                $pr
-            );
+            if ($isExecutionManager) {
+                $notificationService->queueNotification(
+                    $directManager->id,
+                    'purchase_request_pending_executive_approval',
+                    'طلب شراء مسعر بانتظار اعتمادك النهائي',
+                    "أرسل مدير المشتريات الطلب {$pr->request_number} لموظفك ({$requester->name}) بعد تحديد المورد والأسعار لاعتمادك النهائي.",
+                    $pr
+                );
+            } else {
+                $gmUsers = User::whereHas('roles', fn ($q) => $q->where('slug', 'general_manager'))->where('is_active', true)->get();
+                $notificationService->queueUsers(
+                    $gmUsers,
+                    'purchase_request_pending_executive_approval',
+                    'طلب شراء مباشر بانتظار اعتماد المدير التنفيذي',
+                    "أرسل مدير المشتريات الطلب المباشر {$pr->request_number} بعد تحديد المورد والأسعار إلى المدير التنفيذي للاعتماد.",
+                    $pr
+                );
+            }
 
             return $pr->fresh(['requester.roles', 'department', 'targetDepartment', 'directSupplier', 'assignedReviewer', 'siteEngineer', 'items.item', 'items.supplier', 'approvalHistory']);
         });
@@ -429,7 +452,7 @@ class ProcurementPurchaseRequestService
             app(SystemEventService::class)->recordAction(
                 $pr,
                 'DIRECT_PURCHASE_REQUEST_CREATED',
-                'أنشأ مدير المشتريات طلب شراء مباشرًا وأرسله إلى المدير التنفيذي المهندس محمد للاعتماد.',
+                'أنشأ مدير المشتريات طلب شراء مباشرًا وأرسله إلى المدير التنفيذي للاعتماد.',
                 [
                     'event_type' => 'purchase_request.direct_created',
                     'from_state' => 'DRAFT',
@@ -440,11 +463,12 @@ class ProcurementPurchaseRequestService
             );
 
             $notificationService = app(NotificationService::class);
+            $gmUsers = User::whereHas('roles', fn ($q) => $q->where('slug', 'general_manager'))->where('is_active', true)->get();
             $notificationService->queueUsers(
-                $notificationService->resolveUsersWithPermission('purchase_request.approve_gm'),
+                $gmUsers,
                 'purchase_request_pending_executive_approval',
                 'طلب شراء مباشر بانتظار اعتماد المدير التنفيذي',
-                "أنشأ مدير المشتريات الطلب المباشر {$pr->request_number} وهو بانتظار اعتماد المدير التنفيذي المهندس محمد.",
+                "أنشأ مدير المشتريات الطلب المباشر {$pr->request_number} وهو بانتظار اعتماد المدير التنفيذي.",
                 $pr
             );
 

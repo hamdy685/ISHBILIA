@@ -62,16 +62,32 @@ class ExecutionManagerSeeder extends Seeder
 
         // 3. البحث عن حساب المهندس كامل وتحديث المدير المباشر له
         if (\Illuminate\Support\Facades\Schema::hasColumn('users', 'manager_id')) {
-            $kamel = User::where('email', 'kamel@eshbelia.com')
+            $kamelUsers = User::where('email', 'kamel@eshbelia.com')
                 ->orWhere('email', 'kamel@gmail.com')
                 ->orWhere('name', 'like', '%كامل%')
-                ->first();
+                ->get();
 
-            if ($kamel) {
-                $kamel->update([
-                    'manager_id' => $karim->id,
-                ]);
+            foreach ($kamelUsers as $kamel) {
+                if ($kamel->id !== $karim->id) {
+                    $kamel->update([
+                        'manager_id' => $karim->id,
+                    ]);
+                }
             }
+        }
+
+        // 4. تنظيف أي إشعارات قديمة كانت موجهة للمدير العام بخصوص طلبات تتبع مدير مشروعات التنفيذ
+        try {
+            $gmUserIds = User::whereHas('roles', fn ($q) => $q->where('slug', 'general_manager'))->pluck('id');
+            if ($gmUserIds->isNotEmpty()) {
+                \App\Models\Notification::whereIn('user_id', $gmUserIds)
+                    ->whereHasMorph('notifiable', [\App\Models\PurchaseRequest::class], function ($q) {
+                        $q->whereHas('requester.manager.roles', fn ($r) => $r->where('slug', 'execution_manager'));
+                    })
+                    ->delete();
+            }
+        } catch (\Throwable $e) {
+            // Ignore
         }
     }
 }

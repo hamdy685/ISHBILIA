@@ -551,7 +551,7 @@ class ReviewerPurchaseRequestService
                     $pr
                 );
             } else {
-                $executives = $notificationService->resolveUsersWithPermission('purchase_request.approve_gm');
+                $executives = User::whereHas('roles', fn ($q) => $q->where('slug', 'general_manager'))->where('is_active', true)->get();
                 $notificationService->queueUsers(
                     $executives,
                     'purchase_request_pending_executive',

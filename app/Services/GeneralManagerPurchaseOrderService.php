@@ -22,6 +22,8 @@ class GeneralManagerPurchaseOrderService
 
         if ($user && $user->hasRole('execution_manager')) {
             $query->whereHas('purchaseRequest.requester', fn ($q) => $q->where('manager_id', $user->id));
+        } elseif ($user && !$user->hasRole('admin')) {
+            $query->whereDoesntHave('purchaseRequest.requester.manager.roles', fn ($q) => $q->where('slug', 'execution_manager'));
         }
 
         return $query->orderBy('updated_at', 'desc')
@@ -49,6 +51,11 @@ class GeneralManagerPurchaseOrderService
         if ($user && $user->hasRole('execution_manager')) {
             if ((int) $po->purchaseRequest?->requester?->manager_id !== (int) $user->id) {
                 throw new AccessDeniedHttpException('غير مصرح لك باستعراض أمر شراء لا يتبع موظفيك.');
+            }
+        } elseif ($user && !$user->hasRole('admin')) {
+            $po->loadMissing('purchaseRequest.requester.manager.roles');
+            if ($po->purchaseRequest?->requester?->manager?->hasRole('execution_manager')) {
+                throw new AccessDeniedHttpException('هذا الأمر يتبع مدير مشروعات التنفيذ.');
             }
         }
 

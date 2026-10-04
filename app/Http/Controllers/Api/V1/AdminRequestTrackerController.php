@@ -36,7 +36,15 @@ class AdminRequestTrackerController extends Controller
                 'role' => 'المراجع',
             ] : null,
 
-            'PENDING_EXECUTIVE_APPROVAL', 'PENDING_EXECUTIVE_QUOTE_DECISION' => $this->firstUserWithRole('general_manager'),
+            'PENDING_EXECUTIVE_APPROVAL', 'PENDING_EXECUTIVE_QUOTE_DECISION' => (
+                $pr->requester?->manager && $pr->requester->manager->hasRole('execution_manager')
+                    ? [
+                        'id'   => $pr->requester->manager->id,
+                        'name' => $pr->requester->manager->name,
+                        'role' => 'مدير مشروعات التنفيذ',
+                    ]
+                    : $this->firstUserWithRole('general_manager')
+            ),
 
             'PENDING_PROCUREMENT_APPROVAL', 'APPROVED_BY_ACCOUNTING',
             'APPROVED_BY_PROCUREMENT', 'PENDING_QUOTE_RECOMMENDATIONS' => $this->firstUserWithRole('procurement_manager'),

@@ -211,16 +211,32 @@ class PurchaseQuoteService
 
             if ($recommendationCount >= count($requiredRoleTypes)) {
                 $request->update(['status' => self::EXECUTIVE_DECISION_PENDING]);
-                $executives = $notificationService->resolveUsersWithPermission('purchase_quote.decide');
-                $notificationService->queueUsers(
-                    $executives,
-                    'purchase_quote_recommendations_ready',
-                    'ترشيحات عروض الأسعار جاهزة',
-                    $isExecutiveRequester
-                        ? "اكتمل ترشيح الحسابات للطلب {$request->request_number}. القرار النهائي للمدير العام."
-                        : "اكتملت ترشيحات الحسابات ومدير القسم للطلب {$request->request_number}. القرار للمدير التنفيذي.",
-                    $request
-                );
+                $requester = $request->requester;
+                $directManager = ($requester && $requester->manager_id)
+                    ? User::with('roles')->where('id', $requester->manager_id)->where('is_active', true)->first()
+                    : null;
+                $isExecutionManager = $directManager && $directManager->hasRole('execution_manager');
+
+                if ($isExecutionManager) {
+                    $notificationService->queueNotification(
+                        $directManager->id,
+                        'purchase_quote_recommendations_ready',
+                        'ترشيحات عروض الأسعار جاهزة لقرارك',
+                        "اكتملت ترشيحات الحسابات ومدير القسم للطلب {$request->request_number}. القرار لمدير مشروعات التنفيذ ({$directManager->name}).",
+                        $request
+                    );
+                } else {
+                    $gmUsers = User::whereHas('roles', fn ($q) => $q->where('slug', 'general_manager'))->where('is_active', true)->get();
+                    $notificationService->queueUsers(
+                        $gmUsers,
+                        'purchase_quote_recommendations_ready',
+                        'ترشيحات عروض الأسعار جاهزة',
+                        $isExecutiveRequester
+                            ? "اكتمل ترشيح الحسابات للطلب {$request->request_number}. القرار النهائي للمدير العام."
+                            : "اكتملت ترشيحات الحسابات ومدير القسم للطلب {$request->request_number}. القرار للمدير التنفيذي.",
+                        $request
+                    );
+                }
             } elseif ($roleType === 'ACCOUNTING' && ! $isExecutiveRequester) {
                 // Sequential workflow step 2: Financial Director has recommended -> notify Department Reviewer
                 $reviewers = collect();
@@ -254,6 +270,18 @@ class PurchaseQuoteService
         $request = $quote->purchaseRequest->loadMissing(['targetDepartment', 'department']);
         if ($request->status !== self::EXECUTIVE_DECISION_PENDING) {
             throw new \RuntimeException('الطلب ليس بانتظار القرار التنفيذي على عروض الأسعار.');
+        }
+
+        if ($executive->hasRole('execution_manager')) {
+            $request->loadMissing('requester');
+            if ((int) $request->requester?->manager_id !== (int) $executive->id) {
+                throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('غير مصرح لك باتخاذ قرار على عروض أسعار لا تتبع موظفيك.');
+            }
+        } elseif (! $executive->hasRole('admin')) {
+            $request->loadMissing('requester.manager.roles');
+            if ($request->requester?->manager?->hasRole('execution_manager')) {
+                throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('هذا الطلب يتبع مدير مشروعات التنفيذ ولا يقرره المدير العام.');
+            }
         }
 
         return DB::transaction(function () use ($executive, $quote, $decision, $comment, $request): PurchaseRequest {

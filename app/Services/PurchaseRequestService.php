@@ -624,8 +624,9 @@ class PurchaseRequestService
                         $request
                     );
                 } else {
+                    $gmUsers = User::whereHas('roles', fn ($q) => $q->where('slug', 'general_manager'))->where('is_active', true)->get();
                     $notificationService->queueUsers(
-                        $notificationService->resolveUsersWithPermission('purchase_request.view_gm'),
+                        $gmUsers,
                         'purchase_request_pending_executive_approval',
                         'طلب شراء بانتظار اعتماد المدير التنفيذي',
                         "طلب الشراء {$request->request_number} جاهز لقرار المدير التنفيذي.",

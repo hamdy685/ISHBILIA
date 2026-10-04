@@ -98,7 +98,7 @@ class SendNotificationsJob implements ShouldQueue
 
         if ($this->notifiable instanceof \App\Models\PurchaseRequest) {
             if (str_contains($this->type, 'quote')) {
-                if ($user->hasRole('general_manager')) {
+                if ($user->hasRole('general_manager') || $user->hasRole('execution_manager')) {
                     return "/general-manager/purchase-quotes?open={$id}";
                 }
                 if ($user->hasRole('reviewer')) {
@@ -114,7 +114,7 @@ class SendNotificationsJob implements ShouldQueue
             if ($user->hasRole('reviewer')) {
                 return "/reviewer/requests/{$id}";
             }
-            if ($user->hasRole('general_manager')) {
+            if ($user->hasRole('general_manager') || $user->hasRole('execution_manager')) {
                 return "/general-manager/purchase-requests?open={$id}";
             }
             if ($user->hasRole('accountant') && str_contains($this->type, 'accounting')) {
@@ -134,7 +134,7 @@ class SendNotificationsJob implements ShouldQueue
             if ($user->hasRole('procurement_manager')) {
                 return "/procurement/purchase-orders/{$id}";
             }
-            if ($user->hasRole('general_manager')) {
+            if ($user->hasRole('general_manager') || $user->hasRole('execution_manager')) {
                 return "/general-manager/purchase-orders/{$id}";
             }
             if ($user->hasRole('accountant')) {

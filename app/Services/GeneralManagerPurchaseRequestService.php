@@ -35,6 +35,8 @@ class GeneralManagerPurchaseRequestService
 
         if ($user && $user->hasRole('execution_manager')) {
             $query->whereHas('requester', fn ($q) => $q->where('manager_id', $user->id));
+        } elseif ($user && !$user->hasRole('admin')) {
+            $query->whereDoesntHave('requester.manager.roles', fn ($q) => $q->where('slug', 'execution_manager'));
         }
 
         return $query->orderByDesc('updated_at')
@@ -62,6 +64,8 @@ class GeneralManagerPurchaseRequestService
 
         if ($user && $user->hasRole('execution_manager')) {
             $query->whereHas('requester', fn ($q) => $q->where('manager_id', $user->id));
+        } elseif ($user && !$user->hasRole('admin')) {
+            $query->whereDoesntHave('requester.manager.roles', fn ($q) => $q->where('slug', 'execution_manager'));
         }
 
         return $query->findOrFail($id);
@@ -75,6 +79,11 @@ class GeneralManagerPurchaseRequestService
             $request->loadMissing('requester');
             if ((int) $request->requester?->manager_id !== (int) $executive->id) {
                 throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('غير مصرح لك بتعديل طلب شراء لا يتبع موظفيك.');
+            }
+        } elseif (! $executive->hasRole('admin')) {
+            $request->loadMissing('requester.manager.roles');
+            if ($request->requester?->manager?->hasRole('execution_manager')) {
+                throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('هذا الطلب يتبع مدير مشروعات التنفيذ ولا يقرره المدير العام.');
             }
         }
 
@@ -231,6 +240,11 @@ class GeneralManagerPurchaseRequestService
             if ((int) $request->requester?->manager_id !== (int) $executive->id) {
                 throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('غير مصرح لك باعتماد طلب شراء لا يتبع موظفيك.');
             }
+        } elseif (! $executive->hasRole('admin')) {
+            $request->loadMissing('requester.manager.roles');
+            if ($request->requester?->manager?->hasRole('execution_manager')) {
+                throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('هذا الطلب يتبع مدير مشروعات التنفيذ ولا يقرره المدير العام.');
+            }
         }
 
         $actorTitle = $executive->hasRole('execution_manager') ? "مدير مشروعات التنفيذ ({$executive->name})" : "المدير التنفيذي ({$executive->name})";
@@ -304,6 +318,11 @@ class GeneralManagerPurchaseRequestService
             $request->loadMissing('requester');
             if ((int) $request->requester?->manager_id !== (int) $executive->id) {
                 throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('غير مصرح لك برفض طلب شراء لا يتبع موظفيك.');
+            }
+        } elseif (! $executive->hasRole('admin')) {
+            $request->loadMissing('requester.manager.roles');
+            if ($request->requester?->manager?->hasRole('execution_manager')) {
+                throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('هذا الطلب يتبع مدير مشروعات التنفيذ ولا يقرره المدير العام.');
             }
         }
 

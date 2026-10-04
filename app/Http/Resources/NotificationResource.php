@@ -80,7 +80,7 @@ class NotificationResource extends JsonResource
                 } else {
                     $targetUrl = "/accounting/supplier-finance";
                 }
-            } elseif ($role === 'general_manager') {
+            } elseif ($role === 'general_manager' || $role === 'execution_manager') {
                 if (str_contains($this->type, 'quote')) {
                     $targetUrl = "/general-manager/purchase-quotes?open={$this->notifiable_id}";
                 } elseif ($this->notifiable_type === PurchaseOrder::class || $this->purchase_order_id) {
