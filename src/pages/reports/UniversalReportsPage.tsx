@@ -85,6 +85,7 @@ export const UniversalReportsPage: React.FC = () => {
   const [customTo, setCustomTo] = useState(() => new Date().toISOString().slice(0, 10));
   const [period, setPeriod] = usePersistedState('reports.period.v3', '90');
   const [status, setStatus] = usePersistedState('reports.status.v3', '');
+  const [actualOnly, setActualOnly] = usePersistedState<boolean>('reports.actualOnly.v1', true);
   const [searchQuery, setSearchQuery] = useState('');
   
   // View mode: 'excel' (Spreadsheet View) vs 'dashboard' (Charts & Cards)
@@ -101,7 +102,9 @@ export const UniversalReportsPage: React.FC = () => {
     setRefreshing(true);
     try {
       let activePeriod = period;
-      const extraParams: Partial<ProcurementAnalyticsFilterParams> = {};
+      const extraParams: Partial<ProcurementAnalyticsFilterParams> & { actual_only?: boolean } = {
+        actual_only: actualOnly,
+      };
 
       if (reportType === 'daily') {
         activePeriod = 'today';
@@ -119,7 +122,7 @@ export const UniversalReportsPage: React.FC = () => {
         extraParams.to_date = customTo;
       }
 
-      const data = await getProcurementAnalyticsApi(activePeriod, status || undefined, extraParams);
+      const data = await getProcurementAnalyticsApi(activePeriod, status || undefined, extraParams as any);
       setReport(data);
     } catch (err) {
       setError(parseApiError(err).message || 'تعذر تحميل التقرير الشامل.');
@@ -131,23 +134,27 @@ export const UniversalReportsPage: React.FC = () => {
 
   useEffect(() => {
     void loadReport();
-  }, [reportType, selectedDate, selectedMonth, customFrom, customTo, period, status]);
+  }, [reportType, selectedDate, selectedMonth, customFrom, customTo, period, status, actualOnly]);
 
   const metrics = report?.metrics;
 
-  // Filtered orders based on local search
+  // Filtered orders based on local search & actualOnly
   const filteredOrders = useMemo(() => {
     if (!report?.recent_purchase_orders) return [];
-    if (!searchQuery.trim()) return report.recent_purchase_orders;
+    let list = report.recent_purchase_orders;
+    if (actualOnly) {
+      list = list.filter((po) => po.status !== 'PO_DRAFT' && po.status !== 'REJECTED' && po.status !== 'PENDING_ACTUAL_PO');
+    }
+    if (!searchQuery.trim()) return list;
     const q = searchQuery.trim().toLowerCase();
-    return report.recent_purchase_orders.filter((po) => {
+    return list.filter((po) => {
       const matchPo = po.po_number?.toLowerCase().includes(q);
       const matchSup = po.supplier_name?.toLowerCase().includes(q);
       const matchDept = po.department_name?.toLowerCase().includes(q);
       const matchItem = po.items?.some((it) => it.item_description?.toLowerCase().includes(q));
       return matchPo || matchSup || matchDept || matchItem;
     });
-  }, [report?.recent_purchase_orders, searchQuery]);
+  }, [report?.recent_purchase_orders, searchQuery, actualOnly]);
 
   // Calculate live total for filtered orders
   const filteredOrdersTotal = useMemo(() => {
@@ -614,7 +621,7 @@ export const UniversalReportsPage: React.FC = () => {
             <tfoot>
               <tr className="bg-slate-200 border-t-2 border-black font-black text-black">
                 <td colSpan={9} className="border border-black px-3 py-1.5 text-right font-black text-xs">
-                  الإجمالي العام لمشتريات الفترة ({filteredOrders.length} أمر شراء صادر):
+                  الإجمالي العام لمشتريات الفترة الفعلية ({filteredOrders.length} أمر شراء فعلي):
                 </td>
                 <td className="border border-black px-2 py-1.5 text-center font-mono font-black text-xs">
                   {formatCurrency(filteredOrdersTotal)} ج.م
@@ -949,6 +956,24 @@ export const UniversalReportsPage: React.FC = () => {
                 </div>
               )}
 
+              {/* Actual Orders Toggle (Default: True) */}
+              <div className="flex items-center">
+                <button
+                  type="button"
+                  onClick={() => setActualOnly((prev) => !prev)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl transition cursor-pointer border ${
+                    actualOnly
+                      ? 'bg-cyan-950 text-cyan-300 border-cyan-700/60 shadow-sm'
+                      : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-slate-200'
+                  }`}
+                  title="تصفية التقرير لعرض أوامر الشراء الفعلية المعتمدة فقط"
+                >
+                  <span>{actualOnly ? '✅' : '⚪'}</span>
+                  <span>الأوامر الفعلية فقط</span>
+                  {actualOnly && <span className="text-[9px] bg-cyan-900/60 text-cyan-200 px-1.5 rounded-full font-mono">افتراضي</span>}
+                </button>
+              </div>
+
               {/* Status Filter */}
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold text-slate-400">الحالة:</span>
@@ -1190,7 +1215,7 @@ export const UniversalReportsPage: React.FC = () => {
                       <tfoot className="bg-slate-900 border-t-2 border-slate-700 text-slate-100 font-black">
                         <tr>
                           <td colSpan={9} className="px-4 py-3 text-right text-xs font-black">
-                            الإجمالي العام لمشتريات الفترة ({filteredOrders.length} أمر شراء):
+                            الإجمالي العام لمشتريات الفترة الفعلية ({filteredOrders.length} أمر شراء فعلي):
                           </td>
                           <td className="px-3 py-3 text-center font-mono text-sm font-black text-emerald-300">
                             {formatCurrency(filteredOrdersTotal)} ج.م
@@ -1218,14 +1243,14 @@ export const UniversalReportsPage: React.FC = () => {
                 {/* ── Visual KPI Cards ── */}
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
                   <KpiCard
-                    title="إجمالي الإنفاق والمشتريات"
+                    title="إجمالي المشتريات الفعلية"
                     value={
                       <div className="flex items-baseline gap-1">
                         <CurrencyDisplay amount={metrics?.total_value || '0'} className="text-emerald-300" />
                       </div>
                     }
                     accentColor="emerald"
-                    subtext="إجمالي قيمة الأوامر للفترة"
+                    subtext="بناءً على أوامر الشراء الفعلية المعتمدة"
                   />
                   <KpiCard
                     title="عدد أوامر الشراء"

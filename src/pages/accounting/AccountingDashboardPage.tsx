@@ -239,7 +239,7 @@ export const AccountingDashboardPage: React.FC = () => {
           clickableHint="أرشيف الأوامر ←"
         />
         <KpiPill
-          title="إجمالي أوامر الشراء الفعلية"
+          title="إجمالي المشتريات الفعلية"
           value={<CurrencyDisplay amount={totalActualPoEgp} amountClassName="font-bold font-mono text-emerald-400 text-xs" />}
           accentColor="emerald"
           icon={<span className="text-xs">💵</span>}
@@ -265,8 +265,8 @@ export const AccountingDashboardPage: React.FC = () => {
       </KpiPillsBar>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <DashboardBars title="الإنفاق حسب القسم" subtitle="قيمة الأوامر المصدرة للأقسام" segments={departmentSegments} unit="ج.م" />
-        <DashboardBars title="الإنفاق حسب المورد" subtitle="أعلى الموردين قيمة وتعاملاً" segments={supplierSegments} unit="ج.م" />
+        <DashboardBars title="الإنفاق الفعلي حسب القسم" subtitle="بناءً على أوامر الشراء الفعلية المعتمدة" segments={departmentSegments} unit="ج.م" />
+        <DashboardBars title="الإنفاق الفعلي حسب المورد" subtitle="بناءً على أوامر الشراء الفعلية المعتمدة" segments={supplierSegments} unit="ج.م" />
       </div>
 
       {/* Recent PO Issues List */}

@@ -141,28 +141,32 @@ describe('PurchaseRequestTimeline Component & Business Logic', () => {
       expect(cards[8].state).toBe('PENDING');
     });
 
-    it('Card 9 is ACTIVE when receipt is approved and COMPLETED when accounting processed', () => {
+    it('Card 9 is Actual PO, ACTIVE when receipt is approved and COMPLETED (100%) when Actual PO finalized', () => {
       const reqApprovedReceipt = createBaseRequest({
         status: 'APPROVED_BY_ACCOUNTING',
         procurement_route: 'DIRECT',
         purchase_orders: [
-          { id: 50, has_approved_receipt: true, status: 'ISSUED' },
+          { id: 50, has_approved_receipt: true, status: 'PENDING_ACTUAL_PO' },
         ] as any,
       });
       const cardsApproved = generateTimelineCards(reqApprovedReceipt);
       expect(cardsApproved[7].state).toBe('COMPLETED');
-      expect(cardsApproved[8].id).toBe('step-9-finance-close');
+      expect(cardsApproved[8].id).toBe('step-9-actual-po');
+      expect(cardsApproved[8].title).toBe('إصدار أمر الشراء الفعلي (Actual PO)');
+      expect(cardsApproved[8].assignee).toBe('مدير المشتريات');
       expect(cardsApproved[8].state).toBe('ACTIVE');
 
       const reqCompleted = createBaseRequest({
-        status: 'ACCOUNTING_PROCESSED',
+        status: 'COMPLETED',
         procurement_route: 'DIRECT',
         purchase_orders: [
-          { id: 50, has_approved_receipt: true, is_paid: true, status: 'FINAL_APPROVED' },
+          { id: 50, has_approved_receipt: true, finalized_at: '2026-10-05T12:00:00Z', status: 'FINAL_APPROVED' },
         ] as any,
       });
       const cardsCompleted = generateTimelineCards(reqCompleted);
       expect(cardsCompleted[8].state).toBe('COMPLETED');
+      expect(cardsCompleted[8].description).toContain('تم الفحص الهندسي بنجاح، وتم إصدار أمر الشراء الفعلي (Actual PO) وبكده تكون خلصت وتمت بنجاح.');
+      expect(cardsCompleted.every((c) => c.state === 'COMPLETED')).toBe(true);
     });
   });
 
@@ -277,6 +281,23 @@ describe('PurchaseRequestTimeline Component & Business Logic', () => {
 
       expect(screen.getByText('إنشاء الطلب')).toBeInTheDocument();
       expect(screen.queryByText('تسجيل مسودة الطلب وتحديد الأصناف والكميات وتاريخ الاحتياج.')).toBeNull();
+    });
+
+    it('renders Actual PO card with required alert text and 100% progress when finalized', () => {
+      const req = createBaseRequest({
+        status: 'COMPLETED',
+        procurement_route: 'DIRECT',
+        purchase_orders: [
+          { id: 50, has_approved_receipt: true, finalized_at: '2026-10-05T12:00:00Z', status: 'FINAL_APPROVED' },
+        ] as any,
+      });
+
+      render(<PurchaseRequestTimeline request={req} />);
+
+      expect(screen.getByText('إصدار أمر الشراء الفعلي (Actual PO)')).toBeInTheDocument();
+      expect(screen.getByText('100%')).toBeInTheDocument();
+      const alertElements = screen.getAllByText('💡 تم الفحص الهندسي بنجاح، وتم إصدار أمر الشراء الفعلي (Actual PO) وبكده تكون خلصت وتمت بنجاح.');
+      expect(alertElements.length).toBeGreaterThan(0);
     });
   });
 });

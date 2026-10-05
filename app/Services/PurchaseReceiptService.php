@@ -36,6 +36,7 @@ class PurchaseReceiptService
     public function receiptArchive(User $user, int $perPage = 25)
     {
         $query = PurchaseReceipt::with([
+            'supplier',
             'purchaseOrder.supplier',
             'purchaseOrder.purchaseRequest.department',
             'purchaseOrder.purchaseRequest.requester',
@@ -116,9 +117,15 @@ class PurchaseReceiptService
         }
 
         return DB::transaction(function () use ($warehouseKeeper, $purchaseOrder, $items, $receivedAt, $notes, $siteEngineerId, $orderItems, $photoData): PurchaseReceipt {
+            $supplierId = $purchaseOrder->supplier_id ?: \App\Models\Supplier::getOrCreateInternalWarehouseSupplier()->id;
+            if (! $purchaseOrder->supplier_id) {
+                $purchaseOrder->update(['supplier_id' => $supplierId]);
+            }
+
             $receipt = PurchaseReceipt::create([
                 'purchase_order_id' => $purchaseOrder->id,
                 'purchase_request_id' => $purchaseOrder->purchase_request_id,
+                'supplier_id' => $supplierId,
                 'warehouse_keeper_user_id' => $warehouseKeeper->id,
                 'site_engineer_user_id' => $siteEngineerId,
                 'receipt_number' => 'GRN-' . now()->format('YmdHis') . '-' . $purchaseOrder->id,
@@ -205,7 +212,7 @@ class PurchaseReceiptService
     public function updateBySiteEngineer(User $siteEngineer, PurchaseReceipt $receipt, array $items, ?string $notes = null): PurchaseReceipt
     {
         $receipt->loadMissing(['items.purchaseOrderItem.prItem', 'purchaseOrder.items.prItem']);
-        if ((int) $receipt->site_engineer_user_id !== (int) $siteEngineer->id) {
+        if (! $siteEngineer->hasRole('admin') && (int) $receipt->site_engineer_user_id !== (int) $siteEngineer->id) {
             throw new \RuntimeException('هذا الإذن غير مخصص لمهندس الموقع الحالي.');
         }
         if ($receipt->status !== 'PENDING_SITE_ENGINEER') {
@@ -271,7 +278,7 @@ class PurchaseReceiptService
         if ($receipt->status === 'APPROVED') {
             return $receipt;
         }
-        if ($receipt->site_engineer_user_id !== $siteEngineer->id) {
+        if (! $siteEngineer->hasRole('admin') && (int) $receipt->site_engineer_user_id !== (int) $siteEngineer->id) {
             throw new \RuntimeException('هذا الإذن غير مخصص لمهندس الموقع الحالي.');
         }
         if ($receipt->status !== 'PENDING_SITE_ENGINEER') {
@@ -279,16 +286,31 @@ class PurchaseReceiptService
         }
 
         return DB::transaction(function () use ($siteEngineer, $receipt, $notes): PurchaseReceipt {
+            $receipt->loadMissing(['purchaseOrder.supplier', 'supplier']);
+            $isInternalWarehouse = $receipt->isInternalWarehouse();
+
             $receipt->update([
                 'status' => 'APPROVED',
                 'site_engineer_approved_at' => now(),
                 'site_engineer_notes' => $notes,
             ]);
-            $receipt->purchaseOrder->update([
-                'delivery_status' => 'DELIVERED',
-                'actual_delivery_date' => $receipt->received_at ?: now()->toDateString(),
-                'status' => 'PENDING_ACTUAL_PO',
-            ]);
+
+            if ($isInternalWarehouse) {
+                // Internal stock withdrawal: direct inventory deduction, zero purchase cost, no external commercial actual PO required
+                $receipt->purchaseOrder->update([
+                    'delivery_status' => 'DELIVERED',
+                    'actual_delivery_date' => $receipt->received_at ?: now()->toDateString(),
+                    'status' => 'FINAL_APPROVED',
+                    'finalized_at' => now(),
+                    'finalized_by_user_id' => $siteEngineer->id,
+                ]);
+            } else {
+                $receipt->purchaseOrder->update([
+                    'delivery_status' => 'DELIVERED',
+                    'actual_delivery_date' => $receipt->received_at ?: now()->toDateString(),
+                    'status' => 'PENDING_ACTUAL_PO',
+                ]);
+            }
 
             app(NotificationService::class)->markEntityNotificationsAsRead($receipt);
             app(NotificationService::class)->markEntityNotificationsAsRead($receipt->purchaseOrder);
@@ -297,38 +319,84 @@ class PurchaseReceiptService
                 'target_type' => PurchaseReceipt::class,
                 'target_id' => $receipt->id,
                 'actor_user_id' => $siteEngineer->id,
-                'action' => 'SITE_ENGINEER_RECEIPT_APPROVED',
+                'action' => $isInternalWarehouse ? 'INTERNAL_STOCK_RECEIPT_APPROVED' : 'SITE_ENGINEER_RECEIPT_APPROVED',
                 'from_state' => 'PENDING_SITE_ENGINEER',
                 'to_state' => 'APPROVED',
-                'comments' => $notes ?? 'اعتمد مهندس الموقع الكميات المستلمة وأُعيد الملف لإدارة المشتريات لإصدار أمر الشراء الفعلي.',
+                'comments' => $isInternalWarehouse
+                    ? ($notes ? "{$notes} — صرف من رصيد المخزن الداخلي (بضاعة متواجدة مسبقاً بالمستودع بسعر 0 ج.م)" : 'اعتمد مهندس الموقع استلام المواد المنصرفة من المخزن الداخلي (بضاعة متواجدة مسبقاً بالمستودع بسعر 0 ج.م) وتم خصمها من رصيد المخزن وتسليمها للموقع.')
+                    : ($notes ?? 'اعتمد مهندس الموقع الكميات المستلمة وأُعيد الملف لإدارة المشتريات لإصدار أمر الشراء الفعلي.'),
             ]);
 
             $notificationService = app(NotificationService::class);
 
-            // Notify Procurement Managers to issue the Actual PO
-            $procurementUsers = $notificationService->resolveUsersWithPermission('purchase_order.create');
+            if (! $isInternalWarehouse) {
+                // Notify Procurement Managers to issue the Actual PO for external vendor purchases
+                $procurementUsers = $notificationService->resolveUsersWithPermission('purchase_order.create');
 
-            if ($procurementUsers->isNotEmpty()) {
-                $notificationService->queueUsers(
-                    $procurementUsers,
-                    'grn_approved_pending_actual_po',
-                    'إذن استلام معتمد — بانتظار إصدار أمر الشراء الفعلي',
-                    "اعتمد مهندس الموقع إذن الاستلام {$receipt->receipt_number} لأمر الشراء {$receipt->purchaseOrder->po_number}. يرجى مراجعة الكميات وإصدار أمر الشراء الفعلي.",
-                    $receipt->purchaseOrder
-                );
+                if ($procurementUsers->isNotEmpty()) {
+                    $notificationService->queueUsers(
+                        $procurementUsers,
+                        'grn_approved_pending_actual_po',
+                        'إذن استلام معتمد — بانتظار إصدار أمر الشراء الفعلي',
+                        "اعتمد مهندس الموقع إذن الاستلام {$receipt->receipt_number} لأمر الشراء {$receipt->purchaseOrder->po_number}. يرجى مراجعة الكميات وإصدار أمر الشراء الفعلي.",
+                        $receipt->purchaseOrder
+                    );
+                }
             }
 
             if ($receipt->warehouse_keeper_user_id) {
                 $notificationService->queueNotification(
                     $receipt->warehouse_keeper_user_id,
                     'purchase_receipt_approved_site_engineer',
-                    'تم اعتماد إذن الاستلام من مهندس الموقع',
+                    $isInternalWarehouse ? 'تم اعتماد إذن الصرف والاستلام من مهندس الموقع (خصم من رصيد المخزن الداخلي)' : 'تم اعتماد إذن الاستلام من مهندس الموقع',
                     "اعتمد مهندس الموقع إذن الاستلام {$receipt->receipt_number} لأمر الشراء {$receipt->purchaseOrder->po_number}.",
                     $receipt
                 );
             }
 
-            return $receipt->fresh(['purchaseOrder.supplier', 'purchaseOrder.items.item', 'purchaseRequest', 'warehouseKeeper', 'siteEngineer', 'items.purchaseOrderItem']);
+            // Notify Site Accountant (محاسب الموقع)
+            $receipt->purchaseOrder->loadMissing('purchaseRequest.department');
+            $deptCode = $receipt->purchaseOrder->purchaseRequest?->department?->code;
+            $deptAccountants = collect();
+            if ($deptCode) {
+                foreach (\App\Services\SupplierInvoiceService::ACCOUNTANT_DEPARTMENT_MAPPINGS as $roleSlug => $deptCodes) {
+                    if (in_array($deptCode, $deptCodes, true)) {
+                        $deptAccountants = User::whereHas('roles', fn ($q) => $q->where('slug', $roleSlug))
+                            ->where('is_active', true)
+                            ->get();
+                        break;
+                    }
+                }
+            }
+            $targetAccountants = $deptAccountants->isNotEmpty()
+                ? $deptAccountants
+                : User::whereHas('roles', fn ($q) => $q->whereIn('slug', ['site_accountant', 'accountant', 'general_accountant']))
+                    ->where('is_active', true)
+                    ->get();
+
+            if ($targetAccountants->isEmpty()) {
+                $targetAccountants = $notificationService->resolveUsersWithPermission('purchase_order.view_accounting');
+            }
+
+            if ($targetAccountants->isNotEmpty()) {
+                if ($isInternalWarehouse) {
+                    $notificationService->queueUsers(
+                        $targetAccountants,
+                        'internal_warehouse_grn_approved',
+                        'إذن استلام مواد منصرفة من المخزن الداخلي معتمد (رصيد مخزن سابق)',
+                        "اعتمد مهندس الموقع إذن الاستلام {$receipt->receipt_number} لبضاعة مسحوبة من رصيد المخزن الداخلي لأمر {$receipt->purchaseOrder->po_number}. تم خصم الكميات من المستودع ولا تتطلب فاتورة مورد خارجي.",
+                        $receipt->purchaseOrder
+                    );
+                } else {
+                    $notificationService->queueAccountingWithPurchaseOrderAndReceipt(
+                        $targetAccountants,
+                        $receipt->purchaseOrder,
+                        $receipt
+                    );
+                }
+            }
+
+            return $receipt->fresh(['supplier', 'purchaseOrder.supplier', 'purchaseOrder.items.item', 'purchaseRequest', 'warehouseKeeper', 'siteEngineer', 'items.purchaseOrderItem']);
         });
     }
 
@@ -363,9 +431,11 @@ class PurchaseReceiptService
         $itemsMap = collect($items)->keyBy('purchase_order_item_id');
 
         return DB::transaction(function () use ($requester, $purchaseOrder, $pr, $orderItems, $itemsMap, $notes): PurchaseReceipt {
+            $supplierId = $purchaseOrder->supplier_id ?: \App\Models\Supplier::getOrCreateInternalWarehouseSupplier()->id;
             $receipt = PurchaseReceipt::create([
                 'purchase_order_id' => $purchaseOrder->id,
                 'purchase_request_id' => $pr->id,
+                'supplier_id' => $supplierId,
                 'warehouse_keeper_user_id' => null,
                 'site_engineer_user_id' => null,
                 'receiver_user_id' => $requester->id,
@@ -496,9 +566,11 @@ class PurchaseReceiptService
         }
 
         return DB::transaction(function () use ($purchaseOrder, $siteEngineerId): PurchaseReceipt {
+            $supplierId = $purchaseOrder->supplier_id ?: \App\Models\Supplier::getOrCreateInternalWarehouseSupplier()->id;
             $receipt = PurchaseReceipt::create([
                 'purchase_order_id' => $purchaseOrder->id,
                 'purchase_request_id' => $purchaseOrder->purchase_request_id,
+                'supplier_id' => $supplierId,
                 'warehouse_keeper_user_id' => null,
                 'site_engineer_user_id' => $siteEngineerId,
                 'receipt_number' => 'GRN-SITE-' . now()->format('YmdHis') . '-' . $purchaseOrder->id,

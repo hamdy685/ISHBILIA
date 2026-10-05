@@ -482,7 +482,8 @@ class AdminMasterOrdersController extends Controller
                 'pending_po_count' => $masterList->where('cycle_stage', 'PENDING_PO')->count(),
                 'under_review_count' => $masterList->where('cycle_stage', 'UNDER_REVIEW')->count(),
                 'rejected_count' => $masterList->where('cycle_stage', 'CANCELLED_OR_REJECTED')->count(),
-                'total_financial_value' => round((float) $masterList->whereNotIn('cycle_stage', ['CANCELLED_OR_REJECTED'])->sum('grand_total'), 2),
+                'total_financial_value' => round((float) $masterList->where('is_actual_po', true)->sum('grand_total'), 2),
+                'total_estimated_value' => round((float) $masterList->whereNotIn('cycle_stage', ['CANCELLED_OR_REJECTED'])->sum('grand_total'), 2),
             ];
 
             // 5. Filter by Stage if requested

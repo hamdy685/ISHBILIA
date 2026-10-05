@@ -71,6 +71,7 @@ class PurchaseReceiptController extends Controller
         $this->service->syncPendingBuildingsReceiptsForEngineer($request->user());
 
         $receipts = PurchaseReceipt::with([
+            'supplier',
             'purchaseOrder.supplier',
             'purchaseOrder.purchaseRequest.department',
             'purchaseOrder.purchaseRequest.requester',
@@ -96,6 +97,7 @@ class PurchaseReceiptController extends Controller
     public function show(string|int $id)
     {
         $receipt = PurchaseReceipt::with([
+            'supplier',
             'purchaseOrder.supplier',
             'purchaseOrder.createdBy',
             'purchaseOrder.accountingReviewer',

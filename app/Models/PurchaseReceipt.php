@@ -7,13 +7,16 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+use App\Traits\ScopesDataByUserRole;
+
 class PurchaseReceipt extends Model
 {
-    use HasFactory;
+    use HasFactory, ScopesDataByUserRole;
 
     protected $fillable = [
         'purchase_order_id',
         'purchase_request_id',
+        'supplier_id',
         'warehouse_keeper_user_id',
         'site_engineer_user_id',
         'receiver_user_id',
@@ -36,6 +39,8 @@ class PurchaseReceipt extends Model
 
     protected $appends = [
         'photo_url',
+        'supplier_name',
+        'is_internal_warehouse',
     ];
 
     public function getPhotoUrlAttribute(): ?string
@@ -96,6 +101,30 @@ class PurchaseReceipt extends Model
     public function isBuildingsDirectReceipt(): bool
     {
         return $this->receipt_type === 'SITE_DIRECT';
+    }
+
+    public function supplier(): BelongsTo
+    {
+        return $this->belongsTo(Supplier::class, 'supplier_id');
+    }
+
+    public function getSupplierNameAttribute(): string
+    {
+        return $this->supplier?->company_name
+            ?: $this->purchaseOrder?->supplier?->company_name
+            ?: Supplier::INTERNAL_WAREHOUSE_NAME;
+    }
+
+    public function getIsInternalWarehouseAttribute(): bool
+    {
+        return $this->isInternalWarehouse();
+    }
+
+    public function isInternalWarehouse(): bool
+    {
+        return $this->supplier?->isInternalWarehouse()
+            || $this->purchaseOrder?->isInternalWarehouse()
+            || ($this->supplier_id && $this->supplier_id === Supplier::getOrCreateInternalWarehouseSupplier()->id);
     }
 
     public function items(): HasMany

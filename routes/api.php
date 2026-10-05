@@ -326,6 +326,8 @@ Route::middleware('auth:sanctum')->prefix('accounting')->group(function () {
         ->middleware('permission:accounting.invoice.match');
     Route::post('/invoices/{invoice}/payments', [SupplierInvoiceController::class, 'storePayment'])
         ->middleware('permission:accounting.payment.create');
+    Route::post('/payments', [SupplierInvoiceController::class, 'storeDirectPayment'])
+        ->middleware('permission:accounting.payment.create');
     Route::post('/suppliers/{supplier}/payments', [SupplierInvoiceController::class, 'storeSupplierPayment'])
         ->middleware('permission:accounting.payment.create');
     Route::get('/suppliers/accounts', [SupplierInvoiceController::class, 'supplierAccounts'])

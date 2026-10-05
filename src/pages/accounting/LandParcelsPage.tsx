@@ -891,7 +891,7 @@ const LandParcelsPage: React.FC = () => {
               <div className={`${activeTab === 'materials' ? 'block' : 'hidden'} print:block space-y-3`}>
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-black text-slate-100 print:text-black flex items-center gap-1.5">
-                    <span>🧱</span> سجل تفاصيل المواد والأصناف المنفذة والموردة للموقع
+                    <span>🧱</span> سجل تفاصيل المواد والأصناف المنفذة والموردة للموقع (أوامر الشراء الفعلية المعتمدة)
                   </h3>
                   <span className="text-xs text-slate-400 print:text-slate-600">
                     إجمالي البنود: <strong>{parcelDetails.materials?.length || 0}</strong>

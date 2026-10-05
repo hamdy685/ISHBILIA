@@ -59,8 +59,43 @@ class Supplier extends Model
         return $this->hasMany(PurchaseRequestQuote::class, 'supplier_id');
     }
 
+    public const INTERNAL_WAREHOUSE_NAME = 'المخزن الداخلي';
+    public const INTERNAL_WAREHOUSE_TAX_NUMBER = 'INTERNAL-WH-001';
+
+    /**
+     * Get or create the dedicated Virtual Supplier representing the Company's Internal Warehouse.
+     */
+    public static function getOrCreateInternalWarehouseSupplier(): self
+    {
+        return self::firstOrCreate(
+            ['company_name' => self::INTERNAL_WAREHOUSE_NAME],
+            [
+                'tax_number' => self::INTERNAL_WAREHOUSE_TAX_NUMBER,
+                'contact_name' => 'أمين المستودع الرئيسي',
+                'phone' => '01000000000',
+                'address' => 'مستودع الشركة الرئيسي - المقر المركزي',
+                'payment_terms' => 'صرف مباشر من رصيد المخزن الداخلي',
+                'opening_balance' => 0.00,
+                'opening_balance_notes' => 'المورد الافتراضي لصرف واستلام المواد من رصيد المخزن الداخلي',
+                'is_active' => true,
+            ]
+        );
+    }
+
+    public function isInternalWarehouse(): bool
+    {
+        return $this->company_name === self::INTERNAL_WAREHOUSE_NAME
+            || $this->company_name === 'مخزن الشركة الرئيسي'
+            || $this->tax_number === self::INTERNAL_WAREHOUSE_TAX_NUMBER;
+    }
+
     public function approvedQuotes(): HasMany
     {
         return $this->hasMany(PurchaseRequestQuote::class, 'supplier_id')->where('status', 'SELECTED');
+    }
+
+    public function purchaseReceipts(): HasMany
+    {
+        return $this->hasMany(PurchaseReceipt::class, 'supplier_id');
     }
 }

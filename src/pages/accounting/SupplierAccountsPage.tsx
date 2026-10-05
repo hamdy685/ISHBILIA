@@ -45,7 +45,8 @@ const SupplierAccountDedicatedPage: React.FC<{
   selected: SupplierAccountDetails;
   onBack: () => void;
   onRecordPayment: (account: SupplierAccountSummary) => void;
-}> = ({ selected, onBack, onRecordPayment }) => {
+  onReloadWithDate?: (fromDate: string) => Promise<void>;
+}> = ({ selected, onBack, onRecordPayment, onReloadWithDate }) => {
   const [activeTab, setActiveTab] = useState<'LEDGER' | 'INVOICES' | 'PAYMENTS' | 'QUOTES'>('LEDGER');
   const [ledgerSearch, setLedgerSearch] = useState('');
   const [ledgerParcel, setLedgerParcel] = useState('');
@@ -68,137 +69,17 @@ const SupplierAccountDedicatedPage: React.FC<{
       .finally(() => setQuotesLoading(false));
   }, [selected.supplier.id]);
 
+  // When ledgerFromDate changes, trigger backend reload to fetch CARRIED_FORWARD balance brought forward
+  useEffect(() => {
+    if (onReloadWithDate) {
+      void onReloadWithDate(ledgerFromDate);
+    }
+  }, [ledgerFromDate, onReloadWithDate]);
+
+  // Strict Single Source of Truth: Exclusively rely on selected.ledger from backend
   const rawLedgerRows = useMemo<SupplierLedgerRow[]>(() => {
-    if (selected.ledger && selected.ledger.length > 0) {
-      return selected.ledger;
-    }
-
-    const rows: SupplierLedgerRow[] = [];
-
-    // Opening Balance
-    if (Number(selected.summary.opening_balance || 0) > 0) {
-      const obDate = selected.supplier.created_at ? selected.supplier.created_at.slice(0, 10) : '2026-01-01';
-      rows.push({
-        id: 'ob-' + selected.supplier.id,
-        type: 'OPENING_BALANCE',
-        date: obDate,
-        date_formatted: obDate,
-        description: 'رصيد افتتاحي سابق' + (selected.supplier.opening_balance_notes ? ` (${selected.supplier.opening_balance_notes})` : ''),
-        parcel: '—',
-        region: '—',
-        quantity: null,
-        uom: '—',
-        unit_price: null,
-        value: Number(selected.summary.opening_balance),
-        paid: 0,
-        balance: 0,
-        reference: 'رصيد سابق',
-      });
-    }
-
-    // Invoices and PO items
-    selected.invoices.forEach((inv) => {
-      const po = inv.purchase_order;
-      const receipt = inv.purchase_receipt;
-      const invDate = inv.invoice_date ? inv.invoice_date.slice(0, 10) : (inv.created_at ? inv.created_at.slice(0, 10) : '—');
-      const defaultParcel = inv.land_allocations?.[0]?.parcel?.parcel_reference
-        || po?.purchase_request?.parcel_reference
-        || '—';
-      const defaultRegion = inv.land_allocations?.[0]?.parcel?.region
-        || po?.purchase_request?.region
-        || '—';
-
-      const items = receipt?.items?.length ? receipt.items : (po?.items?.length ? po.items : null);
-
-      if (items && items.length > 0) {
-        items.forEach((it: any, idx: number) => {
-          const poItem = it.purchase_order_item || it;
-          const itDesc = poItem.item_description || poItem.item?.name || `صنف #${idx + 1}`;
-          const itParcel = poItem.item_reference || poItem.pr_item?.item_reference || defaultParcel;
-          const itRegion = poItem.region || poItem.pr_item?.region || defaultRegion;
-          const itQty = Number(it.received_quantity ?? poItem.quantity ?? 1);
-          const itPrice = Number(poItem.unit_price || 0);
-          const itVal = Number(poItem.line_total || itQty * itPrice || inv.amount);
-
-          rows.push({
-            id: `inv-${inv.id}-item-${idx}`,
-            type: 'SUPPLY',
-            date: invDate,
-            date_formatted: invDate,
-            description: itDesc,
-            parcel: itParcel,
-            region: itRegion,
-            quantity: itQty,
-            uom: poItem.uom || '—',
-            unit_price: itPrice,
-            value: itVal,
-            paid: 0,
-            balance: 0,
-            reference: inv.invoice_number || po?.po_number,
-          });
-        });
-      } else {
-        rows.push({
-          id: `inv-${inv.id}`,
-          type: 'SUPPLY',
-          date: invDate,
-          date_formatted: invDate,
-          description: `فاتورة توريد #${inv.invoice_number}` + (po?.po_number ? ` (${po.po_number})` : ''),
-          parcel: defaultParcel,
-          region: defaultRegion,
-          quantity: 1,
-          uom: '—',
-          unit_price: Number(inv.amount),
-          value: Number(inv.amount),
-          paid: 0,
-          balance: 0,
-          reference: inv.invoice_number,
-        });
-      }
-    });
-
-    // Payments
-    selected.payments.forEach((p) => {
-      const pDate = p.payment_date ? p.payment_date.slice(0, 10) : '—';
-      const method = paymentMethods[p.payment_method] || p.payment_method;
-      const desc = `سداد دفعة (${method})` + (p.payment_number ? ` - إيصال #${p.payment_number}` : '') + (p.notes ? ` - ${p.notes}` : '');
-      const parcel = p.allocations?.map(a => a.invoice?.land_allocations?.[0]?.parcel?.parcel_reference).filter(Boolean)[0] || '—';
-      const region = p.allocations?.map(a => a.invoice?.land_allocations?.[0]?.parcel?.region).filter(Boolean)[0] || '—';
-
-      rows.push({
-        id: `pay-${p.id}`,
-        type: 'PAYMENT',
-        date: pDate,
-        date_formatted: pDate,
-        description: desc,
-        parcel,
-        region,
-        quantity: null,
-        uom: '—',
-        unit_price: null,
-        value: 0,
-        paid: Number(p.amount),
-        balance: 0,
-        reference: p.payment_number || p.reference_number,
-      });
-    });
-
-    // Sort chronologically
-    rows.sort((a, b) => {
-      const dCmp = (a.date || '').localeCompare(b.date || '');
-      if (dCmp !== 0) return dCmp;
-      const typeOrder = { OPENING_BALANCE: 1, SUPPLY: 2, PAYMENT: 3 };
-      return (typeOrder[a.type] || 2) - (typeOrder[b.type] || 2);
-    });
-
-    let b = 0;
-    rows.forEach(r => {
-      b += (r.value || 0) - (r.paid || 0);
-      r.balance = Math.round(b * 100) / 100;
-    });
-
-    return rows;
-  }, [selected]);
+    return selected.ledger || [];
+  }, [selected.ledger]);
 
   const availableParcels = useMemo(() => {
     const set = new Set<string>();
@@ -238,8 +119,21 @@ const SupplierAccountDedicatedPage: React.FC<{
     });
 
     let running = 0;
+    const firstRow = list[0];
+    if (firstRow && firstRow.type === 'CARRIED_FORWARD') {
+      running = Number(firstRow.balance || 0);
+      return list.map((r, idx) => {
+        if (idx === 0) return r;
+        running += (Number(r.value) || 0) - (Number(r.paid) || 0);
+        return {
+          ...r,
+          balance: Math.round(running * 100) / 100,
+        };
+      });
+    }
+
     return list.map(r => {
-      running += (r.value || 0) - (r.paid || 0);
+      running += (Number(r.value) || 0) - (Number(r.paid) || 0);
       return {
         ...r,
         balance: Math.round(running * 100) / 100,
@@ -657,7 +551,7 @@ const SupplierAccountDedicatedPage: React.FC<{
             <>
               <div className="hidden min-w-0 md:block overflow-x-auto print:block">
                 <Table className="min-w-[850px] print:w-full print:min-w-0 print:border print:border-slate-900">
-                  <TableHeader className="bg-slate-950/80 print:bg-slate-100">
+                  <TableHeader className="bg-slate-950/80 print:bg-slate-100 print:table-header-group">
                     <TableRow className="border-b border-slate-800 print:border-b-2 print:border-slate-900">
                       <TableHead className="whitespace-nowrap text-center text-xs font-black text-slate-300 print:text-black print:border-r print:border-slate-900 py-2.5">
                         التاريخ
@@ -692,8 +586,8 @@ const SupplierAccountDedicatedPage: React.FC<{
                     {filteredLedgerRows.map((row) => (
                       <TableRow
                         key={row.id}
-                        className={`border-b border-slate-800/80 transition-colors hover:bg-slate-800/40 print:border-b print:border-slate-900 ${
-                          row.type === 'PAYMENT' ? 'bg-emerald-950/10' : row.type === 'OPENING_BALANCE' ? 'bg-amber-950/15' : ''
+                        className={`border-b border-slate-800/80 transition-colors hover:bg-slate-800/40 print:border-b print:border-slate-900 print:break-inside-avoid ${
+                          row.type === 'PAYMENT' ? 'bg-emerald-950/10' : (row.type === 'OPENING_BALANCE' || row.type === 'CARRIED_FORWARD') ? 'bg-amber-950/15' : ''
                         }`}
                       >
                         {/* التاريخ */}
@@ -711,7 +605,7 @@ const SupplierAccountDedicatedPage: React.FC<{
                                 ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/60'
                                 : 'bg-amber-950 text-amber-300 border border-amber-800/60'
                             }`}>
-                              {row.type === 'SUPPLY' ? 'توريد' : row.type === 'PAYMENT' ? 'سداد' : 'رصيد سابق'}
+                              {row.type === 'SUPPLY' ? 'توريد' : row.type === 'PAYMENT' ? 'سداد' : (row.type === 'CARRIED_FORWARD' ? 'رصيد سابق منقول' : 'رصيد سابق')}
                             </span>
                             <span className="font-semibold">{row.description}</span>
                             {row.reference && (
@@ -768,7 +662,7 @@ const SupplierAccountDedicatedPage: React.FC<{
 
                   {/* Totals Footer */}
                   <tfoot>
-                    <TableRow className="bg-slate-950 font-black border-t-2 border-slate-700 print:bg-slate-100 print:border-t-2 print:border-slate-900">
+                    <TableRow className="bg-slate-950 font-black border-t-2 border-slate-700 print:bg-slate-100 print:border-t-2 print:border-slate-900 print:break-inside-avoid">
                       <TableCell colSpan={2} className="text-right text-xs font-black text-slate-100 print:text-black print:border-r print:border-slate-900 py-3">
                         الإجمالي العام ({filteredLedgerRows.length} حركة)
                       </TableCell>
@@ -792,6 +686,22 @@ const SupplierAccountDedicatedPage: React.FC<{
                     </TableRow>
                   </tfoot>
                 </Table>
+              </div>
+
+              {/* ── OFFICIAL 3-SIGNATORY PRINT SECTION ── */}
+              <div className="hidden print:grid grid-cols-3 gap-6 pt-8 mt-6 border-t-2 border-slate-900 text-center text-xs text-slate-950 font-bold print:break-inside-avoid">
+                <div className="space-y-12">
+                  <div>إعداد / المحاسب المختص</div>
+                  <div className="border-b border-dashed border-slate-900 w-3/4 mx-auto pb-2">التوقيع: ............................</div>
+                </div>
+                <div className="space-y-12">
+                  <div>مراجعة / المدير المالي</div>
+                  <div className="border-b border-dashed border-slate-900 w-3/4 mx-auto pb-2">التوقيع: ............................</div>
+                </div>
+                <div className="space-y-12">
+                  <div>اعتماد ومصادقة / ممثل المورد</div>
+                  <div className="border-b border-dashed border-slate-900 w-3/4 mx-auto pb-2">التوقيع والختم: ............................</div>
+                </div>
               </div>
 
               {/* Mobile View */}
@@ -1430,6 +1340,14 @@ export const SupplierAccountsPage: React.FC = () => {
           selected={selected}
           onBack={closeAccount}
           onRecordPayment={openPaymentForm}
+          onReloadWithDate={async (fromDate: string) => {
+            try {
+              const updated = await getSupplierAccountApi(selected.supplier.id, fromDate || null);
+              setSelected(updated);
+            } catch (err) {
+              setError(parseApiError(err).message);
+            }
+          }}
         />
 
         {paymentAccount && createPortal(

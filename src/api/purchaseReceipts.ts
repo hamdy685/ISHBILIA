@@ -59,6 +59,10 @@ export interface ReceiptRecord {
   photo_name?: string | null;
   photo_url?: string | null;
   site_engineer_notes?: string | null;
+  supplier_id?: number | null;
+  supplier_name?: string | null;
+  supplier?: { id: number; company_name: string; contact_person?: string | null; phone?: string | null } | null;
+  is_internal_warehouse?: boolean;
   warehouse_keeper?: { id: number; name: string } | null;
   site_engineer?: { id: number; name: string } | null;
   purchase_order?: ReceiptPurchaseOrder | null;

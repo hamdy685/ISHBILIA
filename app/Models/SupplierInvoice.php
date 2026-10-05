@@ -3,13 +3,14 @@
 namespace App\Models;
 
 use App\Models\Accounting\JournalEntry;
+use App\Traits\ScopesDataByUserRole;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class SupplierInvoice extends \Illuminate\Database\Eloquent\Model
 {
-    use HasFactory;
+    use HasFactory, ScopesDataByUserRole;
 
     protected $fillable = [
         'supplier_id',

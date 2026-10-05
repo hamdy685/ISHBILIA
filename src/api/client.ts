@@ -194,6 +194,34 @@ export const formatValidationErrors = (errors: unknown): string => {
 };
 
 /**
+ * Extracts a dictionary mapping each input field name to its primary validation error message.
+ * Enables React form inputs to easily bind error highlights to specific fields (e.g. error.validationErrors['items.0.quantity']).
+ */
+export const extractValidationFieldErrors = (errors: unknown): Record<string, string> => {
+  if (!errors || typeof errors !== 'object') return {};
+  const result: Record<string, string> = {};
+
+  const processObject = (obj: Record<string, unknown>, prefix = '') => {
+    for (const [key, value] of Object.entries(obj)) {
+      const fullKey = prefix ? `${prefix}.${key}` : key;
+      if (typeof value === 'string' && value.trim()) {
+        result[fullKey] = translateCommonValidationError(value);
+      } else if (Array.isArray(value)) {
+        const firstString = value.find((v) => typeof v === 'string' && v.trim());
+        if (firstString) {
+          result[fullKey] = translateCommonValidationError(firstString);
+        }
+      } else if (value && typeof value === 'object') {
+        processObject(value as Record<string, unknown>, fullKey);
+      }
+    }
+  };
+
+  processObject(errors as Record<string, unknown>);
+  return result;
+};
+
+/**
  * Translates an API error into a standardized, user-friendly Arabic message based on HTTP status code.
  */
 export const translateApiError = (error: any): string => {
@@ -218,10 +246,27 @@ export const translateApiError = (error: any): string => {
     }
 
     case 403:
+      if (typeof data?.message === 'string' && /[\u0600-\u06FF]/.test(data.message)) {
+        return data.message;
+      }
       return 'عفواً، لا تملك الصلاحية الكافية لإتمام هذا الإجراء.';
 
     case 404:
+      if (typeof data?.message === 'string' && /[\u0600-\u06FF]/.test(data.message)) {
+        return data.message;
+      }
       return 'البيانات المطلوبة غير موجودة أو تم حذفها.';
+
+    case 409: {
+      // 409 Conflict: E.g. modifying an approved PO or concurrency conflicts
+      if (typeof data?.message === 'string' && data.message.trim()) {
+        return data.message.trim();
+      }
+      if (typeof data?.error === 'string' && data.error.trim()) {
+        return data.error.trim();
+      }
+      return 'تعارض في العملية: تم تعديل أو اعتماد السجل مسبقاً ولا يمكن تعديله في حالته الحالية.';
+    }
 
     case 422: {
       const validationMerged = formatValidationErrors(data?.errors);
@@ -248,14 +293,18 @@ export const translateApiError = (error: any): string => {
 /**
  * Centralized response error interceptor handler.
  * Enriches the error object with the standardized Arabic translation, handles session expiry (401),
- * and enables components to immediately consume `error.message` with `toast.error(error.message)`.
+ * attaches field-level validation errors for form bindings, and enables components to consume
+ * `error.message` with `toast.error(error.message)` or `toast.warning(error.message)`.
  */
 export const handleResponseError = (error: any) => {
   const isLoginOrPublicEndpoint =
     error?.config?.url?.includes('/auth/login') ||
     error?.config?.url?.includes('/auth/demo-accounts');
 
-  if (error?.response && error.response.status === 401 && !isLoginOrPublicEndpoint) {
+  const status = error?.response?.status;
+  const data = error?.response?.data;
+
+  if (error?.response && status === 401 && !isLoginOrPublicEndpoint) {
     markSessionExpired();
     removeToken();
     if (onUnauthenticatedCallback) {
@@ -265,6 +314,7 @@ export const handleResponseError = (error: any) => {
   }
 
   const translatedMessage = translateApiError(error);
+  const validationErrors = status === 422 ? extractValidationFieldErrors(data?.errors) : {};
 
   if (error && typeof error === 'object') {
     try {
@@ -283,6 +333,14 @@ export const handleResponseError = (error: any) => {
     }
 
     (error as any).translatedMessage = translatedMessage;
+    (error as any).status = status;
+    (error as any).isConflict = status === 409;
+    (error as any).isForbidden = status === 403;
+    (error as any).isUnauthorized = status === 401;
+    (error as any).isValidationError = status === 422;
+    (error as any).isServerError = typeof status === 'number' && status >= 500;
+    (error as any).validationErrors = validationErrors;
+    (error as any).fieldErrors = validationErrors;
 
     if (error.response && typeof error.response === 'object') {
       if (!error.response.data || typeof error.response.data !== 'object') {
@@ -290,6 +348,7 @@ export const handleResponseError = (error: any) => {
       } else {
         error.response.data.message = translatedMessage;
       }
+      (error.response as any).validationErrors = validationErrors;
     }
   }
 

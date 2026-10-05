@@ -198,12 +198,14 @@ export interface DirectAccountingFinancialData {
 export const approveProcurementPrApi = async (
   id: number,
   options: { use_quotes?: boolean; comment?: string; financial_data?: DirectAccountingFinancialData } = {},
-): Promise<PurchaseRequest> =>
-  (await apiClient.post<{ data: PurchaseRequest }>(`/procurement/purchase-requests/${id}/approve`, {
+): Promise<{ message: string; data: PurchaseRequest }> => {
+  const response = await apiClient.post<{ message: string; data: PurchaseRequest }>(`/procurement/purchase-requests/${id}/approve`, {
     use_quotes: options.use_quotes ?? true,
     comment: options.comment,
     financial_data: options.financial_data,
-  })).data.data;
+  });
+  return response.data;
+};
 
 /** Procurement Manager rejects a PR */
 export const rejectProcurementPrApi = async (id: number, comment: string): Promise<PurchaseRequest> =>

@@ -43,7 +43,7 @@ describe('DirectAccountingReviewModal', () => {
 
     expect(screen.getByText(/إدخال البيانات المالية — PR-TEST-101/)).toBeInTheDocument();
     expect(screen.getAllByText('حديد تسليح 12 مم').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('تأكيد وإرسال للحسابات')).toBeInTheDocument();
+    expect(screen.getByText('👤 إرسال للمدير التنفيذي للاعتماد')).toBeInTheDocument();
   });
 
   it('renders safely without throwing when suppliers is undefined or empty', () => {
@@ -58,7 +58,23 @@ describe('DirectAccountingReviewModal', () => {
     );
 
     expect(screen.getByText(/إدخال البيانات المالية — PR-TEST-101/)).toBeInTheDocument();
-    expect(screen.getByText('تأكيد وإرسال للحسابات')).toBeInTheDocument();
+    expect(screen.getByText('👤 إرسال للمدير التنفيذي للاعتماد')).toBeInTheDocument();
+  });
+
+  it('renders correctly with explicit accounting target destination', () => {
+    render(
+      <DirectAccountingReviewModal
+        isOpen={true}
+        request={mockRequest}
+        suppliers={mockSuppliers}
+        targetDestination="accounting"
+        onClose={() => undefined}
+        onConfirm={() => undefined}
+      />
+    );
+
+    expect(screen.getByText(/إدخال البيانات المالية — PR-TEST-101/)).toBeInTheDocument();
+    expect(screen.getByText('💰 اعتماد وإرسال للإدارة المالية')).toBeInTheDocument();
   });
 
   it('renders safely when request has empty items or undefined items', () => {

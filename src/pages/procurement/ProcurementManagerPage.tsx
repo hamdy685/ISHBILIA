@@ -336,9 +336,10 @@ export const ProcurementManagerPage: React.FC = () => {
   const handleStartQuotes = async (request: PurchaseRequest) => {
     setRefreshing(true);
     try {
-      const updated = await approveProcurementPrApi(request.id, { use_quotes: true });
+      const response = await approveProcurementPrApi(request.id, { use_quotes: true });
       await loadData();
-      setQuoteRequest(updated || request);
+      setQuoteRequest(response.data || request);
+      setSuccessBanner(response.message || 'تم بدء مرحلة عروض الأسعار بنجاح.');
     } catch (error) {
       setPageError(parseApiError(error).message);
     } finally {
@@ -363,12 +364,13 @@ export const ProcurementManagerPage: React.FC = () => {
     setDirectAccountingSubmitting(true);
     setDirectAccountingError(null);
     try {
-      await approveProcurementPrApi(request.id, {
+      const response = await approveProcurementPrApi(request.id, {
         use_quotes: false,
         financial_data: financialData,
       });
       setDirectAccountingRequest(null);
       setDirectAccountingError(null);
+      setSuccessBanner(response.message || 'تم إرسال الطلب بنجاح إلى المدير التنفيذي للاعتماد.');
       await loadData();
     } catch (error) {
       const errMessage = parseApiError(error).message;
@@ -716,7 +718,7 @@ export const ProcurementManagerPage: React.FC = () => {
                 </span>
               </div>
               <p className="text-[11px] text-slate-300 mt-1 leading-5">
-                أذونات استلام معتمدة بالموقع تحتاج مطابقة الكميات والأسعار وإصدار الأمر الفعلي للحسابات.
+                أذونات استلام معتمدة بالموقع تحتاج مطابقة الكميات والأسعار وإصدار الأمر الفعلي للإدارة المالية.
               </p>
             </div>
             <Button
@@ -759,7 +761,7 @@ export const ProcurementManagerPage: React.FC = () => {
                   </span>
                 </h3>
                 <p className="text-xs text-slate-300 mt-0.5">
-                  تم فحص واعتماد الاستلام بالموقع من قبل أمين المخزن ومهندس الموقع. بصفتك إدارة المشتريات، راجع الكميات والأسعار واعتمد الأمر الفعلي لإرساله للحسابات.
+                  تم فحص واعتماد الاستلام بالموقع من قبل أمين المخزن ومهندس الموقع. بصفتك إدارة المشتريات، راجع الكميات والأسعار واعتمد الأمر الفعلي لإرساله للإدارة المالية.
                 </p>
               </div>
             </div>
@@ -1113,7 +1115,7 @@ export const ProcurementManagerPage: React.FC = () => {
                                   }}
                                   className="font-bold border-amber-700/60 text-amber-200 hover:bg-amber-950/50"
                                 >
-                                  ⚡ إرسال للحسابات بدون عروض
+                                  👤 إرسال للمدير التنفيذي للاعتماد
                                 </Button>
                                 <Button
                                   variant="danger"
@@ -1286,7 +1288,7 @@ export const ProcurementManagerPage: React.FC = () => {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
             <div>
               <h2 className="text-base font-black text-indigo-300 flex items-center gap-2">
-                <span>⚡ أوامر الشراء الفعلية — بانتظار المراجعة والإصدار للحسابات ({pendingActualPos.length})</span>
+                <span>⚡ أوامر الشراء الفعلية — بانتظار المراجعة والإصدار للإدارة المالية ({pendingActualPos.length})</span>
               </h2>
               <p className="mt-1 text-xs text-slate-400">
                 هذه الأوامر تم فحص واستلام بضاعتها بالموقع واعتماد إذن الاستلام نهائياً. يرجى مراجعة الكميات والأسعار وإصدار الأمر الفعلي النهائي ليتمكن المحاسب من مطابقة الفاتورة والصرف.

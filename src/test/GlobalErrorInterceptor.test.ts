@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import apiClient, {
   translateApiError,
   formatValidationErrors,
+  extractValidationFieldErrors,
   handleResponseError,
   redirectToLogin,
   setOnUnauthenticated,
@@ -52,12 +53,39 @@ describe('Global Error Interceptor', () => {
       expect(translated).toBe('عفواً، لا تملك الصلاحية الكافية لإتمام هذا الإجراء.');
     });
 
+    it('preserves custom Arabic authorization message for 403 status', () => {
+      const error403Custom = {
+        response: { status: 403, data: { message: 'غير مصرح لك باستعراض استلام غير مسند إليك.' } },
+      };
+      const translated = translateApiError(error403Custom);
+      expect(translated).toBe('غير مصرح لك باستعراض استلام غير مسند إليك.');
+    });
+
     it('translates 404 Not Found status', () => {
       const error404 = {
         response: { status: 404, data: {} },
       };
       const translated = translateApiError(error404);
       expect(translated).toBe('البيانات المطلوبة غير موجودة أو تم حذفها.');
+    });
+
+    it('translates 409 Conflict status with custom backend message', () => {
+      const error409 = {
+        response: {
+          status: 409,
+          data: { message: 'لا يمكن تعديل أمر الشراء؛ فقد تم اعتماده مسبقاً.' },
+        },
+      };
+      const translated = translateApiError(error409);
+      expect(translated).toBe('لا يمكن تعديل أمر الشراء؛ فقد تم اعتماده مسبقاً.');
+    });
+
+    it('falls back gracefully to clear Arabic message for 409 Conflict when backend message is empty', () => {
+      const error409Fallback = {
+        response: { status: 409, data: {} },
+      };
+      const translated = translateApiError(error409Fallback);
+      expect(translated).toBe('تعارض في العملية: تم تعديل أو اعتماد السجل مسبقاً ولا يمكن تعديله في حالته الحالية.');
     });
 
     it('translates 500 and higher Server Error status (500, 502, 503)', () => {
@@ -144,9 +172,56 @@ describe('Global Error Interceptor', () => {
       const translated = translateApiError(error422WithoutErrors);
       expect(translated).toBe('بيانات غير صالحة. يرجى مراجعة الحقول المطلوبة والتأكد من صحة المدخلات.');
     });
+
+    it('extracts field-by-field validation map via extractValidationFieldErrors for form binding', () => {
+      const errors = {
+        title: ['حقل عنوان الطلب مطلوب'],
+        'items.0.quantity': ['الكمية يجب أن تكون أكبر من صفر'],
+        code: ['The code has already been taken.'],
+      };
+      const fieldErrors = extractValidationFieldErrors(errors);
+      expect(fieldErrors).toEqual({
+        title: 'حقل عنوان الطلب مطلوب',
+        'items.0.quantity': 'الكمية يجب أن تكون أكبر من صفر',
+        code: 'هذه القيمة مستخدمة بالفعل.',
+      });
+    });
   });
 
   describe('3. Response Error Interceptor Handler and Session Management', () => {
+    it('enriches error object with status, isConflict, isForbidden, and validationErrors flags', async () => {
+      const conflictError = {
+        response: {
+          status: 409,
+          data: { message: 'تم اعتماد أمر الشراء مسبقاً ولا يمكن تعديله.' },
+        },
+      };
+
+      await expect(handleResponseError(conflictError)).rejects.toMatchObject({
+        isConflict: true,
+        status: 409,
+        message: 'تم اعتماد أمر الشراء مسبقاً ولا يمكن تعديله.',
+      });
+
+      const validationError = {
+        response: {
+          status: 422,
+          data: {
+            errors: {
+              delivery_date: ['تاريخ التوريد مطلوب'],
+            },
+          },
+        },
+      };
+
+      await expect(handleResponseError(validationError)).rejects.toMatchObject({
+        isValidationError: true,
+        status: 422,
+        validationErrors: {
+          delivery_date: 'تاريخ التوريد مطلوب',
+        },
+      });
+    });
     it('handles 401: marks session expired, removes token, calls onUnauthenticated, and redirects', async () => {
       const markSessionExpiredSpy = vi.spyOn(authStorage, 'markSessionExpired');
       const removeTokenSpy = vi.spyOn(authStorage, 'removeToken');
@@ -313,6 +388,45 @@ describe('Global Error Interceptor', () => {
       }
 
       expect(toastErrorSpy).toHaveBeenCalledWith('حدث عطل مؤقت في النظام. يرجى المحاولة بعد قليل.');
+    });
+
+    it('allows components to display 409 Conflict with yellow warning / conflict toast', async () => {
+      const toastWarningSpy = vi.spyOn(toast, 'warning');
+
+      const raw409Error = {
+        response: {
+          status: 409,
+          data: { message: 'تم إنشاء إذن استلام لهذا الأمر بالفعل.' },
+        },
+        message: 'Request failed with status code 409',
+      };
+
+      try {
+        await handleResponseError(raw409Error);
+      } catch (err: any) {
+        if (err.isConflict) {
+          toast.warning(err.message);
+        } else {
+          toast.error(err.message);
+        }
+      }
+
+      expect(toastWarningSpy).toHaveBeenCalledWith('تم إنشاء إذن استلام لهذا الأمر بالفعل.');
+    });
+
+    it('provides toast.conflict helper that dispatches warning notification with 409 badge title', () => {
+      const listenerSpy = vi.fn();
+      const unsubscribe = toast.subscribe(listenerSpy);
+
+      toast.conflict('لا يمكن إتمام العملية بسبب تعارض في حالة الاعتماد');
+
+      expect(listenerSpy).toHaveBeenCalledWith(
+        'لا يمكن إتمام العملية بسبب تعارض في حالة الاعتماد',
+        'warning',
+        expect.objectContaining({ title: 'تعارض في الإجراء (409)' })
+      );
+
+      unsubscribe();
     });
   });
 });

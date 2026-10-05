@@ -593,8 +593,8 @@ export const AuthenticatedLayout: React.FC = () => {
                 </main>
             </div>
 
-            {/* Floating Quick Action Button (+) for All Roles except Admin */}
-            {primaryRoleSlug !== 'admin' && location.pathname !== '/requests/create' && location.pathname !== '/employee/requests/create' && (
+            {/* Floating Quick Action Button (+) for Authorized Roles with PR creation permission (except Admin) */}
+            {primaryRoleSlug !== 'admin' && hasPermission('purchase_request.create') && location.pathname !== '/requests/create' && location.pathname !== '/employee/requests/create' && (
                 <Link
                     to={primaryRoleSlug === 'employee' ? '/employee/requests/create' : '/requests/create'}
                     className="print:hidden group fixed bottom-6 left-6 z-50 flex items-center gap-2.5 rounded-full bg-gradient-to-r from-cyan-500 to-teal-400 p-3.5 sm:px-5 sm:py-3.5 text-slate-950 font-black shadow-2xl shadow-cyan-500/40 hover:shadow-cyan-400/60 border border-cyan-200/50 hover:scale-105 active:scale-95 transition-all duration-200 select-none"

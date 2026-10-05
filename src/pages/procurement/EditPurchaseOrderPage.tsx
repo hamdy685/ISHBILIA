@@ -357,7 +357,7 @@ export const EditPurchaseOrderPage: React.FC = () => {
         notes: finalizationNotes.trim() || undefined,
       });
 
-      alert(`✅ تم إصدار أمر الشراء الفعلي (${po.po_number}) بنجاح وإرساله للحسابات.`);
+      alert(`✅ تم إصدار أمر الشراء الفعلي (${po.po_number}) بنجاح وإرساله للإدارة المالية.`);
       navigate(`/procurement/purchase-orders/${po.id}`);
     } catch (err) {
       const parsed = parseApiError(err);
@@ -411,7 +411,7 @@ export const EditPurchaseOrderPage: React.FC = () => {
               disabled={busy}
               className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs px-5 py-2.5 rounded-lg shadow-lg shadow-emerald-900/40 flex items-center gap-2 transition-all cursor-pointer"
             >
-              <span>✅ إصدار أمر الشراء الفعلي وإرسال للحسابات</span>
+              <span>💰 اعتماد وإرسال للإدارة المالية</span>
             </button>
           )}
 
@@ -482,7 +482,7 @@ export const EditPurchaseOrderPage: React.FC = () => {
                   مرحلة إصدار أمر الشراء الفعلي (Actual PO Workflow)
                 </h3>
                 <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-                  تم توريد البضاعة واعتماد إذن الاستلام (GRN) في الموقع. بصفتك إدارة المشتريات، لديك الصلاحية الكاملة لتعديل الكميات والأسعار وإضافة أو حذف أي بنود لتعكس الواقع الفعلي تماماً، ثم إرسال الملف النهائي للحسابات.
+                  تم توريد البضاعة واعتماد إذن الاستلام (GRN) في الموقع. بصفتك إدارة المشتريات، لديك الصلاحية الكاملة لتعديل الكميات والأسعار وإضافة أو حذف أي بنود لتعكس الواقع الفعلي تماماً، ثم إرسال الملف النهائي للإدارة المالية.
                 </p>
                 {latestReceipt && (
                   <div className="flex flex-wrap items-center gap-3 mt-3 text-xs text-slate-400 bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
@@ -1040,7 +1040,7 @@ export const EditPurchaseOrderPage: React.FC = () => {
               disabled={busy}
               className="w-full sm:w-auto bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white font-black text-sm px-8 py-3 rounded-xl shadow-xl shadow-emerald-950/50 flex items-center justify-center gap-2 transition-all cursor-pointer"
             >
-              <span>✅ إصدار أمر الشراء الفعلي وإرسال للحسابات</span>
+              <span>💰 اعتماد وإرسال للإدارة المالية</span>
             </button>
           )}
 

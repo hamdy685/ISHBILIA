@@ -115,6 +115,9 @@ class LandParcelService
         $orderIds = $allocations->pluck('invoice.purchase_order_id')->filter()->unique();
 
         $materials = \App\Models\PurchaseOrderItem::query()
+            ->whereHas('purchaseOrder', function ($poQ) {
+                $poQ->actualPo();
+            })
             ->where(function ($q) use ($parcel, $orderIds) {
                 $q->where('item_reference', $parcel->parcel_reference);
                 if ($orderIds->isNotEmpty()) {

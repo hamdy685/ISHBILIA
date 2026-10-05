@@ -520,8 +520,8 @@ class PurchaseRequestService
      */
     public function submitRequest(User $user, PurchaseRequest $request, ?int $siteEngineerUserId = null): PurchaseRequest
     {
-        if ($request->status !== 'DRAFT') {
-            throw new \RuntimeException('Only draft purchase requests can be submitted.');
+        if (! in_array($request->status, ['DRAFT', 'REJECTED', 'RETURNED'], true)) {
+            throw new \RuntimeException('Only draft or rejected/returned purchase requests can be submitted.');
         }
 
         if ($request->items()->count() === 0) {
@@ -533,8 +533,8 @@ class PurchaseRequestService
         return DB::transaction(function () use ($user, $request, $siteEngineerUserId) {
             // إعادة تحميل الطلب مع قفل الصف لمنع الإرسال المزدوج أو انتقالين متزامنين من المسودة.
             $request = PurchaseRequest::query()->whereKey($request->id)->lockForUpdate()->firstOrFail();
-            if ($request->status !== 'DRAFT') {
-                throw new \RuntimeException('تم إرسال طلب الشراء بالفعل أو لم يعد في حالة مسودة.');
+            if (! in_array($request->status, ['DRAFT', 'REJECTED', 'RETURNED'], true)) {
+                throw new \RuntimeException('تم إرسال طلب الشراء بالفعل أو لم يعد في حالة مسودة أو مرفوض.');
             }
             $request->loadMissing(['department', 'targetDepartment', 'assignedReviewer', 'siteEngineer']);
             $normalizedNeededDate = $this->normalizeNeededDate($request->date_needed?->toDateString());

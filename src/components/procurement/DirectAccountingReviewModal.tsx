@@ -17,6 +17,7 @@ interface DirectAccountingReviewModalProps {
   onConfirm: (financialData: DirectAccountingFinancialData) => void;
   isSubmitting?: boolean;
   reviewMode?: 'procurement' | 'accounting';
+  targetDestination?: 'executive' | 'accounting';
   apiError?: string | null;
 }
 
@@ -54,9 +55,37 @@ export const DirectAccountingReviewModal: React.FC<DirectAccountingReviewModalPr
   onConfirm,
   isSubmitting = false,
   reviewMode = 'procurement',
+  targetDestination,
   apiError = null,
 }) => {
   const isAccountingReview = reviewMode === 'accounting';
+  // If destination is not explicitly provided: in procurement mode direct PRs require GM approval first.
+  const resolvedDestination = targetDestination || (isAccountingReview ? 'procurement' : 'executive');
+
+  const confirmButtonLabel = isAccountingReview
+    ? 'اعتماد وإرسال للمشتريات'
+    : resolvedDestination === 'executive'
+    ? '👤 إرسال للمدير التنفيذي للاعتماد'
+    : '💰 اعتماد وإرسال للإدارة المالية';
+
+  const confirmLoadingLabel = isAccountingReview
+    ? 'جاري إعادة الطلب للمشتريات...'
+    : resolvedDestination === 'executive'
+    ? 'جاري الإرسال للمدير التنفيذي...'
+    : 'جاري الإرسال للإدارة المالية...';
+
+  const modalSubtitle = isAccountingReview
+    ? 'راجع الحسابات الطلب كاملًا، وعدّل البيانات المالية والملاحظات عند الحاجة، ثم أعده إلى مدير المشتريات.'
+    : resolvedDestination === 'executive'
+    ? 'اختر المورد لكل بند وأدخل الكميات والأسعار قبل إرسال الطلب إلى المدير التنفيذي للاعتماد.'
+    : 'اختر المورد لكل بند وأدخل الكميات والأسعار قبل اعتماد وإرسال الطلب للإدارة المالية.';
+
+  const routeStatusLabel = isAccountingReview
+    ? 'إعادة للمشتريات بعد المراجعة'
+    : resolvedDestination === 'executive'
+    ? 'اعتماد المدير التنفيذي أولاً'
+    : 'موافقة الإدارة المالية';
+
   const [items, setItems] = useState<EditableFinancialItem[]>([]);
   const [notes, setNotes] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -195,9 +224,7 @@ export const DirectAccountingReviewModal: React.FC<DirectAccountingReviewModalPr
       closeOnBackdrop={!isSubmitting}
       closeOnEscape={!isSubmitting}
       title={isAccountingReview ? `مراجعة وتعديل البيانات المالية — ${request.request_number}` : `إدخال البيانات المالية — ${request.request_number}`}
-      subtitle={isAccountingReview
-        ? 'راجع الحسابات الطلب كاملًا، وعدّل البيانات المالية والملاحظات عند الحاجة، ثم أعده إلى مدير المشتريات.'
-        : 'اختر المورد لكل بند وأدخل الكميات والأسعار قبل إرسال الطلب المباشر إلى الحسابات للموافقة المالية.'}
+      subtitle={modalSubtitle}
       size="xl"
       footer={(
         <>
@@ -209,9 +236,9 @@ export const DirectAccountingReviewModal: React.FC<DirectAccountingReviewModalPr
             size="sm"
             onClick={handleConfirm}
             isLoading={isSubmitting}
-            loadingText={isAccountingReview ? 'جاري إعادة الطلب للمشتريات...' : 'جاري الإرسال للحسابات...'}
+            loadingText={confirmLoadingLabel}
           >
-            {isAccountingReview ? 'اعتماد وإرسال للمشتريات' : 'تأكيد وإرسال للحسابات'}
+            {confirmButtonLabel}
           </Button>
         </>
       )}
@@ -236,7 +263,7 @@ export const DirectAccountingReviewModal: React.FC<DirectAccountingReviewModalPr
           </div>
           <div className="rounded-lg border border-amber-500/40 bg-amber-950/20 p-3">
             <p className="text-[11px] text-amber-300/80">مسار الإجراء</p>
-            <p className="mt-1 text-sm font-black text-amber-200">طلب مباشر — {isAccountingReview ? 'إعادة للمشتريات بعد المراجعة' : 'موافقة الحسابات أولًا'}</p>
+            <p className="mt-1 text-sm font-black text-amber-200">طلب مباشر — {routeStatusLabel}</p>
           </div>
         </div>
 
@@ -546,7 +573,13 @@ export const DirectAccountingReviewModal: React.FC<DirectAccountingReviewModalPr
             onChange={(event) => setNotes(event.target.value)}
             disabled={isSubmitting}
             rows={3}
-            placeholder="اكتب أي ملاحظات تحتاجها الحسابات أو توضيحًا على التعديلات..."
+            placeholder={
+              isAccountingReview
+                ? 'اكتب أي ملاحظات تحتاجها المشتريات أو توضيحًا على التعديلات...'
+                : resolvedDestination === 'executive'
+                ? 'اكتب أي ملاحظات توضيحية للمدير التنفيذي أو الحسابات...'
+                : 'اكتب أي ملاحظات تحتاجها الإدارة المالية...'
+            }
             className="mt-2 w-full resize-y rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-normal leading-6 text-slate-100 outline-none focus:border-cyan-400 disabled:opacity-60"
           />
         </label>

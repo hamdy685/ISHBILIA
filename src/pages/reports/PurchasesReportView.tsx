@@ -872,6 +872,24 @@ export const PurchasesReportView: React.FC = () => {
               </div>
             </div>
 
+            {/* Actual Orders Toggle (Default: True) */}
+            <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-lg border border-slate-800">
+              <button
+                type="button"
+                onClick={() => setActualOnly((prev) => !prev)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded transition cursor-pointer ${
+                  actualOnly
+                    ? 'bg-cyan-950 text-cyan-300 border border-cyan-700/60 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                }`}
+                title="تصفية التقرير لعرض أوامر الشراء الفعلية المعتمدة فقط بدون الأوامر المبدئية"
+              >
+                <span>{actualOnly ? '✅' : '⚪'}</span>
+                <span>الأوامر الفعلية فقط</span>
+                {actualOnly && <span className="text-[9px] bg-cyan-900/60 text-cyan-200 px-1.5 rounded-full font-mono">افتراضي</span>}
+              </button>
+            </div>
+
             {/* Accounting Mode Toggle (All Orders vs Pending Invoices vs Verified) */}
             <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
               <span className="text-[10px] font-bold text-slate-400 px-2">عرض:</span>

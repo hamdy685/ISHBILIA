@@ -84,6 +84,17 @@ class ProcurementAnalyticsController extends Controller
                 });
             });
 
+        $actualOnly = $request->boolean('actual_only', true);
+
+        // استعلام أوامر الشراء الفعلية المعتمدة نهائياً (Actual Purchase Orders Only)
+        $actualPurchaseOrderQuery = (clone $basePurchaseOrderQuery)
+            ->actualPo();
+
+        $actualOrderTotals = (clone $actualPurchaseOrderQuery)
+            ->select([])
+            ->selectRaw('COUNT(*) as purchase_orders_count, COALESCE(SUM(grand_total), 0) as total_value')
+            ->first();
+
         // استعلام المشتريات المعتمدة والمفوترة بالحسابات في المرحلة النهائية
         $invoicedPurchaseOrderQuery = PurchaseOrder::query()
             ->select(['id', 'po_number', 'purchase_request_id', 'supplier_id', 'created_by_user_id', 'status', 'grand_total', 'delivery_status', 'delivery_date', 'actual_delivery_date', 'created_at', 'updated_at'])
@@ -121,7 +132,7 @@ class ProcurementAnalyticsController extends Controller
 
         $filteredPurchaseOrderQuery = is_string($status) && in_array($status, self::ORDER_STATUSES, true)
             ? (clone $basePurchaseOrderQuery)->where('status', $status)
-            : (clone $invoicedPurchaseOrderQuery);
+            : ($actualOnly ? (clone $actualPurchaseOrderQuery) : (clone $basePurchaseOrderQuery));
 
         $filteredPurchaseOrders = $filteredPurchaseOrderQuery
             ->with(['purchaseRequest.department', 'supplier', 'createdBy.department', 'items', 'supplierInvoices'])
@@ -186,7 +197,7 @@ class ProcurementAnalyticsController extends Controller
 
         $statusMetrics = (clone $basePurchaseOrderQuery)
             ->select('status')
-            ->selectRaw('COUNT(*) as row_count, COALESCE(SUM(CASE WHEN (finalized_at IS NOT NULL OR status IN (\'APPROVED_BY_ACCOUNTING\', \'FINAL_APPROVED\')) AND status NOT IN (\'PO_DRAFT\', \'PENDING_ACTUAL_PO\', \'REJECTED\') THEN grand_total ELSE 0 END), 0) as total_value')
+            ->selectRaw('COUNT(*) as row_count, COALESCE(SUM(CASE WHEN (finalized_at IS NOT NULL OR status IN (\'APPROVED_BY_ACCOUNTING\', \'FINAL_APPROVED\')) AND status NOT IN (\'PO_DRAFT\', \'PENDING_ACTUAL_PO\', \'REJECTED\', \'CANCELLED\', \'VOIDED\') THEN grand_total ELSE 0 END), 0) as total_value')
             ->groupBy('status')
             ->get();
         $statusBreakdown = $statusMetrics
@@ -210,7 +221,7 @@ class ProcurementAnalyticsController extends Controller
             ])
             ->values();
 
-        $deliveryMetrics = (clone $invoicedPurchaseOrderQuery)
+        $deliveryMetrics = (clone $actualPurchaseOrderQuery)
             ->select('delivery_status')
             ->selectRaw('COUNT(*) as row_count, COALESCE(SUM(grand_total), 0) as total_value')
             ->groupBy('delivery_status')
@@ -223,8 +234,8 @@ class ProcurementAnalyticsController extends Controller
             ])
             ->values();
 
-        // توزيع المشتريات على الموردين يقتصر على المشتريات المعتمدة محاسبياً
-        $supplierMetrics = (clone $invoicedPurchaseOrderQuery)
+        // توزيع المشتريات على الموردين يقتصر على أوامر الشراء الفعلية المعتمدة
+        $supplierMetrics = (clone $actualPurchaseOrderQuery)
             ->select('supplier_id')
             ->selectRaw('COUNT(*) as row_count, COALESCE(SUM(grand_total), 0) as total_value')
             ->whereNotNull('supplier_id')
@@ -251,32 +262,30 @@ class ProcurementAnalyticsController extends Controller
             })
             ->values();
 
-        // توزيع المشتريات على الأقسام يقتصر على الفواتير المعتمدة محاسبياً
-        $departmentMetrics = DB::table('supplier_invoices as si')
-            ->join('purchase_orders as po', 'po.id', '=', 'si.purchase_order_id')
+        // توزيع المشتريات على الأقسام يقتصر على أوامر الشراء الفعلية المعتمدة
+        $departmentMetrics = DB::table('purchase_orders as po')
             ->leftJoin('purchase_requests as pr', 'pr.id', '=', 'po.purchase_request_id')
             ->leftJoin('departments as d', 'd.id', '=', 'pr.department_id')
             ->leftJoin('users as creator', 'creator.id', '=', 'po.created_by_user_id')
-            ->whereNotIn('si.status', ['VOIDED', 'CANCELLED'])
-            ->whereNotIn('po.status', ['REJECTED', 'PO_DRAFT', 'PENDING_ACTUAL_PO'])
+            ->where(function ($q) {
+                $q->whereNotNull('po.finalized_at')
+                  ->orWhereIn('po.status', ['APPROVED_BY_ACCOUNTING', 'FINAL_APPROVED'])
+                  ->orWhereExists(function ($sub) {
+                      $sub->select(DB::raw(1))
+                          ->from('supplier_invoices as si')
+                          ->whereColumn('si.purchase_order_id', 'po.id')
+                          ->whereNotIn('si.status', ['VOIDED', 'CANCELLED']);
+                  });
+            })
+            ->whereNotIn('po.status', ['REJECTED', 'PO_DRAFT', 'PENDING_ACTUAL_PO', 'CANCELLED', 'VOIDED'])
             ->when($startDate !== null, function ($q) use ($startDate) {
-                $q->where(function ($sub) use ($startDate) {
-                    $sub->whereNotNull('si.invoice_date')->where('si.invoice_date', '>=', $startDate->toDateString())
-                        ->orWhere(function ($fb) use ($startDate) {
-                            $fb->whereNull('si.invoice_date')->where('si.created_at', '>=', $startDate);
-                        });
-                });
+                $q->where('po.created_at', '>=', $startDate);
             })
             ->when($endDate !== null, function ($q) use ($endDate) {
-                $q->where(function ($sub) use ($endDate) {
-                    $sub->whereNotNull('si.invoice_date')->where('si.invoice_date', '<=', $endDate->toDateString())
-                        ->orWhere(function ($fb) use ($endDate) {
-                            $fb->whereNull('si.invoice_date')->where('si.created_at', '<=', $endDate);
-                        });
-                });
+                $q->where('po.created_at', '<=', $endDate);
             })
             ->when($allowedDepartmentCodes !== null, fn ($query) => $query->whereIn('d.code', $allowedDepartmentCodes))
-            ->selectRaw('COALESCE(pr.department_id, creator.department_id, 0) as department_id, COUNT(DISTINCT po.id) as row_count, COALESCE(SUM(si.amount), 0) as total_value')
+            ->selectRaw('COALESCE(pr.department_id, creator.department_id, 0) as department_id, COUNT(DISTINCT po.id) as row_count, COALESCE(SUM(po.grand_total), 0) as total_value')
             ->groupByRaw('COALESCE(pr.department_id, creator.department_id, 0)')
             ->get();
         $departmentLookup = Department::query()
@@ -323,8 +332,11 @@ class ProcurementAnalyticsController extends Controller
         // not valid for PostgreSQL boolean columns.
         $supplierCount = Supplier::query()->count();
         $activeSupplierCount = Supplier::query()->where('is_active', true)->count();
-        $totalOrderCount = (int) ($invoicedOrderTotals?->purchase_orders_count ?? 0);
-        $totalValue = $totalInvoicedAmount > 0 ? $totalInvoicedAmount : (float) ($invoicedOrderTotals?->total_value ?? 0);
+        $totalOrderCount = (int) ($actualOrderTotals?->purchase_orders_count ?? 0);
+        $totalValue = (float) ($actualOrderTotals?->total_value ?? 0);
+        if ($totalValue <= 0 && $totalInvoicedAmount > 0) {
+            $totalValue = $totalInvoicedAmount;
+        }
         $orderCountByStatus = $statusMetrics->keyBy('status');
         $requestCountByStatus = $requestStatusMetrics->keyBy('status');
         $pendingProcurementCount = (int) ($requestCountByStatus->get('PENDING_PROCUREMENT_APPROVAL')?->row_count ?? 0);

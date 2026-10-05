@@ -9,10 +9,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\Concerns\RecordsSystemEvents;
+use App\Traits\ScopesDataByUserRole;
 
 class PurchaseOrder extends Model
 {
-    use HasFactory, SoftDeletes, RecordsSystemEvents;
+    use HasFactory, SoftDeletes, RecordsSystemEvents, ScopesDataByUserRole;
 
     protected $table = 'purchase_orders';
 
@@ -144,29 +145,49 @@ class PurchaseOrder extends Model
 
     /**
      * Scope to filter only Actual Purchase Orders (excluding preliminary/unfinalized orders).
+     * Strictly requires finalized_at IS NOT NULL, or formal final approval, or valid supplier invoices.
      */
     public function scopeActualPo($query)
     {
         return $query->where(function ($q) {
             $q->whereNotNull('finalized_at')
               ->orWhereIn('status', ['APPROVED_BY_ACCOUNTING', 'FINAL_APPROVED'])
-              ->orWhereHas('supplierInvoices', fn ($iq) => $iq->whereNotIn('status', ['VOIDED', 'CANCELLED']))
-              ->orWhereHas('purchaseReceipts', fn ($rq) => $rq->where('status', 'APPROVED'));
-        })->whereNotIn('status', ['PO_DRAFT', 'REJECTED', 'CANCELLED', 'VOIDED']);
+              ->orWhereHas('supplierInvoices', fn ($iq) => $iq->whereNotIn('status', ['VOIDED', 'CANCELLED']));
+        })->whereNotIn('status', ['PO_DRAFT', 'PENDING_ACTUAL_PO', 'REJECTED', 'CANCELLED', 'VOIDED']);
+    }
+
+    /**
+     * Scope to filter orders that are strictly finalized (whereNotNull('finalized_at')).
+     */
+    public function scopeFinalizedActual($query)
+    {
+        return $query->whereNotNull('finalized_at')
+            ->whereNotIn('status', ['PO_DRAFT', 'PENDING_ACTUAL_PO', 'REJECTED', 'CANCELLED', 'VOIDED']);
     }
 
     /**
      * Check if this purchase order is an Actual PO.
      */
+    /**
+     * Check if this purchase order is an Actual PO.
+     */
     public function isActualPo(): bool
     {
-        if (in_array($this->status, ['PO_DRAFT', 'REJECTED', 'CANCELLED', 'VOIDED'], true)) {
+        if (in_array($this->status, ['PO_DRAFT', 'PENDING_ACTUAL_PO', 'REJECTED', 'CANCELLED', 'VOIDED'], true)) {
             return false;
         }
 
         return ! is_null($this->finalized_at)
             || in_array($this->status, ['APPROVED_BY_ACCOUNTING', 'FINAL_APPROVED'], true)
-            || $this->supplierInvoices()->whereNotIn('status', ['VOIDED', 'CANCELLED'])->exists()
-            || $this->purchaseReceipts()->where('status', 'APPROVED')->exists();
+            || $this->supplierInvoices()->whereNotIn('status', ['VOIDED', 'CANCELLED'])->exists();
+    }
+
+    /**
+     * Check if this purchase order represents an internal stock withdrawal / warehouse movement.
+     */
+    public function isInternalWarehouse(): bool
+    {
+        return $this->supplier?->isInternalWarehouse()
+            || ($this->supplier_id && $this->supplier_id === Supplier::getOrCreateInternalWarehouseSupplier()->id);
     }
 }

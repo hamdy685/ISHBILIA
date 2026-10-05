@@ -268,9 +268,9 @@ class PurchaseRequestController extends Controller
             ], 403);
         }
 
-        if ($pr->status !== 'DRAFT') {
+        if (! in_array($pr->status, ['DRAFT', 'REJECTED', 'RETURNED'], true)) {
             return response()->json([
-                'message' => 'Only draft purchase requests can be submitted.',
+                'message' => 'Only draft or rejected/returned purchase requests can be submitted.',
             ], 409);
         }
 

@@ -189,9 +189,12 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
       [
         receipt.receipt_number,
         receipt.purchase_order?.po_number,
+        receipt.supplier?.company_name,
+        receipt.supplier_name,
         receipt.purchase_order?.supplier?.company_name,
         receipt.purchase_order?.purchase_request?.department?.name,
         receipt.warehouse_keeper?.name,
+        receipt.is_internal_warehouse ? 'المخزن الداخلي' : '',
       ]
         .filter(Boolean)
         .join(' '),
@@ -204,12 +207,15 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
       [
         receipt.receipt_number,
         receipt.purchase_order?.po_number,
+        receipt.supplier?.company_name,
+        receipt.supplier_name,
         receipt.purchase_order?.supplier?.company_name,
         receipt.purchase_order?.purchase_request?.department?.name,
         receipt.warehouse_keeper?.name,
         receipt.site_engineer?.name,
         receipt.warehouse_notes,
         receipt.site_engineer_notes,
+        receipt.is_internal_warehouse ? 'المخزن الداخلي' : '',
       ]
         .filter(Boolean)
         .join(' '),
@@ -484,12 +490,21 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                           return (
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm sm:text-base pt-1">
                               <div className="flex items-center gap-3 text-slate-100 bg-slate-950/80 p-3.5 rounded-2xl border border-slate-800">
-                                <span className="text-3xl shrink-0">🏢</span>
+                                <span className="text-3xl shrink-0">
+                                  {order.supplier?.company_name === 'المخزن الداخلي' ? '🏛️' : '🏢'}
+                                </span>
                                 <div>
                                   <span className="text-slate-400 block text-xs font-bold">المورد صاحب البضاعة:</span>
-                                  <span className="font-black text-base sm:text-lg text-white block mt-0.5">
-                                    {order.supplier?.company_name || 'مورد غير محدد'}
-                                  </span>
+                                  <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                                    <span className="font-black text-base sm:text-lg text-white block">
+                                      {order.supplier?.company_name || 'مورد غير محدد'}
+                                    </span>
+                                    {order.supplier?.company_name === 'المخزن الداخلي' && (
+                                      <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-purple-950 text-purple-300 border border-purple-600/70 shadow-sm">
+                                        صرف من رصيد الشركة (سعر 0)
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
 
@@ -892,6 +907,12 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                 <span>توريد مباشر لموقع المباني (استلام مباشر بالموقع دون مرور بالمخزن)</span>
                               </span>
                             )}
+                            {(receipt.is_internal_warehouse || receipt.supplier?.company_name === 'المخزن الداخلي' || receipt.purchase_order?.supplier?.company_name === 'المخزن الداخلي') && (
+                              <span className="text-xs sm:text-sm font-black text-purple-200 bg-purple-950/90 border border-purple-500/80 px-3 py-1 rounded-xl flex items-center gap-1.5 shadow-md">
+                                <span>🏛️</span>
+                                <span>صرف من رصيد المخزن الداخلي (بضاعة متواجدة مسبقاً - سعر 0)</span>
+                              </span>
+                            )}
                           </div>
                         </div>
 
@@ -910,13 +931,16 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                             receipt.items?.find((i) => i.purchase_order_item?.region || i.purchase_order_item?.pr_item?.region)?.purchase_order_item?.pr_item?.region ||
                             null;
 
+                          const isInternal = receipt.is_internal_warehouse || receipt.supplier?.company_name === 'المخزن الداخلي' || receipt.purchase_order?.supplier?.company_name === 'المخزن الداخلي';
+                          const supplierName = receipt.supplier?.company_name || receipt.supplier_name || receipt.purchase_order?.supplier?.company_name || (isInternal ? 'المخزن الداخلي' : 'مورد غير محدد');
+
                           return (
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs sm:text-sm pt-1">
                               <div className="flex items-center gap-2 text-slate-200 bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/80">
-                                <span className="text-base">🏢</span>
+                                <span className="text-base">{isInternal ? '🏛️' : '🏢'}</span>
                                 <div>
                                   <span className="text-slate-400 block text-[11px]">المورد:</span>
-                                  <span className="font-bold text-slate-100">{receipt.purchase_order?.supplier?.company_name || 'مورد غير محدد'}</span>
+                                  <span className="font-bold text-slate-100">{supplierName}</span>
                                 </div>
                               </div>
 
@@ -1201,8 +1225,18 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                           أمر شراء: <span className="font-mono text-cyan-400">{receipt.purchase_order.po_number}</span>
                         </span>
                       )}
-                      <span className="text-xs sm:text-sm text-slate-300">
-                        🏢 {receipt.purchase_order?.supplier?.company_name || 'مورد غير محدد'}
+                      <span className="text-xs sm:text-sm text-slate-300 flex items-center gap-1.5 flex-wrap">
+                        <span>
+                          {receipt.is_internal_warehouse || receipt.supplier?.company_name === 'المخزن الداخلي' || receipt.purchase_order?.supplier?.company_name === 'المخزن الداخلي' ? '🏛️' : '🏢'}
+                        </span>
+                        <span>
+                          {receipt.supplier?.company_name || receipt.supplier_name || receipt.purchase_order?.supplier?.company_name || (receipt.is_internal_warehouse ? 'المخزن الداخلي' : 'مورد غير محدد')}
+                        </span>
+                        {(receipt.is_internal_warehouse || receipt.supplier?.company_name === 'المخزن الداخلي' || receipt.purchase_order?.supplier?.company_name === 'المخزن الداخلي') && (
+                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-purple-950 text-purple-300 border border-purple-700/60 shadow-sm">
+                            بضاعة مخزن داخلي (سعر 0)
+                          </span>
+                        )}
                       </span>
                       {receipt.receipt_type === 'SITE_DIRECT' && (
                         <span className="text-xs font-black px-2.5 py-0.5 rounded-full border bg-amber-950/80 text-amber-300 border-amber-600/70 shadow-sm">

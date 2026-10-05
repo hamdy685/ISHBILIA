@@ -193,7 +193,7 @@ export const ProcurementDashboardPage: React.FC = () => {
               type: 'PO' as const,
               code: po.po_number,
               title: `📦 إذن الاستلام معتمد — مطلوب إصدار أمر الشراء الفعلي (${po.supplier?.company_name || 'المورد'})`,
-              subtitle: 'الموقع أتم الاستلام — يرجى مطابقة وتعديل الأسعار والكميات لإصدار الأمر الفعلي للحسابات',
+              subtitle: 'الموقع أتم الاستلام — يرجى مطابقة وتعديل الأسعار والكميات لإصدار الأمر الفعلي للإدارة المالية',
               department: po.department?.name || po.purchase_request?.department?.name,
               supplier: po.supplier?.company_name,
               amount: Number(po.grand_total || 0),
@@ -252,9 +252,9 @@ export const ProcurementDashboardPage: React.FC = () => {
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <KpiCard
-          title="إجمالي أوامر الشراء الفعلية"
+          title="إجمالي المشتريات الفعلية"
           value={<CurrencyDisplay amount={analytics?.metrics.total_value || 0} amountClassName="text-base font-bold font-mono text-cyan-400" />}
-          subtext="أمر شراء فعلي معتمد"
+          subtext="بناءً على أوامر الشراء الفعلية المعتمدة"
           accentColor="cyan"
           to="/procurement/reports"
           clickableHint="عرض التقارير ←"
@@ -318,7 +318,7 @@ export const ProcurementDashboardPage: React.FC = () => {
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                الطلبات المستلمة بالموقع والمعتمد إذن استلامها، تتطلب مطابقة الكميات وتعديل الأسعار لإصدار أمر الشراء الفعلي النهائي للحسابات.
+                الطلبات المستلمة بالموقع والمعتمد إذن استلامها، تتطلب مطابقة الكميات وتعديل الأسعار لإصدار أمر الشراء الفعلي النهائي للإدارة المالية.
               </p>
             </div>
           </div>
@@ -334,7 +334,7 @@ export const ProcurementDashboardPage: React.FC = () => {
 
         {pendingActualPos.length === 0 ? (
           <div className="text-center py-6 text-slate-400 text-xs bg-slate-900/60 rounded-xl border border-slate-800/80 mt-4">
-            🎉 لا توجد طلبات معلقة بانتظار إصدار أمر الشراء الفعلي حالياً. تم استكمال جميع الاستلامات المعتمدة وتحويلها للحسابات.
+            🎉 لا توجد طلبات معلقة بانتظار إصدار أمر الشراء الفعلي حالياً. تم استكمال جميع الاستلامات المعتمدة وتحويلها للإدارة المالية.
           </div>
         ) : (
           <div className="mt-4 space-y-3">

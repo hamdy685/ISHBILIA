@@ -392,7 +392,7 @@ class SupplierInvoiceService
             ->all();
     }
 
-    public function supplierAccount(Supplier $supplier, ?User $user = null): array
+    public function supplierAccount(Supplier $supplier, ?User $user = null, ?string $fromDate = null): array
     {
         $allowedCodes = $this->getAllowedDepartmentCodesForAccountant($user);
 
@@ -426,11 +426,11 @@ class SupplierInvoiceService
             'summary' => $this->supplierSummary($supplier, $user),
             'invoices' => $supplier->invoices->sortByDesc('invoice_date')->values(),
             'payments' => $supplier->payments->sortByDesc('payment_date')->values(),
-            'ledger' => $this->buildSupplierLedger($supplier, $user),
+            'ledger' => $this->buildSupplierLedger($supplier, $user, $fromDate),
         ];
     }
 
-    public function buildSupplierLedger(Supplier $supplier, ?User $user = null): array
+    public function buildSupplierLedger(Supplier $supplier, ?User $user = null, ?string $fromDate = null): array
     {
         $allowedCodes = $this->getAllowedDepartmentCodesForAccountant($user);
         $rows = [];
@@ -494,9 +494,10 @@ class SupplierInvoiceService
 
             $date = $receipt?->received_at?->format('Y-m-d')
                 ?? ($invoice?->invoice_date?->format('Y-m-d')
+                ?? ($order?->finalized_at?->format('Y-m-d')
                 ?? ($order?->actual_delivery_date?->format('Y-m-d')
                 ?? ($order?->order_date?->format('Y-m-d')
-                ?? ($order?->created_at?->format('Y-m-d') ?? now()->format('Y-m-d')))));
+                ?? ($order?->created_at?->format('Y-m-d') ?? now()->format('Y-m-d'))))));
 
             $parcel = $poItem->item_reference
                 ?: ($poItem->prItem?->item_reference
@@ -594,7 +595,56 @@ class SupplierInvoiceService
             return ($a['sort_order'] ?? 2) <=> ($b['sort_order'] ?? 2);
         });
 
-        // 5. Calculate Running Balance
+        // 5. If fromDate is set, calculate Balance Brought Forward (رصيد ما قبل الفترة)
+        $cleanFromDate = $fromDate ? trim($fromDate) : null;
+        if ($cleanFromDate) {
+            $priorRows = [];
+            $currentPeriodRows = [];
+            foreach ($rows as $r) {
+                // An opening balance record is by definition from a prior period
+                if ($r['type'] === 'OPENING_BALANCE' || $r['date'] < $cleanFromDate) {
+                    $priorRows[] = $r;
+                } else {
+                    $currentPeriodRows[] = $r;
+                }
+            }
+
+            $priorBalance = 0.0;
+            foreach ($priorRows as $pr) {
+                $priorBalance += (float) $pr['value'] - (float) $pr['paid'];
+            }
+            $priorBalance = round($priorBalance, 2);
+
+            $bfDateFormatted = Carbon::parse($cleanFromDate)->subDay()->format('d/m/Y');
+            $bfRow = [
+                'id' => 'BF-' . $supplier->id . '-' . $cleanFromDate,
+                'type' => 'CARRIED_FORWARD',
+                'sort_order' => 0,
+                'date' => $cleanFromDate,
+                'date_formatted' => $bfDateFormatted,
+                'description' => 'رصيد ما قبل الفترة المنقول (Balance B/F)',
+                'parcel' => '—',
+                'region' => '—',
+                'quantity' => null,
+                'uom' => '—',
+                'unit_price' => null,
+                'value' => $priorBalance >= 0 ? $priorBalance : 0.0,
+                'paid' => $priorBalance < 0 ? abs($priorBalance) : 0.0,
+                'balance' => $priorBalance,
+                'reference' => 'رصيد مرحل',
+            ];
+
+            $rows = array_merge([$bfRow], $currentPeriodRows);
+            $runningBalance = $priorBalance;
+            for ($i = 1; $i < count($rows); $i++) {
+                $runningBalance += (float) $rows[$i]['value'] - (float) $rows[$i]['paid'];
+                $rows[$i]['balance'] = round($runningBalance, 2);
+            }
+
+            return $rows;
+        }
+
+        // 6. Calculate Running Balance for all records
         $runningBalance = 0;
         foreach ($rows as &$row) {
             $runningBalance += (float) $row['value'] - (float) $row['paid'];

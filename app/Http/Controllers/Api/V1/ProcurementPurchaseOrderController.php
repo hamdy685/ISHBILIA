@@ -151,10 +151,14 @@ class ProcurementPurchaseOrderController extends Controller
             return response()->json(['message' => $e->getMessage()], 409);
         }
 
+        $message = $useQuotes
+            ? 'تم اعتماد الطلب وبدء مسار عروض الأسعار الثلاثة.'
+            : ($approved->status === 'PENDING_EXECUTIVE_APPROVAL'
+                ? 'تم إرسال الطلب بنجاح إلى المدير التنفيذي للاعتماد.'
+                : 'تم إرسال الطلب إلى الإدارة المالية للموافقة.');
+
         return response()->json([
-            'message' => $useQuotes
-                ? 'تم اعتماد الطلب وبدء مسار عروض الأسعار الثلاثة.'
-                : 'تم إرسال الطلب إلى الحسابات للموافقة المالية بدون عروض أسعار.',
+            'message' => $message,
             'data' => new PurchaseRequestResource($approved),
         ], 200);
     }
@@ -355,6 +359,10 @@ class ProcurementPurchaseOrderController extends Controller
     {
         $po = PurchaseOrder::where('id', (int) $id)->firstOrFail();
 
+        if ($po->finalized_at !== null) {
+            return response()->json(['message' => 'لا يمكن تعديل أمر الشراء بعد اعتماده كأمر شراء فعلي نهائي.'], 409);
+        }
+
         if (! in_array($po->status, ['PO_DRAFT', 'RETURNED_TO_PROCUREMENT', 'PENDING_ACTUAL_PO', 'ISSUED', 'PENDING_ACCOUNTING_REVIEW', 'APPROVED_BY_ACCOUNTING'], true)) {
             return response()->json(['message' => 'لا يمكن تعديل أمر الشراء في هذه الحالة.'], 409);
         }
@@ -376,6 +384,10 @@ class ProcurementPurchaseOrderController extends Controller
         $po = PurchaseOrder::findOrFail((int) $id);
         $item = PurchaseOrderItem::findOrFail((int) $itemId);
 
+        if ($po->finalized_at !== null) {
+            return response()->json(['message' => 'لا يمكن تعديل أمر الشراء بعد اعتماده كأمر شراء فعلي نهائي.'], 409);
+        }
+
         if (! in_array($po->status, ['PO_DRAFT', 'RETURNED_TO_PROCUREMENT', 'PENDING_ACTUAL_PO', 'ISSUED', 'PENDING_ACCOUNTING_REVIEW', 'APPROVED_BY_ACCOUNTING'], true)) {
             return response()->json(['message' => 'لا يمكن تعديل أمر الشراء في هذه الحالة.'], 409);
         }
@@ -395,6 +407,10 @@ class ProcurementPurchaseOrderController extends Controller
     {
         $po = PurchaseOrder::findOrFail((int) $id);
 
+        if ($po->finalized_at !== null) {
+            return response()->json(['message' => 'لا يمكن تعديل أمر الشراء بعد اعتماده كأمر شراء فعلي نهائي.'], 409);
+        }
+
         if (! in_array($po->status, ['PO_DRAFT', 'RETURNED_TO_PROCUREMENT', 'PENDING_ACTUAL_PO', 'ISSUED', 'PENDING_ACCOUNTING_REVIEW', 'APPROVED_BY_ACCOUNTING'], true)) {
             return response()->json(['message' => 'لا يمكن تعديل أمر الشراء في هذه الحالة.'], 409);
         }
@@ -410,6 +426,10 @@ class ProcurementPurchaseOrderController extends Controller
     {
         $po = PurchaseOrder::findOrFail((int) $id);
         $item = PurchaseOrderItem::findOrFail((int) $itemId);
+
+        if ($po->finalized_at !== null) {
+            return response()->json(['message' => 'لا يمكن تعديل أمر الشراء بعد اعتماده كأمر شراء فعلي نهائي.'], 409);
+        }
 
         if (! in_array($po->status, ['PO_DRAFT', 'RETURNED_TO_PROCUREMENT', 'PENDING_ACTUAL_PO', 'ISSUED', 'PENDING_ACCOUNTING_REVIEW', 'APPROVED_BY_ACCOUNTING'], true)) {
             return response()->json(['message' => 'لا يمكن تعديل أمر الشراء في هذه الحالة.'], 409);

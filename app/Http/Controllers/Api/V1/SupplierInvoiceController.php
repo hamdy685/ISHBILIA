@@ -165,8 +165,9 @@ class SupplierInvoiceController extends Controller
 
     public function supplierAccount(Request $request, Supplier $supplier): JsonResponse
     {
+        $fromDate = $request->query('from_date');
         return response()->json([
-            'data' => $this->service->supplierAccount($supplier, $request->user()),
+            'data' => $this->service->supplierAccount($supplier, $request->user(), $fromDate ? (string) $fromDate : null),
         ]);
     }
 
@@ -187,5 +188,48 @@ class SupplierInvoiceController extends Controller
             'message' => 'تم تحديث الرصيد الافتتاحي للمورد بنجاح.',
             'data' => $result,
         ]);
+    }
+
+    public function storeDirectPayment(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'invoice_id' => ['nullable', 'exists:supplier_invoices,id'],
+            'supplier_id' => ['nullable', 'exists:suppliers,id'],
+            'amount' => ['required', 'numeric', 'gt:0'],
+            'payment_date' => ['nullable', 'date'],
+            'payment_method' => ['required', 'string', 'in:BANK_TRANSFER,CASH,CHEQUE'],
+            'reference_number' => ['nullable', 'string', 'max:100'],
+            'notes' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        if (!empty($validated['invoice_id'])) {
+            $invoice = SupplierInvoice::findOrFail($validated['invoice_id']);
+            $result = $this->service->recordPayment(
+                $request->user(),
+                $invoice,
+                (float) $validated['amount'],
+                $validated['payment_date'] ?? null,
+                $validated['payment_method'],
+                $validated['reference_number'] ?? null,
+                $validated['notes'] ?? null,
+            );
+            return response()->json($result, 201);
+        }
+
+        if (!empty($validated['supplier_id'])) {
+            $supplier = Supplier::findOrFail($validated['supplier_id']);
+            $result = $this->service->recordSupplierPayment(
+                $request->user(),
+                $supplier,
+                (float) $validated['amount'],
+                $validated['payment_date'] ?? null,
+                $validated['payment_method'],
+                $validated['reference_number'] ?? null,
+                $validated['notes'] ?? null,
+            );
+            return response()->json($result, 201);
+        }
+
+        return response()->json(['message' => 'يجب تحديد الفاتورة أو المورد لتسجيل الدفعة.'], 422);
     }
 }

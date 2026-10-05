@@ -335,13 +335,14 @@ export const AdminMasterOrdersPage: React.FC = () => {
           </button>
 
           <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3 text-right">
-            <span className="text-[11px] font-bold text-slate-400 block">إجمالي القيمة المالية</span>
+            <span className="text-[11px] font-bold text-slate-400 block">إجمالي القيمة المالية الفعلية</span>
             <div className="flex items-baseline justify-between mt-1">
               <span className="text-lg font-mono font-black text-emerald-400">
                 {formatCleanNumber(stats.total_financial_value)}
               </span>
               <span className="text-xs text-slate-400 font-bold">ج.م</span>
             </div>
+            <span className="text-[10px] text-slate-500 block mt-0.5">للأوامر الفعلية المعتمدة فقط</span>
           </div>
         </div>
       )}

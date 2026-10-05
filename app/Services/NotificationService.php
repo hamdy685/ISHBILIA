@@ -191,25 +191,51 @@ class NotificationService
             'notifiable_id' => $notifiable->getKey(),
         ])->first();
 
+        $poId = $notifiable instanceof PurchaseOrder ? $notifiable->id : ($notifiable instanceof PurchaseReceipt ? $notifiable->purchase_order_id : null);
+        $receiptId = $notifiable instanceof PurchaseReceipt ? $notifiable->id : null;
+
         if ($existing) {
             $existing->update([
                 'title' => $title,
                 'message' => $message,
+                'purchase_order_id' => $poId ?: $existing->purchase_order_id,
+                'purchase_receipt_id' => $receiptId ?: $existing->purchase_receipt_id,
                 'read_at' => null,
                 'created_at' => now(),
             ]);
+
+            try {
+                \Illuminate\Support\Facades\Notification::send(
+                    $user,
+                    new \App\Notifications\ProcurementWorkflowNotification($type, $title, $message, $notifiable)
+                );
+            } catch (\Throwable) {
+            }
+
             return $existing;
         }
 
-        return Notification::create([
+        $created = Notification::create([
             'user_id' => $userId,
             'type' => $type,
             'notifiable_type' => get_class($notifiable),
             'notifiable_id' => $notifiable->getKey(),
+            'purchase_order_id' => $poId,
+            'purchase_receipt_id' => $receiptId,
             'title' => $title,
             'message' => $message,
             'read_at' => null,
         ]);
+
+        try {
+            \Illuminate\Support\Facades\Notification::send(
+                $user,
+                new \App\Notifications\ProcurementWorkflowNotification($type, $title, $message, $notifiable)
+            );
+        } catch (\Throwable) {
+        }
+
+        return $created;
     }
 
     /**
@@ -327,6 +353,19 @@ class NotificationService
                     'message' => "أمر الشراء {$purchaseOrder->po_number} وإذن الاستلام {$purchaseReceipt->receipt_number} مرتبطان بنفس العملية. افتح الرسالة لمراجعة المستندين واستكمال فاتورة المورد.",
                     'read_at' => null,
                 ]);
+            }
+
+            try {
+                \Illuminate\Support\Facades\Notification::send(
+                    $user,
+                    new \App\Notifications\ProcurementWorkflowNotification(
+                        'purchase_order_and_receipt_ready_accounting',
+                        'أمر الشراء وإذن الاستلام جاهزان للحسابات',
+                        "أمر الشراء {$purchaseOrder->po_number} وإذن الاستلام {$purchaseReceipt->receipt_number} مرتبطان بنفس العملية.",
+                        $purchaseOrder
+                    )
+                );
+            } catch (\Throwable) {
             }
         }
     }

@@ -113,13 +113,19 @@ export const getTimelineStepIndex = (request: PurchaseRequest): number => {
         po.has_approved_receipt || (po.receipts || []).some((r: any) => r.status === 'APPROVED')
     ) || historyHas(request, ['SITE_ENGINEER_APPROVED', 'RECEIPT_APPROVED_BY_SITE_ENGINEER']);
 
-  const isAccountingProcessed =
-    status === 'ACCOUNTING_PROCESSED' ||
-    status === 'COMPLETED' ||
-    pos.some((po: any) => po.is_paid || po.financial_status === 'PAID');
+  const hasActualPoFinalized =
+    pos.some(
+      (po: any) =>
+        Boolean(po.finalized_at) ||
+        Boolean(po.is_actual_po) ||
+        po.status === 'FINAL_APPROVED' ||
+        (po.supplier?.company_name === 'المخزن الداخلي' && (po.has_approved_receipt || hasApprovedReceipt))
+    ) ||
+    historyHas(request, ['ACTUAL_PO_FINALIZED', 'ACTUAL_PO_ISSUED', 'INTERNAL_STOCK_RECEIPT_APPROVED']) ||
+    ['COMPLETED', 'ACCOUNTING_PROCESSED'].includes(status);
 
-  if (isAccountingProcessed) return isDirect ? 8 : 9;
-  if (hasApprovedReceipt) return isDirect ? 7 : 8;
+  if (hasActualPoFinalized) return isDirect ? 8 : 9;
+  if (hasApprovedReceipt || pos.some((po: any) => po.status === 'PENDING_ACTUAL_PO')) return isDirect ? 8 : 9;
   if (hasIssuedPo || status === 'PENDING_SITE_ENGINEER') return isDirect ? 7 : 8;
 
   if (status === 'APPROVED_BY_PROCUREMENT' || (isDirect && status === 'APPROVED_BY_ACCOUNTING')) {
@@ -172,6 +178,17 @@ export const generateTimelineCards = (request: PurchaseRequest): TimelineCardIte
     status === 'ACCOUNTING_PROCESSED' ||
     status === 'COMPLETED' ||
     pos.some((po: any) => po.is_paid || po.financial_status === 'PAID');
+
+  const hasActualPoFinalized =
+    pos.some(
+      (po: any) =>
+        Boolean(po.finalized_at) ||
+        Boolean(po.is_actual_po) ||
+        po.status === 'FINAL_APPROVED' ||
+        (po.supplier?.company_name === 'المخزن الداخلي' && (po.has_approved_receipt || hasApprovedReceipt))
+    ) ||
+    historyHas(request, ['ACTUAL_PO_FINALIZED', 'ACTUAL_PO_ISSUED', 'INTERNAL_STOCK_RECEIPT_APPROVED']) ||
+    ['COMPLETED', 'ACCOUNTING_PROCESSED'].includes(status);
 
   const cards: TimelineCardItem[] = [];
 
@@ -422,7 +439,7 @@ export const generateTimelineCards = (request: PurchaseRequest): TimelineCardIte
 
   // البطاقة 7: إصدار أمر الشراء (PO)
   let cardPoState: TimelineCardState = 'PENDING';
-  if (hasIssuedPo) {
+  if (hasIssuedPo || hasApprovedReceipt || hasActualPoFinalized) {
     cardPoState = 'COMPLETED';
   } else if (status === 'APPROVED_BY_PROCUREMENT' || (isDirect && status === 'APPROVED_BY_ACCOUNTING')) {
     cardPoState = isRejected ? 'REJECTED' : 'ACTIVE';
@@ -446,7 +463,7 @@ export const generateTimelineCards = (request: PurchaseRequest): TimelineCardIte
 
   // البطاقة 8: استلام المخزن والفحص الهندسي
   let cardReceiptState: TimelineCardState = 'PENDING';
-  if (hasApprovedReceipt) {
+  if (hasApprovedReceipt || hasActualPoFinalized) {
     cardReceiptState = 'COMPLETED';
   } else if (hasWarehouseReceipt || hasIssuedPo || status === 'PENDING_SITE_ENGINEER') {
     cardReceiptState = isRejected ? 'REJECTED' : 'ACTIVE';
@@ -472,28 +489,38 @@ export const generateTimelineCards = (request: PurchaseRequest): TimelineCardIte
       : undefined,
   });
 
-  // البطاقة 9: الإغلاق المالي وصرف الفاتورة
-  let cardFinanceState: TimelineCardState = 'PENDING';
-  if (isAccountingProcessed) {
-    cardFinanceState = 'COMPLETED';
-  } else if (hasApprovedReceipt) {
-    cardFinanceState = isRejected ? 'REJECTED' : 'ACTIVE';
+  // البطاقة 9: إصدار أمر الشراء الفعلي (Actual PO) - المحطة النهائية والمكتملة (100%)
+  let cardActualPoState: TimelineCardState = 'PENDING';
+  if (hasActualPoFinalized) {
+    cardActualPoState = 'COMPLETED';
+  } else if (hasApprovedReceipt || pos.some((po: any) => po.status === 'PENDING_ACTUAL_PO')) {
+    cardActualPoState = isRejected ? 'REJECTED' : 'ACTIVE';
   } else {
-    cardFinanceState = 'PENDING';
+    cardActualPoState = 'PENDING';
   }
 
   cards.push({
-    id: 'step-9-finance-close',
+    id: 'step-9-actual-po',
     stepNumber: 9,
     stepLabel: '9',
-    title: 'الإغلاق المالي وصرف الفاتورة',
-    role: 'الإدارة المالية',
-    assignee: 'المدير المالي / حسابات الموردين',
-    state: cardFinanceState,
-    description: 'مطابقة الفاتورة الضريبية مع أمر الشراء وإذن الاستلام وصرف مستحقات المورد.',
-    badgeText: cardFinanceState === 'COMPLETED' ? 'مكتمل ومغلق ماليًا ✅' : cardFinanceState === 'ACTIVE' ? 'جاهز للمطابقة والصرف 🔵' : 'المرحلة الختامية ⚪',
-    icon: '💰',
-    actionNote: cardFinanceState === 'ACTIVE' ? 'تم الفحص الهندسي بنجاح، والمعاملة الآن لدى الحسابات لتسجيل الفاتورة وصرف المستحقات.' : undefined,
+    title: 'إصدار أمر الشراء الفعلي (Actual PO)',
+    role: 'إدارة المشتريات',
+    assignee: 'مدير المشتريات',
+    state: cardActualPoState,
+    description: '💡 تم الفحص الهندسي بنجاح، وتم إصدار أمر الشراء الفعلي (Actual PO) وبكده تكون خلصت وتمت بنجاح.',
+    badgeText:
+      cardActualPoState === 'COMPLETED'
+        ? 'أمر شراء فعلي معتمد (100%) ✅'
+        : cardActualPoState === 'ACTIVE'
+        ? 'بانتظار إصدار الأمر الفعلي 🔵'
+        : 'المحطة الختامية ⚪',
+    icon: '🎯',
+    actionNote:
+      cardActualPoState === 'COMPLETED'
+        ? '💡 تم الفحص الهندسي بنجاح، وتم إصدار أمر الشراء الفعلي (Actual PO) وبكده تكون خلصت وتمت بنجاح.'
+        : cardActualPoState === 'ACTIVE'
+        ? 'تم الفحص الهندسي بنجاح، وبانتظار قيام مدير المشتريات بإصدار أمر الشراء الفعلي (Actual PO) لإغلاق المعاملة بنسبة 100%.'
+        : undefined,
   });
 
   return cards;
@@ -525,6 +552,17 @@ export const getActionGuidance = (request: PurchaseRequest): { text: string; bg:
     ) ||
     Boolean(request.purchase_order_issued);
 
+  const hasActualPoFinalized =
+    pos.some(
+      (po: any) =>
+        Boolean(po.finalized_at) ||
+        Boolean(po.is_actual_po) ||
+        po.status === 'FINAL_APPROVED' ||
+        (po.supplier?.company_name === 'المخزن الداخلي' && (po.has_approved_receipt || hasApprovedReceipt))
+    ) ||
+    historyHas(request, ['ACTUAL_PO_FINALIZED', 'ACTUAL_PO_ISSUED', 'INTERNAL_STOCK_RECEIPT_APPROVED']) ||
+    ['COMPLETED', 'ACCOUNTING_PROCESSED'].includes(status);
+
   if (status === 'DRAFT') {
     return {
       icon: '✍️',
@@ -539,18 +577,18 @@ export const getActionGuidance = (request: PurchaseRequest): { text: string; bg:
       bg: 'border-rose-800 bg-rose-950/60 text-rose-200',
     };
   }
-  if (status === 'ACCOUNTING_PROCESSED' || status === 'COMPLETED') {
+  if (status === 'ACCOUNTING_PROCESSED' || status === 'COMPLETED' || hasActualPoFinalized) {
     return {
       icon: '🎉',
-      text: 'اكتملت دورة الشراء المستندية بنجاح تام، وتم سداد فواتير المورد وإغلاق المعاملة ماليًا ومخزنيًا.',
+      text: '💡 تم الفحص الهندسي بنجاح، وتم إصدار أمر الشراء الفعلي (Actual PO) وبكده تكون خلصت وتمت بنجاح (100%).',
       bg: 'border-emerald-600 bg-emerald-950/60 text-emerald-100',
     };
   }
-  if (hasApprovedReceipt) {
+  if (hasApprovedReceipt || pos.some((po: any) => po.status === 'PENDING_ACTUAL_PO')) {
     return {
-      icon: '💰',
-      text: 'تم فحص واعتماد المواد هندسياً بالموقع بنجاح، والطلب الآن لدى الحسابات لمطابقة الفاتورة وإتمام إجراءات الصرف.',
-      bg: 'border-emerald-600 bg-emerald-950/50 text-emerald-100',
+      icon: '🎯',
+      text: 'تم فحص واعتماد المواد هندسياً بالموقع بنجاح، وبانتظار قيام مدير المشتريات بإصدار أمر الشراء الفعلي (Actual PO) لإغلاق المعاملة بنسبة 100%.',
+      bg: 'border-cyan-600 bg-cyan-950/50 text-cyan-100',
     };
   }
   if (hasWarehouseReceipt) {
@@ -639,7 +677,11 @@ export const PurchaseRequestTimeline: React.FC<PurchaseRequestTimelineProps> = (
   const activeStepIndex = useMemo(() => getTimelineStepIndex(request), [request]);
 
   const completedCardsCount = cards.filter((c) => c.state === 'COMPLETED').length;
-  const progressPercent = Math.round((completedCardsCount / Math.max(cards.length, 1)) * 100);
+  const isActualPoComplete = cards.some((c) => c.id === 'step-9-actual-po' && c.state === 'COMPLETED');
+  const progressPercent =
+    isActualPoComplete || completedCardsCount >= cards.length
+      ? 100
+      : Math.round((completedCardsCount / Math.max(cards.length, 1)) * 100);
 
   return (
     <section className="space-y-4" dir="rtl" aria-label="شريط تتبع دورة عمل طلب الشراء">
@@ -803,10 +845,20 @@ export const PurchaseRequestTimeline: React.FC<PurchaseRequestTimelineProps> = (
                 )}
               </div>
 
-              {/* Card Bottom: Active Action Note if waiting */}
-              {isActive && card.actionNote && (
-                <div className="mt-3 rounded-xl border border-cyan-500/40 bg-cyan-950/40 p-2 text-[10px] font-semibold text-cyan-200 leading-4">
-                  <span>💡 {card.actionNote}</span>
+              {/* Card Bottom: Active Action Note or Actual PO Completed Note */}
+              {((isActive && card.actionNote) || (isCompleted && card.id === 'step-9-actual-po')) && (
+                <div
+                  className={`mt-3 rounded-xl border p-2 text-[10px] font-semibold leading-4 ${
+                    isCompleted && card.id === 'step-9-actual-po'
+                      ? 'border-emerald-500/50 bg-emerald-950/50 text-emerald-200 shadow-sm'
+                      : 'border-cyan-500/40 bg-cyan-950/40 text-cyan-200'
+                  }`}
+                >
+                  <span>
+                    {isCompleted && card.id === 'step-9-actual-po'
+                      ? '💡 تم الفحص الهندسي بنجاح، وتم إصدار أمر الشراء الفعلي (Actual PO) وبكده تكون خلصت وتمت بنجاح.'
+                      : `💡 ${card.actionNote}`}
+                  </span>
                 </div>
               )}
 

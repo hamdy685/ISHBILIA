@@ -178,7 +178,7 @@ export interface SupplierAccountSummary extends SupplierBalanceSummary {
 
 export interface SupplierLedgerRow {
   id: string | number;
-  type: 'OPENING_BALANCE' | 'SUPPLY' | 'PAYMENT';
+  type: 'OPENING_BALANCE' | 'SUPPLY' | 'PAYMENT' | 'CARRIED_FORWARD';
   date: string;
   date_formatted?: string;
   description: string;
@@ -369,8 +369,10 @@ export const recordSupplierPaymentForInvoiceApi = async (invoiceId: number, payl
 export const getSupplierAccountsApi = async () =>
   (await cachedGetData<{ data: SupplierAccountSummary[] }>(`${accountingBase}/suppliers/accounts`)).data;
 
-export const getSupplierAccountApi = async (supplierId: number) =>
-  (await apiClient.get<{ data: SupplierAccountDetails }>(`${accountingBase}/suppliers/${supplierId}/account`)).data.data;
+export const getSupplierAccountApi = async (supplierId: number, fromDate?: string | null) => {
+  const query = fromDate ? `?from_date=${encodeURIComponent(fromDate)}` : '';
+  return (await apiClient.get<{ data: SupplierAccountDetails }>(`${accountingBase}/suppliers/${supplierId}/account${query}`)).data.data;
+};
 
 export const setSupplierOpeningBalanceApi = async (
   supplierId: number,

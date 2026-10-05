@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\Concerns\RecordsSystemEvents;
+use App\Traits\ScopesDataByUserRole;
 
 class PurchaseRequest extends Model
 {
@@ -19,6 +20,8 @@ class PurchaseRequest extends Model
         'DRAFT',
         'SUBMITTED',
         'UNDER_REVIEW',
+        'REJECTED',
+        'RETURNED',
     ];
 
     public function isEditableByRequester(): bool
@@ -40,7 +43,7 @@ class PurchaseRequest extends Model
         return in_array($this->status, self::REVIEWER_EDITABLE_STATUSES, true);
     }
 
-    use HasFactory, SoftDeletes, RecordsSystemEvents;
+    use HasFactory, SoftDeletes, RecordsSystemEvents, ScopesDataByUserRole;
 
     protected $table = 'purchase_requests';
 
