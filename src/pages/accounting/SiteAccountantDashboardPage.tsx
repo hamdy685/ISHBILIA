@@ -25,6 +25,7 @@ import { PurchaseRequest } from '../../types/purchaseRequest';
 import { getUnitLabel } from '../../utils/units';
 import { formatCleanNumber } from '../../utils/numberFormat';
 import ThreeWayMatchPrintModal from '../../components/accounting/ThreeWayMatchPrintModal';
+import { InvoiceRegistrationModal } from '../../components/accounting/InvoiceRegistrationModal';
 import { shareReceiptOnWhatsApp } from '../../utils/whatsapp';
 
 const cleanDate = (d?: string | null) => (d ? String(d).slice(0, 10) : '—');
@@ -71,6 +72,7 @@ export const SiteAccountantDashboardPage: React.FC = () => {
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [recordingId, setRecordingId] = useState<number | null>(null);
   const [selectedCycleReceipt, setSelectedCycleReceipt] = useState<ApprovedReceipt | null>(null);
+  const [registerInvoiceReceipt, setRegisterInvoiceReceipt] = useState<ApprovedReceipt | null>(null);
 
   const loadDashboardData = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -226,6 +228,9 @@ export const SiteAccountantDashboardPage: React.FC = () => {
         reason: 'تم اعتماد إذن الاستلام في الموقع وينتظر تأكيد تسجيله في شيت الإكسيل الخارجي بواسطة المحاسب.',
         actionUrl: `/accounting/supplier-finance?tab=payments&purchase_receipt_id=${receipt.id}`,
         actionLabel: 'تسجيل الفاتورة',
+        onAction: () => {
+          setRegisterInvoiceReceipt(receipt);
+        },
         timeAgo: cleanDate(receipt.received_at),
         created_at: receipt.received_at || undefined,
         items_count: itemsList.length,
@@ -234,7 +239,7 @@ export const SiteAccountantDashboardPage: React.FC = () => {
           await handleMarkRecorded(receipt.id, comment || undefined);
         },
         directApproveLabel: 'تم التسجيل ✅',
-        directApproveClassName: 'bg-blue-600 hover:bg-blue-500 shadow-blue-950/40',
+        directApproveClassName: 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-950/40',
         directApproveIcon: <span>📝</span>,
       });
     }
@@ -557,12 +562,23 @@ export const SiteAccountantDashboardPage: React.FC = () => {
                                 💬 واتساب
                               </Button>
 
-                              {/* 3. زر تم التسجيل بالشيت الخارجي */}
+                              {/* 3. زر تسجيل الفاتورة في نفس الصفحة */}
+                              <Button
+                                size="sm"
+                                variant="primary"
+                                className="whitespace-nowrap font-bold text-[11px] bg-cyan-600 hover:bg-cyan-500 shadow-cyan-950/40"
+                                onClick={() => setRegisterInvoiceReceipt(receipt)}
+                                title="تسجيل فاتورة المورد لهذا الإذن في نفس الصفحة دون مغادرة"
+                              >
+                                🧾 تسجيل فاتورة
+                              </Button>
+
+                              {/* 4. زر تم التسجيل بالشيت الخارجي */}
                               {!isRecorded ? (
                                 <Button
                                   size="sm"
                                   variant="primary"
-                                  className="whitespace-nowrap font-bold text-[11px] bg-blue-600 hover:bg-blue-500 shadow-blue-950/40"
+                                  className="whitespace-nowrap font-bold text-[11px] bg-emerald-600 hover:bg-emerald-500 shadow-emerald-950/40"
                                   disabled={isRecording}
                                   onClick={() => void handleMarkRecorded(receipt.id)}
                                   title="تأكيد التسجيل في شيت الإكسيل الخارجي"
@@ -829,6 +845,17 @@ export const SiteAccountantDashboardPage: React.FC = () => {
         receipt={selectedCycleReceipt}
         isOpen={Boolean(selectedCycleReceipt)}
         onClose={() => setSelectedCycleReceipt(null)}
+      />
+
+      {/* ── مودال تسجيل فاتورة المورد في نفس الصفحة ── */}
+      <InvoiceRegistrationModal
+        receipt={registerInvoiceReceipt}
+        isOpen={Boolean(registerInvoiceReceipt)}
+        onClose={() => setRegisterInvoiceReceipt(null)}
+        onSuccess={(msg) => {
+          setActionSuccess(msg);
+          void loadDashboardData(true);
+        }}
       />
     </div>
   );

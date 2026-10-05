@@ -61,6 +61,7 @@ export interface ActionInboxItem {
   ) => Promise<void> | void;
   onDirectReject?: (item: ActionInboxItem, reason: string) => Promise<void> | void;
   onDirectSubmit?: (item: ActionInboxItem) => Promise<void> | void;
+  onAction?: (item: ActionInboxItem) => void | Promise<void>;
   directApproveLabel?: string;
   directApproveClassName?: string;
   directApproveIcon?: React.ReactNode;
@@ -657,7 +658,11 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                             variant="success"
                             size="sm"
                             disabled={directApprovingId === item.id}
-                            onClick={() => handleApproveClick(item)}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleApproveClick(item);
+                            }}
                             className={`flex-1 text-xs font-black text-white shadow-md transition-all ${
                               item.directApproveClassName || 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-950/40'
                             }`}
@@ -700,7 +705,15 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                       <Button
                         variant={(!item.onDirectApprove && !item.onDirectSubmit) ? 'primary' : 'secondary'}
                         size="sm"
-                        onClick={() => navigate(item.actionUrl)}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (item.onAction) {
+                            item.onAction(item);
+                          } else {
+                            navigate(item.actionUrl);
+                          }
+                        }}
                         className={`flex-1 text-xs font-bold ${
                           (!item.onDirectApprove && !item.onDirectSubmit)
                             ? 'bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black shadow-md shadow-cyan-950/50'
