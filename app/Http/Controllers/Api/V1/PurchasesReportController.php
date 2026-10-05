@@ -292,21 +292,13 @@ class PurchasesReportController extends Controller
                     }
                     $receivedQty = $matchingReceiptItem ? (float) $matchingReceiptItem->received_quantity : null;
 
-                    // كميات وأسعار أمر الشراء الفعلي والاستلام المعتمد هي المصدر الحصري للتقارير المالية
-                    $isActualPo = $order->isActualPo();
-                    $poQty = (float) ($poItem->quantity ?? 1);
+                    // كميات وأسعار أمر الشراء الفعلي هي المصدر الحصري للتقارير المالية
+                    $poQty = (float) ($poItem->quantity ?? 0);
                     $unitPrice = (float) ($poItem->unit_price ?? $poItem->estimated_unit_price ?? 0);
-
-                    // الأولوية الصارمة: الكمية المستلمة فعلياً بإذن الاستلام المعتمد أو كمية أمر الشراء الفعلي
-                    if ($receivedQty !== null && $receivedQty > 0) {
-                        $effectiveQty = $receivedQty;
-                    } elseif ($isActualPo || $order->finalized_at) {
-                        $effectiveQty = $poQty;
-                    } else {
-                        $effectiveQty = $poQty;
-                    }
-
-                    $lineTotal = round($effectiveQty * $unitPrice, 2);
+                    $effectiveQty = $poQty;
+                    $lineTotal = (float) ($poItem->line_total !== null && (float) $poItem->line_total > 0
+                        ? $poItem->line_total
+                        : round($effectiveQty * $unitPrice, 2));
 
                     $rowParcelRef = $poItem->item_reference
                         ?: ($prItem?->item_reference ?: $defaultParcelRef);

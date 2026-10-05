@@ -37,14 +37,26 @@ const money = (value: string | number | null | undefined) => `${formatCleanNumbe
 
 const receiptValue = (receipt: ApprovedReceipt) => {
   const po = receipt.purchase_order;
-  if (po?.finalized_at && Number(po.grand_total) > 0) {
+  if (po?.grand_total && Number(po.grand_total) > 0) {
     return Number(po.grand_total);
+  }
+  if (po?.items && po.items.length > 0) {
+    return po.items.reduce((sum: number, it: any) => {
+      const q = Number(it.quantity || 0);
+      const p = Number(it.unit_price || 0);
+      const lt = it.line_total !== undefined && it.line_total !== null && Number(it.line_total) > 0
+        ? Number(it.line_total)
+        : Math.round(q * p * 100) / 100;
+      return sum + lt;
+    }, 0);
   }
   return (receipt.items || []).reduce((sum, item) => {
     const poItem = item.purchase_order_item;
-    const finalQty = Number(item.received_quantity ?? poItem?.actual_quantity ?? poItem?.quantity ?? 0);
+    const poQty = Number(poItem?.quantity ?? poItem?.actual_quantity ?? item.ordered_quantity ?? item.received_quantity ?? 0);
     const unitPrice = Number(poItem?.unit_price || 0);
-    const lineTotal = Math.round(finalQty * unitPrice * 100) / 100;
+    const lineTotal = poItem?.line_total !== undefined && poItem?.line_total !== null && Number(poItem.line_total) > 0
+      ? Number(poItem.line_total)
+      : Math.round(poQty * unitPrice * 100) / 100;
     return sum + lineTotal;
   }, 0);
 };

@@ -33,14 +33,26 @@ const money = (value: string | number | null | undefined) =>
 
 const receiptValue = (receipt: ApprovedReceipt) => {
   const po = receipt.purchase_order;
-  if (po?.finalized_at && Number(po.grand_total) > 0) {
+  if (po?.grand_total && Number(po.grand_total) > 0) {
     return Number(po.grand_total);
+  }
+  if (po?.items && po.items.length > 0) {
+    return po.items.reduce((sum: number, it: any) => {
+      const q = Number(it.quantity || 0);
+      const p = Number(it.unit_price || 0);
+      const lt = it.line_total !== undefined && it.line_total !== null && Number(it.line_total) > 0
+        ? Number(it.line_total)
+        : Math.round(q * p * 100) / 100;
+      return sum + lt;
+    }, 0);
   }
   return (receipt.items || []).reduce((sum, item) => {
     const poItem = item.purchase_order_item;
-    const finalQty = Number(item.received_quantity ?? poItem?.actual_quantity ?? poItem?.quantity ?? 0);
+    const poQty = Number(poItem?.quantity ?? poItem?.actual_quantity ?? item.ordered_quantity ?? item.received_quantity ?? 0);
     const unitPrice = Number(poItem?.unit_price || 0);
-    const lineTotal = Math.round(finalQty * unitPrice * 100) / 100;
+    const lineTotal = poItem?.line_total !== undefined && poItem?.line_total !== null && Number(poItem.line_total) > 0
+      ? Number(poItem.line_total)
+      : Math.round(poQty * unitPrice * 100) / 100;
     return sum + lineTotal;
   }, 0);
 };
@@ -145,40 +157,47 @@ export const SiteAccountantDashboardPage: React.FC = () => {
     };
   }, [user, hasRole]);
 
-  // Helper to build items list for a receipt
+  // Helper to build items list for a receipt strictly relying on Actual PO
   const buildReceiptItemsList = (receipt: ApprovedReceipt) => {
     const po = receipt.purchase_order;
-    const isActualPo = Boolean(po?.finalized_at);
-    return isActualPo && po?.items && po.items.length > 0
-      ? po.items.map((poi: any) => {
-          const actualQty = Number(poi.actual_quantity ?? poi.quantity ?? 0);
-          const unitPrice = Number(poi.unit_price || 0);
-          return {
-            description: poi.item_name || poi.item_description || 'صنف',
-            quantity: actualQty,
-            uom: poi.uom,
-            specifications: poi.specifications,
-            parcel: poi.item_reference,
-            region: poi.region,
-            unit_price: unitPrice,
-            line_total: Math.round(actualQty * unitPrice * 100) / 100,
-          };
-        })
-      : (receipt.items || []).map((it) => {
-          const poItem = it.purchase_order_item;
-          const actualQty = Number(it.received_quantity ?? poItem?.actual_quantity ?? poItem?.quantity ?? 0);
-          const unitPrice = Number(poItem?.unit_price || 0);
-          return {
-            description: poItem?.item_name || poItem?.item_description || 'صنف',
-            quantity: actualQty,
-            uom: poItem?.uom,
-            specifications: poItem?.specifications,
-            parcel: poItem?.item_reference,
-            region: poItem?.region,
-            unit_price: unitPrice,
-            line_total: Math.round(actualQty * unitPrice * 100) / 100,
-          };
-        });
+    if (po?.items && po.items.length > 0) {
+      return po.items.map((poi: any) => {
+        const poQty = Number(poi.quantity ?? poi.actual_quantity ?? 0);
+        const unitPrice = Number(poi.unit_price || 0);
+        const lineTotal = poi.line_total !== undefined && poi.line_total !== null && Number(poi.line_total) > 0
+          ? Number(poi.line_total)
+          : Math.round(poQty * unitPrice * 100) / 100;
+        return {
+          description: poi.item_name || poi.item_description || 'صنف',
+          quantity: poQty,
+          uom: poi.uom,
+          specifications: poi.specifications,
+          parcel: poi.item_reference,
+          region: poi.region,
+          unit_price: unitPrice,
+          line_total: lineTotal,
+        };
+      });
+    }
+
+    return (receipt.items || []).map((it) => {
+      const poItem = it.purchase_order_item;
+      const poQty = Number(poItem?.quantity ?? poItem?.actual_quantity ?? it.ordered_quantity ?? it.received_quantity ?? 0);
+      const unitPrice = Number(poItem?.unit_price || 0);
+      const lineTotal = poItem?.line_total !== undefined && poItem?.line_total !== null && Number(poItem.line_total) > 0
+        ? Number(poItem.line_total)
+        : Math.round(poQty * unitPrice * 100) / 100;
+      return {
+        description: poItem?.item_name || poItem?.item_description || 'صنف',
+        quantity: poQty,
+        uom: poItem?.uom,
+        specifications: poItem?.specifications,
+        parcel: poItem?.item_reference,
+        region: poItem?.region,
+        unit_price: unitPrice,
+        line_total: lineTotal,
+      };
+    });
   };
 
   // Build Action Required Inbox Items
@@ -200,7 +219,9 @@ export const SiteAccountantDashboardPage: React.FC = () => {
         subtitle: receipt.purchase_order?.supplier?.company_name || 'مورد غير محدد',
         department: receipt.purchase_order?.purchase_request?.department?.name || accountantScope.defaultDeptName,
         supplier: receipt.purchase_order?.supplier?.company_name,
-        amount: receiptValue(receipt),
+        amount: Number(po?.grand_total || 0) > 0
+          ? Number(po?.grand_total)
+          : receiptValue(receipt),
         urgency: 'HIGH',
         reason: 'تم اعتماد إذن الاستلام في الموقع وينتظر تأكيد تسجيله في شيت الإكسيل الخارجي بواسطة المحاسب.',
         actionUrl: `/accounting/supplier-finance?tab=payments&purchase_receipt_id=${receipt.id}`,

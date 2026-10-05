@@ -407,17 +407,19 @@ class ProcurementAnalyticsController extends Controller
                     'created_at' => $po->created_at?->toIso8601String(),
                     'updated_at' => $po->updated_at?->toIso8601String(),
                     'items' => $po->items->map(function ($item) {
-                        $actualQty = (float) $item->actual_quantity;
+                        $poQty = (float) ($item->quantity ?? 0);
                         $unitPrice = (float) ($item->unit_price ?? 0);
-                        $lineTotal = round($actualQty * $unitPrice, 2);
+                        $lineTotal = (float) ($item->line_total !== null && (float) $item->line_total > 0
+                            ? $item->line_total
+                            : round($poQty * $unitPrice, 2));
                         return [
                             'id' => $item->id,
                             'item_description' => $item->item_description,
                             'item_reference' => $item->item_reference,
                             'region' => $item->region,
-                            'quantity' => $actualQty,
-                            'original_quantity' => (float) $item->quantity,
-                            'actual_quantity' => $actualQty,
+                            'quantity' => $poQty,
+                            'original_quantity' => $poQty,
+                            'actual_quantity' => $poQty,
                             'uom' => $item->uom,
                             'unit_price' => number_format($unitPrice, 2, '.', ''),
                             'line_total' => number_format($lineTotal, 2, '.', ''),

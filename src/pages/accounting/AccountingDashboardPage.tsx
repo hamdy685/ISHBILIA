@@ -143,14 +143,17 @@ export const AccountingDashboardPage: React.FC = () => {
             created_at: po.created_at || undefined,
             items_count: po.items?.length || 0,
             items_list: po.items?.map((it: any) => {
-              const qty = Number(it.actual_quantity ?? it.quantity ?? 0);
+              const poQty = Number(it.quantity ?? it.actual_quantity ?? 0);
               const price = Number(it.unit_price || 0);
+              const lineTotal = it.line_total !== undefined && it.line_total !== null && Number(it.line_total) > 0
+                ? Number(it.line_total)
+                : Math.round(poQty * price * 100) / 100;
               return {
                 description: it.item_description || it.item?.name || 'بند توريد',
-                quantity: it.actual_quantity ?? it.quantity,
+                quantity: poQty,
                 uom: it.uom,
                 unit_price: it.unit_price,
-                line_total: it.line_total ?? Math.round(qty * price * 100) / 100,
+                line_total: lineTotal,
                 specifications: it.specifications,
                 parcel: it.item_reference,
                 region: it.region,

@@ -108,42 +108,27 @@ class PurchaseOrderItem extends Model
 
     public function getActualQuantityAttribute(): float
     {
-        if ($this->relationLoaded('receiptItems')) {
-            $approved = $this->receiptItems->filter(fn ($ri) => $ri->receipt && in_array($ri->receipt->status, ['APPROVED', 'PENDING_SITE_ENGINEER', 'DELIVERED'], true));
-            if ($approved->isNotEmpty() && (float) $approved->sum('received_quantity') > 0) {
-                return (float) $approved->sum('received_quantity');
-            }
-        } elseif ($this->relationLoaded('purchaseOrder') && $this->purchaseOrder?->relationLoaded('receipts')) {
-            $approvedSum = 0.0;
-            $found = false;
-            foreach ($this->purchaseOrder->receipts as $receipt) {
-                if (in_array($receipt->status, ['APPROVED', 'PENDING_SITE_ENGINEER', 'DELIVERED'], true) && $receipt->relationLoaded('items')) {
-                    $ri = $receipt->items->firstWhere('purchase_order_item_id', $this->id);
-                    if ($ri && (float) $ri->received_quantity > 0) {
-                        $approvedSum += (float) $ri->received_quantity;
-                        $found = true;
-                    }
-                }
-            }
-            if ($found && $approvedSum > 0) {
-                return $approvedSum;
-            }
-        } elseif ($this->exists) {
-            $approvedSum = (float) \App\Models\PurchaseReceiptItem::query()
-                ->where('purchase_order_item_id', $this->id)
-                ->whereHas('receipt', fn ($q) => $q->whereIn('status', ['APPROVED', 'PENDING_SITE_ENGINEER', 'DELIVERED']))
-                ->sum('received_quantity');
-            if ($approvedSum > 0) {
-                return $approvedSum;
-            }
-        }
-
         return (float) ($this->quantity ?? 0);
     }
 
     public function getActualLineTotalAttribute(): float
     {
-        return round($this->actual_quantity * (float) ($this->unit_price ?? 0), 2);
+        if ($this->line_total !== null && (float) $this->line_total > 0) {
+            return (float) $this->line_total;
+        }
+
+        return round((float) ($this->quantity ?? 0) * (float) ($this->unit_price ?? 0), 2);
+    }
+
+    public function getReceivedQuantityAttribute(): ?float
+    {
+        if ($this->relationLoaded('receiptItems')) {
+            $approved = $this->receiptItems->filter(fn ($ri) => $ri->receipt && in_array($ri->receipt->status, ['APPROVED', 'PENDING_SITE_ENGINEER', 'DELIVERED'], true));
+            if ($approved->isNotEmpty()) {
+                return (float) $approved->sum('received_quantity');
+            }
+        }
+        return null;
     }
 }
 

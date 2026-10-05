@@ -188,23 +188,26 @@ export const ProcurementDashboardPage: React.FC = () => {
           ...pos
             .filter((p) => p.status === 'PENDING_ACTUAL_PO')
             .map((po) => {
-              const latestApprovedReceipt = (po as any).receipts?.find((r: any) => r.status === 'APPROVED');
               const itemsList = po.items?.map((it: any) => {
-                const matchingRcptItem = latestApprovedReceipt?.items?.find((ri: any) => ri.purchase_order_item_id === it.id);
-                const actualQty = Number(matchingRcptItem?.received_quantity ?? it.actual_quantity ?? it.quantity ?? 0);
+                const poQty = Number(it.quantity ?? it.actual_quantity ?? 0);
                 const price = Number(it.unit_price || 0);
+                const lineTotal = it.line_total !== undefined && it.line_total !== null && Number(it.line_total) > 0
+                  ? Number(it.line_total)
+                  : Math.round(poQty * price * 100) / 100;
                 return {
                   description: it.item_description || it.item?.name || 'بند توريد',
-                  quantity: actualQty,
+                  quantity: poQty,
                   uom: it.uom,
                   unit_price: it.unit_price,
-                  line_total: Math.round(actualQty * price * 100) / 100,
+                  line_total: lineTotal,
                   specifications: it.specifications,
                   parcel: it.item_reference,
                   region: it.region,
                 };
               }) || [];
-              const actualTotal = itemsList.reduce((acc: number, cur: any) => acc + (cur.line_total || 0), 0);
+              const poGrandTotal = Number(po.grand_total || 0) > 0
+                ? Number(po.grand_total)
+                : itemsList.reduce((acc: number, cur: any) => acc + (cur.line_total || 0), 0);
 
               return {
                 id: `po-actual-${po.id}`,
@@ -215,7 +218,7 @@ export const ProcurementDashboardPage: React.FC = () => {
                 subtitle: 'الموقع أتم الاستلام — يرجى مطابقة وتعديل الأسعار والكميات لإصدار الأمر الفعلي للإدارة المالية',
                 department: po.department?.name || po.purchase_request?.department?.name,
                 supplier: po.supplier?.company_name,
-                amount: actualTotal > 0 ? actualTotal : Number(po.grand_total || 0),
+                amount: poGrandTotal,
                 urgency: 'CRITICAL' as const,
                 reason: 'تم استلام البضاعة واعتماد إذن الاستلام بالموقع — أمر الشراء بانتظار إصدار الأمر الفعلي من المشتريات لإرساله للإدارة المالية.',
                 actionUrl: `/procurement/purchase-orders/${po.id}/edit`,
@@ -243,14 +246,17 @@ export const ProcurementDashboardPage: React.FC = () => {
               timeAgo: po.created_at ? po.created_at.slice(0, 10) : undefined,
               items_count: po.items?.length || 0,
               items_list: po.items?.map((it: any) => {
-                const qty = Number(it.actual_quantity ?? it.quantity ?? 0);
+                const poQty = Number(it.quantity ?? it.actual_quantity ?? 0);
                 const price = Number(it.unit_price || 0);
+                const lineTotal = it.line_total !== undefined && it.line_total !== null && Number(it.line_total) > 0
+                  ? Number(it.line_total)
+                  : Math.round(poQty * price * 100) / 100;
                 return {
                   description: it.item_description || it.item?.name || 'بند توريد',
-                  quantity: it.actual_quantity ?? it.quantity,
+                  quantity: poQty,
                   uom: it.uom,
                   unit_price: it.unit_price,
-                  line_total: it.line_total ?? Math.round(qty * price * 100) / 100,
+                  line_total: lineTotal,
                   specifications: it.specifications,
                   parcel: it.item_reference,
                   region: it.region,
