@@ -771,6 +771,19 @@ export const SupplierPaymentsPage: React.FC = () => {
                   {invoiceReceipt.items.map((item, idx) => {
                     const poItem = item.purchase_order_item;
                     const lineTotal = Number(item.received_quantity || 0) * Number(poItem?.unit_price || 0);
+                    const matchPoItem = invoiceReceipt.purchase_order?.items?.find((p: any) => p.id === poItem?.id || (p.item_description && p.item_description === poItem?.item_description));
+                    const prQty = poItem?.pr_item?.quantity 
+                      ?? (poItem as any)?.pr_item_quantity 
+                      ?? matchPoItem?.pr_item?.quantity 
+                      ?? (matchPoItem as any)?.pr_item_quantity 
+                      ?? null;
+                    const poQty = poItem?.quantity 
+                      ?? matchPoItem?.quantity 
+                      ?? item.ordered_quantity 
+                      ?? null;
+                    const receivedQty = item.received_quantity;
+                    const uomLabel = getUnitLabel(poItem?.uom || poItem?.pr_item?.uom || matchPoItem?.uom);
+
                     return (
                       <div
                         key={item.id || idx}
@@ -790,21 +803,37 @@ export const SupplierPaymentsPage: React.FC = () => {
                           </span>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-2 text-[11px]">
-                          <div className="rounded-lg bg-slate-950/90 border border-slate-800 px-2.5 py-1.5 flex items-center justify-between">
-                            <span className="text-slate-400">الكمية المستلمة:</span>
-                            <strong className="font-mono text-emerald-300 font-black">
-                              {item.received_quantity} {getUnitLabel(poItem?.uom)}
+                        {/* مقارنة الكميات الثلاث: طلب الشراء • أمر الشراء الفعلي • المستلم */}
+                        <div className="grid grid-cols-3 gap-2 text-[11px]">
+                          <div className="rounded-lg bg-slate-950/90 border border-slate-800 px-2 py-1.5 flex flex-col items-center justify-center text-center">
+                            <span className="text-slate-400 text-[10px]">طلب الشراء (PR)</span>
+                            <strong className="font-mono text-slate-200 font-bold mt-0.5">
+                              {prQty !== null ? `${formatCleanQty(prQty)} ${uomLabel}` : '—'}
                             </strong>
                           </div>
+                          <div className="rounded-lg bg-slate-950/90 border border-slate-800 px-2 py-1.5 flex flex-col items-center justify-center text-center">
+                            <span className="text-slate-400 text-[10px]">أمر الشراء (PO)</span>
+                            <strong className="font-mono text-cyan-300 font-bold mt-0.5">
+                              {poQty !== null ? `${formatCleanQty(poQty)} ${uomLabel}` : '—'}
+                            </strong>
+                          </div>
+                          <div className="rounded-lg bg-slate-950/90 border border-slate-800 px-2 py-1.5 flex flex-col items-center justify-center text-center">
+                            <span className="text-slate-400 text-[10px]">المستلم (GRN)</span>
+                            <strong className="font-mono text-emerald-300 font-black mt-0.5">
+                              {receivedQty !== undefined && receivedQty !== null ? `${formatCleanQty(receivedQty)} ${uomLabel}` : '—'}
+                            </strong>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2 text-[11px] pt-1">
                           <div className="rounded-lg bg-slate-950/90 border border-slate-800 px-2.5 py-1.5 flex items-center justify-between">
-                            <span className="text-slate-400">السعر المعتمد:</span>
+                            <span className="text-slate-400">السعر:</span>
                             <strong className="font-mono text-slate-200 font-bold">
                               {money(poItem?.unit_price)}
                             </strong>
                           </div>
                           <div className="rounded-lg bg-slate-950/90 border border-slate-800 px-2.5 py-1.5 flex items-center justify-between">
-                            <span className="text-slate-400">قطعة الأرض:</span>
+                            <span className="text-slate-400">القطعة:</span>
                             <strong className="font-mono text-cyan-300 font-bold">
                               {poItem?.item_reference || '—'}
                             </strong>
@@ -823,13 +852,15 @@ export const SupplierPaymentsPage: React.FC = () => {
 
                 {/* Desktop Table View */}
                 <div className="hidden sm:block overflow-x-auto">
-                  <Table className="min-w-[650px] text-xs">
+                  <Table className="min-w-[850px] text-xs">
                     <TableHeader>
                       <TableRow className="border-slate-800">
                         <TableHead>الصنف / المادة</TableHead>
                         <TableHead>رقم القطعة</TableHead>
                         <TableHead>المنطقة</TableHead>
-                        <TableHead>الكمية المستلمة</TableHead>
+                        <TableHead className="text-center whitespace-nowrap">كمية طلب الشراء</TableHead>
+                        <TableHead className="text-center whitespace-nowrap">كمية أمر الشراء الفعلي</TableHead>
+                        <TableHead className="text-center whitespace-nowrap">الكمية المستلمة</TableHead>
                         <TableHead>السعر المعتمد</TableHead>
                         <TableHead>إجمالي البند</TableHead>
                       </TableRow>
@@ -838,6 +869,19 @@ export const SupplierPaymentsPage: React.FC = () => {
                       {invoiceReceipt.items.map((item) => {
                         const poItem = item.purchase_order_item;
                         const lineTotal = Number(item.received_quantity || 0) * Number(poItem?.unit_price || 0);
+                        const matchPoItem = invoiceReceipt.purchase_order?.items?.find((p: any) => p.id === poItem?.id || (p.item_description && p.item_description === poItem?.item_description));
+                        const prQty = poItem?.pr_item?.quantity 
+                          ?? (poItem as any)?.pr_item_quantity 
+                          ?? matchPoItem?.pr_item?.quantity 
+                          ?? (matchPoItem as any)?.pr_item_quantity 
+                          ?? null;
+                        const poQty = poItem?.quantity 
+                          ?? matchPoItem?.quantity 
+                          ?? item.ordered_quantity 
+                          ?? null;
+                        const receivedQty = item.received_quantity;
+                        const uomLabel = getUnitLabel(poItem?.uom || poItem?.pr_item?.uom || matchPoItem?.uom);
+
                         return (
                           <TableRow key={item.id} className="border-slate-800/60">
                             <TableCell className="font-bold text-slate-200">
@@ -851,7 +895,22 @@ export const SupplierPaymentsPage: React.FC = () => {
                             </TableCell>
                             <TableCell className="font-mono text-cyan-300 font-bold">{poItem?.item_reference || '—'}</TableCell>
                             <TableCell className="text-slate-300">{poItem?.region || '—'}</TableCell>
-                            <TableCell className="font-mono font-bold text-emerald-300">{item.received_quantity} {getUnitLabel(poItem?.uom)}</TableCell>
+
+                            {/* كمية طلب الشراء (PR) */}
+                            <TableCell className="font-mono text-center font-bold text-slate-300 whitespace-nowrap">
+                              {prQty !== null ? `${formatCleanQty(prQty)} ${uomLabel}` : '—'}
+                            </TableCell>
+
+                            {/* كمية أمر الشراء الفعلي (PO) */}
+                            <TableCell className="font-mono text-center font-bold text-cyan-300 whitespace-nowrap">
+                              {poQty !== null ? `${formatCleanQty(poQty)} ${uomLabel}` : '—'}
+                            </TableCell>
+
+                            {/* الكمية المستلمة (GRN) */}
+                            <TableCell className="font-mono text-center font-black text-emerald-300 whitespace-nowrap">
+                              {receivedQty !== undefined && receivedQty !== null ? `${formatCleanQty(receivedQty)} ${uomLabel}` : '—'}
+                            </TableCell>
+
                             <TableCell className="font-mono text-slate-300">{money(poItem?.unit_price)}</TableCell>
                             <TableCell className="font-mono font-black text-emerald-300">{money(lineTotal)}</TableCell>
                           </TableRow>

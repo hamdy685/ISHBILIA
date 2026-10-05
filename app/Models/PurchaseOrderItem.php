@@ -41,6 +41,18 @@ class PurchaseOrderItem extends Model
         ];
     }
 
+    protected $appends = [
+        'pr_item_quantity',
+    ];
+
+    public function getPrItemQuantityAttribute(): ?float
+    {
+        if ($this->relationLoaded('prItem') && $this->prItem) {
+            return (float) $this->prItem->quantity;
+        }
+        return null;
+    }
+
     protected static function booted(): void
     {
         static::saving(function (PurchaseOrderItem $item): void {
