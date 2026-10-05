@@ -68,6 +68,22 @@ class AccountingPurchaseOrderService
                 'comments' => $comment ?? 'Financial review approved by accounting.',
             ]);
 
+            if ($lockedPo->purchaseRequest) {
+                $pr = $lockedPo->purchaseRequest;
+                $prFromState = $pr->status;
+                $pr->update(['status' => 'ISSUED']);
+
+                ApprovalHistory::create([
+                    'target_type' => PurchaseRequest::class,
+                    'target_id'   => $pr->id,
+                    'actor_user_id' => $accountant->id,
+                    'action'      => 'PO_APPROVED_BY_ACCOUNTING',
+                    'from_state'  => $prFromState,
+                    'to_state'    => 'ISSUED',
+                    'comments'    => 'تم اعتماد أمر الشراء محاسبياً رقم ' . $lockedPo->po_number . ($comment ? " ({$comment})" : ''),
+                ]);
+            }
+
             AuditLog::create([
                 'user_id' => $accountant->id,
                 'entity_type' => PurchaseOrder::class,

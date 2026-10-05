@@ -173,4 +173,28 @@ export const statusConfigs: Record<string, StatusConfig> = {
     badgeClass: 'bg-gray-950/80 text-gray-400 border-gray-700/80',
     dotClass: 'bg-gray-500',
   },
+  ACTUAL_PO_ISSUED: {
+    labelAr: 'أمر شراء فعلي معتمد',
+    labelEn: 'Actual PO Approved',
+    badgeClass: 'bg-emerald-950/90 text-emerald-200 border-emerald-500/80 shadow-xs shadow-emerald-950/50 font-bold',
+    dotClass: 'bg-emerald-400 animate-pulse',
+  },
+  PO_ISSUED: {
+    labelAr: 'أمر شراء صادر',
+    labelEn: 'PO Issued',
+    badgeClass: 'bg-cyan-950/80 text-cyan-200 border-cyan-700/80 font-bold',
+    dotClass: 'bg-cyan-400',
+  },
+  PO_APPROVED: {
+    labelAr: 'أمر شراء معتمد',
+    labelEn: 'PO Approved',
+    badgeClass: 'bg-emerald-950/80 text-emerald-300 border-emerald-800/80 font-bold',
+    dotClass: 'bg-emerald-400',
+  },
+  GRN_PENDING: {
+    labelAr: 'بانتظار فحص الاستلام',
+    labelEn: 'GRN Pending',
+    badgeClass: 'bg-purple-950/80 text-purple-300 border-purple-800/80 font-bold',
+    dotClass: 'bg-purple-400',
+  },
 };

@@ -30,10 +30,112 @@ const getRequestType = (pr: PurchaseRequest): React.ReactNode => {
   return 'طلب شراء موقع';
 };
 
+export interface RequestLifecycleResolution {
+  statusKey: string;
+  statusLabel: string;
+  lastAction: string;
+  poNumber?: string;
+  poId?: number;
+  isActualPo?: boolean;
+}
+
+export const getRequestLifecycle = (pr: PurchaseRequest): RequestLifecycleResolution => {
+  const pos = pr.purchase_orders || [];
+  const validPos = pos.filter((po) => !['REJECTED', 'CANCELLED', 'VOIDED'].includes(po.status));
+  const latestPo = validPos[validPos.length - 1] || validPos[0];
+
+  const hasApprovedReceipt =
+    validPos.some((po) => po.has_approved_receipt || (po.receipts || []).some((r) => r.status === 'APPROVED')) ||
+    pr.approval_history?.some((h) => ['SITE_ENGINEER_APPROVED', 'RECEIPT_APPROVED_BY_SITE_ENGINEER', 'INTERNAL_STOCK_RECEIPT_APPROVED'].includes(h.action));
+
+  const hasActualPoFinalized =
+    validPos.some(
+      (po) =>
+        Boolean(po.finalized_at) ||
+        Boolean(po.is_actual_po) ||
+        po.status === 'FINAL_APPROVED' ||
+        (hasApprovedReceipt && po.status === 'APPROVED_BY_ACCOUNTING') ||
+        (po.supplier?.company_name === 'المخزن الداخلي' && hasApprovedReceipt)
+    ) ||
+    pr.approval_history?.some((h) => ['ACTUAL_PO_FINALIZED', 'ACTUAL_PO_ISSUED'].includes(h.action)) ||
+    pr.status === 'ACTUAL_PO_ISSUED' ||
+    pr.effective_status === 'ACTUAL_PO_ISSUED';
+
+  if (hasActualPoFinalized) {
+    const poNum = latestPo?.po_number || pr.latest_purchase_order?.po_number;
+    return {
+      statusKey: 'ACTUAL_PO_ISSUED',
+      statusLabel: 'أمر شراء فعلي معتمد',
+      lastAction: poNum ? `تم اعتماد أمر الشراء الفعلي (${poNum})` : 'تم اعتماد أمر الشراء الفعلي',
+      poNumber: poNum,
+      poId: latestPo?.id || pr.latest_purchase_order?.id,
+      isActualPo: true,
+    };
+  }
+
+  if (hasApprovedReceipt || validPos.some((po) => po.status === 'PENDING_ACTUAL_PO') || pr.status === 'PENDING_ACTUAL_PO' || pr.effective_status === 'PENDING_ACTUAL_PO') {
+    const poNum = latestPo?.po_number || pr.latest_purchase_order?.po_number;
+    return {
+      statusKey: 'PENDING_ACTUAL_PO',
+      statusLabel: 'بالموقع - بانتظار الأمر الفعلي',
+      lastAction: poNum ? `تم استلام المواد بالموقع - بانتظار الأمر الفعلي (${poNum})` : 'تم استلام المواد بالموقع - بانتظار الأمر الفعلي',
+      poNumber: poNum,
+      poId: latestPo?.id || pr.latest_purchase_order?.id,
+    };
+  }
+
+  const hasPendingReceipt = validPos.some((po) => (po.receipts || []).some((r) => ['PENDING', 'SUBMITTED_BY_WAREHOUSE'].includes(r.status))) || pr.status === 'GRN_PENDING';
+  if (hasPendingReceipt) {
+    const poNum = latestPo?.po_number || pr.latest_purchase_order?.po_number;
+    return {
+      statusKey: 'GRN_PENDING',
+      statusLabel: 'بانتظار فحص واعتماد الاستلام',
+      lastAction: poNum ? `تم توريد المواد للمخزن - بانتظار مهندس الموقع (${poNum})` : 'تم توريد المواد للمخزن - بانتظار مهندس الموقع',
+      poNumber: poNum,
+      poId: latestPo?.id || pr.latest_purchase_order?.id,
+    };
+  }
+
+  const hasIssuedPo =
+    validPos.length > 0 ||
+    Boolean(pr.purchase_order_issued) ||
+    Boolean(pr.latest_purchase_order) ||
+    pr.status === 'ISSUED' ||
+    pr.status === 'PO_ISSUED' ||
+    pr.status === 'PO_APPROVED' ||
+    (pr.status as string) === 'PO_DRAFT';
+
+  if (hasIssuedPo) {
+    const isAccountingApproved = latestPo?.status === 'APPROVED_BY_ACCOUNTING' || pr.status === 'PO_APPROVED';
+    const isPendingAccounting = latestPo?.status === 'PENDING_ACCOUNTING_REVIEW';
+    const poNum = latestPo?.po_number || pr.latest_purchase_order?.po_number;
+
+    return {
+      statusKey: isAccountingApproved ? 'PO_APPROVED' : 'PO_ISSUED',
+      statusLabel: isAccountingApproved ? 'أمر شراء معتمد' : 'أمر شراء صادر',
+      lastAction: isAccountingApproved
+        ? (poNum ? `اعتماد أمر الشراء من الحسابات (${poNum})` : 'اعتماد أمر الشراء من الحسابات')
+        : isPendingAccounting
+        ? (poNum ? `تم تقديم أمر الشراء للحسابات (${poNum})` : 'تم تقديم أمر الشراء للحسابات')
+        : (poNum ? `تم إصدار أمر الشراء للمورد (${poNum})` : 'تم إصدار أمر الشراء للمورد'),
+      poNumber: poNum,
+      poId: latestPo?.id || pr.latest_purchase_order?.id,
+    };
+  }
+
+  // Fallback to standard PR status & last approval history
+  const latestHistoryAction = pr.approval_history?.[pr.approval_history.length - 1]?.action;
+  const historyLabel = latestHistoryAction && PR_ACTION_LABELS[latestHistoryAction] ? PR_ACTION_LABELS[latestHistoryAction] : undefined;
+
+  return {
+    statusKey: pr.status,
+    statusLabel: PR_STATUS_LABELS[pr.status as keyof typeof PR_STATUS_LABELS] || pr.status,
+    lastAction: historyLabel || PR_STATUS_LABELS[pr.status as keyof typeof PR_STATUS_LABELS] || 'قيد المتابعة',
+  };
+};
+
 const getLastAction = (pr: PurchaseRequest): string => {
-  const latestAction = pr.approval_history?.[pr.approval_history.length - 1]?.action;
-  if (latestAction && PR_ACTION_LABELS[latestAction]) return PR_ACTION_LABELS[latestAction];
-  return PR_STATUS_LABELS[pr.status as keyof typeof PR_STATUS_LABELS] || 'قيد المتابعة';
+  return getRequestLifecycle(pr).lastAction;
 };
 
 interface RowProps {
@@ -62,6 +164,7 @@ export const PurchaseRequestTableRow: React.FC<RowProps> = React.memo(({
   const parcelsDisplay = getSummaryParcels(pr);
   const regionsDisplay = getSummaryRegions(pr);
   const quantitiesInfo = getSummaryQuantities(pr.items);
+  const lifecycle = getRequestLifecycle(pr);
 
   return (
     <TableRow className="border-b border-white/5 hover:bg-white/[0.03] transition-colors">
@@ -88,9 +191,16 @@ export const PurchaseRequestTableRow: React.FC<RowProps> = React.memo(({
       <TableCell className="text-slate-300 text-xs">{getRequestType(pr)}</TableCell>
       <TableCell className="text-slate-300 text-xs">{pr.target_department?.name || pr.department?.name || '—'}</TableCell>
       <TableCell>
-        <PurchaseRequestStatusBadge status={pr.status} />
+        <div className="flex flex-col gap-1 items-start">
+          <PurchaseRequestStatusBadge status={lifecycle.statusKey} />
+          {lifecycle.poNumber && (
+            <span className="font-mono text-[10px] text-cyan-300 font-bold bg-cyan-950/80 border border-cyan-800/80 rounded px-1.5 py-0.5 whitespace-nowrap shadow-xs">
+              {lifecycle.poNumber}
+            </span>
+          )}
+        </div>
       </TableCell>
-      <TableCell className="max-w-[210px] text-xs text-slate-400">{getLastAction(pr)}</TableCell>
+      <TableCell className="max-w-[210px] text-xs text-slate-300 font-medium">{lifecycle.lastAction}</TableCell>
       <TableCell>
         <div className="flex gap-2 justify-center">
           <Link to={`/requests/${pr.id}`}>
@@ -149,6 +259,7 @@ export const PurchaseRequestMobileCard: React.FC<RowProps> = React.memo(({
   const quantitiesInfo = getSummaryQuantities(pr.items);
   const isOffice = pr.request_type === 'OFFICE_SUPPLIES';
   const primaryItemDesc = itemNames[0] || (isOffice ? 'مستلزمات مكتبية' : 'مواد مشروعات');
+  const lifecycle = getRequestLifecycle(pr);
 
   return (
     <article
@@ -156,14 +267,19 @@ export const PurchaseRequestMobileCard: React.FC<RowProps> = React.memo(({
     >
       {/* Row 1: Request Number, Status Badge, and Date */}
       <div className="flex items-center justify-between gap-2 border-b border-white/5 pb-2.5">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Link
             to={`/requests/${pr.id}`}
             className="font-mono text-sm font-black text-gold-400 hover:text-gold-200 hover:underline transition-colors"
           >
             {pr.request_number}
           </Link>
-          <PurchaseRequestStatusBadge status={pr.status} />
+          <PurchaseRequestStatusBadge status={lifecycle.statusKey} />
+          {lifecycle.poNumber && (
+            <span className="font-mono text-[10px] text-cyan-300 font-bold bg-cyan-950/80 border border-cyan-800/80 rounded px-1.5 py-0.5 whitespace-nowrap">
+              {lifecycle.poNumber}
+            </span>
+          )}
         </div>
         <span className="font-mono text-[10px] text-slate-400 shrink-0">
           {formatRequestDate(pr.created_at)}
@@ -231,6 +347,12 @@ export const PurchaseRequestMobileCard: React.FC<RowProps> = React.memo(({
             </Link>
           </div>
         )}
+
+        {/* Last action */}
+        <div className="pt-2 border-t border-white/5 text-[11px] flex items-center justify-between">
+          <span className="text-slate-400">آخر إجراء:</span>
+          <span className="text-slate-200 font-semibold">{lifecycle.lastAction}</span>
+        </div>
       </div>
 
       {/* Row 4: Actions Toolbar */}

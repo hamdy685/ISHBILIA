@@ -693,6 +693,22 @@ class PurchaseOrderService
                 'comments'    => $notes ?? 'أصدر مدير المشتريات أمر الشراء الفعلي بعد اعتماد إذن الاستلام وأرسله للحسابات.',
             ]);
 
+            if ($lockedPo->purchaseRequest) {
+                $pr = $lockedPo->purchaseRequest;
+                $prFromState = $pr->status;
+                $pr->update(['status' => 'ISSUED']);
+
+                ApprovalHistory::create([
+                    'target_type' => PurchaseRequest::class,
+                    'target_id'   => $pr->id,
+                    'actor_user_id' => $user->id,
+                    'action'      => 'ACTUAL_PO_ISSUED',
+                    'from_state'  => $prFromState,
+                    'to_state'    => 'ISSUED',
+                    'comments'    => 'تم إصدار وتثبيت أمر الشراء الفعلي رقم ' . $lockedPo->po_number,
+                ]);
+            }
+
             AuditLog::create([
                 'user_id'     => $user->id,
                 'entity_type' => PurchaseOrder::class,
@@ -807,6 +823,22 @@ class PurchaseOrderService
                 'to_state' => 'ISSUED',
                 'comments' => 'Purchase order issued by procurement manager.',
             ]);
+
+            if ($lockedPo->purchaseRequest) {
+                $pr = $lockedPo->purchaseRequest;
+                $prFromState = $pr->status;
+                $pr->update(['status' => 'ISSUED']);
+
+                ApprovalHistory::create([
+                    'target_type' => PurchaseRequest::class,
+                    'target_id'   => $pr->id,
+                    'actor_user_id' => $user->id,
+                    'action'      => 'PO_ISSUED',
+                    'from_state'  => $prFromState,
+                    'to_state'    => 'ISSUED',
+                    'comments'    => 'تم إصدار أمر الشراء رقم ' . $lockedPo->po_number . ' للمورد.',
+                ]);
+            }
 
             app(SystemEventService::class)->recordAction(
                 $lockedPo,

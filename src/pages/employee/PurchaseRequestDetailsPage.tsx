@@ -31,6 +31,7 @@ import { getSummaryParcels, getSummaryRegions, getSummaryQuantities } from '../.
 import { UnifiedNotesCard } from '../../components/common/UnifiedNotesCard';
 import { formatCleanQty } from '../../utils/numberFormat';
 import { formatRebarDisplay, extractRebarInfo } from '../../utils/rebar';
+import { getRequestLifecycle } from '../../components/purchase-requests/PurchaseRequestTable';
 
 const REQUESTER_EDITABLE_STATUSES = ['DRAFT', 'SUBMITTED', 'UNDER_REVIEW'];
 const REVIEWER_DECISION_STATUSES = ['REJECTED', 'APPROVED_BY_REVIEWER', 'PENDING_PROCUREMENT_APPROVAL', 'APPROVED_BY_PROCUREMENT', 'PO_DRAFT', 'ISSUED'];
@@ -354,7 +355,14 @@ export const PurchaseRequestDetailsPage: React.FC = () => {
         </div>
         <div>
           <div className="text-[10px] text-slate-400 font-semibold">الحالة</div>
-          <div className="font-bold text-slate-200 mt-1">{PR_STATUS_LABELS[requestData.status] || requestData.status}</div>
+          <div className="font-bold text-slate-200 mt-1 flex items-center gap-1.5 flex-wrap">
+            <span>{getRequestLifecycle(requestData).statusLabel}</span>
+            {getRequestLifecycle(requestData).poNumber && (
+              <span className="font-mono text-[10px] text-cyan-300 font-bold bg-cyan-950/80 border border-cyan-800/80 rounded px-1.5 py-0.5">
+                {getRequestLifecycle(requestData).poNumber}
+              </span>
+            )}
+          </div>
         </div>
         <div>
           <div className="text-[10px] text-slate-400 font-semibold">تاريخ الاحتياج</div>

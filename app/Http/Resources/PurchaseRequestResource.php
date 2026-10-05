@@ -9,6 +9,8 @@ class PurchaseRequestResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        $lifecycle = $this->getEffectiveLifecycle();
+
         return [
             'id' => $this->id,
             'request_number' => $this->request_number,
@@ -23,11 +25,19 @@ class PurchaseRequestResource extends JsonResource
                 'region' => $this->landParcel->region,
             ] : null,
             'status' => $this->status,
+            'effective_status' => $lifecycle['status'],
+            'effective_status_label' => $lifecycle['label'],
+            'effective_last_action' => $lifecycle['last_action'],
+            'latest_purchase_order' => $lifecycle['po_number'] ? [
+                'id' => $lifecycle['po_id'],
+                'po_number' => $lifecycle['po_number'],
+                'is_actual_po' => $lifecycle['is_actual_po'],
+            ] : null,
             'procurement_route' => $this->procurement_route,
             'direct_supplier_id' => $this->direct_supplier_id,
             'requires_warehouse_receipt' => (bool) ($this->requires_warehouse_receipt ?? true),
             'total_estimated_cost' => number_format((float) $this->total_estimated_cost, 2, '.', ''),
-            'purchase_order_issued' => (int) ($this->issued_purchase_orders_count ?? 0) > 0,
+            'purchase_order_issued' => (int) ($this->issued_purchase_orders_count ?? 0) > 0 || (bool) $lifecycle['po_number'],
             'priority' => $this->priority,
             'date_needed' => $this->date_needed instanceof \DateTimeInterface
                 ? $this->date_needed->format('Y-m-d')
@@ -198,6 +208,8 @@ class PurchaseRequestResource extends JsonResource
                     'status' => $po->status,
                     'delivery_status' => $po->delivery_status,
                     'total_amount' => $po->total_amount,
+                    'finalized_at' => $po->finalized_at ? ($po->finalized_at instanceof \DateTimeInterface ? $po->finalized_at->toIso8601String() : (string) $po->finalized_at) : null,
+                    'is_actual_po' => (bool) ($po->finalized_at !== null || $po->status === 'FINAL_APPROVED'),
                     'supplier' => $po->relationLoaded('supplier') && $po->supplier
                         ? ['id' => $po->supplier->id, 'company_name' => $po->supplier->company_name]
                         : null,

@@ -171,7 +171,11 @@ class PurchaseRequestController extends Controller
             'attachments.uploadedBy',
             'purchaseOrders.supplier',
             'purchaseOrders.receipts',
-        ])->findOrFail((int) $id);
+        ])
+        ->withCount(['purchaseOrders as issued_purchase_orders_count' => function ($q) {
+            $q->whereNotIn('status', ['REJECTED', 'CANCELLED', 'VOIDED']);
+        }])
+        ->findOrFail((int) $id);
 
         $user = $request->user();
         $isAllowed = $pr->user_id === $user->id

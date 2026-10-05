@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { PurchaseRequest, PR_STATUS_LABELS } from '../../types/purchaseRequest';
+import { getRequestLifecycle } from '../purchase-requests/PurchaseRequestTable';
 
 export interface PurchaseRequestTimelineProps {
   request: PurchaseRequest;
@@ -80,22 +81,6 @@ export const getTimelineStepIndex = (request: PurchaseRequest): number => {
   // Procurement pricing / quotes preparation
   if (status === 'PENDING_PROCUREMENT_APPROVAL') return 3;
 
-  if (isDirect) {
-    // Direct purchase path
-    if (status === 'PENDING_EXECUTIVE_APPROVAL') return 4;
-    if (status === 'PENDING_ACCOUNTING_APPROVAL') return 5;
-    if (status === 'APPROVED_BY_ACCOUNTING') return 6;
-  } else {
-    // Quotes comparison path
-    if (status === 'PENDING_QUOTE_RECOMMENDATIONS') {
-      const hasAccountingRec = request.quotes?.some((q) =>
-        q.recommendations?.some((r) => r.role_type === 'ACCOUNTING')
-      );
-      return hasAccountingRec ? 5 : 4;
-    }
-    if (status === 'PENDING_EXECUTIVE_QUOTE_DECISION') return 6;
-  }
-
   // PO & Fulfillment milestones
   const pos = (request as any).purchase_orders || [];
   const hasIssuedPo =
@@ -127,6 +112,22 @@ export const getTimelineStepIndex = (request: PurchaseRequest): number => {
   if (hasActualPoFinalized) return isDirect ? 8 : 9;
   if (hasApprovedReceipt || pos.some((po: any) => po.status === 'PENDING_ACTUAL_PO')) return isDirect ? 8 : 9;
   if (hasIssuedPo || status === 'PENDING_SITE_ENGINEER') return isDirect ? 7 : 8;
+
+  if (isDirect) {
+    // Direct purchase path
+    if (status === 'PENDING_EXECUTIVE_APPROVAL') return 4;
+    if (status === 'PENDING_ACCOUNTING_APPROVAL') return 5;
+    if (status === 'APPROVED_BY_ACCOUNTING') return 6;
+  } else {
+    // Quotes comparison path
+    if (status === 'PENDING_QUOTE_RECOMMENDATIONS') {
+      const hasAccountingRec = request.quotes?.some((q) =>
+        q.recommendations?.some((r) => r.role_type === 'ACCOUNTING')
+      );
+      return hasAccountingRec ? 5 : 4;
+    }
+    if (status === 'PENDING_EXECUTIVE_QUOTE_DECISION') return 6;
+  }
 
   if (status === 'APPROVED_BY_PROCUREMENT' || (isDirect && status === 'APPROVED_BY_ACCOUNTING')) {
     return isDirect ? 6 : 7;
@@ -675,6 +676,7 @@ export const PurchaseRequestTimeline: React.FC<PurchaseRequestTimelineProps> = (
   const cards = useMemo(() => generateTimelineCards(request), [request]);
   const guidance = useMemo(() => getActionGuidance(request), [request]);
   const activeStepIndex = useMemo(() => getTimelineStepIndex(request), [request]);
+  const lifecycle = useMemo(() => getRequestLifecycle(request), [request]);
 
   const completedCardsCount = cards.filter((c) => c.state === 'COMPLETED').length;
   const isActualPoComplete = cards.some((c) => c.id === 'step-9-actual-po' && c.state === 'COMPLETED');
@@ -691,13 +693,18 @@ export const PurchaseRequestTimeline: React.FC<PurchaseRequestTimelineProps> = (
       >
         <span className="text-2xl shrink-0 select-none animate-bounce">{guidance.icon}</span>
         <div className="flex-1 leading-6">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
             <strong className="text-[11px] font-black uppercase tracking-wider opacity-90">
               الوضع الحالي للطلب:
             </strong>
             <span className="font-mono text-xs px-2 py-0.5 rounded-md bg-black/30 border border-white/10 text-white">
-              {PR_STATUS_LABELS[request.status] || request.status}
+              {lifecycle.statusLabel}
             </span>
+            {lifecycle.poNumber && (
+              <span className="font-mono text-[11px] px-2 py-0.5 rounded-md bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-bold">
+                أمر شراء: {lifecycle.poNumber}
+              </span>
+            )}
           </div>
           <p className="text-xs font-medium">{guidance.text}</p>
         </div>

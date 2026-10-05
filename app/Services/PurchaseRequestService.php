@@ -671,9 +671,18 @@ class PurchaseRequestService
                 'items.item',
                 'items.supplier',
                 'approvalHistory.actor',
-                'purchaseOrders:id,po_number,purchase_request_id,status,grand_total',
+                'purchaseOrders' => function ($q) {
+                    $q->select('id', 'po_number', 'manual_po_number', 'purchase_request_id', 'status', 'grand_total', 'finalized_at', 'supplier_id', 'created_at', 'updated_at')
+                      ->with([
+                          'supplier:id,company_name',
+                          'receipts:id,purchase_order_id,status,receipt_number',
+                      ]);
+                },
                 'supplements',
             ])
+            ->withCount(['purchaseOrders as issued_purchase_orders_count' => function ($q) {
+                $q->whereNotIn('status', ['REJECTED', 'CANCELLED', 'VOIDED']);
+            }])
             ->orderBy('created_at', 'desc')
             ->paginate($perPage);
     }

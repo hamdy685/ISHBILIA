@@ -30,6 +30,12 @@ const EMPLOYEE_APPROVED_STATUSES = new Set([
   'APPROVED_BY_ACCOUNTING',
   'PENDING_QUOTE_RECOMMENDATIONS',
   'PENDING_EXECUTIVE_QUOTE_DECISION',
+  'ISSUED',
+  'PO_ISSUED',
+  'PO_APPROVED',
+  'ACTUAL_PO_ISSUED',
+  'PENDING_ACTUAL_PO',
+  'COMPLETED',
 ]);
 
 import { useRealtimeRefresh, emitAppDataUpdated } from '../../hooks/useRealtimeRefresh';

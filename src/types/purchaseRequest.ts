@@ -37,6 +37,13 @@ export type PurchaseRequestStatus =
   | 'PENDING_EXECUTIVE_QUOTE_DECISION'
   | 'APPROVED_BY_REVIEWER'
   | 'APPROVED_BY_PROCUREMENT'
+  | 'ISSUED'
+  | 'PO_ISSUED'
+  | 'PO_APPROVED'
+  | 'ACTUAL_PO_ISSUED'
+  | 'PENDING_ACTUAL_PO'
+  | 'GRN_PENDING'
+  | 'COMPLETED'
   | 'REJECTED';
 
 export type PurchaseRequestPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
@@ -54,6 +61,13 @@ export const PR_STATUS_LABELS: Record<PurchaseRequestStatus, string> = {
   PENDING_EXECUTIVE_QUOTE_DECISION: 'بانتظار قرار العروض',
   APPROVED_BY_REVIEWER: 'معتمد من المراجع',
   APPROVED_BY_PROCUREMENT: 'معتمد من المشتريات',
+  ISSUED: 'أمر شراء صادر',
+  PO_ISSUED: 'أمر شراء صادر',
+  PO_APPROVED: 'أمر شراء معتمد',
+  ACTUAL_PO_ISSUED: 'أمر شراء فعلي معتمد',
+  PENDING_ACTUAL_PO: 'بالموقع - بانتظار الأمر الفعلي',
+  GRN_PENDING: 'بانتظار فحص واعتماد الاستلام',
+  COMPLETED: 'مكتمل',
   REJECTED: 'مرفوض',
 };
 
@@ -74,6 +88,14 @@ export const PR_ACTION_LABELS: Record<string, string> = {
   EXECUTIVE_REJECTED_QUOTES: 'رفض المدير التنفيذي العروض',
   DIRECT_PURCHASE_REQUEST_CREATED: 'تم إنشاء طلب شراء مباشر وإرساله للحسابات',
   ACCOUNTING_APPROVED_DIRECT: 'اعتماد الحسابات وإعادة الطلب للمشتريات',
+  PO_CREATED: 'تم إنشاء أمر الشراء',
+  PO_ISSUED: 'تم إصدار أمر الشراء للمورد',
+  PO_APPROVED: 'تم اعتماد أمر الشراء من الحسابات',
+  PO_APPROVED_BY_ACCOUNTING: 'تم اعتماد أمر الشراء من الحسابات',
+  ACTUAL_PO_FINALIZED: 'تم إصدار وتثبيت أمر الشراء الفعلي',
+  ACTUAL_PO_ISSUED: 'تم اعتماد أمر الشراء الفعلي',
+  WAREHOUSE_RECEIPT_APPROVED: 'تم استلام وتأكيد المواد بالمخزن',
+  SITE_ENGINEER_APPROVED: 'تم فحص واعتماد المواد هندسياً بالموقع',
   REJECTED: 'تم رفض الطلب',
 };
 
@@ -267,6 +289,8 @@ export interface PurchaseRequest {
     total_amount?: string | number | null;
     supplier?: { id: number; company_name: string } | null;
     has_approved_receipt?: boolean;
+    finalized_at?: string | null;
+    is_actual_po?: boolean;
     receipts?: Array<{
       id: number;
       receipt_number: string;
@@ -276,6 +300,14 @@ export interface PurchaseRequest {
       receiver_notes?: string | null;
     }>;
   }>;
+  effective_status?: string;
+  effective_status_label?: string;
+  effective_last_action?: string;
+  latest_purchase_order?: {
+    id: number;
+    po_number: string;
+    is_actual_po?: boolean;
+  } | null;
   supplements?: PurchaseRequestSupplement[];
 }
 
