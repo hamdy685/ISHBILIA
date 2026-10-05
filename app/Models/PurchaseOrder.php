@@ -152,6 +152,7 @@ class PurchaseOrder extends Model
         return $query->where(function ($q) {
             $q->whereNotNull('finalized_at')
               ->orWhereIn('status', ['APPROVED_BY_ACCOUNTING', 'FINAL_APPROVED'])
+              ->orWhereHas('receipts', fn ($rq) => $rq->whereIn('status', ['APPROVED', 'PENDING_SITE_ENGINEER', 'DELIVERED']))
               ->orWhereHas('supplierInvoices', fn ($iq) => $iq->whereNotIn('status', ['VOIDED', 'CANCELLED']));
         })->whereNotIn('status', ['PO_DRAFT', 'PENDING_ACTUAL_PO', 'REJECTED', 'CANCELLED', 'VOIDED']);
     }

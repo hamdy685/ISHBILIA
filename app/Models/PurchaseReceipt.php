@@ -35,12 +35,16 @@ class PurchaseReceipt extends Model
         'site_engineer_notes',
         'receiver_notes',
         'rejection_reason',
+        'accountant_recorded_at',
+        'accountant_recorded_by_user_id',
+        'accountant_recording_notes',
     ];
 
     protected $appends = [
         'photo_url',
         'supplier_name',
         'is_internal_warehouse',
+        'is_accountant_recorded',
     ];
 
     public function getPhotoUrlAttribute(): ?string
@@ -65,7 +69,18 @@ class PurchaseReceipt extends Model
             'warehouse_submitted_at' => 'datetime',
             'site_engineer_approved_at' => 'datetime',
             'receiver_approved_at' => 'datetime',
+            'accountant_recorded_at' => 'datetime',
         ];
+    }
+
+    public function accountantRecordedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'accountant_recorded_by_user_id');
+    }
+
+    public function getIsAccountantRecordedAttribute(): bool
+    {
+        return ! is_null($this->accountant_recorded_at);
     }
 
     public function purchaseOrder(): BelongsTo

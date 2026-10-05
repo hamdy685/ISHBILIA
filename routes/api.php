@@ -316,6 +316,8 @@ Route::middleware('auth:sanctum')->prefix('accounting')->group(function () {
 
     Route::get('/receipts/approved', [SupplierInvoiceController::class, 'approvedReceipts'])
         ->middleware('permission:accounting.invoice.view');
+    Route::post('/receipts/{id}/mark-recorded', [SupplierInvoiceController::class, 'markReceiptRecorded'])
+        ->middleware('permission:accounting.invoice.view');
     Route::get('/supplier-invoices/pending', [SupplierInvoiceController::class, 'approvedReceipts'])
         ->middleware('permission:accounting.invoice.view');
     Route::get('/invoices', [SupplierInvoiceController::class, 'invoices'])

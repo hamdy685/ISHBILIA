@@ -50,11 +50,18 @@ export interface ApprovedReceipt {
   warehouse_submitted_at?: string | null;
   site_engineer_approved_at?: string | null;
   warehouse_notes?: string | null;
+  site_engineer_notes?: string | null;
+  receiver_notes?: string | null;
+  receiver_user?: { id: number; name: string } | null;
   photo_path?: string | null;
   photo_name?: string | null;
   photo_url?: string | null;
-  site_engineer_notes?: string | null;
   rejection_reason?: string | null;
+  accountant_recorded_at?: string | null;
+  accountant_recorded_by_user_id?: number | null;
+  accountant_recording_notes?: string | null;
+  accountant_recorded_by?: { id: number; name: string } | null;
+  is_accountant_recorded?: boolean;
   warehouse_keeper?: { id: number; name: string } | null;
   site_engineer?: { id: number; name: string } | null;
   purchase_order_id: number;
@@ -321,8 +328,18 @@ export const wipeAllLandParcelsApi = async (): Promise<{ message: string; delete
   return response.data;
 };
 
-export const getApprovedReceiptsForAccountingApi = async () =>
-  (await apiClient.get<{ data: ApprovedReceipt[] }>(`${accountingBase}/receipts/approved`)).data.data;
+export const getApprovedReceiptsForAccountingApi = async (params?: { recorded?: boolean; status?: string }) =>
+  (await apiClient.get<{ data: ApprovedReceipt[] }>(`${accountingBase}/receipts/approved`, { params })).data.data;
+
+export const markReceiptAsRecordedApi = async (receiptId: number, notes?: string) => {
+  const response = await apiClient.post<{ message: string; data: any }>(`${accountingBase}/receipts/${receiptId}/mark-recorded`, { notes });
+  invalidateCachedGet(`${accountingBase}/receipts/approved`);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('notifications-updated'));
+    window.dispatchEvent(new CustomEvent('app-data-updated'));
+  }
+  return response.data;
+};
 
 export const getSupplierInvoicesApi = async (supplierId?: number) =>
   (await apiClient.get<{ data: SupplierInvoice[] }>(`${accountingBase}/invoices`, {

@@ -4,6 +4,7 @@ import { ApprovedReceipt } from '../../api/supplierFinance';
 import { PurchaseOrder } from '../../types/purchaseOrder';
 import { printDocumentOnly } from '../../utils/print';
 import { CombinedPrintTemplate } from '../procurement/CombinedPrintTemplate';
+import { shareReceiptOnWhatsApp } from '../../utils/whatsapp';
 
 interface ThreeWayMatchPrintModalProps {
   receipt?: ApprovedReceipt | null;
@@ -67,6 +68,16 @@ export const ThreeWayMatchPrintModal: React.FC<ThreeWayMatchPrintModalProps> = (
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {receipt && (
+              <button
+                type="button"
+                onClick={() => shareReceiptOnWhatsApp(receipt)}
+                className="flex items-center gap-1.5 rounded-lg bg-green-600 hover:bg-green-500 px-3.5 py-1.5 text-xs font-bold text-white transition-colors shadow-md cursor-pointer"
+                title="مشاركة تفاصيل الإذن عبر واتساب"
+              >
+                <span>💬</span> واتساب
+              </button>
+            )}
             <button
               type="button"
               onClick={handlePrint}

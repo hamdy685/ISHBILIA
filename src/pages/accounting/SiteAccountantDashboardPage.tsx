@@ -16,6 +16,7 @@ import {
   getApprovedReceiptsForAccountingApi,
   getSupplierInvoicesApi,
   matchSupplierInvoiceApi,
+  markReceiptAsRecordedApi,
 } from '../../api/supplierFinance';
 import { getAccountingPurchaseOrdersApi } from '../../api/accounting';
 import { getOwnPurchaseRequestsApi, submitPurchaseRequestApi } from '../../api/purchaseRequests';
@@ -23,6 +24,8 @@ import { PurchaseOrder } from '../../types/purchaseOrder';
 import { PurchaseRequest } from '../../types/purchaseRequest';
 import { getUnitLabel } from '../../utils/units';
 import { formatCleanNumber } from '../../utils/numberFormat';
+import ThreeWayMatchPrintModal from '../../components/accounting/ThreeWayMatchPrintModal';
+import { shareReceiptOnWhatsApp } from '../../utils/whatsapp';
 
 const cleanDate = (d?: string | null) => (d ? String(d).slice(0, 10) : '—');
 const money = (value: string | number | null | undefined) =>
@@ -51,19 +54,25 @@ export const SiteAccountantDashboardPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'RECEIPTS' | 'INVOICES' | 'ORDERS' | 'MY_REQUESTS'>('RECEIPTS');
+  const [receiptsFilter, setReceiptsFilter] = useState<'pending' | 'recorded' | 'all'>('pending');
+  const [recordedReceipts, setRecordedReceipts] = useState<ApprovedReceipt[]>([]);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [recordingId, setRecordingId] = useState<number | null>(null);
+  const [selectedCycleReceipt, setSelectedCycleReceipt] = useState<ApprovedReceipt | null>(null);
 
   const loadDashboardData = async (silent = false) => {
     if (!silent) setLoading(true);
     setError(null);
     try {
-      const [receiptsData, invoicesData, posData, requestsData] = await Promise.all([
-        getApprovedReceiptsForAccountingApi().catch(() => []),
+      const [receiptsData, recordedData, invoicesData, posData, requestsData] = await Promise.all([
+        getApprovedReceiptsForAccountingApi({ status: 'pending' }).catch(() => []),
+        getApprovedReceiptsForAccountingApi({ recorded: true }).catch(() => []),
         getSupplierInvoicesApi().catch(() => []),
         getAccountingPurchaseOrdersApi().catch(() => []),
         getOwnPurchaseRequestsApi().catch(() => []),
       ]);
       setReceipts(receiptsData || []);
+      setRecordedReceipts(recordedData || []);
       setInvoices(invoicesData || []);
       setPurchaseOrders(posData || []);
       setOwnRequests(requestsData || []);
@@ -71,6 +80,19 @@ export const SiteAccountantDashboardPage: React.FC = () => {
       if (!silent) setError(parseApiError(err).message);
     } finally {
       if (!silent) setLoading(false);
+    }
+  };
+
+  const handleMarkRecorded = async (receiptId: number, notes?: string) => {
+    setRecordingId(receiptId);
+    try {
+      await markReceiptAsRecordedApi(receiptId, notes);
+      setActionSuccess('تم تأكيد تسجيل المعاملة في شيت الإكسيل الخارجي بنجاح ✅');
+      await loadDashboardData(true);
+    } catch (err) {
+      setError(parseApiError(err).message);
+    } finally {
+      setRecordingId(null);
     }
   };
 
@@ -123,63 +145,76 @@ export const SiteAccountantDashboardPage: React.FC = () => {
     };
   }, [user, hasRole]);
 
+  // Helper to build items list for a receipt
+  const buildReceiptItemsList = (receipt: ApprovedReceipt) => {
+    const po = receipt.purchase_order;
+    const isActualPo = Boolean(po?.finalized_at);
+    return isActualPo && po?.items && po.items.length > 0
+      ? po.items.map((poi: any) => {
+          const actualQty = Number(poi.actual_quantity ?? poi.quantity ?? 0);
+          const unitPrice = Number(poi.unit_price || 0);
+          return {
+            description: poi.item_name || poi.item_description || 'صنف',
+            quantity: actualQty,
+            uom: poi.uom,
+            specifications: poi.specifications,
+            parcel: poi.item_reference,
+            region: poi.region,
+            unit_price: unitPrice,
+            line_total: Math.round(actualQty * unitPrice * 100) / 100,
+          };
+        })
+      : (receipt.items || []).map((it) => {
+          const poItem = it.purchase_order_item;
+          const actualQty = Number(it.received_quantity ?? poItem?.actual_quantity ?? poItem?.quantity ?? 0);
+          const unitPrice = Number(poItem?.unit_price || 0);
+          return {
+            description: poItem?.item_name || poItem?.item_description || 'صنف',
+            quantity: actualQty,
+            uom: poItem?.uom,
+            specifications: poItem?.specifications,
+            parcel: poItem?.item_reference,
+            region: poItem?.region,
+            unit_price: unitPrice,
+            line_total: Math.round(actualQty * unitPrice * 100) / 100,
+          };
+        });
+  };
+
   // Build Action Required Inbox Items
   const actionInboxItems: ActionInboxItem[] = useMemo(() => {
     const items: ActionInboxItem[] = [];
 
-    // 1. Approved Receipts waiting for invoice
+    // 1. Approved Receipts waiting for recording
     for (const receipt of receipts) {
       const po = receipt.purchase_order;
       const isActualPo = Boolean(po?.finalized_at);
-      const itemsList = isActualPo && po?.items && po.items.length > 0
-        ? po.items.map((poi: any) => {
-            const actualQty = Number(poi.actual_quantity ?? poi.quantity ?? 0);
-            const unitPrice = Number(poi.unit_price || 0);
-            return {
-              description: poi.item_name || poi.item_description || 'صنف',
-              quantity: actualQty,
-              uom: poi.uom,
-              specifications: poi.specifications,
-              parcel: poi.item_reference,
-              region: poi.region,
-              unit_price: unitPrice,
-              line_total: Math.round(actualQty * unitPrice * 100) / 100,
-            };
-          })
-        : (receipt.items || []).map((it) => {
-            const poItem = it.purchase_order_item;
-            const actualQty = Number(it.received_quantity ?? poItem?.actual_quantity ?? poItem?.quantity ?? 0);
-            const unitPrice = Number(poItem?.unit_price || 0);
-            return {
-              description: poItem?.item_name || poItem?.item_description || 'صنف',
-              quantity: actualQty,
-              uom: poItem?.uom,
-              specifications: poItem?.specifications,
-              parcel: poItem?.item_reference,
-              region: poItem?.region,
-              unit_price: unitPrice,
-              line_total: Math.round(actualQty * unitPrice * 100) / 100,
-            };
-          });
+      const itemsList = buildReceiptItemsList(receipt);
 
       items.push({
         id: `rcpt-${receipt.id}`,
         rawId: receipt.id,
         type: 'RECEIPT',
         code: receipt.receipt_number,
-        title: isActualPo ? 'أمر شراء فعلي معتمد بانتظار تسجيل الفاتورة' : 'إذن استلام معتمد بانتظار تسجيل الفاتورة',
+        title: isActualPo ? 'أمر شراء فعلي معتمد بانتظار التسجيل' : 'إذن استلام معتمد بانتظار التسجيل',
         subtitle: receipt.purchase_order?.supplier?.company_name || 'مورد غير محدد',
         department: receipt.purchase_order?.purchase_request?.department?.name || accountantScope.defaultDeptName,
         supplier: receipt.purchase_order?.supplier?.company_name,
         amount: receiptValue(receipt),
         urgency: 'HIGH',
-        reason: 'تم اعتماد إذن الاستلام في الموقع وينتظر تسجيل فاتورة المورد الرسمية وترحيلها.',
+        reason: 'تم اعتماد إذن الاستلام في الموقع وينتظر تأكيد تسجيله في شيت الإكسيل الخارجي بواسطة المحاسب.',
         actionUrl: `/accounting/supplier-finance?tab=payments&purchase_receipt_id=${receipt.id}`,
         actionLabel: 'تسجيل الفاتورة',
         timeAgo: cleanDate(receipt.received_at),
         created_at: receipt.received_at || undefined,
         items_count: itemsList.length,
         items_list: itemsList,
+        onDirectApprove: async (_item: any, comment?: string) => {
+          await handleMarkRecorded(receipt.id, comment || undefined);
+        },
+        directApproveLabel: 'تم التسجيل ✅',
+        directApproveClassName: 'bg-blue-600 hover:bg-blue-500 shadow-blue-950/40',
+        directApproveIcon: <span>📝</span>,
       });
     }
 
@@ -365,77 +400,173 @@ export const SiteAccountantDashboardPage: React.FC = () => {
         />
       </KpiPillsBar>
 
-      {/* Tab 1: Approved Receipts Waiting for Invoicing */}
+      {/* Tab 1: Approved Receipts with Sub-filter (Pending / Recorded / All) */}
       {activeTab === 'RECEIPTS' && (
         <Card className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-800 pb-3">
             <div>
               <h2 className="text-base font-black text-slate-100 flex items-center gap-2">
-                <span>🧾</span> إذونات الاستلام المعتمدة الجاهزة للفوترة ({receipts.length})
+                <span>🧾</span> إذونات الاستلام المعتمدة
+                <span className="text-xs font-bold text-slate-400">
+                  ({receiptsFilter === 'recorded' ? recordedReceipts.length : receiptsFilter === 'all' ? receipts.length + recordedReceipts.length : receipts.length})
+                </span>
               </h2>
               <p className="mt-0.5 text-xs text-slate-400">
-                معتمدة من مهندس الموقع وجاهزة لإدخال فاتورة المورد الرسمية وترحيلها.
+                {receiptsFilter === 'pending' ? 'إذونات معتمدة بانتظار التسجيل في شيت الإكسيل الخارجي.' : receiptsFilter === 'recorded' ? 'إذونات تم تأكيد تسجيلها بواسطة المحاسب.' : 'جميع إذونات الاستلام المعتمدة.'}
               </p>
             </div>
-            <Link to="/accounting/supplier-finance">
-              <Button size="sm" variant="secondary" className="text-xs">
-                فتح شاشة الفوترة الكاملة ←
-              </Button>
-            </Link>
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Sub-filter toggle buttons */}
+              <div className="flex rounded-xl border border-slate-700 overflow-hidden text-[11px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => setReceiptsFilter('pending')}
+                  className={`px-3 py-1.5 transition-colors ${receiptsFilter === 'pending' ? 'bg-amber-600 text-white' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`}
+                >
+                  ⏳ بانتظار التسجيل ({receipts.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReceiptsFilter('recorded')}
+                  className={`px-3 py-1.5 transition-colors border-x border-slate-700 ${receiptsFilter === 'recorded' ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`}
+                >
+                  ✅ تم التسجيل ({recordedReceipts.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReceiptsFilter('all')}
+                  className={`px-3 py-1.5 transition-colors ${receiptsFilter === 'all' ? 'bg-cyan-600 text-white' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`}
+                >
+                  📋 الكل ({receipts.length + recordedReceipts.length})
+                </button>
+              </div>
+              <Link to="/accounting/supplier-finance">
+                <Button size="sm" variant="secondary" className="text-xs">
+                  فتح شاشة الفوترة ←
+                </Button>
+              </Link>
+            </div>
           </div>
 
-          {receipts.length > 0 ? (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>إذن الاستلام</TableHead>
-                    <TableHead>أمر الشراء</TableHead>
-                    <TableHead>المورد</TableHead>
-                    <TableHead>القسم</TableHead>
-                    <TableHead>تاريخ الاستلام</TableHead>
-                    <TableHead>قيمة المستلم</TableHead>
-                    <TableHead>الإجراء</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {receipts.slice(0, 10).map((receipt) => (
-                    <TableRow key={receipt.id}>
-                      <TableCell className="font-mono font-bold text-cyan-300 whitespace-nowrap">
-                        {receipt.receipt_number}
-                      </TableCell>
-                      <TableCell className="font-mono whitespace-nowrap">
-                        {receipt.purchase_order?.po_number || '—'}
-                      </TableCell>
-                      <TableCell className="font-bold text-slate-200">
-                        {receipt.purchase_order?.supplier?.company_name || '—'}
-                      </TableCell>
-                      <TableCell className="text-slate-300">
-                        {receipt.purchase_order?.purchase_request?.department?.name || '—'}
-                      </TableCell>
-                      <TableCell className="font-mono text-slate-300 whitespace-nowrap">
-                        {cleanDate(receipt.received_at)}
-                      </TableCell>
-                      <TableCell className="font-mono font-bold text-emerald-300 whitespace-nowrap">
-                        {money(receiptValue(receipt))}
-                      </TableCell>
-                      <TableCell>
-                        <Link to={`/accounting/supplier-finance?tab=payments&purchase_receipt_id=${receipt.id}`}>
-                          <Button size="sm" variant="primary" className="whitespace-nowrap font-bold">
-                            تسجيل فاتورة
-                          </Button>
-                        </Link>
-                      </TableCell>
+          {(() => {
+            const displayReceipts = receiptsFilter === 'recorded' ? recordedReceipts : receiptsFilter === 'all' ? [...receipts, ...recordedReceipts] : receipts;
+            return displayReceipts.length > 0 ? (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>إذن الاستلام</TableHead>
+                      <TableHead>أمر الشراء</TableHead>
+                      <TableHead>المورد</TableHead>
+                      <TableHead>القسم</TableHead>
+                      <TableHead>تاريخ الاستلام</TableHead>
+                      <TableHead>قيمة المستلم</TableHead>
+                      <TableHead>حالة التسجيل</TableHead>
+                      <TableHead>الإجراء</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          ) : (
-            <div className="py-12 text-center text-xs text-slate-500">
-              ✨ لا توجد إذونات استلام معتمدة تنتظر الفوترة حالياً.
-            </div>
-          )}
+                  </TableHeader>
+                  <TableBody>
+                    {displayReceipts.slice(0, 20).map((receipt) => {
+                      const isRecorded = receipt.is_accountant_recorded || Boolean(receipt.accountant_recorded_at);
+                      const isRecording = recordingId === receipt.id;
+                      return (
+                        <TableRow key={receipt.id} className={isRecorded ? 'opacity-80' : ''}>
+                          <TableCell className="font-mono font-bold text-cyan-300 whitespace-nowrap">
+                            {receipt.receipt_number}
+                          </TableCell>
+                          <TableCell className="font-mono whitespace-nowrap">
+                            {receipt.purchase_order?.po_number || '—'}
+                          </TableCell>
+                          <TableCell className="font-bold text-slate-200">
+                            {receipt.purchase_order?.supplier?.company_name || '—'}
+                          </TableCell>
+                          <TableCell className="text-slate-300">
+                            {receipt.purchase_order?.purchase_request?.department?.name || '—'}
+                          </TableCell>
+                          <TableCell className="font-mono text-slate-300 whitespace-nowrap">
+                            {cleanDate(receipt.received_at)}
+                          </TableCell>
+                          <TableCell className="font-mono font-bold text-emerald-300 whitespace-nowrap">
+                            {money(receiptValue(receipt))}
+                          </TableCell>
+                          <TableCell>
+                            {isRecorded ? (
+                              <div className="space-y-0.5">
+                                <span className="rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-[11px] font-black text-emerald-300 border border-emerald-500/40">
+                                  ✅ مُسجّل
+                                </span>
+                                {receipt.accountant_recorded_by && (
+                                  <div className="text-[10px] text-slate-400">
+                                    بواسطة: {receipt.accountant_recorded_by.name}
+                                  </div>
+                                )}
+                                {receipt.accountant_recorded_at && (
+                                  <div className="text-[10px] text-slate-500 font-mono">
+                                    {cleanDate(receipt.accountant_recorded_at)}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="rounded-full bg-amber-500/20 px-2.5 py-0.5 text-[11px] font-black text-amber-300 border border-amber-500/40">
+                                ⏳ بانتظار التسجيل
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {/* 1. عرض ورؤية وطباعة المستندات الثلاثية */}
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                className="whitespace-nowrap font-bold text-[11px] text-cyan-300 border-cyan-700/60 hover:bg-cyan-950/40"
+                                onClick={() => setSelectedCycleReceipt(receipt)}
+                                title="عرض وطباعة الدورة المستندية (طلب الشراء • أمر الشراء الفعلي • إذن الاستلام)"
+                              >
+                                👁️ عرض / 🖨️ طباعة
+                              </Button>
+
+                              {/* 2. إرسال عبر واتساب */}
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                className="whitespace-nowrap font-bold text-[11px] text-emerald-400 border-emerald-700/60 hover:bg-emerald-950/40"
+                                onClick={() => shareReceiptOnWhatsApp(receipt, receiptValue(receipt))}
+                                title="إرسال ملخص المعاملة عبر واتساب"
+                              >
+                                💬 واتساب
+                              </Button>
+
+                              {/* 3. زر تم التسجيل بالشيت الخارجي */}
+                              {!isRecorded ? (
+                                <Button
+                                  size="sm"
+                                  variant="primary"
+                                  className="whitespace-nowrap font-bold text-[11px] bg-blue-600 hover:bg-blue-500 shadow-blue-950/40"
+                                  disabled={isRecording}
+                                  onClick={() => void handleMarkRecorded(receipt.id)}
+                                  title="تأكيد التسجيل في شيت الإكسيل الخارجي"
+                                >
+                                  {isRecording ? 'جاري التسجيل...' : '📝 تم التسجيل'}
+                                </Button>
+                              ) : (
+                                <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-black text-emerald-300 border border-emerald-500/30 whitespace-nowrap">
+                                  ✅ تم التسجيل
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <div className="py-12 text-center text-xs text-slate-500">
+                {receiptsFilter === 'pending' ? '✨ لا توجد إذونات استلام معتمدة تنتظر التسجيل حالياً.' : receiptsFilter === 'recorded' ? '📋 لم يتم تسجيل أي إذونات بعد.' : '✨ لا توجد إذونات استلام معتمدة.'}
+              </div>
+            );
+          })()}
         </Card>
       )}
 
@@ -671,6 +802,13 @@ export const SiteAccountantDashboardPage: React.FC = () => {
           )}
         </Card>
       )}
+
+      {/* ── مودال عرض وطباعة الدورة المستندية الثلاثية ── */}
+      <ThreeWayMatchPrintModal
+        receipt={selectedCycleReceipt}
+        isOpen={Boolean(selectedCycleReceipt)}
+        onClose={() => setSelectedCycleReceipt(null)}
+      />
     </div>
   );
 };

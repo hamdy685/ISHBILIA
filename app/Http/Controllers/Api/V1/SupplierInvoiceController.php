@@ -17,8 +17,59 @@ class SupplierInvoiceController extends Controller
 
     public function approvedReceipts(Request $request): JsonResponse
     {
+        $statusFilter = $request->query('status', 'pending');
+        if ($request->boolean('recorded')) {
+            $statusFilter = 'recorded';
+        }
+
         return response()->json([
-            'data' => $this->service->approvedReceipts((int) $request->integer('limit', 100), $request->user()),
+            'data' => $this->service->approvedReceipts(
+                (int) $request->integer('limit', 100),
+                $request->user(),
+                $statusFilter
+            ),
+        ]);
+    }
+
+    public function markReceiptRecorded(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+        $receipt = PurchaseReceipt::with('purchaseOrder')->findOrFail($id);
+
+        $notes = $request->input('notes');
+
+        $receipt->update([
+            'accountant_recorded_at' => now(),
+            'accountant_recorded_by_user_id' => $user->id,
+            'accountant_recording_notes' => $notes,
+        ]);
+
+        \App\Models\SystemEvent::record(
+            actor: $user,
+            eventType: 'ACCOUNTANT_RECORDED',
+            entityType: 'purchase_receipt',
+            entityId: $receipt->id,
+            summary: "تم تأكيد تسجيل إذن الاستلام {$receipt->receipt_number} في شيت الإكسيل الخارجي بواسطة المحاسب {$user->name}.",
+            details: [
+                'receipt_number' => $receipt->receipt_number,
+                'po_number' => $receipt->purchaseOrder?->po_number,
+                'recorded_at' => now()->toIso8601String(),
+                'notes' => $notes,
+            ]
+        );
+
+        return response()->json([
+            'message' => 'تم تأكيد تسجيل المعاملة في شيت الإكسيل بنجاح.',
+            'data' => [
+                'id' => $receipt->id,
+                'receipt_number' => $receipt->receipt_number,
+                'is_accountant_recorded' => true,
+                'accountant_recorded_at' => $receipt->accountant_recorded_at?->toIso8601String(),
+                'accountant_recorded_by' => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                ],
+            ],
         ]);
     }
 

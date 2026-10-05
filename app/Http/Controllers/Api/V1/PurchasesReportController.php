@@ -124,11 +124,7 @@ class PurchasesReportController extends Controller
                 'supplierInvoices.purchaseReceipt.items.purchaseOrderItem.prItem',
                 'supplierInvoices.createdBy',
             ])
-            ->when($actualOnly, function ($q) {
-                $q->actualPo();
-            }, function ($q) {
-                $q->whereNotIn('status', ['REJECTED', 'PO_DRAFT']);
-            })
+            ->actualPo()
             ->when($allowedDepartmentCodes !== null, function ($q) use ($allowedDepartmentCodes) {
                 $q->whereHas('purchaseRequest.department', function ($dq) use ($allowedDepartmentCodes) {
                     $dq->whereIn('code', $allowedDepartmentCodes);
@@ -140,16 +136,27 @@ class PurchasesReportController extends Controller
                 });
             });
 
-        // 3.1 فلترة الحالة المحاسبية (مسقط ومسجل / بانتظار الحسابات / الكل)
+        // 3.1 فلترة الحالة المحاسبية والتسجيل
         if ($accountingFilter === 'PENDING') {
-            // أوامر الشراء الصادرة التي لم يسجل لها المحاسب فاتورة بعد
-            $ordersQuery->whereDoesntHave('supplierInvoices', function ($iq) {
-                $iq->whereNotIn('status', ['VOIDED', 'CANCELLED']);
+            // أوامر الشراء بانتظار إتمام التسجيل المحاسبي
+            $ordersQuery->where(function ($oq) {
+                $oq->whereDoesntHave('purchaseReceipts', function ($rq) {
+                    $rq->whereNotNull('accountant_recorded_at');
+                })->whereDoesntHave('supplierInvoices', function ($iq) {
+                    $iq->whereNotIn('status', ['VOIDED', 'CANCELLED']);
+                });
             });
         } elseif ($accountingFilter === 'VERIFIED_ONLY') {
-            // الافتراضي والرسمي: فقط الأوامر التي سجل لها المحاسب فاتورة مورد معتمدة
-            $ordersQuery->whereHas('supplierInvoices', function ($iq) {
-                $iq->whereNotIn('status', ['VOIDED', 'CANCELLED']);
+            // الأوامر الفعلية المسجلة محاسبياً أو المعتمدة نهائياً
+            $ordersQuery->where(function ($oq) {
+                $oq->whereNotNull('finalized_at')
+                    ->orWhereIn('status', ['APPROVED_BY_ACCOUNTING', 'FINAL_APPROVED'])
+                    ->orWhereHas('purchaseReceipts', function ($rq) {
+                        $rq->whereNotNull('accountant_recorded_at');
+                    })
+                    ->orWhereHas('supplierInvoices', function ($iq) {
+                        $iq->whereNotIn('status', ['VOIDED', 'CANCELLED']);
+                    });
             });
         }
 

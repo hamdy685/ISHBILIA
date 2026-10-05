@@ -73,7 +73,7 @@ class SupplierInvoiceService
         return null;
     }
 
-    public function approvedReceipts(int $limit = 100, ?User $user = null)
+    public function approvedReceipts(int $limit = 100, ?User $user = null, ?string $statusFilter = 'pending')
     {
         return PurchaseReceipt::with([
             'purchaseOrder.supplier',
@@ -92,14 +92,20 @@ class SupplierInvoiceService
             'purchaseOrder.approvalHistory.actor',
             'warehouseKeeper',
             'siteEngineer',
+            'accountantRecordedBy',
             'items.purchaseOrderItem.item',
             'items.purchaseOrderItem.supplier',
             'items.purchaseOrderItem.prItem.supplier',
         ])
-
             ->where('status', 'APPROVED')
-            ->whereDoesntHave('supplierInvoices', function ($query) {
-                $query->whereIn('status', ['DRAFT', 'OPEN', 'PARTIALLY_PAID', 'PAID']);
+            ->when($statusFilter === 'recorded', function ($query) {
+                $query->whereNotNull('accountant_recorded_at');
+            })
+            ->when($statusFilter === 'pending' || $statusFilter === null, function ($query) {
+                $query->whereNull('accountant_recorded_at')
+                      ->whereDoesntHave('supplierInvoices', function ($iq) {
+                          $iq->whereNotIn('status', ['VOIDED', 'CANCELLED']);
+                      });
             })
             ->when($this->getAllowedDepartmentCodesForAccountant($user), function ($query, $allowedCodes) {
                 $query->whereHas('purchaseOrder.purchaseRequest.department', function ($dq) use ($allowedCodes) {
