@@ -171,8 +171,9 @@ export const NotificationsPage: React.FC = () => {
       ]);
       const list = (data || []).filter((n) => isAllowedNotificationForUser(n, user));
       setNotifications(list);
-      const calculatedUnread = list.filter((n) => !n.read_at).length;
-      setUnreadCount(count !== undefined ? Math.min(count, calculatedUnread) : calculatedUnread);
+      const authoritativeCount = typeof count === 'number' ? count : list.filter((n) => !n.read_at).length;
+      setUnreadCount(authoritativeCount);
+      broadcastNotificationCount(authoritativeCount);
     } catch (err: any) {
       const parsed = parseApiError(err);
       setError(parsed.message);
@@ -244,14 +245,12 @@ export const NotificationsPage: React.FC = () => {
       setNotifications((prev) =>
         prev.map((n) => (n.id === notification.id ? { ...n, read_at: nowIso } : n))
       );
-      setUnreadCount((prev) => {
-        const next = Math.max(0, prev - 1);
-        broadcastNotificationCount(next);
-        return next;
-      });
+      const next = Math.max(0, unreadCount - 1);
+      setUnreadCount(next);
+      broadcastNotificationCount(next);
       window.dispatchEvent(
         new CustomEvent('notifications-updated', {
-          detail: { id: notification.id, read_at: nowIso, optimistic: true },
+          detail: { id: notification.id, read_at: nowIso, optimistic: true, unread_count: next },
         })
       );
 
@@ -302,14 +301,12 @@ export const NotificationsPage: React.FC = () => {
       setNotifications((prev) =>
         prev.map((n) => (n.id === notification.id ? { ...n, read_at: nowIso } : n))
       );
-      setUnreadCount((prev) => {
-        const next = Math.max(0, prev - 1);
-        broadcastNotificationCount(next);
-        return next;
-      });
+      const next = Math.max(0, unreadCount - 1);
+      setUnreadCount(next);
+      broadcastNotificationCount(next);
       window.dispatchEvent(
         new CustomEvent('notifications-updated', {
-          detail: { id: notification.id, read_at: nowIso, optimistic: true },
+          detail: { id: notification.id, read_at: nowIso, optimistic: true, unread_count: next },
         })
       );
 

@@ -96,7 +96,7 @@ class NotificationController extends Controller
         ]);
     }
 
-    public function markAsRead(Request $request, string|int $id): JsonResponse|NotificationResource
+    public function markAsRead(Request $request, string|int $id): JsonResponse
     {
         $notification = Notification::findOrFail((int) $id);
         if ($notification->user_id !== $request->user()->id) {
@@ -106,7 +106,8 @@ class NotificationController extends Controller
         $notification->markAsRead();
         $unreadCount = $this->notificationService->getUnreadCount($request->user());
 
-        return (new NotificationResource($notification))->additional([
+        return response()->json([
+            'data' => (new NotificationResource($notification))->resolve(),
             'message' => 'تم تحديد الإشعار كمقروء.',
             'unread_count' => $unreadCount,
             'count' => $unreadCount,

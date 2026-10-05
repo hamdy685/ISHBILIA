@@ -101,13 +101,22 @@ export const updateAppAndTabBadge = (count: number): void => {
   }
 };
 
+let currentNotificationCount = 0;
+
+/**
+ * Returns the latest in-memory cached notification count synchronously.
+ */
+export const getCachedNotificationCount = (): number => currentNotificationCount;
+
 /**
  * Broadcasts the current notification count to all components and updates the app icon & tab.
  */
 export const broadcastNotificationCount = (count: number): void => {
-  updateAppAndTabBadge(count);
+  const sanitized = Math.max(0, Math.round(Number(count) || 0));
+  currentNotificationCount = sanitized;
+  updateAppAndTabBadge(sanitized);
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('notification-count-changed', { detail: count }));
+    window.dispatchEvent(new CustomEvent('notification-count-changed', { detail: sanitized }));
   }
 };
 
@@ -115,9 +124,14 @@ export const broadcastNotificationCount = (count: number): void => {
  * Hook to read and subscribe to the real-time unread notification count.
  */
 export const useNotificationCount = (): number => {
-  const [count, setCount] = useState<number>(0);
+  const [count, setCount] = useState<number>(() => currentNotificationCount);
 
   useEffect(() => {
+    // Keep local state in sync if cache changed before mount
+    if (currentNotificationCount !== count) {
+      setCount(currentNotificationCount);
+    }
+
     const handleCount = (e: Event) => {
       const val = (e as CustomEvent<number>).detail;
       if (typeof val === 'number') {

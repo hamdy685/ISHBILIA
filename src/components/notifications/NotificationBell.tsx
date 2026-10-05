@@ -25,11 +25,15 @@ import {
   setNotificationSoundEnabled,
   playNotificationSound,
 } from '../../utils/notificationSound';
-import { broadcastNotificationCount } from '../../utils/notificationBadge';
+import {
+  broadcastNotificationCount,
+  getCachedNotificationCount,
+  useNotificationCount,
+} from '../../utils/notificationBadge';
 
 export const NotificationBell: React.FC = () => {
   const { user } = useAuth();
-  const [count, setCount] = useState<number>(0);
+  const count = useNotificationCount();
   const [soundEnabled, setSoundEnabled] = useState<boolean>(() => isNotificationSoundEnabled());
   const [recentNotifications, setRecentNotifications] = useState<Notification[]>([]);
   const [latestToast, setLatestToast] = useState<Notification | null>(null);
@@ -49,16 +53,13 @@ export const NotificationBell: React.FC = () => {
   const [pushActivating, setPushActivating] = useState(false);
   const [pushBannerMsg, setPushBannerMsg] = useState<string | null>(null);
 
-  // ─── Synchronize App Icon Badge, Favicon, and Global Navigation ───
-  useEffect(() => {
-    broadcastNotificationCount(count);
-  }, [count]);
-
   // 1. Lightweight count check (0.1 kB) - default background operation
   const fetchUnreadCountOnly = async () => {
     try {
       const unreadCount = await getUnreadNotificationCountApi().catch(() => 0);
-      setCount(unreadCount);
+      if (typeof unreadCount === 'number') {
+        broadcastNotificationCount(unreadCount);
+      }
     } catch {
       // Keep silent on transient connection issues
     }
@@ -73,8 +74,9 @@ export const NotificationBell: React.FC = () => {
         getNotificationsApi().catch(() => []),
       ]);
       const filtered = (list || []).filter((n) => isAllowedNotificationForUser(n, user));
-      const filteredUnread = filtered.filter((n) => !n.read_at).length;
-      setCount(unreadCount !== undefined ? Math.min(unreadCount, filteredUnread) : filteredUnread);
+      if (typeof unreadCount === 'number') {
+        broadcastNotificationCount(unreadCount);
+      }
       setRecentNotifications(filtered.slice(0, 6));
     } catch {
       // Keep silent on transient connection issues
@@ -113,7 +115,9 @@ export const NotificationBell: React.FC = () => {
       }
 
       setRecentNotifications((prev) => [notification, ...prev.filter((n) => n.id !== notification.id)].slice(0, 6));
-      setCount((current) => current + (notification.read_at ? 0 : 1));
+      if (!notification.read_at) {
+        broadcastNotificationCount(getCachedNotificationCount() + 1);
+      }
 
       const action = resolveNotificationAction(notification, user);
 
@@ -149,7 +153,7 @@ export const NotificationBell: React.FC = () => {
       const custom = event as CustomEvent<{ optimistic?: boolean; id?: number; read_at?: string; unread_count?: number }>;
       if (custom?.detail?.optimistic) {
         if (typeof custom.detail.unread_count === 'number') {
-          setCount(custom.detail.unread_count);
+          broadcastNotificationCount(custom.detail.unread_count);
         }
         if (custom.detail.id) {
           setRecentNotifications((prev) =>
@@ -162,13 +166,6 @@ export const NotificationBell: React.FC = () => {
         void fetchNotificationsList();
       } else {
         void fetchUnreadCountOnly();
-      }
-    };
-
-    const handleCountChanged = (event: Event) => {
-      const val = (event as CustomEvent<number>).detail;
-      if (typeof val === 'number') {
-        setCount((prev) => (prev !== val ? val : prev));
       }
     };
 
@@ -200,12 +197,11 @@ export const NotificationBell: React.FC = () => {
     startNotificationsRealtime();
     window.addEventListener('notification-received', handleReceived as EventListener);
     window.addEventListener('notifications-updated', handleUpdated);
-    window.addEventListener('notification-count-changed', handleCountChanged as EventListener);
     window.addEventListener('app-data-updated', handleUpdated);
     document.addEventListener('visibilitychange', handleVisibilityOrFocus);
     window.addEventListener('focus', handleVisibilityOrFocus);
 
-    // Smart notification heartbeat: 30s interval for lightweight count (saves 99% bandwidth & CPU)
+    // Smart notification heartbeat: 20s interval for lightweight count (saves 99% bandwidth & CPU)
     const pollInterval = window.setInterval(() => {
       if (document.visibilityState === 'visible') {
         if (dropdownOpenRef.current) {
@@ -214,7 +210,7 @@ export const NotificationBell: React.FC = () => {
           void fetchUnreadCountOnly();
         }
       }
-    }, 30000);
+    }, 20000);
 
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -230,7 +226,6 @@ export const NotificationBell: React.FC = () => {
       window.clearInterval(pollInterval);
       window.removeEventListener('notification-received', handleReceived as EventListener);
       window.removeEventListener('notifications-updated', handleUpdated);
-      window.removeEventListener('notification-count-changed', handleCountChanged as EventListener);
       window.removeEventListener('app-data-updated', handleUpdated);
       document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
       window.removeEventListener('focus', handleVisibilityOrFocus);
@@ -258,17 +253,14 @@ export const NotificationBell: React.FC = () => {
     // Instant Optimistic UI Update: decrement count & update styling immediately without waiting for API
     if (!notification.read_at) {
       const nowIso = new Date().toISOString();
-      setCount((prev) => {
-        const next = Math.max(0, prev - 1);
-        broadcastNotificationCount(next);
-        return next;
-      });
+      const nextCount = Math.max(0, count - 1);
+      broadcastNotificationCount(nextCount);
       setRecentNotifications((prev) =>
         prev.map((n) => (n.id === notification.id ? { ...n, read_at: nowIso } : n))
       );
       window.dispatchEvent(
         new CustomEvent('notifications-updated', {
-          detail: { id: notification.id, read_at: nowIso, optimistic: true },
+          detail: { id: notification.id, read_at: nowIso, optimistic: true, unread_count: nextCount },
         })
       );
 
@@ -276,7 +268,6 @@ export const NotificationBell: React.FC = () => {
       markNotificationAsReadApi(notification.id)
         .then((res) => {
           if (typeof res?.unread_count === 'number') {
-            setCount(res.unread_count);
             broadcastNotificationCount(res.unread_count);
           }
         })
@@ -306,7 +297,6 @@ export const NotificationBell: React.FC = () => {
     if (count === 0) return;
     setLoading(true);
     // Instant Optimistic Update
-    setCount(0);
     broadcastNotificationCount(0);
     const nowIso = new Date().toISOString();
     setRecentNotifications((prev) =>

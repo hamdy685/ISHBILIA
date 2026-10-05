@@ -1,5 +1,6 @@
 import apiClient from './client';
 import { Notification } from '../types/notification';
+import { broadcastNotificationCount } from '../utils/notificationBadge';
 
 export const getNotificationsApi = async (): Promise<Notification[]> => {
   const response = await apiClient.get<{ data: Notification[] }>('/notifications');
@@ -8,27 +9,47 @@ export const getNotificationsApi = async (): Promise<Notification[]> => {
 
 export const getUnreadNotificationCountApi = async (): Promise<number> => {
   const response = await apiClient.get<{ unread_count?: number; count?: number }>('/notifications/unread-count');
-  return response.data.unread_count ?? response.data.count ?? 0;
+  const count = response.data.unread_count ?? response.data.count ?? 0;
+  broadcastNotificationCount(count);
+  return count;
 };
 
 export const getUnreadCountApi = getUnreadNotificationCountApi;
 
 export const markNotificationAsReadApi = async (id: number): Promise<Notification & { unread_count?: number }> => {
-  const response = await apiClient.post<{ data: Notification; unread_count?: number } | Notification>(
+  const response = await apiClient.post<{ data: Notification; unread_count?: number; count?: number } | Notification>(
     '/notifications/' + id + '/mark-as-read'
   );
   const data = response.data;
+
+  let unreadCount: number | undefined;
+  if (data && typeof data === 'object') {
+    unreadCount = (data as any).unread_count ?? (data as any).count;
+  }
+
+  if (typeof unreadCount === 'number') {
+    broadcastNotificationCount(unreadCount);
+  }
+
   if (data && typeof data === 'object' && 'data' in data && (data as any).data) {
     return {
       ...(data as any).data,
-      unread_count: (data as any).unread_count,
+      unread_count: unreadCount,
     };
   }
-  return data as Notification;
+  return {
+    ...(data as any),
+    unread_count: unreadCount,
+  };
 };
 
-export const markAllNotificationsAsReadApi = async (): Promise<void> => {
-  await apiClient.post('/notifications/mark-all-as-read');
+export const markAllNotificationsAsReadApi = async (): Promise<{ unread_count: number }> => {
+  const response = await apiClient.post<{ message: string; unread_count?: number; count?: number }>(
+    '/notifications/mark-all-as-read'
+  );
+  const count = response.data?.unread_count ?? response.data?.count ?? 0;
+  broadcastNotificationCount(count);
+  return { unread_count: count };
 };
 
 export const sendTestPushApi = async (): Promise<{ message: string; device_count: number }> => {
