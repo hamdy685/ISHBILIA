@@ -365,17 +365,27 @@ class AdminMasterOrdersController extends Controller
                     'grand_total' => (float) ($po->grand_total ?? 0),
                     'subtotal' => (float) ($po->subtotal ?? 0),
                     'items_count' => $po->items->count(),
-                    'items' => $po->items->map(function (PurchaseOrderItem $item) use ($latestReceipt) {
+                    'items' => $po->items->map(function (PurchaseOrderItem $item) use ($latestReceipt, $isActual) {
                         $matchingReceiptItem = $latestReceipt?->items->firstWhere('purchase_order_item_id', $item->id);
+                        $effectiveQty = (float) $item->quantity;
+                        if ($matchingReceiptItem && $matchingReceiptItem->received_quantity !== null && (float) $matchingReceiptItem->received_quantity > 0) {
+                            $effectiveQty = (float) $matchingReceiptItem->received_quantity;
+                        } elseif ($isActual) {
+                            $effectiveQty = (float) $item->quantity;
+                        }
+                        $unitPrice = (float) $item->unit_price;
+                        $lineTotal = round($effectiveQty * $unitPrice, 2);
                         return [
                             'id' => $item->id,
                             'item_description' => $item->item_description,
                             'item_reference' => $item->item_reference,
                             'region' => $item->region,
-                            'quantity' => (float) $item->quantity,
+                            'quantity' => $effectiveQty,
+                            'original_po_quantity' => (float) $item->quantity,
+                            'actual_quantity' => $effectiveQty,
                             'uom' => $item->uom,
-                            'unit_price' => (float) $item->unit_price,
-                            'line_total' => (float) ($item->line_total > 0 ? $item->line_total : round((float)$item->quantity * (float)$item->unit_price, 2)),
+                            'unit_price' => $unitPrice,
+                            'line_total' => $lineTotal,
                             'received_quantity' => $matchingReceiptItem ? (float) $matchingReceiptItem->received_quantity : null,
                             'specifications' => $item->specifications,
                         ];

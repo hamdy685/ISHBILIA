@@ -37,16 +37,14 @@ const money = (value: string | number | null | undefined) => `${formatCleanNumbe
 
 const receiptValue = (receipt: ApprovedReceipt) => {
   const po = receipt.purchase_order;
-  if (po && (po.finalized_at || (po.status && !['PO_DRAFT', 'REJECTED', 'CANCELLED'].includes(po.status) && Number(po.grand_total) > 0))) {
+  if (po?.finalized_at && Number(po.grand_total) > 0) {
     return Number(po.grand_total);
   }
   return (receipt.items || []).reduce((sum, item) => {
     const poItem = item.purchase_order_item;
-    const finalQty = poItem?.quantity !== undefined ? Number(poItem.quantity) : Number(item.received_quantity || 0);
+    const finalQty = Number(item.received_quantity ?? poItem?.actual_quantity ?? poItem?.quantity ?? 0);
     const unitPrice = Number(poItem?.unit_price || 0);
-    const lineTotal = poItem?.line_total !== undefined && Number(poItem.line_total) > 0
-      ? Number(poItem.line_total)
-      : Math.round(finalQty * unitPrice * 100) / 100;
+    const lineTotal = Math.round(finalQty * unitPrice * 100) / 100;
     return sum + lineTotal;
   }, 0);
 };

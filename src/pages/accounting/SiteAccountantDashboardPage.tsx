@@ -30,16 +30,14 @@ const money = (value: string | number | null | undefined) =>
 
 const receiptValue = (receipt: ApprovedReceipt) => {
   const po = receipt.purchase_order;
-  if (po && (po.finalized_at || (po.status && !['PO_DRAFT', 'REJECTED', 'CANCELLED'].includes(po.status) && Number(po.grand_total) > 0))) {
+  if (po?.finalized_at && Number(po.grand_total) > 0) {
     return Number(po.grand_total);
   }
   return (receipt.items || []).reduce((sum, item) => {
     const poItem = item.purchase_order_item;
-    const finalQty = poItem?.quantity !== undefined ? Number(poItem.quantity) : Number(item.received_quantity || 0);
+    const finalQty = Number(item.received_quantity ?? poItem?.actual_quantity ?? poItem?.quantity ?? 0);
     const unitPrice = Number(poItem?.unit_price || 0);
-    const lineTotal = poItem?.line_total !== undefined && Number(poItem.line_total) > 0
-      ? Number(poItem.line_total)
-      : Math.round(finalQty * unitPrice * 100) / 100;
+    const lineTotal = Math.round(finalQty * unitPrice * 100) / 100;
     return sum + lineTotal;
   }, 0);
 };
@@ -131,12 +129,45 @@ export const SiteAccountantDashboardPage: React.FC = () => {
 
     // 1. Approved Receipts waiting for invoice
     for (const receipt of receipts) {
+      const po = receipt.purchase_order;
+      const isActualPo = Boolean(po?.finalized_at);
+      const itemsList = isActualPo && po?.items && po.items.length > 0
+        ? po.items.map((poi: any) => {
+            const actualQty = Number(poi.actual_quantity ?? poi.quantity ?? 0);
+            const unitPrice = Number(poi.unit_price || 0);
+            return {
+              description: poi.item_name || poi.item_description || 'صنف',
+              quantity: actualQty,
+              uom: poi.uom,
+              specifications: poi.specifications,
+              parcel: poi.item_reference,
+              region: poi.region,
+              unit_price: unitPrice,
+              line_total: Math.round(actualQty * unitPrice * 100) / 100,
+            };
+          })
+        : (receipt.items || []).map((it) => {
+            const poItem = it.purchase_order_item;
+            const actualQty = Number(it.received_quantity ?? poItem?.actual_quantity ?? poItem?.quantity ?? 0);
+            const unitPrice = Number(poItem?.unit_price || 0);
+            return {
+              description: poItem?.item_name || poItem?.item_description || 'صنف',
+              quantity: actualQty,
+              uom: poItem?.uom,
+              specifications: poItem?.specifications,
+              parcel: poItem?.item_reference,
+              region: poItem?.region,
+              unit_price: unitPrice,
+              line_total: Math.round(actualQty * unitPrice * 100) / 100,
+            };
+          });
+
       items.push({
         id: `rcpt-${receipt.id}`,
         rawId: receipt.id,
         type: 'RECEIPT',
         code: receipt.receipt_number,
-        title: 'إذن استلام معتمد بانتظار تسجيل الفاتورة',
+        title: isActualPo ? 'أمر شراء فعلي معتمد بانتظار تسجيل الفاتورة' : 'إذن استلام معتمد بانتظار تسجيل الفاتورة',
         subtitle: receipt.purchase_order?.supplier?.company_name || 'مورد غير محدد',
         department: receipt.purchase_order?.purchase_request?.department?.name || accountantScope.defaultDeptName,
         supplier: receipt.purchase_order?.supplier?.company_name,
@@ -147,17 +178,8 @@ export const SiteAccountantDashboardPage: React.FC = () => {
         actionLabel: 'تسجيل الفاتورة',
         timeAgo: cleanDate(receipt.received_at),
         created_at: receipt.received_at || undefined,
-        items_count: receipt.items?.length || 0,
-        items_list: receipt.items?.map((it) => ({
-          description: it.purchase_order_item?.item_name || it.purchase_order_item?.item_description || 'صنف',
-          quantity: it.received_quantity,
-          uom: it.purchase_order_item?.uom,
-          specifications: it.purchase_order_item?.specifications,
-          parcel: it.purchase_order_item?.item_reference,
-          region: it.purchase_order_item?.region,
-          unit_price: it.purchase_order_item?.unit_price,
-          line_total: Number(it.received_quantity) * Number(it.purchase_order_item?.unit_price || 0),
-        })),
+        items_count: itemsList.length,
+        items_list: itemsList,
       });
     }
 

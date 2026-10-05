@@ -135,7 +135,7 @@ class ProcurementAnalyticsController extends Controller
             : ($actualOnly ? (clone $actualPurchaseOrderQuery) : (clone $basePurchaseOrderQuery));
 
         $filteredPurchaseOrders = $filteredPurchaseOrderQuery
-            ->with(['purchaseRequest.department', 'supplier', 'createdBy.department', 'items', 'supplierInvoices'])
+            ->with(['purchaseRequest.department', 'supplier', 'createdBy.department', 'items', 'purchaseReceipts.items', 'supplierInvoices'])
             ->orderByDesc('created_at')
             ->limit(500)
             ->get();
@@ -406,17 +406,24 @@ class ProcurementAnalyticsController extends Controller
                     'department_name' => $po->purchaseRequest?->department?->name ?? $po->createdBy?->department?->name ?? 'غير محدد',
                     'created_at' => $po->created_at?->toIso8601String(),
                     'updated_at' => $po->updated_at?->toIso8601String(),
-                    'items' => $po->items->map(fn ($item) => [
-                        'id' => $item->id,
-                        'item_description' => $item->item_description,
-                        'item_reference' => $item->item_reference,
-                        'region' => $item->region,
-                        'quantity' => (float) $item->quantity,
-                        'uom' => $item->uom,
-                        'unit_price' => number_format((float) ($item->unit_price ?? 0), 2, '.', ''),
-                        'line_total' => number_format((float) ($item->line_total > 0 ? $item->line_total : round((float)$item->quantity * (float)$item->unit_price, 2)), 2, '.', ''),
-                        'grand_total' => number_format((float) ($item->line_total > 0 ? $item->line_total : round((float)$item->quantity * (float)$item->unit_price, 2)), 2, '.', ''),
-                    ])->values(),
+                    'items' => $po->items->map(function ($item) {
+                        $actualQty = (float) $item->actual_quantity;
+                        $unitPrice = (float) ($item->unit_price ?? 0);
+                        $lineTotal = round($actualQty * $unitPrice, 2);
+                        return [
+                            'id' => $item->id,
+                            'item_description' => $item->item_description,
+                            'item_reference' => $item->item_reference,
+                            'region' => $item->region,
+                            'quantity' => $actualQty,
+                            'original_quantity' => (float) $item->quantity,
+                            'actual_quantity' => $actualQty,
+                            'uom' => $item->uom,
+                            'unit_price' => number_format($unitPrice, 2, '.', ''),
+                            'line_total' => number_format($lineTotal, 2, '.', ''),
+                            'grand_total' => number_format($lineTotal, 2, '.', ''),
+                        ];
+                    })->values(),
                 ];
             })->values(),
             'recent_purchase_requests' => $approvedRequests->map(function (PurchaseRequest $requestModel) {

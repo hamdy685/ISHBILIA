@@ -288,13 +288,20 @@ export const GeneralManagerDashboardPage: React.FC = () => {
               actionLabel: 'معاينة وطباعة أمر الشراء',
               timeAgo: po.created_at ? po.created_at.slice(0, 10) : undefined,
               items_count: po.items?.length || 0,
-              items_list: po.items?.map((it: any) => ({
-                description: it.item_description || it.item?.name || 'بند توريد',
-                quantity: it.quantity,
-                uom: it.uom,
-                unit_price: it.unit_price,
-                line_total: it.line_total,
-              })),
+              items_list: po.items?.map((it: any) => {
+                const qty = Number(it.actual_quantity ?? it.quantity ?? 0);
+                const price = Number(it.unit_price || 0);
+                return {
+                  description: it.item_description || it.item?.name || 'بند توريد',
+                  quantity: it.actual_quantity ?? it.quantity,
+                  uom: it.uom,
+                  unit_price: it.unit_price,
+                  line_total: it.line_total ?? Math.round(qty * price * 100) / 100,
+                  specifications: it.specifications,
+                  parcel: it.item_reference,
+                  region: it.region,
+                };
+              }),
             })),
         ];
 

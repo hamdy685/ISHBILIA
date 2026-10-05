@@ -42,10 +42,10 @@ export const REBAR_TYPES: Record<string, RebarSpec> = {
 
 export const normalizeRebarCode = (unit?: string | null): string => {
   const u = (unit || '').trim().toUpperCase();
-  if (u.includes('2.5') || u.includes('2_5') || u.includes('2,5')) return 'BAR_2_5LINIA';
-  if (u.includes('3') && (u.includes('LINIA') || u.includes('MM') || u.includes('لينية') || u.includes('لنية') || u.includes('ملل'))) return 'BAR_3LINIA';
-  if (u.includes('4') && (u.includes('LINIA') || u.includes('MM') || u.includes('لينية') || u.includes('لنية') || u.includes('ملل'))) return 'BAR_4LINIA';
-  if (u.includes('5') && (u.includes('LINIA') || u.includes('MM') || u.includes('لينية') || u.includes('لنية') || u.includes('ملل'))) return 'BAR_5LINIA';
+  if (u.includes('2.5') || u.includes('2_5') || u.includes('2,5') || u.includes('8 مم') || u.includes('8MM')) return 'BAR_2_5LINIA';
+  if ((u.includes('3') && (u.includes('LINIA') || u.includes('MM') || u.includes('لينية') || u.includes('لنية') || u.includes('ملل'))) || u.includes('10 مم') || u.includes('10MM')) return 'BAR_3LINIA';
+  if ((u.includes('4') && (u.includes('LINIA') || u.includes('MM') || u.includes('لينية') || u.includes('لنية') || u.includes('ملل'))) || u.includes('12 مم') || u.includes('12MM')) return 'BAR_4LINIA';
+  if ((u.includes('5') && (u.includes('LINIA') || u.includes('MM') || u.includes('لينية') || u.includes('لنية') || u.includes('ملل'))) || u.includes('16 مم') || u.includes('16MM')) return 'BAR_5LINIA';
   if (u === 'PARCEL' || u.includes('طرد')) return 'PARCEL';
   return u;
 };
@@ -107,24 +107,41 @@ export const formatRebarDisplay = (
   unit?: string | null,
   specifications?: string | null
 ): string | null => {
+  const numQty = typeof quantity === 'string' ? parseFloat(quantity) || 0 : Number(quantity) || 0;
+  if (numQty <= 0) return null;
+
   // Case 1: Unit is one of the rebar units (BAR_2_5LINIA, BAR_3LINIA, BAR_4LINIA, BAR_5LINIA, PARCEL)
   if (isRebarUnit(unit)) {
     const spec = getRebarType(unit)!;
-    const count = typeof quantity === 'string' ? parseFloat(quantity) || 0 : Number(quantity) || 0;
-    const tons = calculateRebarTons(count, unit);
+    const tons = calculateRebarTons(numQty, unit);
     if (spec.code === 'PARCEL') {
-      return `${formatCleanNumber(tons, 3)} طن (${formatCleanQty(count)} طرد)`;
+      return `${formatCleanNumber(tons, 3)} طن (${formatCleanQty(numQty)} طرد)`;
     }
-    return `${formatCleanNumber(tons, 3)} طن (${formatCleanQty(count)} سيخ ${spec.linia})`;
+    return `${formatCleanNumber(tons, 3)} طن (${formatCleanQty(numQty)} سيخ ${spec.linia})`;
   }
 
-  // Case 2: Unit is TON, but specifications contain rebar info
+  // Case 2: Unit is TON, check if specifications or description contain rebar linia or info
   const u = (unit || '').trim().toUpperCase();
   if ((u === 'TON' || u === 'طن') && specifications) {
     const info = extractRebarInfo(specifications);
-    if (info && info.barCount > 0) {
-      const liniaText = info.linia ? ` ${info.linia}` : '';
-      return `${formatCleanNumber(quantity, 3)} طن (${formatCleanQty(info.barCount)} سيخ${liniaText})`;
+    const spec = getRebarType(info?.linia || specifications);
+
+    if (spec && spec.weightKg > 0 && spec.code !== 'PARCEL') {
+      // Calculate realistic bar count for the actual tons
+      const calculatedBars = Math.round((numQty * 1000) / spec.weightKg);
+      if (calculatedBars > 0) {
+        return `${formatCleanNumber(numQty, 3)} طن (${formatCleanQty(calculatedBars)} سيخ ${spec.linia})`;
+      }
+    } else if (info && info.barCount > 0) {
+      // If no specific weight was found, only show static barCount if mathematically plausible
+      const kgPerBar = (numQty * 1000) / info.barCount;
+      if (kgPerBar >= 3.5 && kgPerBar <= 30) {
+        const liniaText = info.linia ? ` ${info.linia}` : '';
+        return `${formatCleanNumber(numQty, 3)} طن (${formatCleanQty(info.barCount)} سيخ${liniaText})`;
+      } else {
+        // Obvious mismatch (e.g. 80 tons with static note): do not display absurd static bar count!
+        return `${formatCleanNumber(numQty, 3)} طن`;
+      }
     }
   }
 

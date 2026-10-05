@@ -187,30 +187,44 @@ export const ProcurementDashboardPage: React.FC = () => {
             })),
           ...pos
             .filter((p) => p.status === 'PENDING_ACTUAL_PO')
-            .map((po) => ({
-              id: `po-actual-${po.id}`,
-              rawId: po.id,
-              type: 'PO' as const,
-              code: po.po_number,
-              title: `📦 إذن الاستلام معتمد — مطلوب إصدار أمر الشراء الفعلي (${po.supplier?.company_name || 'المورد'})`,
-              subtitle: 'الموقع أتم الاستلام — يرجى مطابقة وتعديل الأسعار والكميات لإصدار الأمر الفعلي للإدارة المالية',
-              department: po.department?.name || po.purchase_request?.department?.name,
-              supplier: po.supplier?.company_name,
-              amount: Number(po.grand_total || 0),
-              urgency: 'CRITICAL' as const,
-              reason: 'تم استلام البضاعة واعتماد إذن الاستلام بالموقع — أمر الشراء بانتظار إصدار الأمر الفعلي من المشتريات لإرساله للإدارة المالية.',
-              actionUrl: `/procurement/purchase-orders/${po.id}/edit`,
-              actionLabel: '⚡ إصدار أمر الشراء الفعلي',
-              timeAgo: po.updated_at ? po.updated_at.slice(0, 10) : undefined,
-              items_count: po.items?.length || 0,
-              items_list: po.items?.map((it: any) => ({
-                description: it.item_description || it.item?.name || 'بند توريد',
-                quantity: it.quantity,
-                uom: it.uom,
-                unit_price: it.unit_price,
-                line_total: it.line_total,
-              })),
-            })),
+            .map((po) => {
+              const latestApprovedReceipt = (po as any).receipts?.find((r: any) => r.status === 'APPROVED');
+              const itemsList = po.items?.map((it: any) => {
+                const matchingRcptItem = latestApprovedReceipt?.items?.find((ri: any) => ri.purchase_order_item_id === it.id);
+                const actualQty = Number(matchingRcptItem?.received_quantity ?? it.actual_quantity ?? it.quantity ?? 0);
+                const price = Number(it.unit_price || 0);
+                return {
+                  description: it.item_description || it.item?.name || 'بند توريد',
+                  quantity: actualQty,
+                  uom: it.uom,
+                  unit_price: it.unit_price,
+                  line_total: Math.round(actualQty * price * 100) / 100,
+                  specifications: it.specifications,
+                  parcel: it.item_reference,
+                  region: it.region,
+                };
+              }) || [];
+              const actualTotal = itemsList.reduce((acc: number, cur: any) => acc + (cur.line_total || 0), 0);
+
+              return {
+                id: `po-actual-${po.id}`,
+                rawId: po.id,
+                type: 'PO' as const,
+                code: po.po_number,
+                title: `📦 إذن الاستلام معتمد — مطلوب إصدار أمر الشراء الفعلي (${po.supplier?.company_name || 'المورد'})`,
+                subtitle: 'الموقع أتم الاستلام — يرجى مطابقة وتعديل الأسعار والكميات لإصدار الأمر الفعلي للإدارة المالية',
+                department: po.department?.name || po.purchase_request?.department?.name,
+                supplier: po.supplier?.company_name,
+                amount: actualTotal > 0 ? actualTotal : Number(po.grand_total || 0),
+                urgency: 'CRITICAL' as const,
+                reason: 'تم استلام البضاعة واعتماد إذن الاستلام بالموقع — أمر الشراء بانتظار إصدار الأمر الفعلي من المشتريات لإرساله للإدارة المالية.',
+                actionUrl: `/procurement/purchase-orders/${po.id}/edit`,
+                actionLabel: '⚡ إصدار أمر الشراء الفعلي',
+                timeAgo: po.updated_at ? po.updated_at.slice(0, 10) : undefined,
+                items_count: itemsList.length,
+                items_list: itemsList,
+              };
+            }),
           ...pos
             .filter((p) => p.status === 'RETURNED_TO_PROCUREMENT')
             .map((po) => ({
@@ -228,13 +242,20 @@ export const ProcurementDashboardPage: React.FC = () => {
               actionLabel: 'تعديل أمر الشراء',
               timeAgo: po.created_at ? po.created_at.slice(0, 10) : undefined,
               items_count: po.items?.length || 0,
-              items_list: po.items?.map((it: any) => ({
-                description: it.item_description || it.item?.name || 'بند توريد',
-                quantity: it.quantity,
-                uom: it.uom,
-                unit_price: it.unit_price,
-                line_total: it.line_total,
-              })),
+              items_list: po.items?.map((it: any) => {
+                const qty = Number(it.actual_quantity ?? it.quantity ?? 0);
+                const price = Number(it.unit_price || 0);
+                return {
+                  description: it.item_description || it.item?.name || 'بند توريد',
+                  quantity: it.actual_quantity ?? it.quantity,
+                  uom: it.uom,
+                  unit_price: it.unit_price,
+                  line_total: it.line_total ?? Math.round(qty * price * 100) / 100,
+                  specifications: it.specifications,
+                  parcel: it.item_reference,
+                  region: it.region,
+                };
+              }),
             })),
         ];
 

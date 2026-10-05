@@ -50,9 +50,13 @@ export interface PurchaseOrderItem {
   item_reference?: string | null;
   region?: string | null;
   quantity: string;
+  original_quantity?: string | number | null;
+  actual_quantity?: string | number | null;
   uom?: string | null;
   unit_price: string;
+  actual_unit_price?: string | number | null;
   line_total: string;
+  actual_line_total?: string | number | null;
   specifications?: string | null;
   supplier_id?: number | null;
   supplier?: {

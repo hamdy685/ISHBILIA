@@ -482,7 +482,7 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                       <div className="rounded-xl border border-slate-800/90 bg-slate-900/60 p-2.5 space-y-1.5 text-xs">
                         <div className="text-[11px] font-bold text-slate-300 flex items-center justify-between pb-1 border-b border-slate-800/60">
                           <span className="flex items-center gap-1.5 text-cyan-400 font-bold">
-                            <span>📦</span> بنود الطلب ({item.items_list.length}):
+                            <span>📦</span> {item.type === 'RECEIPT' ? 'بنود الاستلام الفعلي' : (item.type === 'PO' ? 'بنود أمر الشراء الفعلي' : (item.type === 'INVOICE' ? 'بنود الفاتورة' : 'بنود الطلب'))} ({item.items_list.length}):
                           </span>
                           {item.items_count && item.items_count > item.items_list.length && (
                             <span className="text-[10px] text-slate-500">+{item.items_count - item.items_list.length} أصناف أخرى</span>
@@ -493,9 +493,13 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                             const unitLabel = getUnitLabel(it.uom || '');
                             const hasPrice = it.unit_price !== undefined && it.unit_price !== null && Number(it.unit_price) > 0;
                             const unitPriceNum = hasPrice ? Number(it.unit_price) : 0;
-                            const lineTotalNum = it.line_total !== undefined && it.line_total !== null && Number(it.line_total) > 0
-                              ? Number(it.line_total)
-                              : (hasPrice ? Number(it.quantity) * unitPriceNum : 0);
+                            const qtyNum = Number(it.quantity) || 0;
+                            // Calculate line total strictly from actual quantity * unit price
+                            const lineTotalNum = hasPrice && qtyNum > 0
+                              ? Math.round(qtyNum * unitPriceNum * 100) / 100
+                              : (it.line_total !== undefined && it.line_total !== null && Number(it.line_total) > 0
+                                ? Number(it.line_total)
+                                : 0);
                             const itDesc = (it.description && String(it.description).trim()) || 'صنف غير مسمى';
 
                             return (

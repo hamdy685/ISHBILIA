@@ -285,17 +285,21 @@ class PurchasesReportController extends Controller
                     }
                     $receivedQty = $matchingReceiptItem ? (float) $matchingReceiptItem->received_quantity : null;
 
-                    // كميات وأسعار أمر الشراء هي المصدر الوحيد (Single Source of Truth) بمجرد اعتماده
+                    // كميات وأسعار أمر الشراء الفعلي والاستلام المعتمد هي المصدر الحصري للتقارير المالية
                     $isActualPo = $order->isActualPo();
                     $poQty = (float) ($poItem->quantity ?? 1);
-                    $effectiveQty = ($isActualPo || $order->finalized_at)
-                        ? $poQty
-                        : (($receivedQty !== null && $primaryInvoice !== null) ? $receivedQty : $poQty);
-
                     $unitPrice = (float) ($poItem->unit_price ?? $poItem->estimated_unit_price ?? 0);
-                    $lineTotal = (float) ($poItem->line_total > 0 && $effectiveQty == $poQty
-                        ? $poItem->line_total
-                        : round($effectiveQty * $unitPrice, 2));
+
+                    // الأولوية الصارمة: الكمية المستلمة فعلياً بإذن الاستلام المعتمد أو كمية أمر الشراء الفعلي
+                    if ($receivedQty !== null && $receivedQty > 0) {
+                        $effectiveQty = $receivedQty;
+                    } elseif ($isActualPo || $order->finalized_at) {
+                        $effectiveQty = $poQty;
+                    } else {
+                        $effectiveQty = $poQty;
+                    }
+
+                    $lineTotal = round($effectiveQty * $unitPrice, 2);
 
                     $rowParcelRef = $poItem->item_reference
                         ?: ($prItem?->item_reference ?: $defaultParcelRef);

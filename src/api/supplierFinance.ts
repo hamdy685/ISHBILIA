@@ -13,6 +13,9 @@ export interface ApprovedReceiptItem {
     item_reference?: string | null;
     region?: string | null;
     quantity: string | number;
+    actual_quantity?: string | number | null;
+    actual_unit_price?: string | number | null;
+    actual_line_total?: string | number | null;
     uom?: string | null;
     unit_price: string | number;
     line_total?: string | number;
