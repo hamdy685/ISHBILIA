@@ -589,6 +589,8 @@ class PurchaseOrderService
                     'unit_price'       => $unitPrice,
                     'line_total'       => $lineTotal,
                     'specifications'   => array_key_exists('specifications', $input) ? $input['specifications'] : $existingItem->specifications,
+                    'is_supplementary' => isset($input['is_supplementary']) ? (bool) $input['is_supplementary'] : $existingItem->is_supplementary,
+                    'supplement_batch' => isset($input['supplement_batch']) ? $input['supplement_batch'] : $existingItem->supplement_batch,
                 ]);
 
                 AuditLog::create([
@@ -614,6 +616,8 @@ class PurchaseOrderService
                     'line_total'       => $lineTotal,
                     'specifications'   => $input['specifications'] ?? null,
                     'supplier_id'      => $input['supplier_id'] ?? $lockedPo->supplier_id ?? null,
+                    'is_supplementary' => !empty($input['is_supplementary']),
+                    'supplement_batch' => !empty($input['supplement_batch']) ? (int) $input['supplement_batch'] : null,
                 ]);
 
                 AuditLog::create([

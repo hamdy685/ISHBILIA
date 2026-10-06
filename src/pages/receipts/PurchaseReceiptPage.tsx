@@ -20,6 +20,7 @@ import {
   getReceiptPhotoUrl,
 } from '../../api/purchaseReceipts';
 import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh';
+import { SupplementItemBadge } from '../../components/common/SupplementItemBadge';
 
 interface ReceiptColorTheme {
   border: string;
@@ -467,6 +468,12 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                 طلب توريد #{order.purchase_request.request_number}
                               </span>
                             )}
+                            {order.items?.some((i) => i.is_supplementary) && (
+                              <span className="text-xs sm:text-sm font-black text-amber-300 bg-amber-950/90 border border-amber-500/80 px-3 py-1 rounded-xl flex items-center gap-1.5 shadow-md">
+                                <span>⚡</span>
+                                <span>ملحق كمالة معتمد</span>
+                              </span>
+                            )}
                           </div>
 
                           <div className="flex items-center gap-2 flex-wrap">
@@ -616,6 +623,10 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                       </span>
                                       <h4 className="text-base sm:text-xl font-black text-white flex items-center gap-2 flex-wrap">
                                         <span>{item.item_description || item.item?.name}</span>
+                                        <SupplementItemBadge
+                                          isSupplementary={item.is_supplementary}
+                                          batchNumber={item.supplement_batch}
+                                        />
                                       </h4>
                                     </div>
                                     {item.specifications && (
@@ -943,6 +954,12 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                             <span className="text-xs sm:text-sm font-bold text-slate-300 bg-slate-800 border border-slate-700 px-3 py-1 rounded-lg">
                               أمر شراء: <span className="font-mono text-cyan-300">{receipt.purchase_order?.po_number}</span>
                             </span>
+                            {(receipt.items?.some((i) => i.purchase_order_item?.is_supplementary) || receipt.purchase_order?.items?.some((i) => i.is_supplementary)) && (
+                              <span className="text-xs sm:text-sm font-black text-amber-300 bg-amber-950/90 border border-amber-500/80 px-3 py-1 rounded-xl flex items-center gap-1.5 shadow-md">
+                                <span>⚡</span>
+                                <span>يتضمن بنود ملحق كمالة</span>
+                              </span>
+                            )}
                             {receipt.receipt_type === 'SITE_DIRECT' && (
                               <span className="text-xs sm:text-sm font-black text-amber-200 bg-amber-950/90 border border-amber-500/80 px-3 py-1 rounded-xl flex items-center gap-1.5 shadow-md">
                                 <span>🏗️</span>
@@ -1105,6 +1122,10 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                       </span>
                                       <h4 className="text-base sm:text-lg font-black text-slate-50 tracking-wide flex items-center gap-2 flex-wrap">
                                         <span>{item.purchase_order_item?.item_description || item.purchase_order_item?.item?.name}</span>
+                                        <SupplementItemBadge
+                                          isSupplementary={item.purchase_order_item?.is_supplementary}
+                                          batchNumber={item.purchase_order_item?.supplement_batch}
+                                        />
                                       </h4>
                                     </div>
                                   </div>
@@ -1267,6 +1288,12 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                           أمر شراء: <span className="font-mono text-cyan-400">{receipt.purchase_order.po_number}</span>
                         </span>
                       )}
+                      {(receipt.items?.some((i) => i.purchase_order_item?.is_supplementary) || receipt.purchase_order?.items?.some((i) => i.is_supplementary)) && (
+                        <span className="text-xs font-black px-2.5 py-0.5 rounded-full border bg-amber-950/80 text-amber-300 border-amber-600/70 shadow-sm flex items-center gap-1">
+                          <span>⚡</span>
+                          <span>ملحق كمالة</span>
+                        </span>
+                      )}
                       <span className="text-xs sm:text-sm text-slate-300 flex items-center gap-1.5 flex-wrap">
                         <span>
                           {receipt.is_internal_warehouse || receipt.supplier?.company_name === 'المخزن الداخلي' || receipt.purchase_order?.supplier?.company_name === 'المخزن الداخلي' ? '🏛️' : '🏢'}
@@ -1416,6 +1443,10 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                 <span className="font-mono text-cyan-400 font-bold text-xs">#{idx + 1}</span>
                                 <span className="font-black text-sm text-slate-100 flex items-center gap-2 flex-wrap">
                                   <span>{item.purchase_order_item?.item_description || item.purchase_order_item?.item?.name}</span>
+                                  <SupplementItemBadge
+                                    isSupplementary={item.purchase_order_item?.is_supplementary}
+                                    batchNumber={item.purchase_order_item?.supplement_batch}
+                                  />
                                 </span>
                               </div>
                             </div>

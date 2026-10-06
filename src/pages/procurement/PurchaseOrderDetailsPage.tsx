@@ -16,6 +16,7 @@ import { CurrencyDisplay } from '../../components/ui/CurrencyDisplay';
 import { getUnitLabel } from '../../utils/units';
 import SystemEventTimeline from '../../components/ui/SystemEventTimeline';
 import { UnifiedNotesCard } from '../../components/common/UnifiedNotesCard';
+import { SupplementItemBadge } from '../../components/common/SupplementItemBadge';
 
 export const PurchaseOrderDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -201,6 +202,30 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
         </div>
       )}
 
+      {/* ── Supplement Items Callout Banner ── */}
+      {po.items?.some((i) => i.is_supplementary) && (
+        <div className="rounded-2xl border-2 border-amber-500/80 bg-gradient-to-r from-amber-950/70 via-slate-900 to-amber-950/50 p-5 shadow-2xl text-amber-200 space-y-2">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/20 border border-amber-500/50 text-amber-300 text-xl font-black shadow-inner">
+              ⚡
+            </span>
+            <div>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h3 className="text-base font-black text-amber-300">
+                  يتضمن أمر الشراء بنود كمالة إضافية معتمدة
+                </h3>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-500 text-slate-950 shadow-sm">
+                  {po.items.filter((i) => i.is_supplementary).length} بند كمالة
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                تمت إضافة واعتماد بنود كمالة إضافية على هذا الأمر بموجب طلب كمالة معتمد من رئيس القسم/المشروع.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Metadata Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
         
@@ -263,7 +288,13 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
                   <TableCell className="font-mono text-slate-300">{item.item_reference || '—'}</TableCell>
                   <TableCell className="text-slate-300">{item.region || '—'}</TableCell>
                   <TableCell className="font-bold text-slate-100">
-                    {item.item_name || item.item_description}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span>{item.item_name || item.item_description}</span>
+                      <SupplementItemBadge
+                        isSupplementary={item.is_supplementary}
+                        batchNumber={item.supplement_batch}
+                      />
+                    </div>
                     {item.specifications && <div className="text-[10px] text-slate-400 mt-0.5 font-normal">{item.specifications}</div>}
                   </TableCell>
                   <TableCell className="font-mono text-slate-200">{item.quantity} {getUnitLabel(item.uom)}</TableCell>
@@ -293,8 +324,12 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
               <dl className="mt-4 grid min-w-0 grid-cols-1 gap-3 text-xs min-[420px]:grid-cols-2">
                 <div className="min-w-0 min-[420px]:col-span-2">
                   <dt className="text-slate-500">البند / الوصف</dt>
-                  <dd className="mt-1 break-normal font-bold leading-6 text-slate-100">
-                    {item.item_name || item.item_description || 'غير محدد'}
+                  <dd className="mt-1 break-normal font-bold leading-6 text-slate-100 flex items-center gap-2 flex-wrap">
+                    <span>{item.item_name || item.item_description || 'غير محدد'}</span>
+                    <SupplementItemBadge
+                      isSupplementary={item.is_supplementary}
+                      batchNumber={item.supplement_batch}
+                    />
                   </dd>
                 </div>
                 <div>

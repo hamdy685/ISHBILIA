@@ -1387,6 +1387,12 @@ export const ProcurementManagerPage: React.FC = () => {
                                 {po.department.name}
                               </span>
                             )}
+                            {(po.items?.some((i) => i.is_supplementary) || (po.purchase_request as any)?.supplements?.some((s: any) => s.status === 'APPROVED' || s.status === 'COMPLETED')) && (
+                              <span className="rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 px-3 py-0.5 text-xs font-black flex items-center gap-1 shadow-sm">
+                                <span>⚡</span>
+                                <span>يتضمن ملحق كمالة معتمد</span>
+                              </span>
+                            )}
                           </div>
 
                           <div className="flex items-center gap-2">

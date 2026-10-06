@@ -15,6 +15,7 @@ import { SupplierSelectWithQuickAdd } from '../../components/common/SupplierSele
 import { formatCleanNumber } from '../../utils/numberFormat';
 import PurchaseOrderStatusBadge from '../../components/procurement/PurchaseOrderStatusBadge';
 import { getUnitLabel, getUnitOptions, DEFAULT_PR_UNIT_CODES } from '../../utils/units';
+import { SupplementItemBadge } from '../../components/common/SupplementItemBadge';
 
 const UNIT_OPTIONS = getUnitOptions(DEFAULT_PR_UNIT_CODES);
 
@@ -31,6 +32,8 @@ interface EditableItem {
   line_total: number;
   specifications?: string;
   supplier_id?: number | null;
+  is_supplementary?: boolean;
+  supplement_batch?: number | null;
 }
 
 export const EditPurchaseOrderPage: React.FC = () => {
@@ -90,6 +93,15 @@ export const EditPurchaseOrderPage: React.FC = () => {
         const mappedItems: EditableItem[] = (poData.items || []).map((it) => {
           const qty = Number(it.quantity || 0);
           const price = Number(it.unit_price || 0);
+          const isSupplementary = Boolean(
+            it.is_supplementary ||
+            (it.pr_item as any)?.is_supplementary ||
+            ((poData.purchase_request as any)?.supplements?.some((s: any) =>
+              s.items?.some((si: any) => si.id === it.pr_item_id || si.item_description === it.item_description)
+            ))
+          );
+          const supplementBatch = it.supplement_batch ?? (isSupplementary ? 1 : null);
+
           return {
             id: it.id,
             item_id: it.item_id ?? null,
@@ -103,6 +115,8 @@ export const EditPurchaseOrderPage: React.FC = () => {
             line_total: Math.round(qty * price * 100) / 100,
             specifications: it.specifications || '',
             supplier_id: it.supplier_id ?? null,
+            is_supplementary: isSupplementary,
+            supplement_batch: supplementBatch,
           };
         });
         setItems(mappedItems);
@@ -242,6 +256,8 @@ export const EditPurchaseOrderPage: React.FC = () => {
       unit_price: Number(it.unit_price),
       specifications: it.specifications,
       supplier_id: it.supplier_id || (supplierId ? Number(supplierId) : po.supplier_id),
+      is_supplementary: Boolean(it.is_supplementary),
+      supplement_batch: it.supplement_batch ?? null,
     }));
   };
 
@@ -513,6 +529,35 @@ export const EditPurchaseOrderPage: React.FC = () => {
         </div>
       )}
 
+      {/* ── Supplement Information Callout Banner ── */}
+      {items.some((it) => it.is_supplementary) && (
+        <div className="rounded-2xl border-2 border-amber-500/80 bg-gradient-to-r from-amber-950/70 via-slate-900 to-amber-950/50 p-5 shadow-2xl text-amber-200 space-y-2.5">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/20 border border-amber-500/50 text-amber-300 text-xl font-black shadow-inner">
+              ⚡
+            </span>
+            <div>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h3 className="text-base font-black text-amber-300">
+                  أمر الشراء هذا يتضمن بنود كمالة إضافية معتمدة (طلب كمالة)
+                </h3>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-500 text-slate-950 shadow-sm">
+                  {items.filter((it) => it.is_supplementary).length} بند كمالة
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                تم تحميل بنود الكمالة (المميزة بالبادج الذهبي ⚡) على أمر الشراء الحالي لتعكس الكميات والأسعار الإجمالية المعتمدة.
+                {latestReceipt && (
+                  <span className="block mt-1 text-amber-200/95 font-semibold">
+                    📌 تنبيه: إذن الاستلام الميداني رقم (<strong className="font-mono text-cyan-300">{latestReceipt.receipt_number}</strong>) يخص التوريد المبدئي المستلم، بينما بنود الكمالة تمثل كميات إضافية ملحقة بأمر الشراء.
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Commercial Header Form ── */}
       <form onSubmit={handleSaveAllChanges} className="bg-slate-950 p-6 rounded-2xl border border-slate-800 space-y-4 shadow-xl">
         <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
@@ -650,17 +695,25 @@ export const EditPurchaseOrderPage: React.FC = () => {
 
                     {/* Description */}
                     <td className="p-3">
-                      <input
-                        type="text"
-                        required
-                        disabled={!isEditable || busy}
-                        value={item.item_description}
-                        onChange={(e) => handleItemFieldChange(idx, 'item_description', e.target.value)}
-                        className="w-full min-w-[180px] bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:border-cyan-500"
-                      />
-                      {item.specifications && (
-                        <p className="text-[10px] text-slate-400 mt-1">{item.specifications}</p>
-                      )}
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <input
+                            type="text"
+                            required
+                            disabled={!isEditable || busy}
+                            value={item.item_description}
+                            onChange={(e) => handleItemFieldChange(idx, 'item_description', e.target.value)}
+                            className="flex-1 min-w-[160px] bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:border-cyan-500"
+                          />
+                          <SupplementItemBadge
+                            isSupplementary={item.is_supplementary}
+                            batchNumber={item.supplement_batch}
+                          />
+                        </div>
+                        {item.specifications && (
+                          <p className="text-[10px] text-slate-400 mt-1">{item.specifications}</p>
+                        )}
+                      </div>
                     </td>
 
                     {/* GRN Received Quantity Hint */}
@@ -684,6 +737,13 @@ export const EditPurchaseOrderPage: React.FC = () => {
                                 تطبيق
                               </button>
                             )}
+                          </div>
+                        ) : item.is_supplementary ? (
+                          <div className="flex flex-col items-center gap-0.5" title="هذا البند تمت إضافته كطلب كمالة إضافية بعد التوريد المبدئي">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-950/80 text-amber-300 border border-amber-600/60 shadow-sm whitespace-nowrap">
+                              ⚡ كمالة إضافية
+                            </span>
+                            <span className="text-[9px] text-slate-400 font-medium whitespace-nowrap">بانتظار استلام الموقع</span>
                           </div>
                         ) : (
                           <span className="text-[11px] text-slate-500">—</span>
@@ -779,11 +839,15 @@ export const EditPurchaseOrderPage: React.FC = () => {
             return (
               <article key={`mobile-item-${item.id || idx}`} className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 space-y-3">
                 <div className="flex items-start justify-between gap-3 border-b border-slate-800 pb-2.5">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="rounded bg-slate-800 px-2 py-0.5 text-[11px] font-bold text-slate-300">
                       بند {idx + 1}
                     </span>
                     <span className="font-bold text-slate-200 text-xs">{item.item_description}</span>
+                    <SupplementItemBadge
+                      isSupplementary={item.is_supplementary}
+                      batchNumber={item.supplement_batch}
+                    />
                   </div>
                   {isEditable && (
                     <button
@@ -819,21 +883,29 @@ export const EditPurchaseOrderPage: React.FC = () => {
                   </div>
                 </div>
 
-                {isPendingActualPo && grnQty !== null && (
+                {isPendingActualPo && (
                   <div className="flex items-center justify-between bg-slate-950/70 p-2 rounded-lg border border-slate-800 text-xs">
                     <span className="text-slate-400">المستلم في GRN:</span>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-cyan-300">{grnQty} {getUnitLabel(item.uom)}</span>
-                      {isDifferentFromGrn && (
-                        <button
-                          type="button"
-                          onClick={() => handleApplyGrnQty(idx, grnQty)}
-                          className="text-[10px] text-indigo-400 underline font-semibold"
-                        >
-                          تطبيق الكمية
-                        </button>
-                      )}
-                    </div>
+                    {grnQty !== null ? (
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-cyan-300">{grnQty} {getUnitLabel(item.uom)}</span>
+                        {isDifferentFromGrn && (
+                          <button
+                            type="button"
+                            onClick={() => handleApplyGrnQty(idx, grnQty)}
+                            className="text-[10px] text-indigo-400 underline font-semibold"
+                          >
+                            تطبيق الكمية
+                          </button>
+                        )}
+                      </div>
+                    ) : item.is_supplementary ? (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-950/80 text-amber-300 border border-amber-600/60">
+                        ⚡ كمالة إضافية (بانتظار الاستلام بالموقع)
+                      </span>
+                    ) : (
+                      <span className="text-slate-500">—</span>
+                    )}
                   </div>
                 )}
 
