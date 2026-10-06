@@ -42,6 +42,12 @@ export interface ReceiptPurchaseOrder {
     requester?: { id: number; name: string; email?: string } | null;
     department?: { id: number; name: string } | null;
     site_engineer?: { id: number; name: string } | null;
+    supplements?: Array<{
+      id: number;
+      batch_number: number;
+      status: string;
+      notes?: string | null;
+    }>;
   } | null;
   items?: ReceiptOrderItem[];
 }

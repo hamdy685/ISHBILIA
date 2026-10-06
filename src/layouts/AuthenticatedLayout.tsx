@@ -94,6 +94,7 @@ export const AuthenticatedLayout: React.FC = () => {
                         <Link to="/requests" className={linkClassName("/requests")}><span className="ml-2.5 text-sm" aria-hidden="true">📋</span> طلبات الشراء الخاصة بي</Link>
                         <Link to="/requests/create" className={linkClassName("/requests/create")}><span className="ml-2.5 text-sm" aria-hidden="true">✍️</span> إنشاء طلب شراء</Link>
                         <Link to="/requests/favorites" className={linkClassName("/requests/favorites")}><span className="ml-2.5 text-sm" aria-hidden="true">⭐</span> الطلبات المفضلة</Link>
+                        <Link to="/requests/supplements" className={linkClassName("/requests/supplements")}><span className="ml-2.5 text-sm" aria-hidden="true">➕</span> طلب كمالة</Link>
                         <Link to="/site-engineer" className={linkClassName("/site-engineer")}><span className="ml-2.5 text-sm" aria-hidden="true">📦</span> إذن استلام المواد</Link>
                     </>
                 );

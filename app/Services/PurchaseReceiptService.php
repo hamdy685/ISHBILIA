@@ -69,6 +69,7 @@ class PurchaseReceiptService
             'purchaseRequest.targetDepartment',
             'purchaseRequest.assignedReviewer.department',
             'purchaseRequest.siteEngineer',
+            'purchaseRequest.supplements',
             'items.item',
             'items.prItem',
         ])
@@ -158,6 +159,10 @@ class PurchaseReceiptService
         }
         if (PurchaseReceipt::where('purchase_order_id', $purchaseOrder->id)->whereIn('status', ['PENDING_SITE_ENGINEER', 'APPROVED'])->exists()) {
             throw new \RuntimeException('تم إنشاء إذن استلام لهذا الأمر بالفعل.');
+        }
+
+        if ($purchaseOrder->purchase_request_id && \App\Models\PurchaseRequestSupplement::where('purchase_request_id', $purchaseOrder->purchase_request_id)->whereIn('status', ['PENDING_PROCUREMENT_APPROVAL', 'SUBMITTED', 'REVIEWER_APPROVED'])->exists()) {
+            throw new \RuntimeException('لا يمكن إتمام الاستلام حالياً؛ يوجد طلب كمالة قيد التسعير وإصدار أمر الشراء لدى إدارة المشتريات (م. أحمد). يرجى الانتظار حتى يتم تحميل البنود على أمر الشراء.');
         }
 
         if (empty($items)) {
@@ -333,6 +338,10 @@ class PurchaseReceiptService
         }
         if ($receipt->status !== 'PENDING_SITE_ENGINEER') {
             throw new \RuntimeException('إذن الاستلام ليس بانتظار اعتماد مهندس الموقع.');
+        }
+
+        if ($receipt->purchaseOrder?->purchase_request_id && \App\Models\PurchaseRequestSupplement::where('purchase_request_id', $receipt->purchaseOrder->purchase_request_id)->whereIn('status', ['PENDING_PROCUREMENT_APPROVAL', 'SUBMITTED', 'REVIEWER_APPROVED'])->exists()) {
+            throw new \RuntimeException('لا يمكن إتمام الاستلام حالياً؛ يوجد طلب كمالة قيد التسعير وإصدار أمر الشراء لدى إدارة المشتريات (م. أحمد). يرجى الانتظار حتى يتم تحميل البنود على أمر الشراء.');
         }
 
         return DB::transaction(function () use ($siteEngineer, $receipt, $notes): PurchaseReceipt {
@@ -613,6 +622,10 @@ class PurchaseReceiptService
 
         if (! $siteEngineerId) {
             throw new \RuntimeException('لا يمكن إنشاء إذن استلام مباشر لقسم المباني دون تحديد مهندس الموقع.');
+        }
+
+        if ($purchaseOrder->purchase_request_id && \App\Models\PurchaseRequestSupplement::where('purchase_request_id', $purchaseOrder->purchase_request_id)->whereIn('status', ['PENDING_PROCUREMENT_APPROVAL', 'SUBMITTED', 'REVIEWER_APPROVED'])->exists()) {
+            throw new \RuntimeException('لا يمكن إتمام الاستلام حالياً؛ يوجد طلب كمالة قيد التسعير وإصدار أمر الشراء لدى إدارة المشتريات (م. أحمد). يرجى الانتظار حتى يتم تحميل البنود على أمر الشراء.');
         }
 
         return DB::transaction(function () use ($purchaseOrder, $siteEngineerId): PurchaseReceipt {

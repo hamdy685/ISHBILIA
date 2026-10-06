@@ -113,7 +113,7 @@ export const ProcurementDashboardPage: React.FC = () => {
         // Detect PRs that have pending supplements awaiting procurement processing
         const supplementPrs = prs.filter(pr =>
           Array.isArray(pr.supplements) &&
-          pr.supplements.some((s: any) => s.status === 'REVIEWER_APPROVED' || s.status === 'SUBMITTED')
+          pr.supplements.some((s: any) => ['PENDING_PROCUREMENT_APPROVAL', 'REVIEWER_APPROVED', 'SUBMITTED'].includes(s.status))
         );
 
         const procurementActionItems: ActionInboxItem[] = [

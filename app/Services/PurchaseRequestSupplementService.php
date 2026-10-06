@@ -54,12 +54,18 @@ class PurchaseRequestSupplementService
         // Department and role scoping
         if ($user->hasRole('admin') || $user->hasRole('procurement_manager') || $user->hasRole('general_manager')) {
             // Can view all eligible requests across company
-        } elseif ($user->hasRole('reviewer')) {
+        } elseif ($user->hasRole('reviewer') || $user->hasRole('execution_manager')) {
             $userDeptId = $user->department_id;
             $query->where(function ($q) use ($user, $userDeptId) {
                 $q->where('department_id', $userDeptId)
                     ->orWhere('target_department_id', $userDeptId)
                     ->orWhere('reviewer_user_id', $user->id)
+                    ->orWhere('user_id', $user->id)
+                    ->orWhereHas('requester', fn ($rq) => $rq->where('manager_id', $user->id));
+            });
+        } elseif ($user->hasRole('site_engineer')) {
+            $query->where(function ($q) use ($user) {
+                $q->where('site_engineer_user_id', $user->id)
                     ->orWhere('user_id', $user->id);
             });
         } else {
@@ -86,9 +92,11 @@ class PurchaseRequestSupplementService
         $isReviewer = (int) $pr->reviewer_user_id === (int) $creator->id
             || (int) $pr->department_id === (int) $creator->department_id
             || (int) $pr->target_department_id === (int) $creator->department_id;
-        $isManager = $creator->hasAnyRole(['admin', 'procurement_manager']);
+        $isSiteEngineer = (int) $pr->site_engineer_user_id === (int) $creator->id
+            || $creator->hasRole('site_engineer');
+        $isManager = $creator->hasAnyRole(['admin', 'procurement_manager', 'execution_manager', 'general_manager']);
 
-        if (! $isRequester && ! $isReviewer && ! $isManager) {
+        if (! $isRequester && ! $isReviewer && ! $isManager && ! $isSiteEngineer) {
             throw new ValidationException(validator([], []), [
                 'authorization' => ['غير مصرح لك بإنشاء طلب كمالة لهذا الطلب.'],
             ]);
@@ -111,21 +119,18 @@ class PurchaseRequestSupplementService
             ]);
         }
 
-        return DB::transaction(function () use ($pr, $creator, $itemsData, $notes, $isReviewer) {
+        return DB::transaction(function () use ($pr, $creator, $itemsData, $notes) {
             $nextBatch = ($pr->supplements()->max('batch_number') ?? 0) + 1;
 
-            // Smart Bypass: If creator is department reviewer, general manager, procurement manager, or admin,
-            // bypass the review stage directly to PENDING_PROCUREMENT_APPROVAL
-            $isDepartmentReviewer = $isReviewer && $creator->hasRole('reviewer');
-            $canBypassReview = $isDepartmentReviewer || $creator->hasAnyRole(['admin', 'procurement_manager', 'general_manager']);
-            $status = $canBypassReview ? 'PENDING_PROCUREMENT_APPROVAL' : 'SUBMITTED';
+            // Direct route to procurement (Eng. Ahmed): Bypasses reviewer (Eng. Karim) and GM (Eng. Mohamed) completely
+            $status = 'PENDING_PROCUREMENT_APPROVAL';
 
             $supplement = PurchaseRequestSupplement::create([
                 'purchase_request_id' => $pr->id,
                 'batch_number' => $nextBatch,
                 'requested_by_user_id' => $creator->id,
-                'reviewer_user_id' => $canBypassReview ? $creator->id : null,
-                'reviewed_at' => $canBypassReview ? now() : null,
+                'reviewer_user_id' => $pr->reviewer_user_id,
+                'reviewed_at' => now(),
                 'status' => $status,
                 'notes' => $notes,
             ]);
@@ -173,32 +178,18 @@ class PurchaseRequestSupplementService
                 'action' => 'SUBMIT_SUPPLEMENT',
                 'from_state' => $pr->status,
                 'to_state' => $pr->status,
-                'comments' => "تم إنشاء طلب كمالة (دفعة {$nextBatch})" . ($notes ? ": {$notes}" : ''),
+                'comments' => "تم إنشاء طلب كمالة (دفعة {$nextBatch}) وتوجيهه مباشرة لإدارة المشتريات للتسعير والتحميل على أمر الشراء" . ($notes ? ": {$notes}" : ''),
             ]);
 
-            // Notify
-            if (! $canBypassReview) {
-                $reviewerUsers = $this->notificationService->resolveUsersWithPermission(
-                    'review_purchase_requests',
-                    $pr->target_department_id ?? $pr->department_id
-                );
-                $this->notificationService->queueUsers(
-                    $reviewerUsers,
-                    'pr_supplement_submitted',
-                    "طلب كمالة جديد على الطلب {$pr->request_number}",
-                    "قام {$creator->name} بإضافة بنود كمالة (دفعة {$nextBatch}) على طلب الشراء {$pr->request_number} بانتظار مراجعتك.",
-                    $pr
-                );
-            } else {
-                $procurementUsers = $this->notificationService->resolveUsersWithPermission('manage_procurement');
-                $this->notificationService->queueUsers(
-                    $procurementUsers,
-                    'pr_supplement_reviewer_approved',
-                    "طلب كمالة معتمد على الطلب {$pr->request_number}",
-                    "تم اعتماد بنود الكمالة (دفعة {$nextBatch}) للطلب {$pr->request_number} وهي بانتظار توجيه المشتريات والتسعير.",
-                    $pr
-                );
-            }
+            // Notify Procurement Manager directly (Eng. Ahmed)
+            $procurementUsers = $this->notificationService->resolveUsersWithPermission('manage_procurement');
+            $this->notificationService->queueUsers(
+                $procurementUsers,
+                'pr_supplement_submitted_procurement',
+                "طلب كمالة جديد على الطلب {$pr->request_number}",
+                "قام مهندس الموقع {$creator->name} بإضافة بنود كمالة (دفعة {$nextBatch}) على طلب الشراء {$pr->request_number} بانتظار تسعيرها وتحميلها على أمر الشراء.",
+                $pr
+            );
 
             return $supplement->load(['items.item', 'requester', 'reviewer']);
         });
@@ -293,11 +284,14 @@ class PurchaseRequestSupplementService
         }
 
         return DB::transaction(function () use ($supplement, $pr, $procurementUser, $supplier, $itemsPricing, $notes, $mergeToExistingPo) {
-            // Find existing PO for this supplier on this PR if merging is possible
+            // Find existing open PO on this PR if merging is possible
             $existingPo = null;
             if ($mergeToExistingPo) {
                 $existingPo = PurchaseOrder::where('purchase_request_id', $pr->id)
                     ->where('supplier_id', $supplier->id)
+                    ->whereIn('status', ['PO_DRAFT', 'ISSUED'])
+                    ->first()
+                    ?? PurchaseOrder::where('purchase_request_id', $pr->id)
                     ->whereIn('status', ['PO_DRAFT', 'ISSUED'])
                     ->first();
             }

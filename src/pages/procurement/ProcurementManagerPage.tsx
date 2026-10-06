@@ -210,7 +210,7 @@ export const ProcurementManagerPage: React.FC = () => {
           try {
             const supplementsResp = await getSupplementsForPrApi(prId);
             const pendingSupplement = (supplementsResp.data || []).find(
-              (s) => s.status === 'REVIEWER_APPROVED' || s.status === 'SUBMITTED'
+              (s) => ['PENDING_PROCUREMENT_APPROVAL', 'REVIEWER_APPROVED', 'SUBMITTED'].includes(s.status)
             );
             if (pendingSupplement && targetPr) {
               setSupplementModalPr(targetPr);
@@ -972,7 +972,7 @@ export const ProcurementManagerPage: React.FC = () => {
                             عاجل
                           </span>
                         )}
-                        {request.supplements && request.supplements.some((s: any) => s.status === 'REVIEWER_APPROVED' || s.status === 'SUBMITTED') && (
+                        {request.supplements && request.supplements.some((s: any) => ['PENDING_PROCUREMENT_APPROVAL', 'REVIEWER_APPROVED', 'SUBMITTED'].includes(s.status)) && (
                           <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 border border-amber-500/50 px-2.5 py-0.5 text-[11px] font-black text-amber-300 animate-pulse shadow-sm shadow-amber-500/20">
                             <span>⚡</span>
                             <span>كمالة معلقة</span>
@@ -1068,7 +1068,7 @@ export const ProcurementManagerPage: React.FC = () => {
                                   try {
                                     const resp = await getSupplementsForPrApi(request.id);
                                     const pending = (resp.data || []).find(
-                                      (s) => s.status === 'REVIEWER_APPROVED' || s.status === 'SUBMITTED'
+                                      (s) => ['PENDING_PROCUREMENT_APPROVAL', 'REVIEWER_APPROVED', 'SUBMITTED'].includes(s.status)
                                     );
                                     if (pending) {
                                       setSupplementModalPr(request);

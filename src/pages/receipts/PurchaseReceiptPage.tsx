@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { TableSkeleton } from '../../components/ui/StateFeedback';
@@ -439,6 +439,10 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                 {visibleOrders.map((order, orderIdx) => {
                   const isSavingThis = saving === order.id;
                   const theme = getReceiptTheme(orderIdx);
+                  const pendingSupplement = order.purchase_request?.supplements?.find(
+                    (s) => ['PENDING_PROCUREMENT_APPROVAL', 'SUBMITTED', 'REVIEWER_APPROVED'].includes(s.status)
+                  );
+                  const isLockedBySupplement = Boolean(pendingSupplement);
 
                   return (
                     <div
@@ -465,11 +469,22 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                             )}
                           </div>
 
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-950/80 border border-amber-600/70 text-amber-300 text-xs sm:text-sm font-black shadow-sm">
                               <span>🔒</span>
                               <span>استلام أعمى: يُسجل المستلم الكميات الفعلية بعد انتهاء الصبة والتوريد</span>
                             </span>
+
+                            {!isLockedBySupplement && (
+                              <Link
+                                to="/requests/supplements"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-amber-500/60 hover:border-amber-400 text-amber-300 text-xs sm:text-sm font-black transition-all shadow-sm"
+                                title="إنشاء طلب كمالة (كميات إضافية) لهذا الطلب قبل إتمام الاستلام"
+                              >
+                                <span>➕</span>
+                                <span>طلب كمالة</span>
+                              </Link>
+                            )}
                           </div>
                         </div>
 
@@ -543,6 +558,22 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                           );
                         })()}
                       </div>
+
+                      {/* Supplement In-Progress Warning Callout */}
+                      {isLockedBySupplement && (
+                        <div className="rounded-2xl border-2 border-amber-500/80 bg-gradient-to-r from-amber-950/70 via-slate-950 to-amber-950/60 p-4 sm:p-5 space-y-2.5 shadow-2xl text-amber-200">
+                          <div className="flex items-center gap-2.5 font-black text-sm sm:text-base text-amber-300">
+                            <span className="text-2xl animate-pulse">⏳</span>
+                            <span>الاستلام مقفول مؤقتاً — يوجد طلب كمالة قيد المشتريات (دفعة #{pendingSupplement?.batch_number})</span>
+                          </div>
+                          <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-medium">
+                            قام مهندس الموقع بطلب كميات إضافية (كمالة) على هذا الطلب، والطلب الآن قيد التسعير والتحميل على أمر الشراء الحالي #{order.po_number} لدى إدارة المشتريات (م. أحمد).
+                            <span className="block text-amber-300 mt-1 font-bold">
+                              🚫 تنبيه: لا يمكن استلام المواد بالموقع أو بالمخزن إلا بعد أن ينتهي المهندس أحمد من تسعير البنود وتحميلها على أمر الشراء.
+                            </span>
+                          </p>
+                        </div>
+                      )}
 
                       {/* 2. Items List: Ultra Simple Big Visual Cards */}
                       <div className="space-y-4">
@@ -855,17 +886,28 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                         {/* 4. Giant Confirm & Submit Button */}
                         <div className="pt-4 border-t border-slate-800 space-y-2">
                           <Button
-                            variant="success"
+                            variant={isLockedBySupplement ? "secondary" : "success"}
                             size="lg"
                             isLoading={isSavingThis}
+                            disabled={isLockedBySupplement || isSavingThis}
                             onClick={() => submitWarehouseReceipt(order)}
-                            className="w-full font-black text-base sm:text-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 py-4 rounded-2xl shadow-2xl shadow-emerald-950/80 flex items-center justify-center gap-3 cursor-pointer active:scale-98 transition-all"
+                            className={`w-full font-black text-base sm:text-xl py-4 rounded-2xl shadow-2xl flex items-center justify-center gap-3 transition-all ${
+                              isLockedBySupplement
+                                ? 'bg-slate-800/90 text-amber-300/80 border-2 border-amber-600/50 cursor-not-allowed shadow-none'
+                                : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-950/80 cursor-pointer active:scale-98'
+                            }`}
                           >
-                            <span className="text-2xl">✅</span>
-                            <span>تأكيد واعتماد الاستلام النهائي للموقع (أمر #{order.po_number}) ونقله للحسابات</span>
+                            <span className="text-2xl">{isLockedBySupplement ? '⏳' : '✅'}</span>
+                            <span>
+                              {isLockedBySupplement
+                                ? `الاستلام مقفول مؤقتاً — بانتظار استكمال أمر الشراء للكمالة لدى م. أحمد`
+                                : `تأكيد واعتماد الاستلام النهائي للموقع (أمر #${order.po_number}) ونقله للحسابات`}
+                            </span>
                           </Button>
                           <p className="text-center text-xs sm:text-sm font-bold text-slate-400">
-                            💡 ضغطة واحدة لحفظ إذن الاستلام نهائياً ونقله للإدارة المالية والحسابات للمطابقة والصرف فور انتهاء الصبة.
+                            {isLockedBySupplement
+                              ? '⚠️ تم قفل الاستلام تلقائياً حتى يقوم مدير المشتريات (م. أحمد) بتسعير بنود الكمالة وتحميلها على أمر الشراء.'
+                              : '💡 ضغطة واحدة لحفظ إذن الاستلام نهائياً ونقله للإدارة المالية والحسابات للمطابقة والصرف فور انتهاء الصبة.'}
                           </p>
                         </div>
                       </div>

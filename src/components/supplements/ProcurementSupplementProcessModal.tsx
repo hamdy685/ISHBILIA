@@ -212,6 +212,13 @@ export const ProcurementSupplementProcessModal: React.FC<ProcurementSupplementPr
               </label>
             </div>
 
+            {!useDifferentSupplier && originalSupplier && (
+              <div className="mt-2 text-xs font-bold text-emerald-300 bg-emerald-950/60 border border-emerald-600/50 p-2.5 rounded-xl flex items-center gap-2">
+                <span>🔗</span>
+                <span>سيتم تحميل بنود الكمالة مباشرة على أمر الشراء المفتوح وتحديث إجمالي أمر الشراء تلقائياً لفك قفل الاستلام بالموقع والمخزن.</span>
+              </div>
+            )}
+
             {/* Dropdown if different supplier selected */}
             {(useDifferentSupplier || !originalSupplier) && (
               <div>
