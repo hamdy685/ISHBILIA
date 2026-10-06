@@ -47,6 +47,13 @@ class PurchaseRequest extends Model
 
     protected $table = 'purchase_requests';
 
+    protected $attributes = [
+        'status' => 'DRAFT',
+        'procurement_route' => 'UNDECIDED',
+        'total_estimated_cost' => 0,
+        'priority' => 'NORMAL',
+    ];
+
     protected $fillable = [
         'request_number',
         'manual_request_number',

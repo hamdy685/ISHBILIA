@@ -14,7 +14,9 @@ use App\Services\PurchaseRequestService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 
 class PurchaseRequestController extends Controller
 {
@@ -141,14 +143,36 @@ class PurchaseRequestController extends Controller
      */
     public function store(StorePurchaseRequestRequest $request): JsonResponse
     {
-        $pr = $this->purchaseRequestService->createRequest(
-            $request->user(),
-            $request->validated()
-        );
+        try {
+            $pr = $this->purchaseRequestService->createRequest(
+                $request->user(),
+                $request->validated()
+            );
 
-        return (new PurchaseRequestResource($pr))
-            ->response()
-            ->setStatusCode(201);
+            return (new PurchaseRequestResource($pr))
+                ->response()
+                ->setStatusCode(201);
+        } catch (ValidationException $e) {
+            Log::warning('PurchaseRequestController@store: Validation failed', [
+                'user_id' => $request->user()?->id,
+                'errors' => $e->errors(),
+            ]);
+            throw $e;
+        } catch (\Throwable $e) {
+            Log::error('PurchaseRequestController@store: Failed to create PR: ' . $e->getMessage(), [
+                'user_id' => $request->user()?->id,
+                'payload' => $request->except(['password']),
+                'exception' => get_class($e),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'message' => 'تعذر إنشاء طلب الشراء: ' . $e->getMessage(),
+                'error_detail' => config('app.debug') ? $e->getMessage() : null,
+            ], 500);
+        }
     }
 
     /**
@@ -224,13 +248,37 @@ class PurchaseRequestController extends Controller
             ], 409);
         }
 
-        $updatedPr = $this->purchaseRequestService->updateRequest(
-            $request->user(),
-            $pr,
-            $request->validated()
-        );
+        try {
+            $updatedPr = $this->purchaseRequestService->updateRequest(
+                $request->user(),
+                $pr,
+                $request->validated()
+            );
 
-        return new PurchaseRequestResource($updatedPr);
+            return new PurchaseRequestResource($updatedPr);
+        } catch (ValidationException $e) {
+            Log::warning('PurchaseRequestController@update: Validation failed', [
+                'user_id' => $request->user()?->id,
+                'pr_id' => $id,
+                'errors' => $e->errors(),
+            ]);
+            throw $e;
+        } catch (\Throwable $e) {
+            Log::error('PurchaseRequestController@update: Failed to update PR: ' . $e->getMessage(), [
+                'user_id' => $request->user()?->id,
+                'pr_id' => $id,
+                'payload' => $request->except(['password']),
+                'exception' => get_class($e),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'message' => 'تعذر تعديل طلب الشراء: ' . $e->getMessage(),
+                'error_detail' => config('app.debug') ? $e->getMessage() : null,
+            ], 500);
+        }
     }
 
     /**
@@ -274,21 +322,52 @@ class PurchaseRequestController extends Controller
 
         if (! in_array($pr->status, ['DRAFT', 'REJECTED', 'RETURNED'], true)) {
             return response()->json([
-                'message' => 'Only draft or rejected/returned purchase requests can be submitted.',
+                'message' => 'يمكن فقط إرسال طلبات الشراء التي في حالة مسودة أو معادة/مرفوضة.',
             ], 409);
         }
 
-        $siteEngineerUserId = $request->input('site_engineer_user_id');
-        $submittedPr = $this->purchaseRequestService->submitRequest(
-            $request->user(),
-            $pr,
-            $siteEngineerUserId ? (int) $siteEngineerUserId : null
-        );
+        try {
+            $siteEngineerUserId = $request->input('site_engineer_user_id');
+            $submittedPr = $this->purchaseRequestService->submitRequest(
+                $request->user(),
+                $pr,
+                $siteEngineerUserId ? (int) $siteEngineerUserId : null
+            );
 
-        return response()->json([
-            'message' => 'Purchase request submitted successfully.',
-            'data' => new PurchaseRequestResource($submittedPr),
-        ], 200);
+            return response()->json([
+                'message' => 'تم إرسال طلب الشراء بنجاح.',
+                'data' => new PurchaseRequestResource($submittedPr),
+            ], 200);
+        } catch (ValidationException $e) {
+            Log::warning('PurchaseRequestController@submit: Validation failed', [
+                'user_id' => $request->user()?->id,
+                'pr_id' => $id,
+                'errors' => $e->errors(),
+            ]);
+            throw $e;
+        } catch (\RuntimeException $e) {
+            Log::warning('PurchaseRequestController@submit: Runtime check failed: ' . $e->getMessage(), [
+                'user_id' => $request->user()?->id,
+                'pr_id' => $id,
+            ]);
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], 422);
+        } catch (\Throwable $e) {
+            Log::error('PurchaseRequestController@submit: Failed to submit PR: ' . $e->getMessage(), [
+                'user_id' => $request->user()?->id,
+                'pr_id' => $id,
+                'exception' => get_class($e),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'message' => 'تعذر إرسال طلب الشراء: ' . $e->getMessage(),
+                'error_detail' => config('app.debug') ? $e->getMessage() : null,
+            ], 500);
+        }
     }
 
     /**

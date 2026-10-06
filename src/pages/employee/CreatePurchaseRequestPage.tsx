@@ -154,13 +154,22 @@ const normalizeRequestData = (data: CreatePurchaseRequestPayload): CreatePurchas
   const defaultParcel = isOffice ? 'مقر الشركة' : (data.parcel_reference?.trim() || '');
   const defaultRegion = isOffice ? 'إداري / المقر الرئيسي' : (data.region?.trim() || '');
 
+  // Format clean YYYY-MM-DD date without timestamps or corrupted formatting
+  const rawDate = (data.date_needed || data.required_date || getTodayDateInputValue()).trim();
+  const cleanDate = rawDate.includes('T') ? rawDate.split('T')[0] : (rawDate || getTodayDateInputValue());
+
   return {
     ...data,
     request_type: data.request_type || 'PROJECT',
     parcel_reference: defaultParcel,
+    parcel: defaultParcel,
     region: defaultRegion,
-    land_parcel_id: isOffice ? undefined : data.land_parcel_id,
-    site_engineer_user_id: isOffice ? undefined : data.site_engineer_user_id,
+    land_parcel_id: isOffice ? undefined : (data.land_parcel_id ? Number(data.land_parcel_id) : undefined),
+    site_engineer_user_id: isOffice ? undefined : (data.site_engineer_user_id ? Number(data.site_engineer_user_id) : undefined),
+    target_department_id: data.target_department_id ? Number(data.target_department_id) : undefined,
+    department_id: data.target_department_id ? Number(data.target_department_id) : undefined,
+    date_needed: cleanDate,
+    required_date: cleanDate,
     notes: data.notes?.trim(),
     items: data.items.map((item) => {
       let quantity = Number(item.quantity) || 0;
@@ -179,6 +188,7 @@ const normalizeRequestData = (data: CreatePurchaseRequestPayload): CreatePurchas
 
       return {
         ...item,
+        item_id: item.item_id ? Number(item.item_id) : null,
         quantity,
         uom,
         item_description: item.item_description.trim(),
@@ -429,9 +439,12 @@ const CreatePurchaseRequestPage: React.FC = () => {
       emitAppDataUpdated();
       setTimeout(() => setDraftMessage(null), 4000);
     } catch (err) {
-      const msg = parseApiError(err).message;
-      setError(msg);
-      toast.error(msg || 'حدث خطأ أثناء حفظ المسودة');
+      const apiErr = parseApiError(err);
+      const msg = apiErr.message;
+      const fieldErrors = apiErr.errors ? Object.values(apiErr.errors).flat().join(' • ') : '';
+      const fullError = fieldErrors && fieldErrors !== msg ? `${msg} (${fieldErrors})` : msg;
+      setError(fullError);
+      toast.error(fullError || 'حدث خطأ أثناء حفظ المسودة');
     } finally {
       setIsSavingDraft(false);
     }
@@ -496,9 +509,12 @@ const CreatePurchaseRequestPage: React.FC = () => {
         },
       });
     } catch (err) {
-      const msg = parseApiError(err).message;
-      setError(msg);
-      toast.error(msg || 'حدث خطأ أثناء إرسال طلب الشراء');
+      const apiErr = parseApiError(err);
+      const msg = apiErr.message;
+      const fieldErrors = apiErr.errors ? Object.values(apiErr.errors).flat().join(' • ') : '';
+      const fullError = fieldErrors && fieldErrors !== msg ? `${msg} (${fieldErrors})` : msg;
+      setError(fullError);
+      toast.error(fullError || 'حدث خطأ أثناء إرسال طلب الشراء');
     } finally {
       setIsSubmitting(false);
     }

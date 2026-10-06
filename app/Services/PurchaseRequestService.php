@@ -135,7 +135,7 @@ class PurchaseRequestService
             $requestType = ($data['request_type'] ?? 'PROJECT') === 'OFFICE_SUPPLIES' ? 'OFFICE_SUPPLIES' : 'PROJECT';
             $isOffice = $requestType === 'OFFICE_SUPPLIES';
 
-            $parcelReference = trim((string) ($data['parcel_reference'] ?? ''));
+            $parcelReference = trim((string) ($data['parcel_reference'] ?? $data['parcel'] ?? $data['parcel_name'] ?? ''));
             $region = trim((string) ($data['region'] ?? ''));
             $landParcelId = !empty($data['land_parcel_id']) ? (int) $data['land_parcel_id'] : null;
 
@@ -183,7 +183,7 @@ class PurchaseRequestService
 
             $normalizedItems = $this->normalizeItems($data['items'] ?? [], $isOffice, $parcelReference, $region);
             $requestNumber = $this->generateRequestNumber();
-            $targetDepartmentId = (int) ($data['target_department_id'] ?? $user->department_id);
+            $targetDepartmentId = (int) ($data['target_department_id'] ?? $data['department_id'] ?? $user->department_id);
             $targetDepartment = Department::with(['manager', 'siteEngineer'])->find($targetDepartmentId);
 
             if (!$targetDepartment) {
@@ -193,6 +193,9 @@ class PurchaseRequestService
             }
 
             $isExecutiveRequester = $user->hasRole('general_manager');
+            $isBypassRole = $user->hasAnyRole(['general_manager', 'procurement_manager', 'accountant', 'admin']);
+            $isReviewerSameDept = $user->hasRole('reviewer') && ((int) $targetDepartment->id === (int) $user->department_id);
+
             $assignedManager = $targetDepartment->manager;
             if (!$assignedManager) {
                 $assignedManager = User::where('department_id', $targetDepartment->id)
@@ -222,7 +225,11 @@ class PurchaseRequestService
                 $siteEngineer = $targetDepartment->siteEngineer;
             }
 
-            if (!$assignedManager && !$user->hasRole('general_manager')) {
+            if ($isReviewerSameDept && !$assignedManager) {
+                $assignedManager = $user;
+            }
+
+            if (!$assignedManager && !$isBypassRole && !$isReviewerSameDept) {
                 throw ValidationException::withMessages([
                     'target_department_id' => ['لا يمكن إرسال الطلب قبل تعيين مراجع أو مدير للقسم المستهدف.'],
                 ]);
@@ -244,7 +251,9 @@ class PurchaseRequestService
                 'site_engineer_user_id' => $isOffice ? null : $siteEngineer?->id,
                 'priority' => $data['priority'] ?? 'NORMAL',
                 'status' => 'DRAFT',
-                'date_needed' => $this->normalizeNeededDate($data['date_needed'] ?? null),
+                'procurement_route' => 'UNDECIDED',
+                'total_estimated_cost' => 0,
+                'date_needed' => $this->normalizeNeededDate($data['date_needed'] ?? $data['required_date'] ?? $data['required_delivery_date'] ?? null),
                 'notes' => $data['notes'] ?? null,
             ]);
 
@@ -470,27 +479,26 @@ class PurchaseRequestService
     {
         $dateValue = trim((string) $value);
         if ($dateValue === '') {
-            return now()->toDateString();
+            return Carbon::today()->toDateString();
         }
 
         try {
-            $date = Carbon::createFromFormat('Y-m-d', $dateValue);
+            if (preg_match('/^(\d{4}-\d{2}-\d{2})/', $dateValue, $matches)) {
+                $date = Carbon::createFromFormat('Y-m-d', $matches[1]);
+            } else {
+                $date = Carbon::parse($dateValue);
+            }
         } catch (\Throwable) {
-            throw ValidationException::withMessages([
-                'date_needed' => ['تاريخ الاحتياج غير صحيح. استخدم تاريخًا بصيغة يوم-شهر-سنة صحيحة.'],
-            ]);
+            return Carbon::today()->toDateString();
         }
 
-        if (!$date || $date->format('Y-m-d') !== $dateValue) {
-            throw ValidationException::withMessages([
-                'date_needed' => ['تاريخ الاحتياج غير صحيح. استخدم تاريخًا بصيغة يوم-شهر-سنة صحيحة.'],
-            ]);
+        if (! $date) {
+            return Carbon::today()->toDateString();
         }
 
+        // Auto-bump past dates (e.g. from saved draft) to today
         if ($date->lt(Carbon::today())) {
-            throw ValidationException::withMessages([
-                'date_needed' => ['تاريخ الاحتياج لا يمكن أن يكون في الماضي. اختر اليوم أو تاريخًا قادمًا.'],
-            ]);
+            return Carbon::today()->toDateString();
         }
 
         return $date->toDateString();
@@ -521,12 +529,12 @@ class PurchaseRequestService
     public function submitRequest(User $user, PurchaseRequest $request, ?int $siteEngineerUserId = null): PurchaseRequest
     {
         if (! in_array($request->status, ['DRAFT', 'REJECTED', 'RETURNED'], true)) {
-            throw new \RuntimeException('Only draft or rejected/returned purchase requests can be submitted.');
+            throw new \RuntimeException('يمكن فقط إرسال طلبات الشراء التي في حالة مسودة أو معادة/مرفوضة.');
         }
 
         if ($request->items()->count() === 0) {
             throw ValidationException::withMessages([
-                'items' => ['Cannot submit a purchase request with no line items.'],
+                'items' => ['يجب إضافة بند واحد على الأقل لطلب الشراء قبل الإرسال.'],
             ]);
         }
 
@@ -584,63 +592,67 @@ class PurchaseRequestService
                 'new_value' => json_encode(['status' => $nextStatus, 'target_department_id' => $request->target_department_id], JSON_UNESCAPED_UNICODE),
             ]);
 
-            $eventMessage = match (true) {
-                $nextStatus === 'PENDING_PROCUREMENT_APPROVAL' => 'أنشأ المدير التنفيذي طلب شراء وأرسله مباشرة إلى مدير المشتريات.',
-                $nextStatus === 'PENDING_EXECUTIVE_APPROVAL' && $isProcurementOrAccounting => 'أنشأ مدير المشتريات / الحسابات طلب شراء وأرسله مباشرةً للمدير التنفيذي متجاوزاً مرحلة المراجع.',
-                $nextStatus === 'PENDING_EXECUTIVE_APPROVAL' => 'أرسل مراجع القسم الطلب إلى المدير التنفيذي مباشرة لأن القسم المستهدف هو نفس قسمه.',
-                default => 'أرسل الطلب إلى مدير القسم المستهدف للمراجعة.',
-            };
-            app(SystemEventService::class)->recordAction(
-                $request,
-                'PR_SUBMITTED',
-                $eventMessage,
-                ['event_type' => 'purchase_request.submitted', 'from_state' => 'DRAFT', 'to_state' => $nextStatus, 'actor_user_id' => $user->id]
-            );
-
-            $notificationService = app(NotificationService::class);
-            if ($nextStatus === 'SUBMITTED') {
-                $reviewers = $request->assignedReviewer
-                    ? collect([$request->assignedReviewer])
-                    : $notificationService->resolveUsersWithPermission('purchase_request.review', $request->target_department_id);
-                $notificationService->queueUsers(
-                    $reviewers,
-                    'purchase_request_submitted',
-                    'طلب شراء جديد للمراجعة',
-                    "طلب الشراء {$request->request_number} تابع لقسمك ويحتاج اعتماد مدير القسم.",
-                    $request
+            try {
+                $eventMessage = match (true) {
+                    $nextStatus === 'PENDING_PROCUREMENT_APPROVAL' => 'أنشأ المدير التنفيذي طلب شراء وأرسله مباشرة إلى مدير المشتريات.',
+                    $nextStatus === 'PENDING_EXECUTIVE_APPROVAL' && $isProcurementOrAccounting => 'أنشأ مدير المشتريات / الحسابات طلب شراء وأرسله مباشرةً للمدير التنفيذي متجاوزاً مرحلة المراجع.',
+                    $nextStatus === 'PENDING_EXECUTIVE_APPROVAL' => 'أرسل مراجع القسم الطلب إلى المدير التنفيذي مباشرة لأن القسم المستهدف هو نفس قسمه.',
+                    default => 'أرسل الطلب إلى مدير القسم المستهدف للمراجعة.',
+                };
+                app(SystemEventService::class)->recordAction(
+                    $request,
+                    'PR_SUBMITTED',
+                    $eventMessage,
+                    ['event_type' => 'purchase_request.submitted', 'from_state' => 'DRAFT', 'to_state' => $nextStatus, 'actor_user_id' => $user->id]
                 );
-            } elseif ($nextStatus === 'PENDING_EXECUTIVE_APPROVAL') {
-                $requester = $request->requester;
-                $directManager = ($requester && $requester->manager_id)
-                    ? User::where('id', $requester->manager_id)->where('is_active', true)->first()
-                    : null;
 
-                if ($directManager) {
-                    $notificationService->queueNotification(
-                        $directManager->id,
-                        'purchase_request_pending_executive_approval',
-                        'طلب شراء بانتظار اعتماد المدير',
-                        "طلب الشراء {$request->request_number} لموظفك ({$requester->name}) جاهز لقرارك.",
+                $notificationService = app(NotificationService::class);
+                if ($nextStatus === 'SUBMITTED') {
+                    $reviewers = $request->assignedReviewer
+                        ? collect([$request->assignedReviewer])
+                        : $notificationService->resolveUsersWithPermission('purchase_request.review', $request->target_department_id);
+                    $notificationService->queueUsers(
+                        $reviewers,
+                        'purchase_request_submitted',
+                        'طلب شراء جديد للمراجعة',
+                        "طلب الشراء {$request->request_number} تابع لقسمك ويحتاج اعتماد مدير القسم.",
                         $request
                     );
+                } elseif ($nextStatus === 'PENDING_EXECUTIVE_APPROVAL') {
+                    $requester = $request->requester;
+                    $directManager = ($requester && $requester->manager_id)
+                        ? User::where('id', $requester->manager_id)->where('is_active', true)->first()
+                        : null;
+
+                    if ($directManager) {
+                        $notificationService->queueNotification(
+                            $directManager->id,
+                            'purchase_request_pending_executive_approval',
+                            'طلب شراء بانتظار اعتماد المدير',
+                            "طلب الشراء {$request->request_number} لموظفك ({$requester->name}) جاهز لقرارك.",
+                            $request
+                        );
+                    } else {
+                        $gmUsers = User::whereHas('roles', fn ($q) => $q->where('slug', 'general_manager'))->where('is_active', true)->get();
+                        $notificationService->queueUsers(
+                            $gmUsers,
+                            'purchase_request_pending_executive_approval',
+                            'طلب شراء بانتظار اعتماد المدير التنفيذي',
+                            "طلب الشراء {$request->request_number} جاهز لقرار المدير التنفيذي.",
+                            $request
+                        );
+                    }
                 } else {
-                    $gmUsers = User::whereHas('roles', fn ($q) => $q->where('slug', 'general_manager'))->where('is_active', true)->get();
                     $notificationService->queueUsers(
-                        $gmUsers,
-                        'purchase_request_pending_executive_approval',
-                        'طلب شراء بانتظار اعتماد المدير التنفيذي',
-                        "طلب الشراء {$request->request_number} جاهز لقرار المدير التنفيذي.",
+                        $notificationService->resolveUsersWithPermission('purchase_request.view_approved'),
+                        'purchase_request_pending_procurement',
+                        'طلب شراء من المدير التنفيذي',
+                        "طلب الشراء {$request->request_number} وصل مباشرة للمشتريات لبدء مساره.",
                         $request
                     );
                 }
-            } else {
-                $notificationService->queueUsers(
-                    $notificationService->resolveUsersWithPermission('purchase_request.view_approved'),
-                    'purchase_request_pending_procurement',
-                    'طلب شراء من المدير التنفيذي',
-                    "طلب الشراء {$request->request_number} وصل مباشرة للمشتريات لبدء مساره.",
-                    $request
-                );
+            } catch (\Throwable $notifEx) {
+                \Illuminate\Support\Facades\Log::warning('PR Submit notification warning: ' . $notifEx->getMessage());
             }
 
             return $request->fresh(['requester.roles', 'requester:id,name,email,department_id', 'department:id,name,code', 'targetDepartment.manager:id,name,email,department_id', 'targetDepartment.siteEngineer:id,name,email,department_id', 'assignedReviewer:id,name,email,department_id', 'siteEngineer:id,name,email,department_id', 'items.item', 'items.supplier']);

@@ -372,6 +372,9 @@ export interface CreatePurchaseRequestPayload {
   site_engineer_user_id?: number;
   priority?: PurchaseRequestPriority;
   date_needed?: string;
+  required_date?: string;
+  department_id?: number;
+  parcel?: string;
 
   notes?: string;
   items: PurchaseRequestItemFormInput[];
@@ -380,11 +383,15 @@ export interface CreatePurchaseRequestPayload {
 export interface UpdatePurchaseRequestPayload {
   request_type?: PurchaseRequestType;
   parcel_reference?: string;
+  parcel?: string;
   region?: string;
   land_parcel_id?: number | null;
   target_department_id?: number;
+  department_id?: number;
+  site_engineer_user_id?: number;
   priority?: PurchaseRequestPriority;
   date_needed?: string;
+  required_date?: string;
   notes?: string;
   items?: PurchaseRequestItemFormInput[];
 }
