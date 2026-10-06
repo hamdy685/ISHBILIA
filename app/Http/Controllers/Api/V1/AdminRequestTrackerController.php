@@ -481,6 +481,8 @@ class AdminRequestTrackerController extends Controller
             'status'              => $pr->status,
             'stage'               => $this->statusStage($pr->status),
             'priority'            => $pr->priority,
+            'parcel_reference'    => $pr->parcel_reference ?? $pr->landParcel?->parcel_reference,
+            'region'              => $pr->region ?? $pr->landParcel?->region,
             'total_estimated_cost' => $pr->total_estimated_cost,
             'is_archived'         => $pr->trashed(),
             'days_in_stage'       => $this->daysInCurrentStage($pr),

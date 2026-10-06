@@ -33,6 +33,7 @@ export const DeleteRequestDialog: React.FC<Props> = ({
             size="sm"
             onClick={onConfirm}
             isLoading={isDeleting}
+            disabled={isDeleting}
           >
             حذف
           </Button>

@@ -14,7 +14,7 @@ import PurchaseRequestStatusBadge from '../components/purchase-requests/Purchase
 import { getDefaultDateFrom, getTodayInputDate } from '../utils/dateFilters';
 import { useAuth } from '../context/AuthContext';
 import { getPrimaryRoleSlug } from '../routes/roleRouting';
-import { getSummaryParcels, getSummaryRegions } from '../utils/formatRequestSummary';
+import { getSummaryParcels, getSummaryRegions, getSummaryQuantities, getItemsSummaryDisplay } from '../utils/formatRequestSummary';
 
 const ACTION_LABELS: Record<string, string> = {
   CREATED: 'إنشاء',
@@ -203,9 +203,10 @@ export const RoleArchivePage: React.FC = () => {
                   <TableHeader>
                     <TableRow>
                       <TableHead>رقم الطلب</TableHead>
-                      <TableHead>الصنف / المواد</TableHead>
+                      <TableHead>ملخص البنود</TableHead>
                       <TableHead>رقم قطعة الأرض</TableHead>
                       <TableHead>المنطقة</TableHead>
+                      <TableHead>الكمية / العدد</TableHead>
                       <TableHead>القسم</TableHead>
                       <TableHead>تاريخ الطلب</TableHead>
                       <TableHead>الحالة</TableHead>
@@ -222,14 +223,10 @@ export const RoleArchivePage: React.FC = () => {
                     ) : (
                       filteredRequests.map((pr) => {
                         const itemNames = (pr.items || []).map((i) => i.item_description || i.item?.name).filter(Boolean);
-                        const itemsSummary = itemNames.length === 0
-                          ? '—'
-                          : itemNames.length === 1
-                            ? itemNames[0]
-                            : `${itemNames[0]} (+${itemNames.length - 1} أصناف)`;
-
+                        const itemsSummary = getItemsSummaryDisplay(pr.items);
                         const parcelRefs = getSummaryParcels(pr);
                         const regions = getSummaryRegions(pr);
+                        const quantitiesInfo = getSummaryQuantities(pr.items);
 
                         return (
                           <TableRow key={pr.id}>
@@ -243,6 +240,14 @@ export const RoleArchivePage: React.FC = () => {
                             </TableCell>
                             <TableCell className="font-mono">{parcelRefs}</TableCell>
                             <TableCell>{regions}</TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              <div title={quantitiesInfo.tooltip}>
+                                <div className="font-mono font-bold text-amber-300">{quantitiesInfo.display}</div>
+                                {quantitiesInfo.subtext && (
+                                  <div className="text-[10px] text-slate-400 font-normal leading-tight">{quantitiesInfo.subtext}</div>
+                                )}
+                              </div>
+                            </TableCell>
                             <TableCell>{pr.target_department?.name || pr.department?.name || '—'}</TableCell>
                             <TableCell className="whitespace-nowrap font-mono text-xs text-slate-400">
                               {pr.created_at?.split('T')[0] || '—'}

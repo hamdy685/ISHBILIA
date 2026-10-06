@@ -33,6 +33,7 @@ export const SubmitRequestDialog: React.FC<Props> = ({
             size="sm"
             onClick={onConfirm}
             isLoading={isSubmitting}
+            disabled={isSubmitting}
           >
             تقديم
           </Button>

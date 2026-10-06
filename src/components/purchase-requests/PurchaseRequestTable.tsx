@@ -5,7 +5,7 @@ import { PR_ACTION_LABELS, PR_STATUS_LABELS, PurchaseRequest } from '../../types
 import PurchaseRequestStatusBadge from './PurchaseRequestStatusBadge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../ui/Table';
 import { Button } from '../ui/Button';
-import { getSummaryParcels, getSummaryRegions, getSummaryQuantities } from '../../utils/formatRequestSummary';
+import { getSummaryParcels, getSummaryRegions, getSummaryQuantities, getItemsSummaryDisplay } from '../../utils/formatRequestSummary';
 
 const REQUESTER_EDITABLE_STATUSES = ['DRAFT', 'SUBMITTED', 'UNDER_REVIEW'];
 const REQUESTER_DELETABLE_STATUSES = ['DRAFT'];
@@ -156,11 +156,7 @@ export const PurchaseRequestTableRow: React.FC<RowProps> = React.memo(({
   onOpenDeleteModal,
 }) => {
   const itemNames = pr.items?.map((item) => item.item_description || item.item?.name).filter(Boolean) || [];
-  const itemsDisplay = itemNames.length === 0
-    ? '—'
-    : itemNames.length === 1
-      ? itemNames[0]
-      : `${itemNames[0]} (+${itemNames.length - 1} أصناف)`;
+  const itemsDisplay = getItemsSummaryDisplay(pr.items);
   const parcelsDisplay = getSummaryParcels(pr);
   const regionsDisplay = getSummaryRegions(pr);
   const quantitiesInfo = getSummaryQuantities(pr.items);
@@ -444,7 +440,7 @@ export const PurchaseRequestTable: React.FC<Props> = React.memo(({
           <TableHeader>
             <TableRow>
               <TableHead>رقم الطلب#</TableHead>
-              <TableHead>الصنف / المواد</TableHead>
+              <TableHead>ملخص البنود</TableHead>
               <TableHead>رقم قطعة الأرض</TableHead>
               <TableHead>المنطقة</TableHead>
               <TableHead>الكمية / العدد</TableHead>

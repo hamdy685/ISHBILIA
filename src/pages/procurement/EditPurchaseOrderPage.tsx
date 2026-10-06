@@ -16,6 +16,8 @@ import { formatCleanNumber } from '../../utils/numberFormat';
 import PurchaseOrderStatusBadge from '../../components/procurement/PurchaseOrderStatusBadge';
 import { getUnitLabel, getUnitOptions, DEFAULT_PR_UNIT_CODES } from '../../utils/units';
 import { SupplementItemBadge } from '../../components/common/SupplementItemBadge';
+import { getReceiptPhotoUrl } from '../../api/purchaseReceipts';
+import { getSummaryParcels, getSummaryRegions } from '../../utils/formatRequestSummary';
 
 const UNIT_OPTIONS = getUnitOptions(DEFAULT_PR_UNIT_CODES);
 
@@ -68,6 +70,7 @@ export const EditPurchaseOrderPage: React.FC = () => {
   const [busy, setBusy] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
 
   const loadData = async () => {
     if (!id) return;
@@ -318,7 +321,9 @@ export const EditPurchaseOrderPage: React.FC = () => {
         items: payloadItems,
       });
       await submitPurchaseOrderApi(po.id);
-      navigate('/procurement/purchase-orders');
+      setSuccessMsg('✅ تم حفظ وإرسال أمر الشراء للاستلام بالموقع بنجاح.');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      await loadData();
     } catch (err) {
       const parsed = parseApiError(err);
       setError(parsed.message);
@@ -373,8 +378,9 @@ export const EditPurchaseOrderPage: React.FC = () => {
         notes: finalizationNotes.trim() || undefined,
       });
 
-      alert(`✅ تم إصدار أمر الشراء الفعلي (${po.po_number}) بنجاح وإرساله للإدارة المالية.`);
-      navigate(`/procurement/purchase-orders/${po.id}`);
+      setSuccessMsg(`✅ تم إصدار أمر الشراء الفعلي (${po.po_number}) بنجاح واعتماده وإرساله للإدارة المالية.`);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      await loadData();
     } catch (err) {
       const parsed = parseApiError(err);
       setError(parsed.message);
@@ -393,6 +399,13 @@ export const EditPurchaseOrderPage: React.FC = () => {
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-black text-slate-100 font-mono">{po.po_number}</h1>
             <PurchaseOrderStatusBadge status={po.status} />
+          </div>
+          <div className="flex items-center gap-2 mt-2 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-950/60 to-slate-900 border border-amber-500/40 text-xs w-fit">
+            <span className="text-amber-400 font-bold">🏷️ رقم قطعة الأرض:</span>
+            <strong className="font-mono font-black text-amber-300 text-sm">{getSummaryParcels(po)}</strong>
+            <span className="text-slate-600 mx-1">|</span>
+            <span className="text-copper-400 font-bold">📍 المشروع / المنطقة:</span>
+            <strong className="font-black text-copper-200 text-sm">{getSummaryRegions(po)}</strong>
           </div>
           <p className="text-xs text-slate-400 mt-1">
             {isPendingActualPo
@@ -501,17 +514,46 @@ export const EditPurchaseOrderPage: React.FC = () => {
                   تم توريد البضاعة واعتماد إذن الاستلام (GRN) في الموقع. بصفتك إدارة المشتريات، لديك الصلاحية الكاملة لتعديل الكميات والأسعار وإضافة أو حذف أي بنود لتعكس الواقع الفعلي تماماً، ثم إرسال الملف النهائي للإدارة المالية.
                 </p>
                 {latestReceipt && (
-                  <div className="flex flex-wrap items-center gap-3 mt-3 text-xs text-slate-400 bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
-                    <span>إذن الاستلام: <strong className="text-cyan-300 font-mono">{latestReceipt.receipt_number}</strong></span>
-                    <span>•</span>
-                    <span>أمين المخزن: <strong className="text-slate-200">{latestReceipt.warehouse_keeper?.name || '—'}</strong></span>
-                    <span>•</span>
-                    <span>مهندس الموقع: <strong className="text-slate-200">{latestReceipt.site_engineer?.name || '—'}</strong></span>
-                    {latestReceipt.received_at && (
-                      <>
-                        <span>•</span>
-                        <span>تاريخ الاستلام: <strong className="text-slate-200 font-mono">{latestReceipt.received_at}</strong></span>
-                      </>
+                  <div className="flex flex-wrap items-center justify-between gap-3 mt-3 text-xs text-slate-400 bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span>إذن الاستلام: <strong className="text-cyan-300 font-mono">{latestReceipt.receipt_number}</strong></span>
+                      <span>•</span>
+                      <span>أمين المخزن: <strong className="text-slate-200">{latestReceipt.warehouse_keeper?.name || '—'}</strong></span>
+                      <span>•</span>
+                      <span>مهندس الموقع: <strong className="text-slate-200">{latestReceipt.site_engineer?.name || '—'}</strong></span>
+                      {latestReceipt.received_at && (
+                        <>
+                          <span>•</span>
+                          <span>تاريخ الاستلام: <strong className="text-slate-200 font-mono">{latestReceipt.received_at}</strong></span>
+                        </>
+                      )}
+                    </div>
+                    {Boolean(latestReceipt.photo_url || (latestReceipt as any).photo_path) && (
+                      <div className="flex items-center gap-2">
+                        <div
+                          onClick={() => setPreviewPhotoUrl(getReceiptPhotoUrl(latestReceipt))}
+                          className="relative h-9 w-9 rounded-lg overflow-hidden border border-cyan-400/80 cursor-pointer shrink-0 shadow group"
+                          title="اضغط لتكبير صورة بون الميزان"
+                        >
+                          <img
+                            src={getReceiptPhotoUrl(latestReceipt)}
+                            alt="بون الميزان"
+                            className="h-full w-full object-cover group-hover:scale-110 transition-transform"
+                          />
+                          <div className="absolute inset-0 bg-slate-950/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <span className="text-[10px] text-white">🔍</span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setPreviewPhotoUrl(getReceiptPhotoUrl(latestReceipt))}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-950/90 hover:bg-cyan-900 border border-cyan-500/60 text-cyan-300 font-bold text-xs transition-all cursor-pointer shadow-sm hover:border-cyan-400"
+                          title="معاينة صورة بون الميزان أو إذن التوريد المرفوعة من أمين المخزن"
+                        >
+                          <span>📷</span>
+                          <span>🔍 عرض صورة بون الميزان</span>
+                        </button>
+                      </div>
                     )}
                   </div>
                 )}
@@ -568,9 +610,9 @@ export const EditPurchaseOrderPage: React.FC = () => {
             <button
               type="submit"
               disabled={busy}
-              className="bg-slate-800 hover:bg-slate-700 text-cyan-400 font-bold text-xs px-3.5 py-1.5 rounded-lg border border-slate-700 cursor-pointer"
+              className="bg-slate-800 hover:bg-slate-700 text-cyan-400 font-bold text-xs min-h-[44px] sm:min-h-0 px-3.5 py-1.5 rounded-xl border border-slate-700 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none transition-all flex items-center justify-center gap-1.5"
             >
-              💾 حفظ البيانات
+              {busy ? 'جاري الحفظ...' : '💾 حفظ البيانات'}
             </button>
           )}
         </div>
@@ -1099,9 +1141,16 @@ export const EditPurchaseOrderPage: React.FC = () => {
               type="button"
               onClick={handleSaveAllChanges}
               disabled={busy}
-              className="w-full sm:w-auto bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-sm px-7 py-3 rounded-xl shadow-lg shadow-cyan-600/30 flex items-center justify-center gap-2 transition-all cursor-pointer"
+              className="w-full sm:w-auto bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-sm min-h-[44px] px-7 py-3 rounded-xl shadow-lg shadow-cyan-600/30 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none active:scale-95"
             >
-              <span>💾 حفظ كافة التعديلات</span>
+              {busy ? (
+                <>
+                  <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                  <span>جاري الحفظ...</span>
+                </>
+              ) : (
+                <span>💾 حفظ كافة التعديلات</span>
+              )}
             </button>
           )}
 
@@ -1110,9 +1159,16 @@ export const EditPurchaseOrderPage: React.FC = () => {
               type="button"
               onClick={handleFinalizeActualPo}
               disabled={busy}
-              className="w-full sm:w-auto bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white font-black text-sm px-8 py-3 rounded-xl shadow-xl shadow-emerald-950/50 flex items-center justify-center gap-2 transition-all cursor-pointer"
+              className="w-full sm:w-auto bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white font-black text-sm min-h-[44px] px-8 py-3 rounded-xl shadow-xl shadow-emerald-950/50 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none active:scale-95"
             >
-              <span>💰 اعتماد وإرسال للإدارة المالية</span>
+              {busy ? (
+                <>
+                  <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                  <span>جاري الاعتماد والإرسال...</span>
+                </>
+              ) : (
+                <span>💰 اعتماد وإرسال للإدارة المالية</span>
+              )}
             </button>
           )}
 
@@ -1121,13 +1177,86 @@ export const EditPurchaseOrderPage: React.FC = () => {
               type="button"
               onClick={handleSubmitDraftToSite}
               disabled={busy}
-              className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm px-6 py-3 rounded-xl shadow-lg shadow-indigo-600/20 cursor-pointer"
+              className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm min-h-[44px] px-6 py-3 rounded-xl shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none active:scale-95"
             >
-              حفظ وإرسال للاستلام بالموقع
+              {busy ? (
+                <>
+                  <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                  <span>جاري الإرسال...</span>
+                </>
+              ) : (
+                <span>حفظ وإرسال للاستلام بالموقع</span>
+              )}
             </button>
           )}
         </div>
       </div>
+
+      {/* ── مودال تكبير ومعاينة صورة بون الميزان / إذن التوريد ── */}
+      {previewPhotoUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 p-2 sm:p-4 backdrop-blur-sm animate-fade-in"
+          dir="rtl"
+          onClick={() => setPreviewPhotoUrl(null)}
+        >
+          <div
+            className="relative max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-cyan-500/60 bg-slate-900 shadow-2xl flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-800 bg-slate-950/80 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <span className="text-base sm:text-lg">📷</span>
+                <div>
+                  <h3 className="text-xs sm:text-sm font-bold text-cyan-200">
+                    صورة بون الميزان / إذن التوريد المرفق
+                  </h3>
+                  <p className="text-[10px] text-slate-400 font-mono">
+                    إذن الاستلام: {latestReceipt?.receipt_number}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={previewPhotoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-lg bg-cyan-950 px-3 py-1.5 text-xs font-bold text-cyan-300 border border-cyan-700/60 hover:bg-cyan-900 transition-colors"
+                  title="فتح الصورة في لسان جديد"
+                >
+                  ↗️ فتح بالحجم الكامل
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setPreviewPhotoUrl(null)}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700 bg-slate-800 text-lg font-black text-slate-300 hover:bg-slate-700 hover:text-white cursor-pointer"
+                  title="إغلاق"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-auto p-3 sm:p-6 flex items-center justify-center bg-slate-950/60 min-h-[300px]">
+              <img
+                src={previewPhotoUrl}
+                alt="صورة بون الميزان"
+                className="max-h-[75vh] w-auto max-w-full rounded-xl object-contain shadow-md"
+              />
+            </div>
+
+            <div className="flex items-center justify-between border-t border-slate-800 bg-slate-950/80 px-4 py-2.5 text-xs text-slate-400">
+              <span>يمكنك تدقيق الأوزان والأختام قبل اعتماد أمر الشراء الفعلي.</span>
+              <button
+                type="button"
+                onClick={() => setPreviewPhotoUrl(null)}
+                className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs cursor-pointer"
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

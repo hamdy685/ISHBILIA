@@ -13,7 +13,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '.
 import { usePersistedState } from '../../hooks/usePersistedState';
 import { getDefaultDateFrom, getTodayInputDate, isDefaultTodayRange } from '../../utils/dateFilters';
 import { getUnitLabel } from '../../utils/units';
-import { getSummaryParcels, getSummaryRegions, getSummaryQuantities } from '../../utils/formatRequestSummary';
+import { getSummaryParcels, getSummaryRegions, getSummaryQuantities, getItemsSummaryDisplay } from '../../utils/formatRequestSummary';
 
 const INITIAL_FILTERS: ReviewerRequestFilters = {
   request_number: '',
@@ -253,7 +253,7 @@ export const ReviewerRequestsPage: React.FC = () => {
               <TableHead>رقم الطلب</TableHead>
               <TableHead>مقدم الطلب</TableHead>
               <TableHead>القسم</TableHead>
-              <TableHead>الصنف / المواد</TableHead>
+              <TableHead>ملخص البنود</TableHead>
               <TableHead>رقم قطعة الأرض</TableHead>
               <TableHead>المنطقة</TableHead>
               <TableHead>الكمية / العدد</TableHead>
@@ -266,11 +266,7 @@ export const ReviewerRequestsPage: React.FC = () => {
           <TableBody>
             {filteredRequests.map((request) => {
               const itemNames = request.items?.map((item) => item.item_description || item.item?.name).filter(Boolean) || [];
-              const itemsDisplay = itemNames.length === 0
-                ? '—'
-                : itemNames.length === 1
-                  ? itemNames[0]
-                  : `${itemNames[0]} (+${itemNames.length - 1} أصناف)`;
+              const itemsDisplay = getItemsSummaryDisplay(request.items);
               const parcelsDisplay = getSummaryParcels(request);
               const regionsDisplay = getSummaryRegions(request);
               const quantitiesInfo = getSummaryQuantities(request.items);

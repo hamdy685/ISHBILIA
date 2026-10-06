@@ -26,6 +26,15 @@ interface CreateSupplementModalProps {
   onSuccess: () => void;
 }
 
+interface SupplementFormItem {
+  item_id?: number;
+  item_description: string;
+  quantity: number | string;
+  uom: string;
+  specifications: string;
+  notes: string;
+}
+
 export const CreateSupplementModal: React.FC<CreateSupplementModalProps> = ({
   request,
   isOpen,
@@ -33,10 +42,10 @@ export const CreateSupplementModal: React.FC<CreateSupplementModalProps> = ({
   onSuccess,
 }) => {
   const [notes, setNotes] = useState('');
-  const [items, setItems] = useState<CreateSupplementItemPayload[]>([
+  const [items, setItems] = useState<SupplementFormItem[]>([
     {
       item_description: '',
-      quantity: 1,
+      quantity: '',
       uom: 'قطعة',
       specifications: '',
       notes: '',
@@ -53,7 +62,7 @@ export const CreateSupplementModal: React.FC<CreateSupplementModalProps> = ({
       ...prev,
       {
         item_description: '',
-        quantity: 1,
+        quantity: '',
         uom: 'قطعة',
         specifications: '',
         notes: '',
@@ -68,7 +77,7 @@ export const CreateSupplementModal: React.FC<CreateSupplementModalProps> = ({
     setSelectedPrItemIds((prev) => prev.filter((_, idx) => idx !== index));
   };
 
-  const handleItemChange = (index: number, field: keyof CreateSupplementItemPayload, value: any) => {
+  const handleItemChange = (index: number, field: keyof SupplementFormItem, value: any) => {
     setItems((prev) => {
       const updated = [...prev];
       updated[index] = { ...updated[index], [field]: value };
@@ -99,6 +108,7 @@ export const CreateSupplementModal: React.FC<CreateSupplementModalProps> = ({
           ...updated[index],
           item_id: foundPrItem.item_id || undefined,
           item_description: foundPrItem.item_description,
+          quantity: '', // إفراغ الكمية لإجبار المهندس على كتابة رقم الكمية بنفسه
           uom: foundPrItem.uom || 'قطعة',
           specifications: foundPrItem.specifications || updated[index].specifications || '',
         };
@@ -111,13 +121,21 @@ export const CreateSupplementModal: React.FC<CreateSupplementModalProps> = ({
     e.preventDefault();
     setError(null);
 
-    // Validate
+    // التحقق من حقل سبب التكملة (إلزامي)
+    if (!notes.trim()) {
+      setError('يرجى كتابة سبب التكملة ومبرر الاحتياج الميداني قبل إرسال الطلب.');
+      return;
+    }
+
+    // Validate items
     for (let i = 0; i < items.length; i++) {
       if (!items[i].item_description.trim()) {
         setError(`يرجى كتابة وصف الصنف للبند رقم ${i + 1}`);
         return;
       }
-      if (Number(items[i].quantity) <= 0) {
+      const rawQty = String(items[i].quantity).trim();
+      const numQty = Number(rawQty);
+      if (!rawQty || isNaN(numQty) || numQty <= 0) {
         setError(`الكمية يجب أن تكون أكبر من صفر للبند رقم ${i + 1}`);
         return;
       }
@@ -126,7 +144,7 @@ export const CreateSupplementModal: React.FC<CreateSupplementModalProps> = ({
     try {
       setLoading(true);
       const payload: CreateSupplementPayload = {
-        notes: notes.trim() || undefined,
+        notes: notes.trim(),
         items: items.map((itm) => ({
           ...itm,
           quantity: Number(itm.quantity),
@@ -149,54 +167,63 @@ export const CreateSupplementModal: React.FC<CreateSupplementModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-4 backdrop-blur-sm">
-      <div className="relative w-full max-w-3xl rounded-2xl bg-white shadow-2xl transition-all dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+      <div className="relative w-full max-w-3xl max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden rounded-2xl bg-white shadow-2xl transition-all dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-100 p-6 dark:border-slate-800">
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-100 p-4 sm:p-6 dark:border-slate-800">
           <div>
             <div className="flex items-center gap-2">
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold">
                 ➕
               </span>
-              <h3 className="text-xl font-bold text-slate-800 dark:text-white">
+              <h3 className="text-lg sm:text-xl font-bold text-slate-800 dark:text-white">
                 طلب كمالة جديد على الطلب ({request.request_number})
               </h3>
             </div>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            <p className="mt-1 text-xs sm:text-sm text-slate-500 dark:text-slate-400">
               إضافة كميات تكميلية لنفس بنود الطلب المفتوح — التسعير وتحديد المورد يتم من المشتريات
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+            disabled={loading}
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition-colors disabled:opacity-50"
           >
             ✕
           </button>
         </div>
 
-        {/* PR Info Header Banner */}
-        <div className="bg-amber-50/70 border-b border-amber-100/80 px-6 py-3 dark:bg-amber-950/20 dark:border-amber-900/30">
+        {/* PR Info Header Banner - Prominently highlighting Parcel & Region */}
+        <div className="bg-gradient-to-r from-amber-500/15 via-amber-950/20 to-slate-900 border-b border-amber-500/30 px-6 py-3.5">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
-            <div>
-              <span className="text-slate-500 dark:text-slate-400 block">القطعة:</span>
-              <strong className="text-slate-800 dark:text-slate-200">{request.parcel_reference || 'عام'}</strong>
+            <div className="bg-amber-950/40 p-2 rounded-xl border border-amber-500/30">
+              <span className="text-amber-400 block text-[11px] font-bold">🏷️ رقم قطعة الأرض:</span>
+              <strong className="font-mono text-base font-black text-amber-300 block mt-0.5">
+                {request.parcel_reference || 'عام / غير محددة'}
+              </strong>
             </div>
-            <div>
-              <span className="text-slate-500 dark:text-slate-400 block">المنطقة:</span>
-              <strong className="text-slate-800 dark:text-slate-200">{request.region || 'المركز الرئيسي'}</strong>
+            <div className="bg-amber-950/40 p-2 rounded-xl border border-amber-500/30">
+              <span className="text-copper-400 block text-[11px] font-bold">📍 المشروع / المنطقة:</span>
+              <strong className="text-base font-black text-slate-100 block mt-0.5">
+                {request.region || 'المركز الرئيسي'}
+              </strong>
             </div>
-            <div>
-              <span className="text-slate-500 dark:text-slate-400 block">القسم:</span>
-              <strong className="text-slate-800 dark:text-slate-200">{request.department?.name || '—'}</strong>
+            <div className="bg-slate-950/50 p-2 rounded-xl border border-slate-800">
+              <span className="text-slate-400 block text-[11px] font-semibold">🏢 القسم:</span>
+              <strong className="text-slate-200 text-sm font-bold block mt-0.5">
+                {request.department?.name || '—'}
+              </strong>
             </div>
-            <div>
-              <span className="text-slate-500 dark:text-slate-400 block">حالة الاستلام:</span>
-              <strong className="text-emerald-600 dark:text-emerald-400">لم يتم الاستلام بعد</strong>
+            <div className="bg-slate-950/50 p-2 rounded-xl border border-slate-800">
+              <span className="text-slate-400 block text-[11px] font-semibold">📦 حالة الاستلام:</span>
+              <strong className="text-emerald-400 text-sm font-bold block mt-0.5">
+                لم يتم الاستلام بعد
+              </strong>
             </div>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6">
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 sm:p-6">
           {error && (
             <div className="mb-4 rounded-lg bg-rose-50 p-4 text-sm text-rose-600 dark:bg-rose-950/30 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50">
               {error}
@@ -214,13 +241,14 @@ export const CreateSupplementModal: React.FC<CreateSupplementModalProps> = ({
           {/* Supplement Notes */}
           <div className="mb-6">
             <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              سبب التكملة / ملاحظات على الكمالة:
+              سبب التكملة / مبرر الاحتياج الميداني <span className="text-rose-500 font-bold">*</span>
             </label>
             <input
               type="text"
+              required
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="مثال: حاجة إضافية للموقع لاستكمال الصب..."
+              placeholder="مثال: حاجة إضافية للموقع لاستكمال صب اللبشة المسلحة..."
               className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-800 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
             />
           </div>
@@ -305,17 +333,17 @@ export const CreateSupplementModal: React.FC<CreateSupplementModalProps> = ({
 
                       <div className="sm:col-span-3">
                         <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
-                          كمية الكمالة *
+                          كمية الكمالة <span className="text-rose-500 font-bold">*</span>
                         </label>
                         <input
                           type="number"
                           step="any"
-                          min="0.01"
+                          min="0.001"
                           required
                           value={item.quantity}
                           onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)}
-                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-bold text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                          placeholder="الكمية الإضافية"
+                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-bold text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                          placeholder="أدخل كمية الزيادة"
                         />
                       </div>
 
@@ -364,21 +392,31 @@ export const CreateSupplementModal: React.FC<CreateSupplementModalProps> = ({
               <span>سيتم التسعير بواسطة إدارة المشتريات</span>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3">
               <button
                 type="button"
                 onClick={onClose}
                 disabled={loading}
-                className="rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
               >
                 إلغاء
               </button>
               <button
                 type="submit"
                 disabled={loading}
-                className="rounded-xl bg-amber-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-amber-600/30 hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:opacity-50"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-2 rounded-xl bg-amber-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-amber-600/30 hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none transition-all cursor-pointer"
               >
-                {loading ? 'جارٍ الحفظ...' : 'إرسال طلب الكمالة'}
+                {loading ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>جارٍ الحفظ...</span>
+                  </>
+                ) : (
+                  'إرسال طلب الكمالة'
+                )}
               </button>
             </div>
           </div>

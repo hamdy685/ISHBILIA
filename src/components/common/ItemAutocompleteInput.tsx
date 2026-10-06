@@ -273,7 +273,7 @@ export const ItemAutocompleteInput: React.FC<ItemAutocompleteInputProps> = ({
                   handleSelectSuggestion(suggestion);
                 }}
                 onMouseEnter={() => setHighlightedIndex(idx)}
-                className={`flex items-center justify-between px-3 py-2 cursor-pointer transition-colors ${
+                className={`flex min-h-[44px] sm:min-h-[36px] items-center justify-between px-3 py-2 cursor-pointer transition-colors ${
                   isHighlighted
                     ? 'bg-cyan-950/60 text-cyan-200 font-semibold'
                     : 'hover:bg-slate-800/60 text-slate-300'

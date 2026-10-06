@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { getApprovedPurchaseRequestsApi, getProcurementAnalyticsApi, ProcurementAnalyticsResponse } from '../../api/procurement';
 import { getPurchaseOrdersApi, getPendingActualPosApi } from '../../api/purchaseOrders';
 import { PurchaseOrder } from '../../types/purchaseOrder';
@@ -16,7 +16,7 @@ import ProcurementCharts from '../../components/procurement/ProcurementCharts';
 import ActionRequiredInbox, { ActionInboxItem } from '../../components/dashboard/ActionRequiredInbox';
 
 export const ProcurementDashboardPage: React.FC = () => {
-  const navigate = useNavigate();
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [prs, setPrs] = useState<PurchaseRequest[]>([]);
   const [pos, setPos] = useState<PurchaseOrder[]>([]);
   const [pendingActualPos, setPendingActualPos] = useState<PurchaseOrder[]>([]);
@@ -107,6 +107,19 @@ export const ProcurementDashboardPage: React.FC = () => {
           </Link>
         </div>
       </div>
+
+      {successMessage && (
+        <div className="flex items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-950/40 px-4 py-3 text-xs text-emerald-200">
+          <span>{successMessage}</span>
+          <button
+            type="button"
+            onClick={() => setSuccessMessage(null)}
+            className="text-emerald-400 hover:text-emerald-200"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* ── صندوق المهام والإجراءات المطلوبة منك الآن (Action Inbox) ── */}
       {(() => {
@@ -603,7 +616,12 @@ export const ProcurementDashboardPage: React.FC = () => {
       <DirectPoModal
         isOpen={isDirectPoModalOpen}
         onClose={() => setIsDirectPoModalOpen(false)}
-        onSuccess={(newPoId) => navigate(`/procurement/purchase-orders/${newPoId}/edit`)}
+        onSuccess={(_newPoId) => {
+          setIsDirectPoModalOpen(false);
+          setSuccessMessage('✅ تم إنشاء أمر الشراء المباشر بنجاح وتحديث لوحة التحكم.');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          void loadData();
+        }}
       />
 
       {/* Purchase Order طباعة Preview Modal */}

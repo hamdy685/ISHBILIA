@@ -11,6 +11,7 @@ import {
 import { formatCleanNumber } from '../../utils/numberFormat';
 import { parseApiError } from '../../utils/apiError';
 import { Button } from '../ui/Button';
+import { getUnitLabel } from '../../utils/units';
 
 interface InvoiceRegistrationModalProps {
   receipt: ApprovedReceipt | null;
@@ -82,6 +83,16 @@ export const InvoiceRegistrationModal: React.FC<InvoiceRegistrationModalProps> =
 
   const po = receipt.purchase_order;
   const poId = receipt.purchase_order_id || po?.id;
+
+  const parcelRef = receipt.purchase_order?.purchase_request?.parcel_reference ||
+    receipt.purchase_request?.parcel_reference ||
+    receipt.items?.find((i) => i.purchase_order_item?.item_reference || (i.purchase_order_item as any)?.pr_item?.item_reference)?.purchase_order_item?.item_reference ||
+    null;
+
+  const region = receipt.purchase_order?.purchase_request?.region ||
+    receipt.purchase_request?.region ||
+    receipt.items?.find((i) => i.purchase_order_item?.region || (i.purchase_order_item as any)?.pr_item?.region)?.purchase_order_item?.region ||
+    null;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -165,11 +176,23 @@ export const InvoiceRegistrationModal: React.FC<InvoiceRegistrationModalProps> =
             type="button"
             onClick={onClose}
             disabled={saving}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700 bg-slate-800 text-lg font-black text-slate-300 hover:bg-slate-700 hover:text-white cursor-pointer"
+            className="inline-flex min-h-[44px] min-w-[44px] sm:min-h-8 sm:min-w-8 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-lg font-black text-slate-300 hover:bg-slate-700 hover:text-white cursor-pointer disabled:opacity-50"
             title="إغلاق"
           >
             ×
           </button>
+        </div>
+
+        {/* Prominent Context Banner (رقم القطعة والمشروع / المنطقة بخط عريض) */}
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-amber-950/70 via-slate-950 to-cyan-950/60 px-4 py-2.5 sm:px-6 border-b border-amber-500/40">
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-amber-400 font-bold">🏷️ رقم قطعة الأرض:</span>
+            <strong className="font-mono text-sm font-black text-amber-300">{parcelRef || 'عام / غير محددة'}</strong>
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-cyan-400 font-bold">📍 المشروع / المنطقة:</span>
+            <strong className="text-sm font-black text-cyan-200">{region || po?.purchase_request?.department?.name || '—'}</strong>
+          </div>
         </div>
 
         {/* Form Body */}
@@ -207,6 +230,46 @@ export const InvoiceRegistrationModal: React.FC<InvoiceRegistrationModalProps> =
               </strong>
             </div>
           </div>
+
+          {/* Internal Items Table: (الصنف، الوحدة، الكمية المطلوبة، الكمية المستلمة) */}
+          {receipt.items && receipt.items.length > 0 && (
+            <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+              <h3 className="text-xs font-bold text-slate-300 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <span>📦</span> بنود إذن الاستلام ومطابقة الكميات ({receipt.items.length} صنف):
+                </span>
+                <span className="font-mono text-[10px] text-emerald-400 font-semibold">مطابقة معتمدة من الموقع</span>
+              </h3>
+              <div className="overflow-x-auto rounded-lg border border-slate-800">
+                <table className="w-full text-right text-xs">
+                  <thead className="bg-slate-900 text-slate-400 font-bold border-b border-slate-800">
+                    <tr>
+                      <th className="p-2">الصنف</th>
+                      <th className="p-2">الوحدة</th>
+                      <th className="p-2">الكمية المطلوبة</th>
+                      <th className="p-2">الكمية المستلمة</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 bg-slate-950/80">
+                    {receipt.items.map((it) => {
+                      const poItem = it.purchase_order_item;
+                      const uom = poItem?.uom || (poItem as any)?.pr_item?.uom || '';
+                      return (
+                        <tr key={it.id} className="hover:bg-slate-900/40">
+                          <td className="p-2 font-bold text-slate-200">
+                            {poItem?.item_description || poItem?.item_name || (poItem as any)?.item?.name || 'صنف'}
+                          </td>
+                          <td className="p-2 text-slate-400">{getUnitLabel(uom)}</td>
+                          <td className="p-2 font-mono text-slate-300 font-semibold">{it.ordered_quantity ?? poItem?.quantity ?? '—'}</td>
+                          <td className="p-2 font-mono text-emerald-300 font-bold">{it.received_quantity}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Inputs Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -316,9 +379,11 @@ export const InvoiceRegistrationModal: React.FC<InvoiceRegistrationModalProps> =
               variant="primary"
               size="sm"
               disabled={saving}
-              className="text-xs font-black bg-cyan-600 hover:bg-cyan-500 shadow-lg shadow-cyan-950/50"
+              isLoading={saving}
+              loadingText="جاري الحفظ والتسجيل..."
+              className="text-xs font-black bg-cyan-600 hover:bg-cyan-500 shadow-lg shadow-cyan-950/50 min-h-[44px] sm:min-h-0"
             >
-              {saving ? 'جاري الحفظ والتسجيل...' : 'حفظ وتسجيل الفاتورة ✅'}
+              حفظ وتسجيل الفاتورة ✅
             </Button>
           </div>
         </form>

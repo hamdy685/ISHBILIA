@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { getPurchaseOrdersApi, getPendingActualPosApi, PurchaseOrderPaginationMeta } from '../../api/purchaseOrders';
 import { PurchaseOrder, المورد } from '../../types/purchaseOrder';
 import { getSuppliersApi } from '../../api/suppliers';
@@ -18,9 +18,10 @@ import { Input } from '../../components/ui/FormField';
 import TableFilterBar from '../../components/ui/TableFilterBar';
 import { getDefaultDateFrom, getTodayInputDate, isDefaultTodayRange } from '../../utils/dateFilters';
 import PaginationControls from '../../components/ui/PaginationControls';
+import { getSummaryParcels, getSummaryRegions, getSummaryQuantities, getItemsSummaryDisplay } from '../../utils/formatRequestSummary';
 
 export const PurchaseOrdersPage: React.FC = () => {
-  const navigate = useNavigate();
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [suppliers, setSuppliers] = useState<المورد[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -186,6 +187,19 @@ export const PurchaseOrdersPage: React.FC = () => {
         </div>
       )}
 
+      {successMessage && (
+        <div className="flex items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-950/40 px-4 py-3 text-xs text-emerald-200">
+          <span>{successMessage}</span>
+          <button
+            type="button"
+            onClick={() => setSuccessMessage(null)}
+            className="text-emerald-400 hover:text-emerald-200"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {error && <ErrorMessage error={error} />}
 
       {/* تصفية and الحالة Tab Bar */}
@@ -255,6 +269,9 @@ export const PurchaseOrdersPage: React.FC = () => {
               <TableHead>رقم أمر الشراء</TableHead>
               <TableHead>طلب الشراء المرتبط</TableHead>
               <TableHead>المورد</TableHead>
+              <TableHead>ملخص البنود</TableHead>
+              <TableHead>رقم القطعة / المنطقة</TableHead>
+              <TableHead>الكمية / العدد</TableHead>
               <TableHead>الحالة الحالية</TableHead>
               <TableHead>المبلغ الإجمالي</TableHead>
               <TableHead>تاريخ التحديث</TableHead>
@@ -265,6 +282,11 @@ export const PurchaseOrdersPage: React.FC = () => {
             {visibleOrders.map(po => {
               const canEdit = po.status !== 'REJECTED';
               const isActualPo = po.status === 'PENDING_ACTUAL_PO';
+              const itemsDisplay = getItemsSummaryDisplay(po.items);
+              const parcelsDisplay = getSummaryParcels(po);
+              const regionsDisplay = getSummaryRegions(po);
+              const quantitiesInfo = getSummaryQuantities(po.items);
+              const itemNames = (po.items || []).map((it) => it.item_description || it.item_name || (it as any).item?.name).filter(Boolean);
               return (
                 <TableRow
                   key={po.id}
@@ -280,6 +302,23 @@ export const PurchaseOrdersPage: React.FC = () => {
                   </TableCell>
                   <TableCell className="font-bold text-slate-100">
                     {po.supplier?.company_name || 'غير محدد'}
+                  </TableCell>
+                  <TableCell className="font-semibold text-slate-100 max-w-[180px] truncate text-xs">
+                    <span title={itemNames.join('، ')}>{itemsDisplay}</span>
+                  </TableCell>
+                  <TableCell className="text-xs whitespace-nowrap">
+                    <div className="font-mono text-cyan-300 font-bold">{parcelsDisplay}</div>
+                    {regionsDisplay !== '—' && (
+                      <div className="text-[10px] text-copper-300 font-medium">{regionsDisplay}</div>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-xs whitespace-nowrap">
+                    <div title={quantitiesInfo.tooltip}>
+                      <div className="font-mono font-bold text-amber-300">{quantitiesInfo.display}</div>
+                      {quantitiesInfo.subtext && (
+                        <div className="text-[10px] text-slate-400 font-normal leading-tight">{quantitiesInfo.subtext}</div>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <PurchaseOrderStatusBadge status={po.status} />
@@ -345,27 +384,50 @@ export const PurchaseOrdersPage: React.FC = () => {
           {orders.map((po) => {
             const canEdit = po.status !== 'REJECTED';
             const isActualPo = po.status === 'PENDING_ACTUAL_PO';
-            return (
-              <article
-                key={`mobile-${po.id}`}
-                className={isActualPo
-                  ? 'rounded-xl border-2 border-amber-500/50 bg-gradient-to-br from-amber-950/30 via-slate-900 to-slate-950 p-4 shadow-xl shadow-amber-950/20'
-                  : 'rounded-xl border border-slate-800 bg-slate-900/70 p-4'
-                }
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <Link to={`/procurement/purchase-orders/${po.id}`} className="font-mono text-sm font-black text-cyan-300 hover:underline">{po.po_number}</Link>
-                    <p className="mt-1 text-xs text-slate-400">{po.purchase_request?.request_number || 'أمر شراء مباشر'}</p>
-                  </div>
-                  <PurchaseOrderStatusBadge status={po.status} />
-                </div>
-                <dl className="mt-4 grid grid-cols-2 gap-3 text-xs">
-                  <div><dt className="text-slate-500">المورد</dt><dd className="mt-1 font-bold text-slate-200">{po.supplier?.company_name || 'غير محدد'}</dd></div>
-                  <div><dt className="text-slate-500">الحالة</dt><dd className="mt-1 font-bold text-slate-200">{statusLabel(po.status)}</dd></div>
-                  <div><dt className="text-slate-500">الإجمالي</dt><dd className="mt-1"><CurrencyDisplay amount={po.grand_total} amountClassName="font-mono font-bold text-emerald-400" /></dd></div>
-                  <div><dt className="text-slate-500">آخر تحديث</dt><dd className="mt-1 font-mono text-slate-300">{po.updated_at ? new Date(po.updated_at).toLocaleDateString('ar-EG') : '—'}</dd></div>
-                </dl>
+                const parcelsDisplay = getSummaryParcels(po);
+                const regionsDisplay = getSummaryRegions(po);
+                const itemsDisplay = getItemsSummaryDisplay(po.items);
+                const quantitiesInfo = getSummaryQuantities(po.items);
+
+                return (
+                  <article
+                    key={`mobile-${po.id}`}
+                    className={isActualPo
+                      ? 'rounded-xl border-2 border-amber-500/50 bg-gradient-to-br from-amber-950/30 via-slate-900 to-slate-950 p-4 shadow-xl shadow-amber-950/20'
+                      : 'rounded-xl border border-slate-800 bg-slate-900/70 p-4'
+                    }
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <Link to={`/procurement/purchase-orders/${po.id}`} className="font-mono text-sm font-black text-cyan-300 hover:underline">{po.po_number}</Link>
+                        <p className="mt-1 text-xs text-slate-400">{po.purchase_request?.request_number || 'أمر شراء مباشر'}</p>
+                      </div>
+                      <PurchaseOrderStatusBadge status={po.status} />
+                    </div>
+
+                    {/* Core Essential Context Strip */}
+                    <div className="mt-3 flex items-center gap-2 text-xs flex-wrap bg-slate-950/80 border border-slate-800 rounded-lg px-2.5 py-1.5 font-mono">
+                      <span className="text-slate-400">قطعة:</span>
+                      <strong className="text-cyan-300 font-bold">{parcelsDisplay}</strong>
+                      <span className="text-slate-600">•</span>
+                      <span className="text-slate-400">المنطقة:</span>
+                      <strong className="text-amber-300">{regionsDisplay}</strong>
+                    </div>
+
+                    <div className="mt-2 rounded-lg border border-slate-800 bg-slate-950/60 p-2.5 text-xs space-y-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="text-[11px] text-slate-400">ملخص البنود:</span>
+                        <span className="font-mono font-bold text-amber-300 text-[11px]">{quantitiesInfo.display}</span>
+                      </div>
+                      <p className="font-bold text-slate-200 line-clamp-2">{itemsDisplay}</p>
+                    </div>
+
+                    <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                      <div><dt className="text-slate-500">المورد</dt><dd className="mt-0.5 font-bold text-slate-200">{po.supplier?.company_name || 'غير محدد'}</dd></div>
+                      <div><dt className="text-slate-500">الحالة</dt><dd className="mt-0.5 font-bold text-slate-200">{statusLabel(po.status)}</dd></div>
+                      <div><dt className="text-slate-500">الإجمالي</dt><dd className="mt-0.5"><CurrencyDisplay amount={po.grand_total} amountClassName="font-mono font-bold text-emerald-400" /></dd></div>
+                      <div><dt className="text-slate-500">آخر تحديث</dt><dd className="mt-0.5 font-mono text-slate-300">{po.updated_at ? new Date(po.updated_at).toLocaleDateString('ar-EG') : '—'}</dd></div>
+                    </dl>
                 <div className="mt-4 flex flex-wrap gap-2">
                   <Link to={`/procurement/purchase-orders/${po.id}`}><Button variant="secondary" size="sm">عرض التفاصيل</Button></Link>
                   {isActualPo && (
@@ -421,7 +483,12 @@ export const PurchaseOrdersPage: React.FC = () => {
       <DirectPoModal
         isOpen={isDirectPoModalOpen}
         onClose={() => setIsDirectPoModalOpen(false)}
-        onSuccess={(newPoId) => navigate(`/procurement/purchase-orders/${newPoId}`)}
+        onSuccess={(_newPoId) => {
+          setIsDirectPoModalOpen(false);
+          setSuccessMessage('✅ تم إنشاء أمر الشراء المباشر بنجاح وتحديث القائمة.');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          void loadOrders(1);
+        }}
       />
     </div>
   );

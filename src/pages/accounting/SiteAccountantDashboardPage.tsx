@@ -27,6 +27,7 @@ import { formatCleanNumber } from '../../utils/numberFormat';
 import ThreeWayMatchPrintModal from '../../components/accounting/ThreeWayMatchPrintModal';
 import { InvoiceRegistrationModal } from '../../components/accounting/InvoiceRegistrationModal';
 import { shareReceiptOnWhatsApp } from '../../utils/whatsapp';
+import { getSummaryParcels, getSummaryRegions, getSummaryQuantities, getItemsSummaryDisplay } from '../../utils/formatRequestSummary';
 
 const cleanDate = (d?: string | null) => (d ? String(d).slice(0, 10) : '—');
 const money = (value: string | number | null | undefined) =>
@@ -499,6 +500,9 @@ export const SiteAccountantDashboardPage: React.FC = () => {
                       <TableHead>إذن الاستلام</TableHead>
                       <TableHead>أمر الشراء</TableHead>
                       <TableHead>المورد</TableHead>
+                      <TableHead>ملخص البنود</TableHead>
+                      <TableHead>رقم القطعة / المشروع</TableHead>
+                      <TableHead>الكمية المستلمة</TableHead>
                       <TableHead>القسم</TableHead>
                       <TableHead>تاريخ الاستلام</TableHead>
                       <TableHead>قيمة المستلم</TableHead>
@@ -510,6 +514,16 @@ export const SiteAccountantDashboardPage: React.FC = () => {
                     {displayReceipts.slice(0, 20).map((receipt) => {
                       const isRecorded = receipt.is_accountant_recorded || Boolean(receipt.accountant_recorded_at);
                       const isRecording = recordingId === receipt.id;
+                      const receiptItemsForSummary = (receipt.items || []).map((it) => it.purchase_order_item || { item_description: 'صنف' });
+                      const itemsDisplay = getItemsSummaryDisplay(receiptItemsForSummary);
+                      const itemNames = receiptItemsForSummary.map((it) => it.item_description || (it as any).item_name || (it as any).item?.name).filter(Boolean);
+                      const parcelsDisplay = getSummaryParcels(receipt);
+                      const regionsDisplay = getSummaryRegions(receipt);
+                      const quantitiesInfo = getSummaryQuantities(receipt.items?.map((it) => ({
+                        quantity: it.received_quantity,
+                        uom: it.purchase_order_item?.uom,
+                        item_description: it.purchase_order_item?.item_description,
+                      })));
                       return (
                         <TableRow key={receipt.id} className={isRecorded ? 'opacity-80' : ''}>
                           <TableCell className="font-mono font-bold text-cyan-300 whitespace-nowrap">
@@ -520,6 +534,23 @@ export const SiteAccountantDashboardPage: React.FC = () => {
                           </TableCell>
                           <TableCell className="font-bold text-slate-200">
                             {receipt.purchase_order?.supplier?.company_name || '—'}
+                          </TableCell>
+                          <TableCell className="font-semibold text-slate-100 max-w-[170px] truncate text-xs">
+                            <span title={itemNames.join('، ')}>{itemsDisplay}</span>
+                          </TableCell>
+                          <TableCell className="text-xs whitespace-nowrap">
+                            <div className="font-mono text-cyan-300 font-bold">{parcelsDisplay}</div>
+                            {regionsDisplay !== '—' && (
+                              <div className="text-[10px] text-copper-300">{regionsDisplay}</div>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-xs whitespace-nowrap">
+                            <div title={quantitiesInfo.tooltip}>
+                              <div className="font-mono font-bold text-amber-300">{quantitiesInfo.display}</div>
+                              {quantitiesInfo.subtext && (
+                                <div className="text-[10px] text-slate-400 font-normal leading-tight">{quantitiesInfo.subtext}</div>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell className="text-slate-300">
                             {receipt.purchase_order?.purchase_request?.department?.name || '—'}
@@ -738,6 +769,9 @@ export const SiteAccountantDashboardPage: React.FC = () => {
                   <TableRow>
                     <TableHead>رقم الأمر</TableHead>
                     <TableHead>المورد</TableHead>
+                    <TableHead>ملخص البنود</TableHead>
+                    <TableHead>رقم القطعة / المشروع</TableHead>
+                    <TableHead>الكمية والوحدة</TableHead>
                     <TableHead>القسم</TableHead>
                     <TableHead>إجمالي الأمر</TableHead>
                     <TableHead>حالة التوريد</TableHead>
@@ -745,34 +779,59 @@ export const SiteAccountantDashboardPage: React.FC = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {purchaseOrders.slice(0, 10).map((po) => (
-                    <TableRow key={po.id}>
-                      <TableCell className="font-mono font-bold text-cyan-300 whitespace-nowrap">
-                        {po.po_number}
-                      </TableCell>
-                      <TableCell className="font-bold text-slate-200">
-                        {po.supplier?.company_name || '—'}
-                      </TableCell>
-                      <TableCell className="text-slate-300">
-                        {po.purchase_request?.department?.name || '—'}
-                      </TableCell>
-                      <TableCell className="font-mono font-bold text-emerald-300 whitespace-nowrap">
-                        {money(po.grand_total)}
-                      </TableCell>
-                      <TableCell>
-                        <span className="rounded-full bg-cyan-950 border border-cyan-800 px-2.5 py-0.5 text-[10px] font-bold text-cyan-300">
-                          {po.delivery_status || po.status}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <Link to={`/accounting/purchase-orders/${po.id}`}>
-                          <Button size="sm" variant="secondary" className="whitespace-nowrap text-xs">
-                            عرض التفاصيل
-                          </Button>
-                        </Link>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {purchaseOrders.slice(0, 10).map((po) => {
+                    const itemsDisplay = getItemsSummaryDisplay(po.items);
+                    const parcelsDisplay = getSummaryParcels(po);
+                    const regionsDisplay = getSummaryRegions(po);
+                    const quantitiesInfo = getSummaryQuantities(po.items);
+                    const itemNames = (po.items || []).map((it) => it.item_description || it.item_name || (it as any).item?.name).filter(Boolean);
+
+                    return (
+                      <TableRow key={po.id}>
+                        <TableCell className="font-mono font-bold text-cyan-300 whitespace-nowrap">
+                          {po.po_number}
+                        </TableCell>
+                        <TableCell className="font-bold text-slate-200">
+                          {po.supplier?.company_name || '—'}
+                        </TableCell>
+                        <TableCell className="font-semibold text-slate-100 max-w-[170px] truncate text-xs">
+                          <span title={itemNames.join('، ')}>{itemsDisplay}</span>
+                        </TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">
+                          <div className="font-mono text-cyan-300 font-bold">{parcelsDisplay}</div>
+                          {regionsDisplay !== '—' && (
+                            <div className="text-[10px] text-copper-300">{regionsDisplay}</div>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">
+                          <div title={quantitiesInfo.tooltip}>
+                            <div className="font-mono font-bold text-amber-300">{quantitiesInfo.display}</div>
+                            {quantitiesInfo.subtext && (
+                              <div className="text-[10px] text-slate-400 font-normal leading-tight">{quantitiesInfo.subtext}</div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-slate-300">
+                          {po.purchase_request?.department?.name || '—'}
+                        </TableCell>
+                        <TableCell className="font-mono font-bold text-emerald-300 whitespace-nowrap">
+                          {money(po.grand_total)}
+                        </TableCell>
+                        <TableCell>
+                          <span className="rounded-full bg-cyan-950 border border-cyan-800 px-2.5 py-0.5 text-[10px] font-bold text-cyan-300">
+                            {po.delivery_status || po.status}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Link to={`/accounting/purchase-orders/${po.id}`}>
+                            <Button size="sm" variant="secondary" className="whitespace-nowrap text-xs">
+                              عرض التفاصيل
+                            </Button>
+                          </Link>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>

@@ -3,27 +3,73 @@ import { formatRebarDisplay } from './rebar';
 
 export interface SummaryItem {
   item_description?: string | null;
+  item_name?: string | null;
   item?: { name?: string | null } | null;
   item_reference?: string | null;
   region?: string | null;
   quantity?: number | string | null;
+  ordered_quantity?: number | string | null;
+  received_quantity?: number | string | null;
   uom?: string | null;
   specifications?: string | null;
+  purchase_order_item?: SummaryItem | null;
+  pr_item?: SummaryItem | null;
 }
 
 export interface SummaryRequest {
   request_type?: string | null;
   parcel_reference?: string | null;
+  region?: string | null;
   items?: SummaryItem[] | null;
+  purchase_request?: SummaryRequest | null;
+  purchase_order?: {
+    purchase_request?: SummaryRequest | null;
+    items?: SummaryItem[] | null;
+  } | null;
+}
+
+/**
+ * ملخص البنود: يعرض أول صنفين مع عبارة '+X أصناف أخرى' إذا كان هناك أكثر من صنفين
+ */
+export function getItemsSummaryDisplay(items?: SummaryItem[] | null): string {
+  if (!items || items.length === 0) {
+    return '—';
+  }
+
+  const cleanNames = items
+    .map((i) => {
+      const desc = i.item_description || i.item_name || i.item?.name || i.purchase_order_item?.item_description || i.purchase_order_item?.item_name || i.purchase_order_item?.item?.name;
+      return desc ? String(desc).trim() : '';
+    })
+    .filter(Boolean);
+
+  if (cleanNames.length === 0) {
+    return '—';
+  }
+
+  if (cleanNames.length === 1) {
+    return cleanNames[0];
+  }
+
+  if (cleanNames.length === 2) {
+    return `${cleanNames[0]}، ${cleanNames[1]}`;
+  }
+
+  const remaining = cleanNames.length - 2;
+  return `${cleanNames[0]}، ${cleanNames[1]} (+${remaining} أصناف أخرى)`;
 }
 
 /**
  * إرجاع رقم قطعة الأرض بدون أي تكرار
  */
-export function getSummaryParcels(pr: SummaryRequest): string {
+export function getSummaryParcels(pr?: SummaryRequest | any | null): string {
+  if (!pr) return '—';
+  const prObj = pr.purchase_request || pr.purchase_order?.purchase_request || pr;
+  const items: SummaryItem[] = pr.items || pr.purchase_order?.items || [];
+
   const allParcels = [
-    pr.parcel_reference,
-    ...(pr.items || []).map((i) => i.item_reference)
+    prObj.parcel_reference,
+    ...items.map((i) => i.item_reference || i.purchase_order_item?.item_reference || i.purchase_order_item?.pr_item?.item_reference || i.pr_item?.item_reference)
   ].filter(Boolean) as string[];
 
   const unique = Array.from(new Set(allParcels.map((p) => String(p).trim()).filter(Boolean)));
@@ -33,11 +79,19 @@ export function getSummaryParcels(pr: SummaryRequest): string {
 /**
  * إرجاع المنطقة بدون أي تكرار
  */
-export function getSummaryRegions(pr: SummaryRequest): string {
-  if (pr.request_type === 'OFFICE_SUPPLIES') {
+export function getSummaryRegions(pr?: SummaryRequest | any | null): string {
+  if (!pr) return '—';
+  const prObj = pr.purchase_request || pr.purchase_order?.purchase_request || pr;
+  if (prObj.request_type === 'OFFICE_SUPPLIES') {
     return 'مقر الشركة';
   }
-  const allRegions = (pr.items || []).map((i) => i.region).filter(Boolean) as string[];
+
+  const items: SummaryItem[] = pr.items || pr.purchase_order?.items || [];
+  const allRegions = [
+    prObj.region,
+    ...items.map((i) => i.region || i.purchase_order_item?.region || i.purchase_order_item?.pr_item?.region || i.pr_item?.region)
+  ].filter(Boolean) as string[];
+
   const unique = Array.from(new Set(allRegions.map((r) => String(r).trim()).filter(Boolean)));
   return unique.length > 0 ? unique.join('، ') : '—';
 }
@@ -57,11 +111,17 @@ export function getSummaryQuantities(items?: SummaryItem[] | null): QuantitySumm
   }
 
   const cleanItems = items.map((i) => {
-    const rawQty = Number(i.quantity);
+    const rawVal = i.quantity !== undefined && i.quantity !== null
+      ? i.quantity
+      : i.received_quantity !== undefined && i.received_quantity !== null
+      ? i.received_quantity
+      : i.ordered_quantity;
+    const rawQty = Number(rawVal);
     const qty = isNaN(rawQty) ? 0 : rawQty;
-    const unit = getUnitLabel(i.uom);
-    const name = i.item_description || i.item?.name || 'صنف';
-    return { name, qty, unit, rawUom: (i.uom || '').trim().toUpperCase() };
+    const rawUom = i.uom || i.purchase_order_item?.uom || '';
+    const unit = getUnitLabel(rawUom);
+    const name = i.item_description || i.item_name || i.item?.name || i.purchase_order_item?.item_description || i.purchase_order_item?.item_name || 'صنف';
+    return { name, qty, unit, rawUom: String(rawUom).trim().toUpperCase() };
   });
 
   const formatNum = (n: number) => {
@@ -71,7 +131,7 @@ export function getSummaryQuantities(items?: SummaryItem[] | null): QuantitySumm
   if (cleanItems.length === 1) {
     const it = items[0];
     const cleanIt = cleanItems[0];
-    const rebarText = formatRebarDisplay(it.quantity || 0, it.uom, it.specifications);
+    const rebarText = formatRebarDisplay(it.quantity || it.received_quantity || 0, it.uom, it.specifications);
     if (rebarText) {
       return {
         display: rebarText,
@@ -89,7 +149,7 @@ export function getSummaryQuantities(items?: SummaryItem[] | null): QuantitySumm
   const detailedTooltip = items
     .map((it, idx) => {
       const cleanIt = cleanItems[idx];
-      const rebar = formatRebarDisplay(it.quantity || 0, it.uom, it.specifications);
+      const rebar = formatRebarDisplay(it.quantity || it.received_quantity || 0, it.uom, it.specifications);
       return `${cleanIt.name}: ${rebar || `${formatNum(cleanIt.qty)} ${cleanIt.unit}`}`;
     })
     .join(' | ');

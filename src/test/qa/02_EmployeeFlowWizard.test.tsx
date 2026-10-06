@@ -201,7 +201,10 @@ describe('Scenario 2: اختبار تدفق الموظف ونموذج الإنش
     expect(screen.getByText(/قطعة 244/)).toBeInTheDocument();
     expect(screen.getByText(/النرجس الشمالي/)).toBeInTheDocument();
 
-    // Fill in item description and quantity
+    // Fill in notes, item description and quantity
+    const notesInput = screen.getByPlaceholderText(/حاجة إضافية للموقع/i);
+    fireEvent.change(notesInput, { target: { value: 'كمية إضافية خرسانة لاستكمال الصب' } });
+
     const descInput = screen.getByPlaceholderText(/اسم المادة أو الصنف/i);
     fireEvent.change(descInput, { target: { value: 'حديد عز إضافي 16 مم' } });
 

@@ -69,6 +69,7 @@ export const CreatePurchaseOrderPage: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [fetching, setFetching] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const [isDirectPoModalOpen, setIsDirectPoModalOpen] = useState<boolean>(false);
   const [isSupplementModalOpen, setIsSupplementModalOpen] = useState<boolean>(false);
@@ -456,6 +457,19 @@ export const CreatePurchaseOrderPage: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {successMessage && (
+        <div className="flex items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-950/40 px-4 py-3 text-xs text-emerald-200">
+          <span>{successMessage}</span>
+          <button
+            type="button"
+            onClick={() => setSuccessMessage(null)}
+            className="text-emerald-400 hover:text-emerald-200"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="space-y-3">
@@ -1097,7 +1111,11 @@ export const CreatePurchaseOrderPage: React.FC = () => {
       <DirectPoModal
         isOpen={isDirectPoModalOpen}
         onClose={() => setIsDirectPoModalOpen(false)}
-        onSuccess={() => navigate('/procurement')}
+        onSuccess={(_newPoId) => {
+          setIsDirectPoModalOpen(false);
+          setSuccessMessage('✅ تم إنشاء أمر الشراء المباشر بنجاح.');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
       />
 
       {/* Procurement Supplement Process Modal */}
@@ -1109,7 +1127,11 @@ export const CreatePurchaseOrderPage: React.FC = () => {
           onClose={() => setIsSupplementModalOpen(false)}
           onSuccess={() => {
             setIsSupplementModalOpen(false);
-            navigate('/procurement/purchase-orders');
+            setSuccessMessage('✅ تمت معالجة وتعميد ملحق طلب الشراء بنجاح.');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            if (prId) {
+              void getApprovedPurchaseRequestApi(prId).then(setPr);
+            }
           }}
         />
       )}

@@ -21,7 +21,7 @@ import TableFilterBar from '../../components/ui/TableFilterBar';
 import { getDefaultDateFrom, getTodayInputDate, isDefaultTodayRange } from '../../utils/dateFilters';
 import { useRealtimeRefresh, emitAppDataUpdated } from '../../hooks/useRealtimeRefresh';
 import { getUnitLabel } from '../../utils/units';
-import { getSummaryParcels, getSummaryRegions, getSummaryQuantities } from '../../utils/formatRequestSummary';
+import { getSummaryParcels, getSummaryRegions, getSummaryQuantities, getItemsSummaryDisplay } from '../../utils/formatRequestSummary';
 import { formatCleanNumber } from '../../utils/numberFormat';
 
 const AccountingPurchaseRequestsPage: React.FC = () => {
@@ -161,7 +161,7 @@ const AccountingPurchaseRequestsPage: React.FC = () => {
                   <TableHead className="whitespace-nowrap">تاريخ الاحتياج</TableHead>
                   <TableHead className="whitespace-nowrap">مقدم الطلب</TableHead>
                   <TableHead className="whitespace-nowrap">رئيس القسم</TableHead>
-                  <TableHead className="whitespace-nowrap">الصنف</TableHead>
+                  <TableHead className="whitespace-nowrap">ملخص البنود</TableHead>
                   <TableHead className="whitespace-nowrap">رقم قطعة الأرض</TableHead>
                   <TableHead className="whitespace-nowrap">المنطقة</TableHead>
                   <TableHead className="whitespace-nowrap">الكمية / العدد</TableHead>
@@ -172,11 +172,7 @@ const AccountingPurchaseRequestsPage: React.FC = () => {
               <TableBody>
                 {filteredRequests.map(request => {
                   const itemNames = request.items?.map((item) => item.item_description || item.item?.name).filter(Boolean) || [];
-                  const itemsDisplay = itemNames.length === 0
-                    ? '—'
-                    : itemNames.length === 1
-                      ? itemNames[0]
-                      : `${itemNames[0]} (+${itemNames.length - 1} أصناف)`;
+                  const itemsDisplay = getItemsSummaryDisplay(request.items);
                   const parcelsDisplay = getSummaryParcels(request);
                   const regionsDisplay = getSummaryRegions(request);
                   const quantitiesInfo = getSummaryQuantities(request.items);

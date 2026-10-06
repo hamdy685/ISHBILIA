@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { PurchaseRequest } from '../types/purchaseRequest';
 import { PurchaseRequestSupplement } from '../types/supplement';
 import {
@@ -12,6 +13,7 @@ import { CreateSupplementModal } from '../components/supplements/CreateSupplemen
 import { ProcurementSupplementProcessModal } from '../components/supplements/ProcurementSupplementProcessModal';
 import { ApproveSupplementDialog } from '../components/supplements/ApproveSupplementDialog';
 import { PrDetailsModal } from '../components/procurement/PrDetailsModal';
+import { getUnitLabel } from '../utils/units';
 
 export const SupplementaryRequestsPage: React.FC = () => {
   const { user } = useAuth();
@@ -70,9 +72,22 @@ export const SupplementaryRequestsPage: React.FC = () => {
     }
   };
 
+  const [searchParams] = useSearchParams();
+
   useEffect(() => {
     void loadRequests(1);
   }, []);
+
+  // فتح نافذة الكمالة تلقائياً في حال تمرير معرف الطلب في الرابط ?pr_id=...
+  useEffect(() => {
+    const prIdParam = searchParams.get('pr_id');
+    if (prIdParam && requests.length > 0 && !selectedPrForCreate) {
+      const match = requests.find((r) => String(r.id) === prIdParam || r.request_number === prIdParam);
+      if (match) {
+        setSelectedPrForCreate(match);
+      }
+    }
+  }, [searchParams, requests, selectedPrForCreate]);
 
   const loadSupplementsForPr = async (prId: number) => {
     try {
@@ -463,6 +478,8 @@ export const SupplementaryRequestsPage: React.FC = () => {
                                   <thead className="bg-slate-50 dark:bg-slate-800 text-slate-500">
                                     <tr>
                                       <th className="p-2">الصنف</th>
+                                      <th className="p-2">رقم قطعة الأرض</th>
+                                      <th className="p-2">المنطقة</th>
                                       <th className="p-2">الكمية</th>
                                       <th className="p-2">الوحدة</th>
                                       {isProcurement && <th className="p-2">السعر التقديري</th>}
@@ -475,14 +492,20 @@ export const SupplementaryRequestsPage: React.FC = () => {
                                         <td className="p-2 font-semibold text-slate-800 dark:text-slate-200">
                                           {item.item_description}
                                         </td>
+                                        <td className="p-2 font-mono font-bold text-cyan-600 dark:text-cyan-400">
+                                          {item.item_reference || pr.parcel_reference || '—'}
+                                        </td>
                                         <td className="p-2 text-slate-600 dark:text-slate-300">
+                                          {item.region || pr.region || '—'}
+                                        </td>
+                                        <td className="p-2 font-bold font-mono text-slate-800 dark:text-slate-200">
                                           {item.quantity}
                                         </td>
                                         <td className="p-2 text-slate-500">
-                                          {item.uom || '—'}
+                                          {getUnitLabel(item.uom)}
                                         </td>
                                         {isProcurement && (
-                                          <td className="p-2 text-slate-600 dark:text-slate-300">
+                                          <td className="p-2 text-slate-600 dark:text-slate-300 font-mono">
                                             {item.estimated_unit_price ? `${item.estimated_unit_price} ج.م` : '—'}
                                           </td>
                                         )}

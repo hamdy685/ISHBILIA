@@ -234,7 +234,7 @@ export const DirectPoModal: React.FC<DirectPoModalProps> = ({ isOpen, onClose, o
               <p className="mt-0.5 hidden sm:block text-[11px] text-slate-400">يرسل أولًا للمدير التنفيذي ثم للحسابات قبل إنشاء أمر الشراء</p>
             </div>
           </div>
-          <button type="button" onClick={onClose} className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-600 bg-slate-900/60 text-2xl font-black leading-none text-slate-300 transition-colors hover:border-cyan-400 hover:bg-slate-800 hover:text-white focus:outline-none focus:ring-2 focus:ring-cyan-400/70" aria-label="إغلاق النافذة" title="إغلاق النافذة">×</button>
+          <button type="button" onClick={onClose} disabled={loading} className="inline-flex min-h-[44px] min-w-[44px] sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl border border-slate-600 bg-slate-900/60 text-2xl font-black leading-none text-slate-300 transition-colors hover:border-cyan-400 hover:bg-slate-800 hover:text-white focus:outline-none focus:ring-2 focus:ring-cyan-400/70 disabled:opacity-50 cursor-pointer" aria-label="إغلاق النافذة" title="إغلاق النافذة">×</button>
         </div>
 
         <form onSubmit={handleSubmit} className="min-h-0 flex-1 overflow-y-auto">
@@ -372,11 +372,25 @@ export const DirectPoModal: React.FC<DirectPoModalProps> = ({ isOpen, onClose, o
           </div>
         </form>
 
-        <div className="flex shrink-0 flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 border-t border-slate-600 bg-[#1b283b] px-3 py-3 sm:px-5">
-          <button type="button" onClick={addItem} className="w-full sm:w-auto rounded-md border border-slate-500 px-4 py-2.5 text-xs font-bold text-slate-200 hover:border-cyan-400 hover:text-cyan-300">＋ إضافة صنف آخر</button>
+        <div className="flex shrink-0 flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 border-t border-slate-600 bg-[#1b283b] px-3 py-3 sm:px-5">
+          <button type="button" onClick={addItem} disabled={loading} className="w-full sm:w-auto min-h-[44px] sm:min-h-0 rounded-xl border border-slate-500 px-4 py-2 text-xs font-bold text-slate-200 hover:border-cyan-400 hover:text-cyan-300 transition-colors disabled:opacity-50">＋ إضافة صنف آخر</button>
           <div className="flex w-full sm:w-auto flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
-            <button type="button" onClick={onClose} className="w-full sm:w-auto rounded-md border border-slate-500 px-5 py-2.5 text-xs font-bold text-slate-300 hover:bg-slate-700">إلغاء</button>
-            <button type="submit" disabled={loading} onClick={handleSubmit} className="w-full sm:w-auto rounded-md bg-emerald-600 px-5 py-2.5 text-xs font-black text-white shadow-lg shadow-emerald-900/30 hover:bg-emerald-500 disabled:opacity-50">{loading ? 'جاري إرسال الطلب...' : 'إرسال طلب الشراء للحسابات  ▧'}</button>
+            <button type="button" onClick={onClose} disabled={loading} className="w-full sm:w-auto min-h-[44px] sm:min-h-0 rounded-xl border border-slate-500 px-5 py-2 text-xs font-bold text-slate-300 hover:bg-slate-700 transition-colors disabled:opacity-50">إلغاء</button>
+            <button
+              type="submit"
+              disabled={loading}
+              onClick={handleSubmit}
+              className="w-full sm:w-auto min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-2 text-xs font-black text-white shadow-lg shadow-emerald-900/30 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none transition-all cursor-pointer"
+            >
+              {loading ? (
+                <>
+                  <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                  <span>جاري إرسال الطلب...</span>
+                </>
+              ) : (
+                <span>إرسال طلب الشراء للحسابات  ▧</span>
+              )}
+            </button>
           </div>
         </div>
       </div>

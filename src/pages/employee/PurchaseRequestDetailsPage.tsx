@@ -26,8 +26,9 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '.
 import SystemEventTimeline from '../../components/ui/SystemEventTimeline';
 import PurchaseRequestTimeline from '../../components/procurement/PurchaseRequestTimeline';
 import OfficeReceiptModal from '../../components/purchase-requests/OfficeReceiptModal';
+import { CreateSupplementModal } from '../../components/supplements/CreateSupplementModal';
 import { getUnitLabel } from '../../utils/units';
-import { getSummaryParcels, getSummaryRegions, getSummaryQuantities } from '../../utils/formatRequestSummary';
+import { getSummaryParcels, getSummaryRegions, getSummaryQuantities, getItemsSummaryDisplay } from '../../utils/formatRequestSummary';
 import { UnifiedNotesCard } from '../../components/common/UnifiedNotesCard';
 import { formatCleanQty } from '../../utils/numberFormat';
 import { formatRebarDisplay, extractRebarInfo } from '../../utils/rebar';
@@ -56,6 +57,7 @@ export const PurchaseRequestDetailsPage: React.FC = () => {
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState<boolean>(false);
   const [isOfficeReceiptModalOpen, setIsOfficeReceiptModalOpen] = useState<boolean>(false);
+  const [isSupplementModalOpen, setIsSupplementModalOpen] = useState<boolean>(false);
   const [selectedPoForReceipt, setSelectedPoForReceipt] = useState<any>(null);
 
   const fetchRequest = async () => {
@@ -145,11 +147,7 @@ export const PurchaseRequestDetailsPage: React.FC = () => {
     ].includes(requestData.status) || Boolean(issuedPos.length > 0);
 
   const itemNames = requestData.items?.map((item) => item.item_description || item.item?.name).filter(Boolean) || [];
-  const itemsDisplay = itemNames.length === 0
-    ? '—'
-    : itemNames.length === 1
-      ? itemNames[0]
-      : `${itemNames[0]} (+${itemNames.length - 1} أصناف)`;
+  const itemsDisplay = getItemsSummaryDisplay(requestData.items);
   const parcelsDisplay = getSummaryParcels(requestData);
   const regionsDisplay = getSummaryRegions(requestData);
   const quantitiesInfo = getSummaryQuantities(requestData.items);
@@ -259,15 +257,14 @@ export const PurchaseRequestDetailsPage: React.FC = () => {
             🖨️ طباعة
           </Button>
           {canRequestSupplement && (
-            <Link to="/supplementary-requests">
-              <Button
-                variant="primary"
-                size="sm"
-                className="bg-amber-600 hover:bg-amber-500 text-white font-bold flex items-center gap-1.5 shadow-md shadow-amber-900/30"
-              >
-                <span>➕</span> طلب كمية إضافية (كمالة)
-              </Button>
-            </Link>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setIsSupplementModalOpen(true)}
+              className="bg-amber-600 hover:bg-amber-500 text-white font-bold flex items-center gap-1.5 shadow-md shadow-amber-900/30"
+            >
+              <span>➕</span> طلب كمية إضافية (كمالة)
+            </Button>
           )}
           {canEdit && (
             <Link to={`/requests/${requestData.id}/edit`}>
@@ -553,6 +550,17 @@ export const PurchaseRequestDetailsPage: React.FC = () => {
           }}
           onSuccess={(msg) => {
             setFlashMessage(msg);
+            fetchRequest();
+          }}
+        />
+      )}
+      {isSupplementModalOpen && requestData && (
+        <CreateSupplementModal
+          request={requestData}
+          isOpen={isSupplementModalOpen}
+          onClose={() => setIsSupplementModalOpen(false)}
+          onSuccess={() => {
+            setFlashMessage('تم إرسال طلب الكمالة بنجاح.');
             fetchRequest();
           }}
         />

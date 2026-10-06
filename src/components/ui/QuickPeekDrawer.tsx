@@ -107,7 +107,7 @@ export const QuickPeekDrawer: React.FC<QuickPeekDrawerProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="flex items-center gap-1 rounded-xl border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs font-bold text-slate-300 hover:border-rose-500/60 hover:bg-rose-950/40 hover:text-rose-300 transition-colors cursor-pointer"
+              className="flex min-h-[44px] sm:min-h-0 items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-xs font-bold text-slate-300 hover:border-rose-500/60 hover:bg-rose-950/40 hover:text-rose-300 transition-colors cursor-pointer"
               aria-label="إغلاق المعاينة"
               title="إغلاق نافذة المعاينة"
             >

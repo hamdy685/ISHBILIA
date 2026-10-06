@@ -29,6 +29,8 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
   const [isPrintModalOpen, setIsPrintModalOpen] = useState<boolean>(false);
   const [isCyclePrintModalOpen, setIsCyclePrintModalOpen] = useState<boolean>(false);
 
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
   const { hasPermission } = useAuth();
 
   const loadPo = async (): Promise<PurchaseOrder | null> => {
@@ -76,16 +78,17 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
     try {
       await submitPurchaseOrderApi(po.id);
       await loadPo();
-      alert('تم إرسال أمر الشراء للاستلام بنجاح');
-      navigate('/procurement/purchase-orders');
+      setSuccessMessage('✅ تم تعميد وإرسال أمر الشراء للاستلام والتوريد بنجاح.');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err: any) {
       if (err?.code === 'ECONNABORTED' || err?.message?.includes('timeout')) {
         setError('جاري التحقق من حالة أمر الشراء...');
         try {
           const reloaded = await loadPo();
           if (reloaded?.status === 'ISSUED') {
-            alert('تم إرسال أمر الشراء للاستلام بنجاح');
-            navigate('/procurement/purchase-orders');
+            setError(null);
+            setSuccessMessage('✅ تم تعميد وإرسال أمر الشراء للاستلام والتوريد بنجاح.');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
             return;
           }
         } catch {
@@ -162,6 +165,22 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
           </Button>
         </div>
       </div>
+
+      {successMessage && (
+        <div className="rounded-xl border border-emerald-500/50 bg-emerald-950/40 p-3.5 text-xs text-emerald-300 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span>✅</span>
+            <span className="font-bold">{successMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSuccessMessage(null)}
+            className="text-emerald-400 hover:text-white cursor-pointer font-bold"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {error && <ErrorMessage error={error} />}
 

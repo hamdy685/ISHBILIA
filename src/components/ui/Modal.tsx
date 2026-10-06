@@ -156,7 +156,7 @@ export const Modal: React.FC<ModalProps> = ({
             type="button"
             onClick={onClose}
             aria-label="إغلاق النافذة"
-            className="shrink-0 rounded-lg border border-slate-700 bg-slate-800 p-2 text-slate-400 hover:border-cyan-500/60 hover:bg-slate-700 hover:text-white"
+            className="shrink-0 min-h-[44px] min-w-[44px] sm:min-h-9 sm:min-w-9 flex items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-400 hover:border-cyan-500/60 hover:bg-slate-700 hover:text-white transition-all cursor-pointer"
           >
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -171,7 +171,7 @@ export const Modal: React.FC<ModalProps> = ({
         </div>
 
         {footer && (
-          <footer className="flex shrink-0 flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3 border-t border-slate-700 bg-slate-900 px-3 py-3 sm:px-6 sm:py-4 [&>button]:w-full sm:[&>button]:w-auto">
+          <footer className="flex shrink-0 flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2.5 sm:gap-3 border-t border-slate-700 bg-slate-900 px-3 py-3 sm:px-6 sm:py-4 [&>button]:min-h-[44px] sm:[&>button]:min-h-0 [&>button]:w-full sm:[&>button]:w-auto">
             {footer}
           </footer>
         )}

@@ -13,6 +13,7 @@ import * as catalogApi from '../../api/catalog';
 import * as supplierFinanceApi from '../../api/supplierFinance';
 import * as authStorage from '../../utils/authStorage';
 import * as authApi from '../../api/auth';
+import { getTodayInputDate } from '../../utils/dateFilters';
 
 const mockEmployeeUser = {
   id: 10,
@@ -185,7 +186,7 @@ describe('Scenario 6: اختبارات الأمان والحالات الشاذ�
       expect(dateInput).toBeInTheDocument();
 
       // Verify HTML5 min attribute is set to today
-      const today = new Date().toISOString().slice(0, 10);
+      const today = getTodayInputDate();
       expect(dateInput.getAttribute('min')).toBe(today);
 
       // Attempt to enter a past date directly (e.g. 2020-01-01)

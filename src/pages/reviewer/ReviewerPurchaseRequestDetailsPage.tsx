@@ -116,10 +116,10 @@ export const ReviewerPurchaseRequestDetailsPage: React.FC = () => {
     try {
       await rejectPurchaseRequestApi(requestData.id, comments);
       setIsRejectModalOpen(false);
+      setSuccessMessage('تم رفض طلب الشراء.');
       toast.success('تم رفض طلب الشراء.');
-      navigate('/reviewer/requests', {
-        state: { message: 'تم رفض طلب الشراء.' },
-      });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      await fetchRequest();
     } catch (err) {
       const parsed = parseApiError(err);
       setError(parsed);

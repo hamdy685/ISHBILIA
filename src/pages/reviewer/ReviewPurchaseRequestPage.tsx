@@ -166,11 +166,11 @@ export const ReviewPurchaseRequestPage: React.FC = () => {
     setIsMutating(true);
     setError(null);
     try {
-      await approvePurchaseRequestApi(parseInt(id, 10), comments || '', siteEngineerUserId, requiresWarehouseReceipt);
+      const updated = await approvePurchaseRequestApi(parseInt(id, 10), comments || '', siteEngineerUserId, requiresWarehouseReceipt);
       setIsApproveModalOpen(false);
-      navigate('/reviewer/requests', {
-        state: { message: '✅ تم اعتماد طلب الشراء وتحديد مسار الاستلام وإرساله إلى المدير التنفيذي.' },
-      });
+      setRequestData(updated);
+      setSuccessMessage('✅ تم اعتماد طلب الشراء وتحديد مسار الاستلام وإرساله إلى المدير التنفيذي بنجاح.');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
       setError(parseApiError(err));
     } finally {
@@ -183,11 +183,11 @@ export const ReviewPurchaseRequestPage: React.FC = () => {
     setIsMutating(true);
     setError(null);
     try {
-      await rejectPurchaseRequestApi(parseInt(id, 10), comments);
+      const updated = await rejectPurchaseRequestApi(parseInt(id, 10), comments);
       setIsRejectModalOpen(false);
-      navigate('/reviewer/requests', {
-        state: { message: 'تم رفض طلب الشراء.' },
-      });
+      setRequestData(updated);
+      setSuccessMessage('تم رفض طلب الشراء بنجاح.');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
       setError(parseApiError(err));
     } finally {

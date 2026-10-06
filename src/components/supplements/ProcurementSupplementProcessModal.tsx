@@ -121,32 +121,33 @@ export const ProcurementSupplementProcessModal: React.FC<ProcurementSupplementPr
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/80 p-4 backdrop-blur-md animate-fade-in">
-      <div className="relative w-full max-w-3xl rounded-2xl bg-slate-950 shadow-2xl shadow-amber-900/20 transition-all border border-amber-500/30 ring-1 ring-amber-500/10">
+      <div className="relative w-full max-w-3xl max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden rounded-2xl bg-slate-950 shadow-2xl shadow-amber-900/20 transition-all border border-amber-500/30 ring-1 ring-amber-500/10">
         {/* Header - Luxury Gold */}
-        <div className="flex items-center justify-between border-b border-amber-500/20 bg-gradient-to-r from-slate-950 via-amber-950/20 to-slate-950 p-6 rounded-t-2xl">
+        <div className="flex shrink-0 items-center justify-between border-b border-amber-500/20 bg-gradient-to-r from-slate-950 via-amber-950/20 to-slate-950 p-4 sm:p-6 rounded-t-2xl">
           <div>
             <div className="flex items-center gap-2.5">
               <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500/20 to-amber-700/20 border border-amber-500/40 text-amber-400 font-bold text-lg shadow-inner">
                 ⚡
               </span>
-              <h3 className="text-xl font-black text-amber-100">
+              <h3 className="text-lg sm:text-xl font-black text-amber-100">
                 إصدار ملحق توريد سريع — دفعة #{supplement.batch_number}
               </h3>
             </div>
-            <p className="mt-2 text-sm text-slate-400 leading-relaxed">
+            <p className="mt-1 text-xs sm:text-sm text-slate-400 leading-relaxed">
               تحديد المورد المنفذ وتسعير بنود الكمالة التكميلية لإصدار أمر شراء سريع مرتبط بالطلب الأصلي.
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl p-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 border border-slate-800 transition-all cursor-pointer"
+            disabled={loading}
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl p-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 border border-slate-800 transition-all cursor-pointer disabled:opacity-50"
           >
             ✕
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
           {/* Contextual UX Banner */}
           <div className="rounded-xl border border-amber-600/30 bg-gradient-to-r from-amber-950/30 via-slate-900 to-amber-950/20 p-4 text-right">
             <p className="text-sm text-amber-200 leading-7 font-medium">
@@ -324,21 +325,31 @@ export const ProcurementSupplementProcessModal: React.FC<ProcurementSupplementPr
               </strong>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3">
               <button
                 type="button"
                 onClick={onClose}
                 disabled={loading}
-                className="rounded-xl border border-slate-700 bg-slate-800 px-5 py-2.5 text-sm font-bold text-slate-300 hover:bg-slate-700 hover:text-white transition-all disabled:opacity-50 cursor-pointer"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 rounded-xl border border-slate-700 bg-slate-800 px-5 py-2.5 text-sm font-bold text-slate-300 hover:bg-slate-700 hover:text-white transition-all disabled:opacity-50 cursor-pointer"
               >
                 إلغاء
               </button>
               <button
                 type="submit"
                 disabled={loading}
-                className="rounded-xl bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 hover:from-amber-400 hover:via-amber-500 hover:to-amber-600 px-6 py-2.5 text-sm font-black text-slate-950 shadow-lg shadow-amber-600/30 focus:outline-none focus:ring-2 focus:ring-amber-500/40 disabled:opacity-50 transition-all cursor-pointer hover:-translate-y-0.5 active:translate-y-0"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 hover:from-amber-400 hover:via-amber-500 hover:to-amber-600 px-6 py-2.5 text-sm font-black text-slate-950 shadow-lg shadow-amber-600/30 focus:outline-none focus:ring-2 focus:ring-amber-500/40 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none transition-all cursor-pointer hover:-translate-y-0.5 active:translate-y-0"
               >
-                {loading ? 'جارٍ المعالجة...' : '⚡ تأكيد وإصدار'}
+                {loading ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4 text-slate-950" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>جارٍ المعالجة...</span>
+                  </>
+                ) : (
+                  <span>⚡ تأكيد وإصدار</span>
+                )}
               </button>
             </div>
           </div>
