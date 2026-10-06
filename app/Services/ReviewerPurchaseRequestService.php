@@ -24,38 +24,31 @@ class ReviewerPurchaseRequestService
             return true;
         }
 
-        $request->loadMissing(['targetDepartment', 'department']);
+        $request->loadMissing(['requester', 'targetDepartment', 'department']);
 
         // 1. Explicitly assigned reviewer on the request
         if ($request->reviewer_user_id !== null && (int) $request->reviewer_user_id === (int) $user->id) {
             return true;
         }
 
-        $targetDeptId = $request->target_department_id ?? $request->department_id;
-        $targetDept = $request->targetDepartment ?? $request->department;
-
-        // 2. Designated manager of target or requesting department
-        if ($targetDept?->manager_user_id !== null && (int) $targetDept->manager_user_id === (int) $user->id) {
+        // 2. Requester directly reports to this manager
+        if ($request->requester?->manager_id !== null && (int) $request->requester->manager_id === (int) $user->id) {
             return true;
         }
 
-        // 3. User belongs to target department and has reviewer role or review permission
-        if ($user->department_id !== null && $targetDeptId !== null && (int) $user->department_id === (int) $targetDeptId) {
-            if ($user->hasRole('reviewer') || $user->hasPermission('purchase_request.review')) {
+        // 3. Departmental reviewer: designated manager of target department
+        if (! $user->hasRole('execution_manager')) {
+            $targetDept = $request->targetDepartment ?? $request->department;
+            if ($targetDept?->manager_user_id !== null && (int) $targetDept->manager_user_id === (int) $user->id) {
                 return true;
             }
-        }
-
-        // 4. Global reviewer or reviewer with general review permission
-        if ($user->hasRole('reviewer') && ($user->department_id === null || $user->hasPermission('purchase_request.review'))) {
-            return true;
         }
 
         return false;
     }
 
     /**
-     * Get reviewable PRs assigned to the Reviewer or within their target or requesting department scope.
+     * Get reviewable PRs assigned to the Reviewer or created by engineers reporting directly to them.
      */
     public function getReviewableRequests(User $user, array $filters = [], int $perPage = 200): LengthAwarePaginator
     {
@@ -74,24 +67,16 @@ class ReviewerPurchaseRequestService
             $query->where(function ($scopeQuery) use ($user) {
                 // 1. Explicitly assigned reviewer on the request
                 $scopeQuery->where('reviewer_user_id', $user->id)
-                    // 2. Or user is the designated manager of TARGET department (or requesting dept when target is null)
-                    ->orWhereHas('targetDepartment', function ($departmentQuery) use ($user) {
-                        $departmentQuery->where('manager_user_id', $user->id);
-                    })
-                    ->orWhere(function ($q) use ($user) {
-                        $q->whereNull('target_department_id')
-                            ->whereHas('department', function ($departmentQuery) use ($user) {
-                                $departmentQuery->where('manager_user_id', $user->id);
-                            });
+                    // 2. Or requester reports directly to this user
+                    ->orWhereHas('requester', function ($rq) use ($user) {
+                        $rq->where('manager_id', $user->id);
                     });
 
-                // 3. Reviewer role or permission within department
-                if ($user->department_id !== null && ($user->hasRole('reviewer') || $user->hasPermission('purchase_request.review'))) {
-                    $scopeQuery->orWhere('target_department_id', $user->department_id)
-                        ->orWhere(function ($q) use ($user) {
-                            $q->whereNull('target_department_id')
-                                ->where('department_id', $user->department_id);
-                        });
+                // 3. Departmental reviewer: designated manager of target department
+                if (! $user->hasRole('execution_manager')) {
+                    $scopeQuery->orWhereHas('targetDepartment', function ($departmentQuery) use ($user) {
+                        $departmentQuery->where('manager_user_id', $user->id);
+                    });
                 }
             });
         }

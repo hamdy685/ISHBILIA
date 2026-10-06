@@ -33,23 +33,17 @@ class GeneralManagerPurchaseRequestService
             ])
             ->where('status', self::PENDING_STATUS);
 
-        $executionCodes = ['EXECUTION', 'BUILDINGS', 'FINISHING'];
-
         if ($user && $user->hasRole('execution_manager')) {
-            $query->where(function ($q) use ($user, $executionCodes) {
-                $q->whereHas('requester', fn ($rq) => $rq->where('manager_id', $user->id))
-                    ->orWhereHas('targetDepartment', fn ($dq) => $dq->whereIn('code', $executionCodes))
-                    ->orWhereHas('department', fn ($dq) => $dq->whereIn('code', $executionCodes))
-                    ->orWhereHas('requester.roles', fn ($rq) => $rq->where('slug', 'site_engineer'));
+            $query->where(function ($q) use ($user) {
+                $q->where('reviewer_user_id', $user->id)
+                    ->orWhereHas('requester', fn ($rq) => $rq->where('manager_id', $user->id));
             });
         } elseif ($user && ! $user->hasRole('admin')) {
             $hasExecutionManager = User::whereHas('roles', fn ($q) => $q->where('slug', 'execution_manager'))->where('is_active', true)->exists();
             if ($hasExecutionManager) {
-                $query->where(function ($q) use ($executionCodes) {
-                    $q->whereDoesntHave('targetDepartment', fn ($dq) => $dq->whereIn('code', $executionCodes))
-                        ->whereDoesntHave('department', fn ($dq) => $dq->whereIn('code', $executionCodes))
-                        ->whereDoesntHave('requester.manager.roles', fn ($mq) => $mq->where('slug', 'execution_manager'))
-                        ->whereDoesntHave('requester.roles', fn ($rq) => $rq->where('slug', 'site_engineer'));
+                $query->where(function ($q) {
+                    $q->whereDoesntHave('requester.manager.roles', fn ($mq) => $mq->where('slug', 'execution_manager'))
+                        ->whereDoesntHave('assignedReviewer.roles', fn ($rq) => $rq->where('slug', 'execution_manager'));
                 });
             }
         }
@@ -77,23 +71,17 @@ class GeneralManagerPurchaseRequestService
             ])
             ->where('status', self::PENDING_STATUS);
 
-        $executionCodes = ['EXECUTION', 'BUILDINGS', 'FINISHING'];
-
         if ($user && $user->hasRole('execution_manager')) {
-            $query->where(function ($q) use ($user, $executionCodes) {
-                $q->whereHas('requester', fn ($rq) => $rq->where('manager_id', $user->id))
-                    ->orWhereHas('targetDepartment', fn ($dq) => $dq->whereIn('code', $executionCodes))
-                    ->orWhereHas('department', fn ($dq) => $dq->whereIn('code', $executionCodes))
-                    ->orWhereHas('requester.roles', fn ($rq) => $rq->where('slug', 'site_engineer'));
+            $query->where(function ($q) use ($user) {
+                $q->where('reviewer_user_id', $user->id)
+                    ->orWhereHas('requester', fn ($rq) => $rq->where('manager_id', $user->id));
             });
         } elseif ($user && ! $user->hasRole('admin')) {
             $hasExecutionManager = User::whereHas('roles', fn ($q) => $q->where('slug', 'execution_manager'))->where('is_active', true)->exists();
             if ($hasExecutionManager) {
-                $query->where(function ($q) use ($executionCodes) {
-                    $q->whereDoesntHave('targetDepartment', fn ($dq) => $dq->whereIn('code', $executionCodes))
-                        ->whereDoesntHave('department', fn ($dq) => $dq->whereIn('code', $executionCodes))
-                        ->whereDoesntHave('requester.manager.roles', fn ($mq) => $mq->where('slug', 'execution_manager'))
-                        ->whereDoesntHave('requester.roles', fn ($rq) => $rq->where('slug', 'site_engineer'));
+                $query->where(function ($q) {
+                    $q->whereDoesntHave('requester.manager.roles', fn ($mq) => $mq->where('slug', 'execution_manager'))
+                        ->whereDoesntHave('assignedReviewer.roles', fn ($rq) => $rq->where('slug', 'execution_manager'));
                 });
             }
         }
@@ -425,18 +413,13 @@ class GeneralManagerPurchaseRequestService
             return true;
         }
 
-        $request->loadMissing(['requester.roles', 'targetDepartment', 'department']);
+        $request->loadMissing(['requester']);
+
+        if ((int) $request->reviewer_user_id === (int) $user->id) {
+            return true;
+        }
 
         if ((int) $request->requester?->manager_id === (int) $user->id) {
-            return true;
-        }
-
-        $executionCodes = ['EXECUTION', 'BUILDINGS', 'FINISHING'];
-        if (in_array($request->targetDepartment?->code, $executionCodes, true) || in_array($request->department?->code, $executionCodes, true)) {
-            return true;
-        }
-
-        if ($request->requester?->roles->contains('slug', 'site_engineer')) {
             return true;
         }
 

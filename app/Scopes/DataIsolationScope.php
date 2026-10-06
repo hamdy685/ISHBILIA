@@ -88,13 +88,11 @@ class DataIsolationScope implements Scope
 
         if ($user->hasRole('execution_manager')) {
             $builder->where(function (Builder $q) use ($user) {
-                if ($user->department_id) {
-                    $q->where('department_id', $user->department_id)
-                      ->orWhere('target_department_id', $user->department_id);
-                }
-                $q->orWhereHas('requester', function ($rq) use ($user) {
-                    $rq->where('manager_id', $user->id);
-                })->orWhere('user_id', $user->id);
+                $q->where('reviewer_user_id', $user->id)
+                  ->orWhereHas('requester', function ($rq) use ($user) {
+                      $rq->where('manager_id', $user->id);
+                  })
+                  ->orWhere('user_id', $user->id);
             });
             return;
         }
@@ -131,6 +129,9 @@ class DataIsolationScope implements Scope
                       ->orWhere('target_department_id', $user->department_id);
                 }
                 $q->orWhere('reviewer_user_id', $user->id)
+                  ->orWhereHas('requester', function ($rq) use ($user) {
+                      $rq->where('manager_id', $user->id);
+                  })
                   ->orWhere('user_id', $user->id);
             });
             return;
@@ -174,11 +175,8 @@ class DataIsolationScope implements Scope
         if ($user->hasRole('execution_manager')) {
             $builder->where(function (Builder $q) use ($user) {
                 $q->whereHas('purchaseRequest', function ($prQ) use ($user) {
-                    if ($user->department_id) {
-                        $prQ->where('department_id', $user->department_id)
-                            ->orWhere('target_department_id', $user->department_id);
-                    }
-                    $prQ->orWhereHas('requester', fn ($rq) => $rq->where('manager_id', $user->id))
+                    $prQ->where('reviewer_user_id', $user->id)
+                        ->orWhereHas('requester', fn ($rq) => $rq->where('manager_id', $user->id))
                         ->orWhere('user_id', $user->id);
                 })->orWhere('created_by_user_id', $user->id);
             });
@@ -251,11 +249,8 @@ class DataIsolationScope implements Scope
 
         if ($user->hasRole('execution_manager')) {
             $builder->whereHas('purchaseRequest', function ($prQ) use ($user) {
-                if ($user->department_id) {
-                    $prQ->where('department_id', $user->department_id)
-                        ->orWhere('target_department_id', $user->department_id);
-                }
-                $prQ->orWhereHas('requester', fn ($rq) => $rq->where('manager_id', $user->id))
+                $prQ->where('reviewer_user_id', $user->id)
+                    ->orWhereHas('requester', fn ($rq) => $rq->where('manager_id', $user->id))
                     ->orWhere('user_id', $user->id);
             });
             return;
