@@ -99,9 +99,19 @@ class StorePurchaseRequestRequest extends FormRequest
     {
         return [
             'request_type' => ['nullable', 'string', 'in:PROJECT,OFFICE_SUPPLIES'],
-            'parcel_reference' => ['nullable', 'string', 'max:100'],
+            'parcel_reference' => [
+                \Illuminate\Validation\Rule::requiredIf(fn () => ($this->input('request_type') ?? 'PROJECT') === 'PROJECT'),
+                'nullable',
+                'string',
+                'max:100',
+            ],
             'parcel' => ['nullable', 'string', 'max:100'],
-            'region' => ['nullable', 'string', 'max:150'],
+            'region' => [
+                \Illuminate\Validation\Rule::requiredIf(fn () => ($this->input('request_type') ?? 'PROJECT') === 'PROJECT'),
+                'nullable',
+                'string',
+                'max:150',
+            ],
             'land_parcel_id' => ['nullable', 'integer', 'exists:land_parcels,id'],
             'target_department_id' => ['required', 'integer', 'exists:departments,id'],
             'department_id' => ['nullable', 'integer', 'exists:departments,id'],
@@ -129,6 +139,8 @@ class StorePurchaseRequestRequest extends FormRequest
     public function messages(): array
     {
         return [
+            'parcel_reference.required' => 'رقم قطعة الأرض مطلوب لطلبات المشاريع ولا يمكن أن يكون فارغًا.',
+            'region.required' => 'المنطقة مطلوبة لطلبات المشاريع ولا يمكن أن تكون فارغة.',
             'target_department_id.required' => 'القسم المستهدف مطلوب. يرجى اختيار القسم المعالج للطلب.',
             'target_department_id.exists' => 'القسم المستهدف المحدد غير موجود.',
             'items.required' => 'يجب إضافة بند واحد على الأقل لطلب الشراء.',

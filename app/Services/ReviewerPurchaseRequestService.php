@@ -31,36 +31,24 @@ class ReviewerPurchaseRequestService
             return true;
         }
 
-        $emailMap = (array) config('procurement.default_department_reviewers', []);
+        $targetDeptId = $request->target_department_id ?? $request->department_id;
+        $targetDept = $request->targetDepartment ?? $request->department;
 
-        // 2. Target department takes priority when set
-        if ($request->target_department_id !== null) {
-            if ($request->targetDepartment?->manager_user_id !== null && (int) $request->targetDepartment->manager_user_id === (int) $user->id) {
-                return true;
-            }
-            if ($user->department_id !== null && (int) $user->department_id === (int) $request->target_department_id) {
-                return true;
-            }
-            if ($request->targetDepartment?->code && isset($emailMap[$request->targetDepartment->code])) {
-                if ($user->email === $emailMap[$request->targetDepartment->code]) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        // 3. Fallback to requesting department when target_department_id is null
-        if ($request->department?->manager_user_id !== null && (int) $request->department->manager_user_id === (int) $user->id) {
+        // 2. Designated manager of target or requesting department
+        if ($targetDept?->manager_user_id !== null && (int) $targetDept->manager_user_id === (int) $user->id) {
             return true;
         }
-        if ($user->department_id !== null && (int) $user->department_id === (int) $request->department_id) {
-            return true;
-        }
-        if ($request->department?->code && isset($emailMap[$request->department->code])) {
-            if ($user->email === $emailMap[$request->department->code]) {
+
+        // 3. User belongs to target department and has reviewer role or review permission
+        if ($user->department_id !== null && $targetDeptId !== null && (int) $user->department_id === (int) $targetDeptId) {
+            if ($user->hasRole('reviewer') || $user->hasPermission('purchase_request.review')) {
                 return true;
             }
+        }
+
+        // 4. Global reviewer or reviewer with general review permission
+        if ($user->hasRole('reviewer') && ($user->department_id === null || $user->hasPermission('purchase_request.review'))) {
+            return true;
         }
 
         return false;
@@ -97,33 +85,13 @@ class ReviewerPurchaseRequestService
                             });
                     });
 
-                // 3. Or request is targeted to the reviewer's department (or originated from reviewer's department when target is null)
-                if ($user->department_id !== null) {
+                // 3. Reviewer role or permission within department
+                if ($user->department_id !== null && ($user->hasRole('reviewer') || $user->hasPermission('purchase_request.review'))) {
                     $scopeQuery->orWhere('target_department_id', $user->department_id)
                         ->orWhere(function ($q) use ($user) {
                             $q->whereNull('target_department_id')
                                 ->where('department_id', $user->department_id);
                         });
-                }
-
-                // 4. Official reviewer mapping by department code
-                $emailToDeptCode = [
-                    'ayman@gmail.com' => 'EXECUTION',
-                    'hatem@gmail.com' => 'BUILDINGS',
-                    'kheshen@gmail.com' => 'FINISHING',
-                    'mostafa@gmail.com' => 'LICENSES',
-                    'amr@gmail.com' => 'BUFFET',
-                ];
-                if (isset($emailToDeptCode[$user->email])) {
-                    $targetCode = $emailToDeptCode[$user->email];
-                    $scopeQuery->orWhereHas('targetDepartment', function ($departmentQuery) use ($targetCode) {
-                        $departmentQuery->where('code', $targetCode);
-                    })->orWhere(function ($q) use ($targetCode) {
-                        $q->whereNull('target_department_id')
-                            ->whereHas('department', function ($departmentQuery) use ($targetCode) {
-                                $departmentQuery->where('code', $targetCode);
-                            });
-                    });
                 }
             });
         }
@@ -474,32 +442,37 @@ class ReviewerPurchaseRequestService
             }
             $fromState = $pr->status;
 
-            // Resolve site engineer: explicit reviewer selection takes precedence, then PR value, then department default
-            $siteEngineerId = $siteEngineerUserId ?: $pr->site_engineer_user_id;
-            if (! $siteEngineerId && $pr->targetDepartment?->site_engineer_user_id) {
-                $siteEngineerId = $pr->targetDepartment->site_engineer_user_id;
-            }
-            if (! $siteEngineerId && $pr->department?->site_engineer_user_id) {
-                $siteEngineerId = $pr->department->site_engineer_user_id;
-            }
+            $isOffice = in_array($pr->request_type, ['OFFICE_SUPPLIES', 'ADMINISTRATIVE'], true) || (method_exists($pr, 'isOfficeRequest') && $pr->isOfficeRequest());
+            $engineerUser = null;
 
-            if (! $siteEngineerId) {
-                throw ValidationException::withMessages([
-                    'site_engineer_user_id' => ['يجب اختيار مهندس الموقع أو مسؤول الاستلام قبل اعتماد الطلب وإرساله إلى المدير التنفيذي.'],
-                ]);
-            }
+            if (! $isOffice) {
+                // Resolve site engineer: explicit reviewer selection takes precedence, then PR value, then department default
+                $siteEngineerId = $siteEngineerUserId ?: $pr->site_engineer_user_id;
+                if (! $siteEngineerId && $pr->targetDepartment?->site_engineer_user_id) {
+                    $siteEngineerId = $pr->targetDepartment->site_engineer_user_id;
+                }
+                if (! $siteEngineerId && $pr->department?->site_engineer_user_id) {
+                    $siteEngineerId = $pr->department->site_engineer_user_id;
+                }
 
-            $engineerUser = User::where('id', $siteEngineerId)->where('is_active', true)->first();
-            if (! $engineerUser) {
-                throw ValidationException::withMessages([
-                    'site_engineer_user_id' => ['مهندس الموقع / مسؤول الاستلام المحدد غير موجود أو حسابه غير نشط.'],
-                ]);
+                if (! $siteEngineerId) {
+                    throw ValidationException::withMessages([
+                        'site_engineer_user_id' => ['يجب اختيار مهندس الموقع أو مسؤول الاستلام قبل اعتماد الطلب وإرساله إلى المدير التنفيذي.'],
+                    ]);
+                }
+
+                $engineerUser = User::where('id', $siteEngineerId)->where('is_active', true)->first();
+                if (! $engineerUser) {
+                    throw ValidationException::withMessages([
+                        'site_engineer_user_id' => ['مهندس الموقع / مسؤول الاستلام المحدد غير موجود أو حسابه غير نشط.'],
+                    ]);
+                }
             }
 
             $updateData = [
                 'status' => 'PENDING_EXECUTIVE_APPROVAL',
                 'reviewer_user_id' => $pr->reviewer_user_id ?: $reviewer->id,
-                'site_engineer_user_id' => $engineerUser->id,
+                'site_engineer_user_id' => $engineerUser?->id,
             ];
 
             if ($requiresWarehouseReceipt !== null) {

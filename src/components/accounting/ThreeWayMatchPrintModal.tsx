@@ -37,6 +37,22 @@ export const ThreeWayMatchPrintModal: React.FC<ThreeWayMatchPrintModalProps> = (
   const po = propsPo || propsReceipt?.purchase_order || null;
   const receipt = propsReceipt || (po?.receipts?.[0] as any) || null;
 
+  const [isGeneratingPdf, setIsGeneratingPdf] = React.useState(false);
+
+  const handleWhatsAppShare = async () => {
+    if (!receipt || isGeneratingPdf) return;
+    setIsGeneratingPdf(true);
+    try {
+      const docEl = document.querySelector<HTMLElement>('.three-way-print-container .print-document');
+      await shareReceiptOnWhatsApp(receipt, undefined, {
+        po: po,
+        sourceElement: docEl,
+      });
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
   const handlePrint = () => {
     printDocumentOnly('.three-way-print-container .print-document', {
       orientation: 'portrait',
@@ -71,11 +87,12 @@ export const ThreeWayMatchPrintModal: React.FC<ThreeWayMatchPrintModalProps> = (
             {receipt && (
               <button
                 type="button"
-                onClick={() => shareReceiptOnWhatsApp(receipt)}
-                className="flex items-center gap-1.5 rounded-lg bg-green-600 hover:bg-green-500 px-3.5 py-1.5 text-xs font-bold text-white transition-colors shadow-md cursor-pointer"
-                title="مشاركة تفاصيل الإذن عبر واتساب"
+                disabled={isGeneratingPdf}
+                onClick={() => void handleWhatsAppShare()}
+                className="flex items-center gap-1.5 rounded-lg bg-green-600 hover:bg-green-500 px-3.5 py-1.5 text-xs font-bold text-white transition-colors shadow-md cursor-pointer disabled:opacity-50"
+                title="توليد ملف PDF واختيار جهة الاتصال عبر واتساب"
               >
-                <span>💬</span> واتساب
+                <span>💬</span> {isGeneratingPdf ? 'جاري تجهيز PDF...' : 'واتساب'}
               </button>
             )}
             <button

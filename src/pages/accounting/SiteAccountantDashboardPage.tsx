@@ -73,6 +73,21 @@ export const SiteAccountantDashboardPage: React.FC = () => {
   const [recordingId, setRecordingId] = useState<number | null>(null);
   const [selectedCycleReceipt, setSelectedCycleReceipt] = useState<ApprovedReceipt | null>(null);
   const [registerInvoiceReceipt, setRegisterInvoiceReceipt] = useState<ApprovedReceipt | null>(null);
+  const [sharingWhatsAppReceiptId, setSharingWhatsAppReceiptId] = useState<number | null>(null);
+
+  const handleWhatsAppShare = async (receipt: ApprovedReceipt) => {
+    if (sharingWhatsAppReceiptId) return;
+    setSharingWhatsAppReceiptId(receipt.id);
+    try {
+      await shareReceiptOnWhatsApp(receipt, receiptValue(receipt), {
+        po: receipt.purchase_order,
+      });
+    } catch (err) {
+      console.error('WhatsApp share error:', err);
+    } finally {
+      setSharingWhatsAppReceiptId(null);
+    }
+  };
 
   const loadDashboardData = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -555,11 +570,12 @@ export const SiteAccountantDashboardPage: React.FC = () => {
                               <Button
                                 size="sm"
                                 variant="secondary"
+                                disabled={sharingWhatsAppReceiptId === receipt.id}
                                 className="whitespace-nowrap font-bold text-[11px] text-emerald-400 border-emerald-700/60 hover:bg-emerald-950/40"
-                                onClick={() => shareReceiptOnWhatsApp(receipt, receiptValue(receipt))}
-                                title="إرسال ملخص المعاملة عبر واتساب"
+                                onClick={() => void handleWhatsAppShare(receipt)}
+                                title="توليد ملف PDF للمستند واختيار جهة الاتصال للمشاركة عبر واتساب"
                               >
-                                💬 واتساب
+                                {sharingWhatsAppReceiptId === receipt.id ? '⏳ جاري تجهيز PDF...' : '💬 واتساب'}
                               </Button>
 
                               {/* 3. زر تسجيل الفاتورة في نفس الصفحة */}

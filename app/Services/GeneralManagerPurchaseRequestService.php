@@ -33,10 +33,25 @@ class GeneralManagerPurchaseRequestService
             ])
             ->where('status', self::PENDING_STATUS);
 
+        $executionCodes = ['EXECUTION', 'BUILDINGS', 'FINISHING'];
+
         if ($user && $user->hasRole('execution_manager')) {
-            $query->whereHas('requester', fn ($q) => $q->where('manager_id', $user->id));
-        } elseif ($user && !$user->hasRole('admin')) {
-            $query->whereDoesntHave('requester.manager.roles', fn ($q) => $q->where('slug', 'execution_manager'));
+            $query->where(function ($q) use ($user, $executionCodes) {
+                $q->whereHas('requester', fn ($rq) => $rq->where('manager_id', $user->id))
+                    ->orWhereHas('targetDepartment', fn ($dq) => $dq->whereIn('code', $executionCodes))
+                    ->orWhereHas('department', fn ($dq) => $dq->whereIn('code', $executionCodes))
+                    ->orWhereHas('requester.roles', fn ($rq) => $rq->where('slug', 'site_engineer'));
+            });
+        } elseif ($user && ! $user->hasRole('admin')) {
+            $hasExecutionManager = User::whereHas('roles', fn ($q) => $q->where('slug', 'execution_manager'))->where('is_active', true)->exists();
+            if ($hasExecutionManager) {
+                $query->where(function ($q) use ($executionCodes) {
+                    $q->whereDoesntHave('targetDepartment', fn ($dq) => $dq->whereIn('code', $executionCodes))
+                        ->whereDoesntHave('department', fn ($dq) => $dq->whereIn('code', $executionCodes))
+                        ->whereDoesntHave('requester.manager.roles', fn ($mq) => $mq->where('slug', 'execution_manager'))
+                        ->whereDoesntHave('requester.roles', fn ($rq) => $rq->where('slug', 'site_engineer'));
+                });
+            }
         }
 
         return $query->orderByDesc('updated_at')
@@ -62,10 +77,25 @@ class GeneralManagerPurchaseRequestService
             ])
             ->where('status', self::PENDING_STATUS);
 
+        $executionCodes = ['EXECUTION', 'BUILDINGS', 'FINISHING'];
+
         if ($user && $user->hasRole('execution_manager')) {
-            $query->whereHas('requester', fn ($q) => $q->where('manager_id', $user->id));
-        } elseif ($user && !$user->hasRole('admin')) {
-            $query->whereDoesntHave('requester.manager.roles', fn ($q) => $q->where('slug', 'execution_manager'));
+            $query->where(function ($q) use ($user, $executionCodes) {
+                $q->whereHas('requester', fn ($rq) => $rq->where('manager_id', $user->id))
+                    ->orWhereHas('targetDepartment', fn ($dq) => $dq->whereIn('code', $executionCodes))
+                    ->orWhereHas('department', fn ($dq) => $dq->whereIn('code', $executionCodes))
+                    ->orWhereHas('requester.roles', fn ($rq) => $rq->where('slug', 'site_engineer'));
+            });
+        } elseif ($user && ! $user->hasRole('admin')) {
+            $hasExecutionManager = User::whereHas('roles', fn ($q) => $q->where('slug', 'execution_manager'))->where('is_active', true)->exists();
+            if ($hasExecutionManager) {
+                $query->where(function ($q) use ($executionCodes) {
+                    $q->whereDoesntHave('targetDepartment', fn ($dq) => $dq->whereIn('code', $executionCodes))
+                        ->whereDoesntHave('department', fn ($dq) => $dq->whereIn('code', $executionCodes))
+                        ->whereDoesntHave('requester.manager.roles', fn ($mq) => $mq->where('slug', 'execution_manager'))
+                        ->whereDoesntHave('requester.roles', fn ($rq) => $rq->where('slug', 'site_engineer'));
+                });
+            }
         }
 
         return $query->findOrFail($id);
@@ -76,13 +106,12 @@ class GeneralManagerPurchaseRequestService
         $this->ensurePending($request);
 
         if ($executive->hasRole('execution_manager')) {
-            $request->loadMissing('requester');
-            if ((int) $request->requester?->manager_id !== (int) $executive->id) {
-                throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('غير مصرح لك بتعديل طلب شراء لا يتبع موظفيك.');
+            if (! $this->canManageExecutionRequest($executive, $request)) {
+                throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('غير مصرح لك بتعديل طلب شراء لا يقع ضمن أقسام أو مهندسي إدارة التنفيذ.');
             }
         } elseif (! $executive->hasRole('admin')) {
-            $request->loadMissing('requester.manager.roles');
-            if ($request->requester?->manager?->hasRole('execution_manager')) {
+            $hasExecutionManager = User::whereHas('roles', fn ($q) => $q->where('slug', 'execution_manager'))->where('is_active', true)->exists();
+            if ($hasExecutionManager && $this->canManageExecutionRequest($executive, $request) && (int) $request->requester?->manager_id !== (int) $executive->id) {
                 throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('هذا الطلب يتبع مدير مشروعات التنفيذ ولا يقرره المدير العام.');
             }
         }
@@ -236,13 +265,12 @@ class GeneralManagerPurchaseRequestService
         $this->ensurePending($request);
 
         if ($executive->hasRole('execution_manager')) {
-            $request->loadMissing('requester');
-            if ((int) $request->requester?->manager_id !== (int) $executive->id) {
-                throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('غير مصرح لك باعتماد طلب شراء لا يتبع موظفيك.');
+            if (! $this->canManageExecutionRequest($executive, $request)) {
+                throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('غير مصرح لك باعتماد طلب شراء لا يقع ضمن أقسام أو مهندسي إدارة التنفيذ.');
             }
         } elseif (! $executive->hasRole('admin')) {
-            $request->loadMissing('requester.manager.roles');
-            if ($request->requester?->manager?->hasRole('execution_manager')) {
+            $hasExecutionManager = User::whereHas('roles', fn ($q) => $q->where('slug', 'execution_manager'))->where('is_active', true)->exists();
+            if ($hasExecutionManager && $this->canManageExecutionRequest($executive, $request) && (int) $request->requester?->manager_id !== (int) $executive->id) {
                 throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('هذا الطلب يتبع مدير مشروعات التنفيذ ولا يقرره المدير العام.');
             }
         }
@@ -315,13 +343,12 @@ class GeneralManagerPurchaseRequestService
         $this->ensurePending($request);
 
         if ($executive->hasRole('execution_manager')) {
-            $request->loadMissing('requester');
-            if ((int) $request->requester?->manager_id !== (int) $executive->id) {
-                throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('غير مصرح لك برفض طلب شراء لا يتبع موظفيك.');
+            if (! $this->canManageExecutionRequest($executive, $request)) {
+                throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('غير مصرح لك برفض طلب شراء لا يقع ضمن أقسام أو مهندسي إدارة التنفيذ.');
             }
         } elseif (! $executive->hasRole('admin')) {
-            $request->loadMissing('requester.manager.roles');
-            if ($request->requester?->manager?->hasRole('execution_manager')) {
+            $hasExecutionManager = User::whereHas('roles', fn ($q) => $q->where('slug', 'execution_manager'))->where('is_active', true)->exists();
+            if ($hasExecutionManager && $this->canManageExecutionRequest($executive, $request) && (int) $request->requester?->manager_id !== (int) $executive->id) {
                 throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('هذا الطلب يتبع مدير مشروعات التنفيذ ولا يقرره المدير العام.');
             }
         }
@@ -390,5 +417,29 @@ class GeneralManagerPurchaseRequestService
             $message . " رقم الطلب: {$request->request_number}",
             $request
         );
+    }
+
+    public function canManageExecutionRequest(User $user, PurchaseRequest $request): bool
+    {
+        if ($user->hasRole('admin')) {
+            return true;
+        }
+
+        $request->loadMissing(['requester.roles', 'targetDepartment', 'department']);
+
+        if ((int) $request->requester?->manager_id === (int) $user->id) {
+            return true;
+        }
+
+        $executionCodes = ['EXECUTION', 'BUILDINGS', 'FINISHING'];
+        if (in_array($request->targetDepartment?->code, $executionCodes, true) || in_array($request->department?->code, $executionCodes, true)) {
+            return true;
+        }
+
+        if ($request->requester?->roles->contains('slug', 'site_engineer')) {
+            return true;
+        }
+
+        return false;
     }
 }

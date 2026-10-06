@@ -11,6 +11,55 @@ use Illuminate\Validation\ValidationException;
 
 class PurchaseReceiptService
 {
+    /**
+     * Generate unique sequential receipt number with year and prefix (e.g. GRN-2026-00001).
+     */
+    public function generateUniqueReceiptNumber(string $prefix = 'GRN-'): string
+    {
+        $year = date('Y');
+        $fullPrefix = "{$prefix}{$year}-";
+
+        $latestReceipt = DB::table('purchase_receipts')
+            ->where('receipt_number', 'like', "{$fullPrefix}%")
+            ->orderBy('id', 'desc')
+            ->lockForUpdate()
+            ->first();
+
+        $nextNumber = 1;
+        if ($latestReceipt) {
+            $parts = explode('-', $latestReceipt->receipt_number);
+            $lastSeq = end($parts);
+            $nextNumber = intval($lastSeq) + 1;
+        }
+
+        $prefixLen = strlen($fullPrefix);
+        try {
+            $rawMax = DB::table('purchase_receipts')
+                ->where('receipt_number', 'like', "{$fullPrefix}%")
+                ->selectRaw("MAX(CAST(SUBSTRING(receipt_number, " . ($prefixLen + 1) . ") AS UNSIGNED)) as max_seq")
+                ->value('max_seq');
+
+            if ($rawMax && intval($rawMax) >= $nextNumber) {
+                $nextNumber = intval($rawMax) + 1;
+            }
+        } catch (\Throwable $e) {
+            try {
+                $rawMaxSqlite = DB::table('purchase_receipts')
+                    ->where('receipt_number', 'like', "{$fullPrefix}%")
+                    ->selectRaw("MAX(CAST(substr(receipt_number, " . ($prefixLen + 1) . ") AS INTEGER)) as max_seq")
+                    ->value('max_seq');
+                if ($rawMaxSqlite && intval($rawMaxSqlite) >= $nextNumber) {
+                    $nextNumber = intval($rawMaxSqlite) + 1;
+                }
+            } catch (\Throwable) {}
+        }
+
+        while (DB::table('purchase_receipts')->where('receipt_number', sprintf("%s%05d", $fullPrefix, $nextNumber))->exists()) {
+            $nextNumber++;
+        }
+
+        return sprintf("%s%05d", $fullPrefix, $nextNumber);
+    }
     public function warehouseQueue(int $perPage = 15)
     {
         return PurchaseOrder::with([
@@ -111,10 +160,11 @@ class PurchaseReceiptService
             throw new \RuntimeException('تم إنشاء إذن استلام لهذا الأمر بالفعل.');
         }
 
-        $orderItems = $purchaseOrder->items->keyBy('id');
-        if (count($items) !== $orderItems->count()) {
-            throw ValidationException::withMessages(['items' => ['يجب تسجيل الكمية المستلمة لكل بند في أمر الشراء.']]);
+        if (empty($items)) {
+            throw ValidationException::withMessages(['items' => ['يجب تسجيل صنف واحد على الأقل في إذن الاستلام.']]);
         }
+
+        $orderItems = $purchaseOrder->items->keyBy('id');
 
         return DB::transaction(function () use ($warehouseKeeper, $purchaseOrder, $items, $receivedAt, $notes, $siteEngineerId, $orderItems, $photoData): PurchaseReceipt {
             $supplierId = $purchaseOrder->supplier_id ?: \App\Models\Supplier::getOrCreateInternalWarehouseSupplier()->id;
@@ -128,7 +178,7 @@ class PurchaseReceiptService
                 'supplier_id' => $supplierId,
                 'warehouse_keeper_user_id' => $warehouseKeeper->id,
                 'site_engineer_user_id' => $siteEngineerId,
-                'receipt_number' => 'GRN-' . now()->format('YmdHis') . '-' . $purchaseOrder->id,
+                'receipt_number' => $this->generateUniqueReceiptNumber('GRN-'),
                 'status' => 'PENDING_SITE_ENGINEER',
                 'received_at' => $receivedAt ?: now()->toDateString(),
                 'warehouse_submitted_at' => now(),
@@ -573,7 +623,7 @@ class PurchaseReceiptService
                 'supplier_id' => $supplierId,
                 'warehouse_keeper_user_id' => null,
                 'site_engineer_user_id' => $siteEngineerId,
-                'receipt_number' => 'GRN-SITE-' . now()->format('YmdHis') . '-' . $purchaseOrder->id,
+                'receipt_number' => $this->generateUniqueReceiptNumber('GRN-SITE-'),
                 'receipt_type' => 'SITE_DIRECT',
                 'status' => 'PENDING_SITE_ENGINEER',
                 'received_at' => now()->toDateString(),

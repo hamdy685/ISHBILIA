@@ -189,18 +189,7 @@ class PurchaseRequestService
                             $region = trim((string) $data['items'][0]['region']);
                         }
 
-                        if ($parcelReference === '' || $region === '') {
-                            $errors = [];
-                            if ($parcelReference === '') {
-                                $errors['parcel_reference'] = ['رقم قطعة الأرض مطلوب للطلب ولا يمكن أن يكون فارغًا.'];
-                            }
-                            if ($region === '') {
-                                $errors['region'] = ['المنطقة مطلوبة للطلب ولا يمكن أن تكون فارغة.'];
-                            }
-                            throw ValidationException::withMessages($errors);
-                        }
-
-                        if (! $landParcelId) {
+                        if (! $landParcelId && $parcelReference !== '' && $region !== '') {
                             $existingLp = LandParcel::where('parcel_reference', $parcelReference)->where('region', $region)->first();
                             if ($existingLp) {
                                 $landParcelId = $existingLp->id;
@@ -254,12 +243,6 @@ class PurchaseRequestService
 
                     if ($isReviewerSameDept && !$assignedManager) {
                         $assignedManager = $user;
-                    }
-
-                    if (!$assignedManager && !$isBypassRole && !$isReviewerSameDept) {
-                        throw ValidationException::withMessages([
-                            'target_department_id' => ['لا يمكن إرسال الطلب قبل تعيين مراجع أو مدير للقسم المستهدف.'],
-                        ]);
                     }
 
                     $pr = PurchaseRequest::create([
@@ -390,13 +373,6 @@ class PurchaseRequestService
                     $region = trim((string) $data['items'][0]['region']);
                 }
 
-                if (($parcelProvided || $regionProvided || $itemsProvided) && ($parcelReference === '' || $region === '')) {
-                    $errors = [];
-                    if ($parcelReference === '') $errors['parcel_reference'] = ['رقم قطعة الأرض مطلوب للطلب ولا يمكن أن يكون فارغًا.'];
-                    if ($region === '') $errors['region'] = ['المنطقة مطلوبة للطلب ولا يمكن أن تكون فارغة.'];
-                    throw ValidationException::withMessages($errors);
-                }
-
                 if ($parcelReference !== '' && $region !== '' && ! $landParcelId) {
                     $existingLp = LandParcel::where('parcel_reference', $parcelReference)->where('region', $region)->first();
                     if ($existingLp) {
@@ -439,9 +415,6 @@ class PurchaseRequestService
                 }
                 if ($assignedManager && !$targetDepartment->manager_user_id) {
                     $targetDepartment->update(['manager_user_id' => $assignedManager->id]);
-                }
-                if (!$assignedManager && !$user->hasRole('general_manager')) {
-                    throw ValidationException::withMessages(['target_department_id' => ['القسم المستهدف لا يحتوي على مدير قسم أو مراجع معين بعد.']]);
                 }
                 $isExecutiveRequester = $user->hasRole('general_manager');
                 $updateFields['target_department_id'] = $targetDepartment->id;
