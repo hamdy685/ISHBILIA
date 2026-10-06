@@ -3,6 +3,7 @@ import { PurchaseRequest } from '../types/purchaseRequest';
 import { PurchaseRequestSupplement } from '../types/supplement';
 import {
   approveSupplementReviewerApi,
+  rejectSupplementReviewerApi,
   getEligibleRequestsForSupplementApi,
   getSupplementsForPrApi,
 } from '../api/supplements';
@@ -33,6 +34,11 @@ export const SupplementaryRequestsPage: React.FC = () => {
     request: PurchaseRequest;
     supplement: PurchaseRequestSupplement;
   } | null>(null);
+  const [rejectingSupplement, setRejectingSupplement] = useState<{
+    request: PurchaseRequest;
+    supplement: PurchaseRequestSupplement;
+  } | null>(null);
+  const [rejectionReasonInput, setRejectionReasonInput] = useState('');
 
   // Supplements drawer/expanded state per PR
   const [expandedPrId, setExpandedPrId] = useState<number | null>(null);
@@ -113,6 +119,24 @@ export const SupplementaryRequestsPage: React.FC = () => {
       void loadRequests(page);
     } catch (err: any) {
       alert(err.response?.data?.message || 'حدث خطأ أثناء الاعتماد.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleConfirmRejectSupplement = async () => {
+    if (!rejectingSupplement || !rejectionReasonInput.trim()) return;
+    try {
+      setActionLoading(true);
+      await rejectSupplementReviewerApi(rejectingSupplement.supplement.id, rejectionReasonInput.trim());
+      setSuccessMessage('تم رفض طلب الكمالة بنجاح.');
+      const prId = rejectingSupplement.request.id;
+      setRejectingSupplement(null);
+      setRejectionReasonInput('');
+      void loadSupplementsForPr(prId);
+      void loadRequests(page);
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'حدث خطأ أثناء رفض الطلب.');
     } finally {
       setActionLoading(false);
     }
@@ -379,17 +403,35 @@ export const SupplementaryRequestsPage: React.FC = () => {
                                       تم إصدار أمر الشراء (المورد: {supp.supplier?.company_name || '—'})
                                     </span>
                                   )}
+                                  {supp.status === 'REJECTED' && (
+                                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-200 dark:border-rose-900">
+                                      مرفوض من المراجع
+                                    </span>
+                                  )}
 
                                   {/* Action Buttons inside Drawer */}
                                   {isReviewer && isReviewerPending && (
-                                    <button
-                                      type="button"
-                                      disabled={actionLoading}
-                                      onClick={() => handleReviewerApprove(supp, pr)}
-                                      className="rounded-lg bg-emerald-600 px-3 py-1 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
-                                    >
-                                      اعتماد المراجع
-                                    </button>
+                                    <div className="flex items-center gap-1.5">
+                                      <button
+                                        type="button"
+                                        disabled={actionLoading}
+                                        onClick={() => handleReviewerApprove(supp, pr)}
+                                        className="rounded-lg bg-emerald-600 px-3 py-1 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+                                      >
+                                        اعتماد وتحديد الاستلام
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={actionLoading}
+                                        onClick={() => {
+                                          setRejectingSupplement({ request: pr, supplement: supp });
+                                          setRejectionReasonInput('');
+                                        }}
+                                        className="rounded-lg bg-rose-600 px-3 py-1 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50"
+                                      >
+                                        رفض
+                                      </button>
+                                    </div>
                                   )}
 
                                   {isProcurement && isProcurementReady && (
@@ -407,6 +449,11 @@ export const SupplementaryRequestsPage: React.FC = () => {
                               {supp.notes && (
                                 <p className="text-xs text-slate-500 dark:text-slate-400 mb-2 italic">
                                   "{supp.notes}"
+                                </p>
+                              )}
+                              {supp.rejection_reason && (
+                                <p className="text-xs text-rose-600 dark:text-rose-400 mb-2 font-semibold">
+                                  سبب رفض المراجع: "{supp.rejection_reason}"
                                 </p>
                               )}
 
@@ -527,6 +574,51 @@ export const SupplementaryRequestsPage: React.FC = () => {
           onConfirm={handleConfirmApproveSupplement}
           onClose={() => setApprovingSupplement(null)}
         />
+      )}
+
+      {/* Modal: Reviewer Reject Supplement */}
+      {rejectingSupplement && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-2">
+              رفض طلب الكمالة (دفعة #{rejectingSupplement.supplement.batch_number})
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+              الطلب: <strong className="text-slate-700 dark:text-slate-200">{rejectingSupplement.request.request_number}</strong>
+            </p>
+            <div className="mb-4">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                سبب الرفض *
+              </label>
+              <textarea
+                rows={3}
+                required
+                value={rejectionReasonInput}
+                onChange={(e) => setRejectionReasonInput(e.target.value)}
+                placeholder="يرجى كتابة سبب رفض طلب الكمالة بوضوح..."
+                className="w-full rounded-xl border border-slate-300 p-3 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setRejectingSupplement(null)}
+                disabled={actionLoading}
+                className="rounded-xl border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRejectSupplement}
+                disabled={actionLoading || !rejectionReasonInput.trim()}
+                className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50"
+              >
+                {actionLoading ? 'جارٍ الرفض...' : 'تأكيد الرفض'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Modal: Preview PR Details */}

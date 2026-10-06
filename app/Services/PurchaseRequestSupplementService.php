@@ -49,6 +49,9 @@ class PurchaseRequestSupplementService
             // Exclude requests where materials have already been received at the site/warehouse
             ->whereDoesntHave('purchaseOrders.receipts', function ($q) {
                 $q->where('status', 'APPROVED');
+            })
+            ->whereDoesntHave('receipts', function ($q) {
+                $q->where('status', 'APPROVED');
             });
 
         // Department and role scoping
@@ -61,6 +64,7 @@ class PurchaseRequestSupplementService
                     ->orWhere('target_department_id', $userDeptId)
                     ->orWhere('reviewer_user_id', $user->id)
                     ->orWhere('user_id', $user->id)
+                    ->orWhereHas('approvalHistory', fn ($ah) => $ah->where('actor_user_id', $user->id))
                     ->orWhereHas('requester', fn ($rq) => $rq->where('manager_id', $user->id));
             });
         } elseif ($user->hasRole('site_engineer')) {
@@ -104,7 +108,8 @@ class PurchaseRequestSupplementService
 
         // 2. Eligibility check
         if (! $pr->canAcceptSupplement()) {
-            $hasApprovedReceipt = $pr->purchaseOrders()->whereHas('receipts', fn ($q) => $q->where('status', 'APPROVED'))->exists();
+            $hasApprovedReceipt = $pr->purchaseOrders()->whereHas('receipts', fn ($q) => $q->where('status', 'APPROVED'))->exists()
+                || $pr->receipts()->where('status', 'APPROVED')->exists();
             $msg = $hasApprovedReceipt
                 ? 'لا يمكن إنشاء طلب كمالة لهذا الطلب؛ لقد تم استلام الكمية في الموقع واعتماد الإذن نهائياً بالفعل.'
                 : 'لا يمكن إنشاء طلب كمالة لهذا الطلب؛ الطلب غير معتمد أو غير سارٍ.';
@@ -122,15 +127,26 @@ class PurchaseRequestSupplementService
         return DB::transaction(function () use ($pr, $creator, $itemsData, $notes) {
             $nextBatch = ($pr->supplements()->max('batch_number') ?? 0) + 1;
 
-            // Direct route to procurement (Eng. Ahmed): Bypasses reviewer (Eng. Karim) and GM (Eng. Mohamed) completely
-            $status = 'PENDING_PROCUREMENT_APPROVAL';
+            $isCreatorReviewer = $creator->hasRole('reviewer') || ((int) $pr->reviewer_user_id === (int) $creator->id);
+
+            if ($isCreatorReviewer) {
+                // If reviewer himself created the supplement, it is already approved by reviewer
+                $status = 'PENDING_PROCUREMENT_APPROVAL';
+                $reviewedAt = now();
+                $reviewerUserId = $creator->id;
+            } else {
+                // Otherwise (created by site engineer, requester, etc.), it MUST go to the reviewer first!
+                $status = 'SUBMITTED';
+                $reviewedAt = null;
+                $reviewerUserId = $pr->reviewer_user_id;
+            }
 
             $supplement = PurchaseRequestSupplement::create([
                 'purchase_request_id' => $pr->id,
                 'batch_number' => $nextBatch,
                 'requested_by_user_id' => $creator->id,
-                'reviewer_user_id' => $pr->reviewer_user_id,
-                'reviewed_at' => now(),
+                'reviewer_user_id' => $reviewerUserId,
+                'reviewed_at' => $reviewedAt,
                 'status' => $status,
                 'notes' => $notes,
             ]);
@@ -170,26 +186,63 @@ class PurchaseRequestSupplementService
             // Update PR estimated total
             $pr->increment('total_estimated_cost', $supplementTotal);
 
-            // Record Approval History
-            ApprovalHistory::create([
-                'target_type' => PurchaseRequest::class,
-                'target_id' => $pr->id,
-                'actor_user_id' => $creator->id,
-                'action' => 'SUBMIT_SUPPLEMENT',
-                'from_state' => $pr->status,
-                'to_state' => $pr->status,
-                'comments' => "تم إنشاء طلب كمالة (دفعة {$nextBatch}) وتوجيهه مباشرة لإدارة المشتريات للتسعير والتحميل على أمر الشراء" . ($notes ? ": {$notes}" : ''),
-            ]);
+            // Record Approval History and Notifications
+            if ($isCreatorReviewer) {
+                ApprovalHistory::create([
+                    'target_type' => PurchaseRequest::class,
+                    'target_id' => $pr->id,
+                    'actor_user_id' => $creator->id,
+                    'action' => 'SUBMIT_AND_APPROVE_SUPPLEMENT',
+                    'from_state' => $pr->status,
+                    'to_state' => $pr->status,
+                    'comments' => "تم إنشاء واعتماد طلب كمالة (دفعة {$nextBatch}) بواسطة المراجع وتوجيهه لإدارة المشتريات للتسعير والربط بأمر الشراء" . ($notes ? ": {$notes}" : ''),
+                ]);
 
-            // Notify Procurement Manager directly (Eng. Ahmed)
-            $procurementUsers = $this->notificationService->resolveUsersWithPermission('manage_procurement');
-            $this->notificationService->queueUsers(
-                $procurementUsers,
-                'pr_supplement_submitted_procurement',
-                "طلب كمالة جديد على الطلب {$pr->request_number}",
-                "قام مهندس الموقع {$creator->name} بإضافة بنود كمالة (دفعة {$nextBatch}) على طلب الشراء {$pr->request_number} بانتظار تسعيرها وتحميلها على أمر الشراء.",
-                $pr
-            );
+                // Notify Procurement Manager directly (Eng. Ahmed)
+                $procurementUsers = $this->notificationService->resolveUsersWithPermission('manage_procurement');
+                $this->notificationService->queueUsers(
+                    $procurementUsers,
+                    'pr_supplement_submitted_procurement',
+                    "طلب كمالة معتمد من المراجع على الطلب {$pr->request_number}",
+                    "قام مراجع القسم {$creator->name} بإضافة بنود كمالة معتمدة (دفعة {$nextBatch}) على طلب الشراء {$pr->request_number}. يرجى تحديد المورد والتسعير.",
+                    $pr
+                );
+            } else {
+                ApprovalHistory::create([
+                    'target_type' => PurchaseRequest::class,
+                    'target_id' => $pr->id,
+                    'actor_user_id' => $creator->id,
+                    'action' => 'SUBMIT_SUPPLEMENT',
+                    'from_state' => $pr->status,
+                    'to_state' => $pr->status,
+                    'comments' => "تم إنشاء طلب كمالة (دفعة {$nextBatch}) بواسطة {$creator->name} بانتظار مراجعة واعتماد مراجع القسم وتحديد جهة الاستلام" . ($notes ? ": {$notes}" : ''),
+                ]);
+
+                // Notify Reviewer
+                $reviewers = collect();
+                if ($pr->reviewer_user_id) {
+                    $assigned = User::find($pr->reviewer_user_id);
+                    if ($assigned) {
+                        $reviewers->push($assigned);
+                    }
+                }
+                if ($reviewers->isEmpty()) {
+                    $reviewers = User::whereHas('roles', fn ($q) => $q->where('slug', 'reviewer'))
+                        ->where('department_id', $pr->department_id)
+                        ->get();
+                }
+                if ($reviewers->isEmpty()) {
+                    $reviewers = User::whereHas('roles', fn ($q) => $q->where('slug', 'reviewer'))->get();
+                }
+
+                $this->notificationService->queueUsers(
+                    $reviewers,
+                    'pr_supplement_submitted_reviewer',
+                    "طلب كمالة جديد بانتظار المراجعة على الطلب {$pr->request_number}",
+                    "قام {$creator->name} بإضافة بنود كمالة (دفعة {$nextBatch}) على الطلب {$pr->request_number} بانتظار مراجعتك وتحديد جهة الاستلام.",
+                    $pr
+                );
+            }
 
             return $supplement->load(['items.item', 'requester', 'reviewer']);
         });
@@ -250,6 +303,58 @@ class PurchaseRequestSupplementService
                 "اعتمد المراجع {$reviewer->name} بنود الكمالة (دفعة {$supplement->batch_number}) للطلب {$pr->request_number}. يرجى تحديد المورد والتسعير.",
                 $pr
             );
+
+            return $supplement->load(['items.item', 'requester', 'reviewer']);
+        });
+    }
+
+    /**
+     * Reviewer rejects supplementary items with reason.
+     */
+    public function rejectByReviewer(
+        PurchaseRequestSupplement $supplement,
+        User $reviewer,
+        string $reason
+    ): PurchaseRequestSupplement {
+        $pr = $supplement->purchaseRequest;
+
+        if ($supplement->status !== 'SUBMITTED') {
+            throw ValidationException::withMessages([
+                'status' => ['طلب الكمالة ليس بانتظار مراجعة القسم.'],
+            ]);
+        }
+
+        return DB::transaction(function () use ($supplement, $pr, $reviewer, $reason) {
+            $supplement->update([
+                'status' => 'REJECTED',
+                'reviewer_user_id' => $reviewer->id,
+                'reviewed_at' => now(),
+                'rejection_reason' => $reason,
+            ]);
+
+            ApprovalHistory::create([
+                'target_type' => PurchaseRequest::class,
+                'target_id' => $pr->id,
+                'actor_user_id' => $reviewer->id,
+                'action' => 'REJECT_SUPPLEMENT',
+                'from_state' => $pr->status,
+                'to_state' => $pr->status,
+                'comments' => "تم رفض طلب الكمالة (دفعة {$supplement->batch_number}) من قِبل مراجع القسم: {$reason}",
+            ]);
+
+            // Notify Requester
+            if ($supplement->requested_by_user_id) {
+                $requester = User::find($supplement->requested_by_user_id);
+                if ($requester) {
+                    $this->notificationService->queueUsers(
+                        collect([$requester]),
+                        'pr_supplement_rejected',
+                        "تم رفض طلب الكمالة على الطلب {$pr->request_number}",
+                        "تم رفض بنود الكمالة (دفعة {$supplement->batch_number}) من قِبل المراجع {$reviewer->name}. السبب: {$reason}",
+                        $pr
+                    );
+                }
+            }
 
             return $supplement->load(['items.item', 'requester', 'reviewer']);
         });

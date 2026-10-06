@@ -4,6 +4,21 @@ import { CreateSupplementItemPayload, CreateSupplementPayload } from '../../type
 import { createSupplementApi } from '../../api/supplements';
 import { ItemAutocompleteInput } from '../common/ItemAutocompleteInput';
 
+const COMMON_UNITS = [
+  'طن',
+  'متر مكعب',
+  'متر طولي',
+  'كيلوجرام',
+  'قطعة',
+  'شكارة',
+  'لفة',
+  'لوح',
+  'علبة',
+  'طرد',
+  'ساعة',
+  'يوم',
+];
+
 interface CreateSupplementModalProps {
   request: PurchaseRequest;
   isOpen: boolean;
@@ -27,6 +42,7 @@ export const CreateSupplementModal: React.FC<CreateSupplementModalProps> = ({
       notes: '',
     },
   ]);
+  const [selectedPrItemIds, setSelectedPrItemIds] = useState<(number | null)[]>([null]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,11 +59,13 @@ export const CreateSupplementModal: React.FC<CreateSupplementModalProps> = ({
         notes: '',
       },
     ]);
+    setSelectedPrItemIds((prev) => [...prev, null]);
   };
 
   const handleRemoveItem = (index: number) => {
     if (items.length === 1) return;
     setItems((prev) => prev.filter((_, idx) => idx !== index));
+    setSelectedPrItemIds((prev) => prev.filter((_, idx) => idx !== index));
   };
 
   const handleItemChange = (index: number, field: keyof CreateSupplementItemPayload, value: any) => {
@@ -56,6 +74,37 @@ export const CreateSupplementModal: React.FC<CreateSupplementModalProps> = ({
       updated[index] = { ...updated[index], [field]: value };
       return updated;
     });
+  };
+
+  const handleSelectExistingPrItem = (index: number, prItemIdStr: string) => {
+    if (!prItemIdStr) {
+      setSelectedPrItemIds((prev) => {
+        const u = [...prev];
+        u[index] = null;
+        return u;
+      });
+      return;
+    }
+    const selectedId = Number(prItemIdStr);
+    const foundPrItem = (request.items || []).find((i) => i.id === selectedId);
+    if (foundPrItem) {
+      setSelectedPrItemIds((prev) => {
+        const u = [...prev];
+        u[index] = foundPrItem.id;
+        return u;
+      });
+      setItems((prev) => {
+        const updated = [...prev];
+        updated[index] = {
+          ...updated[index],
+          item_id: foundPrItem.item_id || undefined,
+          item_description: foundPrItem.item_description,
+          uom: foundPrItem.uom || 'قطعة',
+          specifications: foundPrItem.specifications || updated[index].specifications || '',
+        };
+        return updated;
+      });
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -113,7 +162,7 @@ export const CreateSupplementModal: React.FC<CreateSupplementModalProps> = ({
               </h3>
             </div>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              إضافة بنود تكميلية لنفس الطلب — حدد الأصناف والكميات فقط والتسعير يتم من المشتريات
+              إضافة كميات تكميلية لنفس بنود الطلب المفتوح — التسعير وتحديد المورد يتم من المشتريات
             </p>
           </div>
           <button
@@ -158,7 +207,7 @@ export const CreateSupplementModal: React.FC<CreateSupplementModalProps> = ({
           <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50/70 p-3 text-xs text-blue-800 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-300">
             <div className="flex items-start gap-2">
               <span className="text-base">💡</span>
-              <span>حدد البنود والكميات والمواصفات المطلوبة فقط. <strong>التسعير وتحديد المورد يتم بواسطة مدير المشتريات</strong> بعد اعتماد المراجع.</span>
+              <span>يمكنك اختيار البند من بنود الطلب القائمة وتحديد الكمية الإضافية، كما يمكنك تعديل وحدة القياس بحرية.</span>
             </div>
           </div>
 
@@ -171,7 +220,7 @@ export const CreateSupplementModal: React.FC<CreateSupplementModalProps> = ({
               type="text"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="مثال: حاجة إضافية للأعمال الخرسانية بالقطعة..."
+              placeholder="مثال: حاجة إضافية للموقع لاستكمال الصب..."
               className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-800 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
             />
           </div>
@@ -187,84 +236,123 @@ export const CreateSupplementModal: React.FC<CreateSupplementModalProps> = ({
                 onClick={handleAddItem}
                 className="inline-flex items-center gap-1 text-xs font-bold text-amber-600 hover:text-amber-700 dark:text-amber-400"
               >
-                + إضافة بند آخر
+                + إضافة بند كمالة آخر
               </button>
             </div>
 
-            <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
-              {items.map((item, idx) => (
-                <div
-                  key={idx}
-                  className="rounded-xl border border-slate-200 p-4 bg-slate-50/50 dark:border-slate-700/60 dark:bg-slate-800/40 relative"
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold text-slate-600 dark:text-slate-400">
-                      بند رقم #{idx + 1}
-                    </span>
-                    {items.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveItem(idx)}
-                        className="text-xs text-rose-500 hover:text-rose-700 font-semibold"
-                      >
-                        حذف البند
-                      </button>
+            <div className="space-y-4 max-h-80 overflow-y-auto pr-1">
+              {items.map((item, idx) => {
+                const linkedPrItem = (request.items || []).find((i) => i.id === selectedPrItemIds[idx]);
+
+                return (
+                  <div
+                    key={idx}
+                    className="rounded-xl border border-slate-200 p-4 bg-slate-50/50 dark:border-slate-700/60 dark:bg-slate-800/40 relative space-y-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                        بند كمالة #{idx + 1}
+                      </span>
+                      {items.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveItem(idx)}
+                          className="text-xs text-rose-500 hover:text-rose-700 font-semibold"
+                        >
+                          حذف البند
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Quick Picker from PR items */}
+                    {(request.items || []).length > 0 && (
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
+                          اختر من بنود الطلب الأصلي لزيادة كميته:
+                        </label>
+                        <select
+                          value={selectedPrItemIds[idx] || ''}
+                          onChange={(e) => handleSelectExistingPrItem(idx, e.target.value)}
+                          className="w-full rounded-lg border border-amber-300 bg-amber-50/50 px-3 py-1.5 text-xs font-semibold text-slate-800 focus:border-amber-500 focus:outline-none dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200"
+                        >
+                          <option value="">-- أو أدخل صنفاً يدوياً جديداً --</option>
+                          {(request.items || []).map((prItm) => (
+                            <option key={prItm.id} value={prItm.id}>
+                              {prItm.item_description} (الكمية الحالية بالطلب: {prItm.quantity} {prItm.uom || ''})
+                            </option>
+                          ))}
+                        </select>
+                        {linkedPrItem && (
+                          <div className="mt-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                            ✓ مرتبط بالبند الأصلي (الكمية السابقة: {linkedPrItem.quantity} {linkedPrItem.uom}) — أدخل كمية الزيادة بالأسفل
+                          </div>
+                        )}
+                      </div>
                     )}
-                  </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                    <div className="sm:col-span-6">
-                      <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
-                        وصف الصنف *
-                      </label>
-                      <ItemAutocompleteInput
-                        required
-                        value={item.item_description}
-                        onChange={(val) => handleItemChange(idx, 'item_description', val)}
-                        placeholder="اسم المادة أو الصنف"
-                      />
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                      <div className="sm:col-span-6">
+                        <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+                          وصف الصنف *
+                        </label>
+                        <ItemAutocompleteInput
+                          required
+                          value={item.item_description}
+                          onChange={(val) => handleItemChange(idx, 'item_description', val)}
+                          placeholder="اسم المادة أو الصنف"
+                        />
+                      </div>
+
+                      <div className="sm:col-span-3">
+                        <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+                          كمية الكمالة *
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          min="0.01"
+                          required
+                          value={item.quantity}
+                          onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)}
+                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-bold text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                          placeholder="الكمية الإضافية"
+                        />
+                      </div>
+
+                      <div className="sm:col-span-3">
+                        <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+                          الوحدة (قابلة للتغيير)
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            list={`units-list-${idx}`}
+                            value={item.uom || ''}
+                            onChange={(e) => handleItemChange(idx, 'uom', e.target.value)}
+                            placeholder="طن / م3 / حبة"
+                            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                          />
+                          <datalist id={`units-list-${idx}`}>
+                            {COMMON_UNITS.map((u) => (
+                              <option key={u} value={u} />
+                            ))}
+                          </datalist>
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="sm:col-span-3">
-                      <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
-                        الكمية *
-                      </label>
-                      <input
-                        type="number"
-                        step="any"
-                        min="0.01"
-                        required
-                        value={item.quantity}
-                        onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                      />
-                    </div>
-
-                    <div className="sm:col-span-3">
-                      <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
-                        الوحدة
-                      </label>
+                    <div>
                       <input
                         type="text"
-                        value={item.uom || ''}
-                        onChange={(e) => handleItemChange(idx, 'uom', e.target.value)}
-                        placeholder="طن / م3 / حبة"
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                        value={item.specifications || ''}
+                        onChange={(e) => handleItemChange(idx, 'specifications', e.target.value)}
+                        placeholder="مواصفات إضافية أو مقاسات (اختياري)..."
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
                       />
                     </div>
                   </div>
-
-                  <div className="mt-2">
-                    <input
-                      type="text"
-                      value={item.specifications || ''}
-                      onChange={(e) => handleItemChange(idx, 'specifications', e.target.value)}
-                      placeholder="مواصفات إضافية أو مقاسات (اختياري)..."
-                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
-                    />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 

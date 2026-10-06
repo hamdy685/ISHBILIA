@@ -123,6 +123,34 @@ class PurchaseRequestSupplementController extends Controller
     }
 
     /**
+     * Reviewer rejects the supplement.
+     */
+    public function rejectReviewer(Request $request, int $supplementId): JsonResponse
+    {
+        $validated = $request->validate([
+            'rejection_reason' => ['required', 'string', 'max:1000'],
+        ]);
+
+        $supplement = PurchaseRequestSupplement::with('purchaseRequest')->findOrFail($supplementId);
+
+        $user = $request->user();
+        if (! $user->hasAnyRole(['admin', 'reviewer', 'general_manager'])) {
+            return response()->json(['message' => 'غير مصرح لك برفض طلبات كمالة الأقسام.'], 403);
+        }
+
+        $result = $this->service->rejectByReviewer(
+            $supplement,
+            $user,
+            $validated['rejection_reason']
+        );
+
+        return response()->json([
+            'message' => 'تم رفض طلب الكمالة.',
+            'data' => $result,
+        ]);
+    }
+
+    /**
      * Procurement Manager processes the supplement:
      * Assigns supplier (same or different) and prices items.
      */

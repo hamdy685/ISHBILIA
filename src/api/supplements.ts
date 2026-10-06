@@ -85,3 +85,18 @@ export const processSupplementProcurementApi = async (
   );
   return response.data;
 };
+
+/**
+ * Reviewer rejects the supplement with a reason.
+ */
+export const rejectSupplementReviewerApi = async (
+  supplementId: number,
+  rejectionReason: string
+): Promise<{ message: string; data: PurchaseRequestSupplement }> => {
+  const response = await apiClient.post<{ message: string; data: PurchaseRequestSupplement }>(
+    `/purchase-requests/supplements/${supplementId}/reject`,
+    { rejection_reason: rejectionReason }
+  );
+  return response.data;
+};
+

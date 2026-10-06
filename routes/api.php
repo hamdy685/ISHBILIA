@@ -82,6 +82,7 @@ Route::middleware('auth:sanctum')->prefix('purchase-requests')->group(function (
     Route::get('/{id}/supplements', [PurchaseRequestSupplementController::class, 'index'])->whereNumber('id');
     Route::post('/{id}/supplements', [PurchaseRequestSupplementController::class, 'store'])->whereNumber('id');
     Route::post('/supplements/{supplementId}/approve', [PurchaseRequestSupplementController::class, 'approveReviewer'])->whereNumber('supplementId');
+    Route::post('/supplements/{supplementId}/reject', [PurchaseRequestSupplementController::class, 'rejectReviewer'])->whereNumber('supplementId');
     Route::post('/supplements/{supplementId}/process-procurement', [PurchaseRequestSupplementController::class, 'processProcurement'])->whereNumber('supplementId');
 
     Route::get('/{id}', [PurchaseRequestController::class, 'show'])

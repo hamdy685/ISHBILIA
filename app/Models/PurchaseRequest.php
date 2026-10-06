@@ -194,10 +194,20 @@ class PurchaseRequest extends Model
         return $this->hasMany(PurchaseRequestSupplement::class, 'purchase_request_id');
     }
 
+    public function receipts(): HasMany
+    {
+        return $this->hasMany(PurchaseReceipt::class, 'purchase_request_id');
+    }
+
     public function canAcceptSupplement(): bool
     {
         // 1. If any purchase order has an approved receipt (already received at site / warehouse), CANNOT accept supplements
         if ($this->purchaseOrders()->whereHas('receipts', fn ($q) => $q->where('status', 'APPROVED'))->exists()) {
+            return false;
+        }
+
+        // Also if direct receipt on PR is approved
+        if ($this->receipts()->where('status', 'APPROVED')->exists()) {
             return false;
         }
 
