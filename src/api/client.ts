@@ -280,11 +280,14 @@ export const translateApiError = (error: any): string => {
     }
 
     default:
-      if (status >= 500) {
-        return 'حدث عطل مؤقت في النظام. يرجى المحاولة بعد قليل.';
-      }
       if (typeof data?.message === 'string' && /[\u0600-\u06FF]/.test(data.message)) {
         return data.message;
+      }
+      if (typeof data?.error === 'string' && /[\u0600-\u06FF]/.test(data.error)) {
+        return data.error;
+      }
+      if (status >= 500) {
+        return 'حدث عطل مؤقت في النظام. يرجى المحاولة بعد قليل.';
       }
       return 'حدث خطأ غير متوقع. يرجى المحاولة بعد قليل.';
   }

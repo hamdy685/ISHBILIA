@@ -258,7 +258,11 @@ class NotificationService
         // Persist notification to database immediately for instant realtime delivery
         $this->createNotification($userId, $type, $title, $message, $notifiable);
 
-        SendNotificationsJob::dispatch([$userId], $type, $title, $message, $notifiable);
+        try {
+            SendNotificationsJob::dispatch([$userId], $type, $title, $message, $notifiable);
+        } catch (\Throwable $qe) {
+            \Illuminate\Support\Facades\Log::warning('SendNotificationsJob queue dispatch warning: ' . $qe->getMessage());
+        }
     }
 
     /**
@@ -280,7 +284,11 @@ class NotificationService
         // Persist notifications to database immediately for instant realtime delivery
         $this->notifyUsers($recipientIds, $type, $title, $message, $notifiable);
 
-        SendNotificationsJob::dispatch($recipientIds, $type, $title, $message, $notifiable);
+        try {
+            SendNotificationsJob::dispatch($recipientIds, $type, $title, $message, $notifiable);
+        } catch (\Throwable $qe) {
+            \Illuminate\Support\Facades\Log::warning('SendNotificationsJob queue dispatch warning: ' . $qe->getMessage());
+        }
     }
 
     /**
@@ -302,14 +310,18 @@ class NotificationService
         // Persist notification to database immediately for instant realtime delivery
         $this->notifyAccountingWithPurchaseOrderAndReceipt($recipientIds, $purchaseOrder, $purchaseReceipt);
 
-        SendNotificationsJob::dispatch(
-            $recipientIds,
-            'purchase_order_and_receipt_ready_accounting',
-            '',
-            '',
-            $purchaseOrder,
-            $purchaseReceipt,
-        );
+        try {
+            SendNotificationsJob::dispatch(
+                $recipientIds,
+                'purchase_order_and_receipt_ready_accounting',
+                '',
+                '',
+                $purchaseOrder,
+                $purchaseReceipt,
+            );
+        } catch (\Throwable $qe) {
+            \Illuminate\Support\Facades\Log::warning('SendNotificationsJob queue dispatch warning: ' . $qe->getMessage());
+        }
     }
 
     /**
