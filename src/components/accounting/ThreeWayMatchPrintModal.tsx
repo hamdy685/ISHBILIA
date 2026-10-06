@@ -19,6 +19,9 @@ export const ThreeWayMatchPrintModal: React.FC<ThreeWayMatchPrintModalProps> = (
   isOpen,
   onClose,
 }) => {
+  // Top-Level Hooks: Must be called unconditionally at the very top of the component
+  const [isGeneratingPdf, setIsGeneratingPdf] = React.useState(false);
+
   React.useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -32,12 +35,14 @@ export const ThreeWayMatchPrintModal: React.FC<ThreeWayMatchPrintModalProps> = (
     };
   }, [isOpen, onClose]);
 
-  if (!isOpen || (!propsReceipt && !propsPo)) return null;
-
+  // Derived state
   const po = propsPo || propsReceipt?.purchase_order || null;
   const receipt = propsReceipt || (po?.receipts?.[0] as any) || null;
 
-  const [isGeneratingPdf, setIsGeneratingPdf] = React.useState(false);
+  // Early return: ONLY after all hooks have been declared
+  if (!isOpen || (!propsReceipt && !propsPo)) {
+    return null;
+  }
 
   const handleWhatsAppShare = async () => {
     if (!receipt || isGeneratingPdf) return;
