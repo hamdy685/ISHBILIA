@@ -222,6 +222,14 @@ export const generateReceiptPdfBlob = async (
   }
 };
 
+export const isMobileBrowser = (): boolean => {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  const isTouchScreen = 'ontouchstart' in window || (navigator.maxTouchPoints && navigator.maxTouchPoints > 0);
+  const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+  return Boolean(isMobileUA && isTouchScreen);
+};
+
 export const shareReceiptOnWhatsApp = async (
   receipt: WhatsAppReceiptData,
   totalValue?: number,
@@ -229,38 +237,44 @@ export const shareReceiptOnWhatsApp = async (
 ): Promise<void> => {
   const opt: ShareReceiptWhatsAppOptions = typeof options === 'string' ? { overridePhone: options } : (options || {});
   const text = buildReceiptWhatsAppText(receipt, totalValue);
-  
-  // R1: إزالة رقم الهاتف لتفعيل اختيار جهة الاتصال في واتساب
-  const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+  const isMobile = isMobileBrowser();
+
+  // Desktop: توجيه مباشر إلى واتساب ويب web.whatsapp.com بدون رقم هاتف
+  // Mobile: api.whatsapp.com
+  const whatsappUrl = isMobile
+    ? `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`
+    : `https://web.whatsapp.com/send?text=${encodeURIComponent(text)}`;
 
   try {
-    // R2: توليد ملف PDF للمستند
+    // 1. توليد ملف PDF للمستند
     const { blob, fileName } = await generateReceiptPdfBlob(receipt, opt);
 
-    // R4: دعم Web Share API للموبايل إذا كان المتصفح يدعم مشاركة الملفات
-    const pdfFile = new File([blob], fileName, { type: 'application/pdf' });
-    if (
-      typeof navigator !== 'undefined' &&
-      navigator.share &&
-      navigator.canShare &&
-      navigator.canShare({ files: [pdfFile] })
-    ) {
-      try {
-        await navigator.share({
-          title: fileName,
-          text: text,
-          files: [pdfFile],
-        });
-        toast.success('تمت مشاركة ملف الـ PDF عبر واتساب بنجاح ✅');
-        return;
-      } catch (shareErr: any) {
-        if (shareErr.name === 'AbortError') {
+    // 2. إلغاء/تخطي استخدام navigator.share() على أجهزة الكمبيوتر (Desktop) ودعمه فقط للموبايل
+    if (isMobile) {
+      const pdfFile = new File([blob], fileName, { type: 'application/pdf' });
+      if (
+        typeof navigator !== 'undefined' &&
+        navigator.share &&
+        navigator.canShare &&
+        navigator.canShare({ files: [pdfFile] })
+      ) {
+        try {
+          await navigator.share({
+            title: fileName,
+            text: text,
+            files: [pdfFile],
+          });
+          toast.success('تمت مشاركة ملف الـ PDF بنجاح ✅');
           return;
+        } catch (shareErr: any) {
+          if (shareErr.name === 'AbortError') {
+            return;
+          }
         }
       }
     }
 
-    // R2: تحميل الملف تلقائياً على جهاز المستخدم
+    // 3. مسار التحميل المباشر للكمبيوتر (Force download)
     const downloadUrl = URL.createObjectURL(blob);
     const downloadLink = document.createElement('a');
     downloadLink.href = downloadUrl;
@@ -270,16 +284,16 @@ export const shareReceiptOnWhatsApp = async (
     document.body.removeChild(downloadLink);
     setTimeout(() => URL.revokeObjectURL(downloadUrl), 10000);
 
-    // R3: فتح نافذة الواتساب ويب
+    // 4. فتح علامة تبويب جديدة لواتساب ويب مباشرة
     window.open(whatsappUrl, '_blank');
 
-    // R3: توجيه المستخدم والتنبيه عبر Toast
-    toast.success('تم تحميل ملف الـ PDF بنجاح. يرجى اختيار جهة الاتصال وإرفاق الملف في محادثة الواتساب.', {
+    // 5. إشعار التوجيه المطلوب
+    toast.success('تم تحميل ملف الـ PDF بنجاح. سيتم تحويلك لواتساب ويب، يرجى اختيار المورد وإرفاق الملف.', {
       duration: 7000,
     });
   } catch (err) {
     console.error('Error in shareReceiptOnWhatsApp:', err);
-    // Fallback if PDF generation fails: still open WhatsApp Web so user isn't blocked
+    // Fallback if PDF generation fails: still open WhatsApp Web directly
     window.open(whatsappUrl, '_blank');
     toast.info('تم فتح واتساب لاختيار جهة الاتصال.');
   }
