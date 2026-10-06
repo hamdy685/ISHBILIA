@@ -30,54 +30,31 @@ class AccountingPurchaseRequestController extends Controller
 
     public function approve(Request $request, string|int $id): JsonResponse
     {
-        $financialData = $request->input('financial_data');
-        if (is_array($financialData)) {
-            $globalSupplierId = $financialData['supplier_id'] ?? null;
-            $items = $financialData['items'] ?? null;
-            if (is_array($items)) {
-                $firstItemSupplier = null;
-                foreach ($items as $idx => $item) {
-                    if (!empty($item['supplier_id'])) {
-                        $firstItemSupplier ??= $item['supplier_id'];
-                    } elseif ($globalSupplierId) {
-                        $items[$idx]['supplier_id'] = $globalSupplierId;
-                    }
-                }
-                if (!$globalSupplierId && $firstItemSupplier) {
-                    $financialData['supplier_id'] = $firstItemSupplier;
-                }
-                $financialData['items'] = $items;
-                $request->merge(['financial_data' => $financialData]);
-            }
-        }
-
         $validated = $request->validate([
             'comment' => ['nullable', 'string', 'max:2000'],
-            'financial_data' => ['required', 'array'],
-            'financial_data.supplier_id' => ['required', 'integer', 'exists:suppliers,id'],
-            'financial_data.items' => ['required', 'array', 'min:1'],
-            'financial_data.items.*' => ['array'],
-            'financial_data.items.*.pr_item_id' => ['required', 'integer', 'exists:purchase_request_items,id'],
-            'financial_data.items.*.supplier_id' => ['required', 'integer', 'exists:suppliers,id'],
-            'financial_data.items.*.quantity' => ['required', 'numeric', 'gt:0'],
-            'financial_data.items.*.unit_price' => ['required', 'numeric', 'gte:0'],
-            'financial_data.notes' => ['nullable', 'string', 'max:5000'],
+            'notes' => ['nullable', 'string', 'max:5000'],
+            'financial_data' => ['sometimes', 'nullable', 'array'],
         ]);
+
+        $comment = $validated['comment']
+            ?? $validated['notes']
+            ?? ($validated['financial_data']['notes'] ?? null);
+
         $purchaseRequest = PurchaseRequest::findOrFail((int) $id);
 
         try {
             $approved = $this->service->approveRequest(
                 $request->user(),
                 $purchaseRequest,
-                $validated['financial_data'],
-                $validated['comment'] ?? null,
+                [],
+                $comment,
             );
         } catch (\RuntimeException $exception) {
             return response()->json(['message' => $exception->getMessage()], 409);
         }
 
         return response()->json([
-            'message' => 'راجعت الحسابات البيانات المالية ووافقت على الطلب وأعادته إلى مدير المشتريات لإنشاء أمر الشراء.',
+            'message' => 'وافقت الإدارة المالية على الطلب وأعادته إلى مدير المشتريات لإنشاء أمر الشراء.',
             'data' => new PurchaseRequestResource($approved),
         ]);
     }

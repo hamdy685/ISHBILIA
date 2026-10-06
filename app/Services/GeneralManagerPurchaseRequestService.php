@@ -93,6 +93,10 @@ class GeneralManagerPurchaseRequestService
     {
         $this->ensurePending($request);
 
+        if ($executive->hasRole('accountant') && ! $executive->hasRole('admin')) {
+            throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('المدير المالي ليس له صلاحية تعديل القيم المالية أو تغيير المورد. دوره يقتصر حصرياً على الموافقة أو الرفض.');
+        }
+
         if ($executive->hasRole('execution_manager')) {
             if (! $this->canManageExecutionRequest($executive, $request)) {
                 throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('غير مصرح لك بتعديل طلب شراء لا يقع ضمن أقسام أو مهندسي إدارة التنفيذ.');

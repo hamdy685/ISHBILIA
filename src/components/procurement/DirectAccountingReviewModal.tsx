@@ -8,6 +8,7 @@ import { getUnitLabel } from '../../utils/units';
 import { SupplierSelectWithQuickAdd } from '../common/SupplierSelectWithQuickAdd';
 import { SupplementItemBadge } from '../common/SupplementItemBadge';
 import { SmartKgPricingInput } from '../common/SmartKgPricingInput';
+import { useOptionalAuth } from '../../context/AuthContext';
 
 interface DirectAccountingReviewModalProps {
   request: PurchaseRequest | null;
@@ -15,6 +16,7 @@ interface DirectAccountingReviewModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: (financialData: DirectAccountingFinancialData) => void;
+  onReject?: (comment?: string) => void;
   isSubmitting?: boolean;
   reviewMode?: 'procurement' | 'accounting';
   targetDestination?: 'executive' | 'accounting';
@@ -53,29 +55,32 @@ export const DirectAccountingReviewModal: React.FC<DirectAccountingReviewModalPr
   isOpen,
   onClose,
   onConfirm,
+  onReject,
   isSubmitting = false,
   reviewMode = 'procurement',
   targetDestination,
   apiError = null,
 }) => {
+  const auth = useOptionalAuth();
   const isAccountingReview = reviewMode === 'accounting';
+  const isFinancialDirector = isAccountingReview || Boolean(auth?.hasRole('accountant'));
   // If destination is not explicitly provided: in procurement mode direct PRs require GM approval first.
   const resolvedDestination = targetDestination || (isAccountingReview ? 'procurement' : 'executive');
 
-  const confirmButtonLabel = isAccountingReview
-    ? 'اعتماد وإرسال للمشتريات'
+  const confirmButtonLabel = isFinancialDirector
+    ? '✓ موافقة واعتماد'
     : resolvedDestination === 'executive'
     ? '👤 إرسال للمدير التنفيذي للاعتماد'
     : '💰 اعتماد وإرسال للإدارة المالية';
 
-  const confirmLoadingLabel = isAccountingReview
-    ? 'جاري إعادة الطلب للمشتريات...'
+  const confirmLoadingLabel = isFinancialDirector
+    ? 'جاري اعتماد الطلب...'
     : resolvedDestination === 'executive'
     ? 'جاري الإرسال للمدير التنفيذي...'
     : 'جاري الإرسال للإدارة المالية...';
 
-  const modalSubtitle = isAccountingReview
-    ? 'راجع الحسابات الطلب كاملًا، وعدّل البيانات المالية والملاحظات عند الحاجة، ثم أعده إلى مدير المشتريات.'
+  const modalSubtitle = isFinancialDirector
+    ? 'الاعتماد المالي للطلب: مراجعة البنود والموافقة أو الرفض دون تعديل الأسعار أو الموردين.'
     : resolvedDestination === 'executive'
     ? 'اختر المورد لكل بند وأدخل الكميات والأسعار قبل إرسال الطلب إلى المدير التنفيذي للاعتماد.'
     : 'اختر المورد لكل بند وأدخل الكميات والأسعار قبل اعتماد وإرسال الطلب للإدارة المالية.';
@@ -148,6 +153,7 @@ export const DirectAccountingReviewModal: React.FC<DirectAccountingReviewModalPr
   }, [items, activeSuppliers]);
 
   const updateItem = (index: number, field: 'quantity' | 'unit_price', value: string) => {
+    if (isFinancialDirector) return; // Read-only for Financial Director
     const parsedValue = value === '' ? '' : Number(value);
     setItems((current) => current.map((item, itemIndex) => (
       itemIndex === index ? { ...item, [field]: parsedValue } : item
@@ -156,6 +162,7 @@ export const DirectAccountingReviewModal: React.FC<DirectAccountingReviewModalPr
   };
 
   const updateItemSupplier = (index: number, value: string) => {
+    if (isFinancialDirector) return; // Read-only for Financial Director
     const parsedValue = value === '' ? '' as const : Number(value);
     setItems((current) => current.map((item, itemIndex) => (
       itemIndex === index ? { ...item, supplier_id: parsedValue } : item
@@ -164,6 +171,7 @@ export const DirectAccountingReviewModal: React.FC<DirectAccountingReviewModalPr
   };
 
   const applySupplierToAll = (supplierId: number | '', oneTimeName?: string) => {
+    if (isFinancialDirector) return; // Read-only for Financial Director
     setItems((current) =>
       current.map((item) => ({
         ...item,
@@ -175,6 +183,7 @@ export const DirectAccountingReviewModal: React.FC<DirectAccountingReviewModalPr
   };
 
   const handleApplyGlobalSupplier = () => {
+    if (isFinancialDirector) return;
     if (!globalSupplierId && !globalOneTimeName.trim()) {
       setValidationError('يرجى اختيار مورد أو كتابة اسم مورد لعملية واحدة أولاً.');
       return;
@@ -187,6 +196,19 @@ export const DirectAccountingReviewModal: React.FC<DirectAccountingReviewModalPr
       setValidationError('لا توجد بنود مالية مرتبطة بهذا الطلب.');
       return;
     }
+
+    if (isFinancialDirector) {
+      onConfirm({
+        notes: notes.trim() || null,
+        items: items.map((item) => ({
+          pr_item_id: item.pr_item_id,
+          quantity: Number(item.quantity) || 1,
+          unit_price: Number(item.unit_price) || 0,
+        })),
+      });
+      return;
+    }
+
     if (items.some((item) => !item.supplier_id && !item.one_time_supplier_name?.trim())) {
       setValidationError('يجب اختيار المورد أو تحديد مورد لعملية واحدة لكل بند من بنود الطلب.');
       return;
@@ -223,7 +245,7 @@ export const DirectAccountingReviewModal: React.FC<DirectAccountingReviewModalPr
       onClose={onClose}
       closeOnBackdrop={!isSubmitting}
       closeOnEscape={!isSubmitting}
-      title={isAccountingReview ? `مراجعة وتعديل البيانات المالية — ${request.request_number}` : `إدخال البيانات المالية — ${request.request_number}`}
+      title={isFinancialDirector ? `اعتماد طلب الشراء المباشر — ${request.request_number}` : `إدخال البيانات المالية — ${request.request_number}`}
       subtitle={modalSubtitle}
       size="xl"
       footer={(
@@ -231,6 +253,16 @@ export const DirectAccountingReviewModal: React.FC<DirectAccountingReviewModalPr
           <Button variant="secondary" size="sm" onClick={onClose} disabled={isSubmitting}>
             إلغاء والعودة
           </Button>
+          {isFinancialDirector && onReject && (
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => onReject(notes.trim() || undefined)}
+              disabled={isSubmitting}
+            >
+              ✕ رفض الطلب
+            </Button>
+          )}
           <Button
             variant="success"
             size="sm"
@@ -267,40 +299,42 @@ export const DirectAccountingReviewModal: React.FC<DirectAccountingReviewModalPr
           </div>
         </div>
 
-        {/* Quick supplier apply */}
-        <div className="rounded-xl border border-emerald-500/40 bg-emerald-950/20 p-4 space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <div>
-              <p className="text-xs font-bold text-emerald-200">تطبيق مورد على جميع البنود دفعة واحدة</p>
-              <p className="mt-0.5 text-[11px] text-slate-400">
-                يمكنك اختيار مورد معتمد، أو إضافة مورد جديد، أو كتابة اسم مورد لعملية واحدة فقط وتطبيقه على كل البنود.
-              </p>
+        {/* Quick supplier apply - Hidden for Financial Director */}
+        {!isFinancialDirector && (
+          <div className="rounded-xl border border-emerald-500/40 bg-emerald-950/20 p-4 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div>
+                <p className="text-xs font-bold text-emerald-200">تطبيق مورد على جميع البنود دفعة واحدة</p>
+                <p className="mt-0.5 text-[11px] text-slate-400">
+                  يمكنك اختيار مورد معتمد، أو إضافة مورد جديد، أو كتابة اسم مورد لعملية واحدة فقط وتطبيقه على كل البنود.
+                </p>
+              </div>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleApplyGlobalSupplier}
+                disabled={isSubmitting || (!globalSupplierId && !globalOneTimeName.trim())}
+                className="bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold shrink-0"
+              >
+                ✓ تطبيق على جميع البنود
+              </Button>
             </div>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={handleApplyGlobalSupplier}
-              disabled={isSubmitting || (!globalSupplierId && !globalOneTimeName.trim())}
-              className="bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold shrink-0"
-            >
-              ✓ تطبيق على جميع البنود
-            </Button>
+            <div className="max-w-xl">
+              <SupplierSelectWithQuickAdd
+                suppliers={suppliers}
+                selectedSupplierId={globalSupplierId}
+                onSelectSupplierId={(val) => setGlobalSupplierId(val)}
+                oneTimeSupplierName={globalOneTimeName}
+                onChangeOneTimeSupplierName={(name) => setGlobalOneTimeName(name)}
+                onSupplierCreated={(newSup) => {
+                  setGlobalSupplierId(String(newSup.id));
+                  setGlobalOneTimeName('');
+                }}
+                label="المورد المقترح للبنود"
+              />
+            </div>
           </div>
-          <div className="max-w-xl">
-            <SupplierSelectWithQuickAdd
-              suppliers={suppliers}
-              selectedSupplierId={globalSupplierId}
-              onSelectSupplierId={(val) => setGlobalSupplierId(val)}
-              oneTimeSupplierName={globalOneTimeName}
-              onChangeOneTimeSupplierName={(name) => setGlobalOneTimeName(name)}
-              onSupplierCreated={(newSup) => {
-                setGlobalSupplierId(String(newSup.id));
-                setGlobalOneTimeName('');
-              }}
-              label="المورد المقترح للبنود"
-            />
-          </div>
-        </div>
+        )}
 
         {(validationError || apiError) && (
           <div role="alert" className="rounded-lg border border-rose-500/50 bg-rose-950/30 px-3 py-2.5 text-xs font-bold leading-6 text-rose-200">
@@ -362,7 +396,11 @@ export const DirectAccountingReviewModal: React.FC<DirectAccountingReviewModalPr
                       </div>
                     </td>
                     <td className="border-t border-slate-800 px-2 py-2">
-                      {item.one_time_supplier_name ? (
+                      {isFinancialDirector ? (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-950/40 border border-emerald-800/50 px-2.5 py-1 text-xs font-bold text-emerald-300">
+                          🏢 {item.one_time_supplier_name || activeSuppliers.find((s) => s && s.id === item.supplier_id)?.company_name || request.direct_supplier?.company_name || 'غير محدد'}
+                        </span>
+                      ) : item.one_time_supplier_name ? (
                         <div className="flex items-center gap-1.5">
                           <span className="px-2 py-1 rounded bg-amber-500/20 text-amber-300 font-bold text-[10px] border border-amber-500/40 truncate max-w-[150px]">
                             ⚡ {item.one_time_supplier_name}
@@ -400,41 +438,54 @@ export const DirectAccountingReviewModal: React.FC<DirectAccountingReviewModalPr
                       )}
                     </td>
                     <td className="border-t border-slate-800 px-3 py-2 text-center">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <input
-                          aria-label={`كمية البند ${index + 1}`}
-                          type="number"
-                          min="0.01"
-                          step="0.01"
-                          value={item.quantity ?? ''}
-                          onFocus={(event) => event.target.select()}
-                          onChange={(event) => updateItem(index, 'quantity', event.target.value)}
-                          disabled={isSubmitting}
-                          className="h-9 w-24 rounded-md border border-cyan-500/60 bg-[#0b1424] px-2 text-center font-mono text-xs text-slate-100 outline-none focus:border-cyan-300 disabled:opacity-60"
-                        />
-                        <span className="text-[11px] font-bold text-amber-300">{getUnitLabel(item.uom)}</span>
-                      </div>
+                      {isFinancialDirector ? (
+                        <div className="flex items-center justify-center gap-1.5 py-1">
+                          <span className="font-mono text-xs font-bold text-slate-100">{formatCleanNumber(item.quantity)}</span>
+                          <span className="text-[11px] font-bold text-amber-300">{getUnitLabel(item.uom)}</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center gap-1.5">
+                          <input
+                            aria-label={`كمية البند ${index + 1}`}
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            value={item.quantity ?? ''}
+                            onFocus={(event) => event.target.select()}
+                            onChange={(event) => updateItem(index, 'quantity', event.target.value)}
+                            disabled={isSubmitting}
+                            className="h-9 w-24 rounded-md border border-cyan-500/60 bg-[#0b1424] px-2 text-center font-mono text-xs text-slate-100 outline-none focus:border-cyan-300 disabled:opacity-60"
+                          />
+                          <span className="text-[11px] font-bold text-amber-300">{getUnitLabel(item.uom)}</span>
+                        </div>
+                      )}
                     </td>
-                    <td className="border-t border-slate-800 px-3 py-2 text-center align-top min-w-[200px]">
-                      <SmartKgPricingInput
-                        unitPrice={item.unit_price}
-                        quantity={item.quantity}
-                        uom={item.uom}
-                        itemDescription={item.item_description}
-                        disabled={isSubmitting}
-                        onChangeUnitPrice={(newPrice) => updateItem(index, 'unit_price', String(newPrice))}
-                        onConvertToTon={(newQty, tonPrice) => {
-                          setItems((cur) => cur.map((it, i) => i === index ? {
-                            ...it,
-                            quantity: newQty,
-                            uom: 'TON',
-                            unit_price: tonPrice,
-                          } : it));
-                        }}
-                        onConvertToKgPrice={(newKgPrice) => {
-                          updateItem(index, 'unit_price', String(newKgPrice));
-                        }}
-                      />
+                    <td className="border-t border-slate-800 px-3 py-2 text-center align-middle min-w-[150px]">
+                      {isFinancialDirector ? (
+                        <span className="font-mono text-xs font-bold text-slate-200">
+                          {formatCleanNumber(item.unit_price, 2)} ج.م
+                        </span>
+                      ) : (
+                        <SmartKgPricingInput
+                          unitPrice={item.unit_price}
+                          quantity={item.quantity}
+                          uom={item.uom}
+                          itemDescription={item.item_description}
+                          disabled={isSubmitting}
+                          onChangeUnitPrice={(newPrice) => updateItem(index, 'unit_price', String(newPrice))}
+                          onConvertToTon={(newQty, tonPrice) => {
+                            setItems((cur) => cur.map((it, i) => i === index ? {
+                              ...it,
+                              quantity: newQty,
+                              uom: 'TON',
+                              unit_price: tonPrice,
+                            } : it));
+                          }}
+                          onConvertToKgPrice={(newKgPrice) => {
+                            updateItem(index, 'unit_price', String(newKgPrice));
+                          }}
+                        />
+                      )}
                     </td>
                     <td className="border-t border-slate-800 px-3 py-3 text-center font-mono font-black text-emerald-300 text-sm align-top">
                       {formatAmount(lineTotal(item.quantity, item.unit_price))} ج.م
@@ -474,67 +525,89 @@ export const DirectAccountingReviewModal: React.FC<DirectAccountingReviewModalPr
                     {getUnitLabel(item.uom)}
                   </span>
                 </div>
-                <label className="mt-3 block text-xs font-bold text-emerald-300">
-                  المورد <span className="text-rose-400">*</span>
-                  <select
-                    aria-label={`مورد البند ${index + 1}`}
-                    value={item.supplier_id}
-                    onChange={(event) => updateItemSupplier(index, event.target.value)}
-                    disabled={isSubmitting}
-                    className={`mt-1 min-h-11 w-full rounded-xl border px-3 py-2 text-sm outline-none disabled:opacity-60 ${
-                      item.supplier_id
-                        ? 'border-emerald-500/60 bg-[#0b1424] text-slate-100 focus:border-emerald-300'
-                        : 'border-rose-500/60 bg-rose-950/20 text-rose-300 focus:border-rose-300'
-                    }`}
-                  >
-                    <option value="">اختر المورد...</option>
-                    {activeSuppliers.map((supplier) => supplier && (
-                      <option key={supplier.id} value={supplier.id}>
-                        {supplier.company_name || `مورد #${supplier.id}`}{supplier.code ? ` — ${supplier.code}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className="mt-3 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
-                  <label className="text-xs font-bold text-slate-300">
-                    الكمية ({getUnitLabel(item.uom)})
-                    <input
-                      aria-label={`كمية البند ${index + 1}`}
-                      type="number"
-                      min="0.01"
-                      step="0.01"
-                      value={item.quantity ?? ''}
-                      onFocus={(event) => event.target.select()}
-                      onChange={(event) => updateItem(index, 'quantity', event.target.value)}
-                      disabled={isSubmitting}
-                      className="mt-1 min-h-11 w-full rounded-xl border border-cyan-500/60 bg-[#0b1424] px-3 py-2 text-center font-mono text-sm text-slate-100 outline-none focus:border-cyan-300 disabled:opacity-60"
-                    />
-                  </label>
-                  <div className="mt-3">
-                    <label className="text-xs font-bold text-slate-300 block mb-1">
-                      سعر الوحدة ({item.uom === 'TON' ? 'ج.م/طن' : 'ج.م'})
-                    </label>
-                    <SmartKgPricingInput
-                      unitPrice={item.unit_price}
-                      quantity={item.quantity}
-                      uom={item.uom}
-                      itemDescription={item.item_description}
-                      disabled={isSubmitting}
-                      onChangeUnitPrice={(newPrice) => updateItem(index, 'unit_price', String(newPrice))}
-                      onConvertToTon={(newQty, tonPrice) => {
-                        setItems((cur) => cur.map((it, i) => i === index ? {
-                          ...it,
-                          quantity: newQty,
-                          uom: 'TON',
-                          unit_price: tonPrice,
-                        } : it));
-                      }}
-                      onConvertToKgPrice={(newKgPrice) => {
-                        updateItem(index, 'unit_price', String(newKgPrice));
-                      }}
-                    />
+                {isFinancialDirector ? (
+                  <div className="mt-2.5 flex items-center justify-between text-xs">
+                    <span className="text-slate-400 font-bold">المورد:</span>
+                    <span className="inline-flex items-center gap-1 rounded-md bg-emerald-950/40 border border-emerald-800/50 px-2 py-0.5 text-xs font-bold text-emerald-300">
+                      🏢 {item.one_time_supplier_name || activeSuppliers.find((s) => s && s.id === item.supplier_id)?.company_name || request.direct_supplier?.company_name || 'غير محدد'}
+                    </span>
                   </div>
-                </div>
+                ) : (
+                  <label className="mt-3 block text-xs font-bold text-emerald-300">
+                    المورد <span className="text-rose-400">*</span>
+                    <select
+                      aria-label={`مورد البند ${index + 1}`}
+                      value={item.supplier_id}
+                      onChange={(event) => updateItemSupplier(index, event.target.value)}
+                      disabled={isSubmitting}
+                      className={`mt-1 min-h-11 w-full rounded-xl border px-3 py-2 text-sm outline-none disabled:opacity-60 ${
+                        item.supplier_id
+                          ? 'border-emerald-500/60 bg-[#0b1424] text-slate-100 focus:border-emerald-300'
+                          : 'border-rose-500/60 bg-rose-950/20 text-rose-300 focus:border-rose-300'
+                      }`}
+                    >
+                      <option value="">اختر المورد...</option>
+                      {activeSuppliers.map((supplier) => supplier && (
+                        <option key={supplier.id} value={supplier.id}>
+                          {supplier.company_name || `مورد #${supplier.id}`}{supplier.code ? ` — ${supplier.code}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {isFinancialDirector ? (
+                  <div className="mt-2.5 grid grid-cols-2 gap-2 text-xs">
+                    <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-2">
+                      <span className="text-slate-400 block text-[10px]">الكمية</span>
+                      <span className="font-mono font-bold text-slate-200">{formatCleanNumber(item.quantity)} {getUnitLabel(item.uom)}</span>
+                    </div>
+                    <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-2">
+                      <span className="text-slate-400 block text-[10px]">سعر الوحدة</span>
+                      <span className="font-mono font-bold text-slate-200">{formatCleanNumber(item.unit_price, 2)} ج.م</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-3 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
+                    <label className="text-xs font-bold text-slate-300">
+                      الكمية ({getUnitLabel(item.uom)})
+                      <input
+                        aria-label={`كمية البند ${index + 1}`}
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        value={item.quantity ?? ''}
+                        onFocus={(event) => event.target.select()}
+                        onChange={(event) => updateItem(index, 'quantity', event.target.value)}
+                        disabled={isSubmitting}
+                        className="mt-1 min-h-11 w-full rounded-xl border border-cyan-500/60 bg-[#0b1424] px-3 py-2 text-center font-mono text-sm text-slate-100 outline-none focus:border-cyan-300 disabled:opacity-60"
+                      />
+                    </label>
+                    <div className="mt-3">
+                      <label className="text-xs font-bold text-slate-300 block mb-1">
+                        سعر الوحدة ({item.uom === 'TON' ? 'ج.م/طن' : 'ج.م'})
+                      </label>
+                      <SmartKgPricingInput
+                        unitPrice={item.unit_price}
+                        quantity={item.quantity}
+                        uom={item.uom}
+                        itemDescription={item.item_description}
+                        disabled={isSubmitting}
+                        onChangeUnitPrice={(newPrice) => updateItem(index, 'unit_price', String(newPrice))}
+                        onConvertToTon={(newQty, tonPrice) => {
+                          setItems((cur) => cur.map((it, i) => i === index ? {
+                            ...it,
+                            quantity: newQty,
+                            uom: 'TON',
+                            unit_price: tonPrice,
+                          } : it));
+                        }}
+                        onConvertToKgPrice={(newKgPrice) => {
+                          updateItem(index, 'unit_price', String(newKgPrice));
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
                 <div className="mt-3 flex items-center justify-between rounded-lg border border-emerald-700/50 bg-emerald-950/20 px-3 py-2 text-xs">
                   <span className="text-slate-400 font-medium">إجمالي البند</span>
                   <strong className="font-mono text-sm text-emerald-200">{formatAmount(lineTotal(item.quantity, item.unit_price))} ج.م</strong>
@@ -567,15 +640,15 @@ export const DirectAccountingReviewModal: React.FC<DirectAccountingReviewModalPr
         )}
 
         <label className="block border-t border-slate-800 pt-4 text-xs font-bold text-slate-300">
-          ملاحظات مالية وملاحظات المراجعة
+          {isFinancialDirector ? 'ملاحظات الاعتماد المالي (اختياري)' : 'ملاحظات مالية وملاحظات المراجعة'}
           <textarea
             value={notes}
             onChange={(event) => setNotes(event.target.value)}
             disabled={isSubmitting}
             rows={3}
             placeholder={
-              isAccountingReview
-                ? 'اكتب أي ملاحظات تحتاجها المشتريات أو توضيحًا على التعديلات...'
+              isFinancialDirector
+                ? 'اكتب أي ملاحظات أو توجيهات على قرار الاعتماد...'
                 : resolvedDestination === 'executive'
                 ? 'اكتب أي ملاحظات توضيحية للمدير التنفيذي أو الحسابات...'
                 : 'اكتب أي ملاحظات تحتاجها الإدارة المالية...'

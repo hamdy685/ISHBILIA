@@ -485,17 +485,17 @@ class FullEndToEndWorkflowTest extends TestCase
             ]);
         $accountingApproveResponse->assertStatus(200)
             ->assertJsonPath('data.status', 'APPROVED_BY_ACCOUNTING')
-            ->assertJsonPath('data.total_estimated_cost', '5200.00');
+            ->assertJsonPath('data.total_estimated_cost', '2500.00');
         $this->assertDatabaseHas('purchase_requests', [
             'id' => $request->id,
-            'total_estimated_cost' => 5200.00,
-            'notes' => 'عدّلت الحسابات السعر والكمية بعد مراجعة البيانات المالية.',
+            'status' => 'APPROVED_BY_ACCOUNTING',
+            'total_estimated_cost' => 2500.00,
         ]);
         $this->assertDatabaseHas('purchase_request_items', [
             'purchase_request_id' => $request->id,
-            'quantity' => 2.00,
-            'estimated_unit_price' => 2600.00,
-            'estimated_line_total' => 5200.00,
+            'quantity' => 1.00,
+            'estimated_unit_price' => 2500.00,
+            'estimated_line_total' => 2500.00,
         ]);
 
         $procurementQueueResponse = $this->actingAs($this->procurementManager, 'sanctum')

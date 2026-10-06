@@ -98,7 +98,7 @@ describe('DirectAccountingReviewModal', () => {
     expect(screen.getAllByText('لا توجد بنود مرتبطة بهذا الطلب لإدخال بياناتها المالية.').length).toBeGreaterThanOrEqual(1);
   });
 
-  it('renders safely in accounting review mode', () => {
+  it('renders safely in accounting review mode with read-only badges and approve/reject buttons', () => {
     render(
       <DirectAccountingReviewModal
         isOpen={true}
@@ -107,11 +107,13 @@ describe('DirectAccountingReviewModal', () => {
         reviewMode="accounting"
         onClose={() => undefined}
         onConfirm={() => undefined}
+        onReject={() => undefined}
       />
     );
 
-    expect(screen.getByText(/مراجعة وتعديل البيانات المالية — PR-TEST-101/)).toBeInTheDocument();
-    expect(screen.getByText('اعتماد وإرسال للمشتريات')).toBeInTheDocument();
+    expect(screen.getByText(/اعتماد طلب الشراء المباشر — PR-TEST-101/)).toBeInTheDocument();
+    expect(screen.getByText('✓ موافقة واعتماد')).toBeInTheDocument();
+    expect(screen.getByText('✕ رفض الطلب')).toBeInTheDocument();
   });
 
   it('opens and closes repeatedly without changing hook order or crashing', () => {

@@ -29,6 +29,10 @@ class GeneralManagerPurchaseRequestController extends Controller
 
     public function update(UpdatePurchaseRequestRequest $request, string|int $id): PurchaseRequestResource
     {
+        if ($request->user()->hasRole('accountant') && ! $request->user()->hasRole('admin')) {
+            abort(403, 'المدير المالي ليس له صلاحية تعديل القيم المالية أو تغيير المورد. دوره يقتصر حصرياً على الموافقة أو الرفض.');
+        }
+
         $validated = $request->validated();
 
         return new PurchaseRequestResource(

@@ -39,15 +39,15 @@ class AccountingPurchaseRequestService
     {
         $this->ensurePending($request);
 
-        return DB::transaction(function () use ($accountant, $request, $financialData, $comment): PurchaseRequest {
+        return DB::transaction(function () use ($accountant, $request, $comment): PurchaseRequest {
             $pr = PurchaseRequest::with('items')->lockForUpdate()->findOrFail($request->id);
             if ($pr->status !== self::PENDING_STATUS) {
                 throw new \RuntimeException('تم اتخاذ قرار بشأن الطلب المباشر أو لم يعد بانتظار الموافقة المالية.');
             }
-            $grandTotal = $this->applyFinancialData($accountant, $pr, $financialData);
+
+            // الدور يقتصر حصرياً على الموافقة أو الرفض: تحديث الحالة فقط دون المساس بالبيانات المالية أو الموردين أو البنود
             $pr->update([
                 'status' => self::APPROVED_STATUS,
-                'total_estimated_cost' => $grandTotal,
             ]);
 
             ApprovalHistory::create([
@@ -57,7 +57,7 @@ class AccountingPurchaseRequestService
                 'action' => 'ACCOUNTING_APPROVED_DIRECT',
                 'from_state' => self::PENDING_STATUS,
                 'to_state' => self::APPROVED_STATUS,
-                'comments' => $comment ?? 'راجعت الحسابات البيانات المالية وعدلتها عند الحاجة ثم أعادت الطلب إلى مدير المشتريات لإنشاء أمر الشراء.',
+                'comments' => $comment ?? 'وافقت الإدارة المالية على الطلب وأعادته إلى مدير المشتريات لإنشاء أمر الشراء.',
             ]);
 
             AuditLog::create([
@@ -73,13 +73,13 @@ class AccountingPurchaseRequestService
             app(SystemEventService::class)->recordAction(
                 $pr,
                 'ACCOUNTING_APPROVED_DIRECT',
-                'راجعت الحسابات البيانات المالية وأعادت الطلب المباشر إلى مدير المشتريات لإنشاء أمر الشراء.',
+                'وافقت الإدارة المالية على الطلب وأعادته إلى مدير المشتريات لإنشاء أمر الشراء.',
                 [
                     'event_type' => 'purchase_request.accounting_approved_direct',
                     'from_state' => self::PENDING_STATUS,
                     'to_state' => self::APPROVED_STATUS,
                     'actor_user_id' => $accountant->id,
-                    'metadata' => ['comment' => $comment, 'total_estimated_cost' => $grandTotal],
+                    'metadata' => ['comment' => $comment],
                 ]
             );
 
@@ -89,14 +89,14 @@ class AccountingPurchaseRequestService
                 $notificationService->resolveUsersWithPermission('purchase_request.approve_procurement'),
                 'purchase_request_pending_procurement_po',
                 'طلب شراء مباشر جاهز للمشتريات',
-                "راجعت الحسابات البيانات المالية للطلب {$pr->request_number} ووافقَت عليه. عاد الطلب إلى مدير المشتريات لإنشاء أمر الشراء.",
+                "وافقت الإدارة المالية على الطلب {$pr->request_number}. عاد الطلب إلى مدير المشتريات لإنشاء أمر الشراء.",
                 $pr
             );
             $notificationService->queueNotification(
                 $pr->user_id,
                 'purchase_request_accounting_approved_direct',
                 'تمت الموافقة المالية على طلبك',
-                "وافقت الحسابات على الطلب {$pr->request_number} وأعادته إلى مدير المشتريات لإنشاء أمر الشراء.",
+                "وافقت الإدارة المالية على الطلب {$pr->request_number} وأعادته إلى مدير المشتريات لإنشاء أمر الشراء.",
                 $pr
             );
 

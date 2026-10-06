@@ -90,7 +90,7 @@ const AccountingPurchaseRequestsPage: React.FC = () => {
       await approveDirectAccountingPurchaseRequestApi(
         request.id,
         financialData,
-        'راجعت الحسابات الطلب كاملًا وعدلت البيانات المالية عند الحاجة ثم أعادته إلى مدير المشتريات.',
+        financialData.notes || 'تمت الموافقة المالية على الطلب من الإدارة المالية.',
       );
       setReviewingRequest(null);
       await load();
@@ -101,14 +101,15 @@ const AccountingPurchaseRequestsPage: React.FC = () => {
     }
   };
 
-  const reject = async (request: PurchaseRequest) => {
-    const comment = window.prompt('اكتب سبب الرفض المالي:');
+  const reject = async (request: PurchaseRequest, commentInput?: string) => {
+    const comment = commentInput?.trim() || window.prompt('اكتب سبب الرفض المالي:');
     if (!comment?.trim()) return;
 
     setActionId(request.id);
     setError(null);
     try {
       await rejectDirectAccountingPurchaseRequestApi(request.id, comment.trim());
+      setReviewingRequest(null);
       await load();
     } catch (err) {
       setError(parseApiError(err).message);
@@ -198,7 +199,7 @@ const AccountingPurchaseRequestsPage: React.FC = () => {
                         <span title={quantitiesInfo.tooltip}>{quantitiesInfo.display}</span>
                       </TableCell>
                       <TableCell className="whitespace-nowrap font-mono font-bold text-emerald-300">{formatCleanNumber(estimatedTotal)} ج.م</TableCell>
-                      <TableCell className="min-w-[190px]"><div className="flex flex-wrap justify-center gap-2"><Button size="sm" variant="secondary" className="whitespace-nowrap" onClick={() => setSelectedRequest(request)}>عرض التفاصيل</Button><Button size="sm" variant="success" className="whitespace-nowrap" disabled={actionId === request.id} onClick={() => setReviewingRequest(request)}>مراجعة وإرسال</Button><Button size="sm" variant="danger" className="whitespace-nowrap" disabled={actionId === request.id} onClick={() => void reject(request)}>رفض الطلب</Button></div></TableCell>
+                      <TableCell className="min-w-[190px]"><div className="flex flex-wrap justify-center gap-2"><Button size="sm" variant="secondary" className="whitespace-nowrap" onClick={() => setSelectedRequest(request)}>عرض التفاصيل</Button><Button size="sm" variant="success" className="whitespace-nowrap" disabled={actionId === request.id} onClick={() => setReviewingRequest(request)}>مراجعة واعتماد</Button><Button size="sm" variant="danger" className="whitespace-nowrap" disabled={actionId === request.id} onClick={() => void reject(request)}>رفض الطلب</Button></div></TableCell>
                     </TableRow>
                   );
                 })}
@@ -227,7 +228,7 @@ const AccountingPurchaseRequestsPage: React.FC = () => {
                     <div className="min-w-0"><dt className="text-slate-500">الكمية / العدد</dt><dd className="mt-1 font-mono font-bold text-amber-300">{quantitiesInfo.display}</dd></div>
                     <div className="min-w-0 min-[420px]:col-span-2"><dt className="text-slate-500">الإجمالي المقترح</dt><dd className="mt-1 whitespace-nowrap font-mono font-bold text-emerald-300">{formatCleanNumber(estimatedTotal)} ج.م</dd></div>
                   </dl>
-                  <div className="mt-4 grid grid-cols-1 gap-2 min-[420px]:grid-cols-3"><Button size="sm" variant="secondary" className="w-full whitespace-nowrap" onClick={() => setSelectedRequest(request)}>عرض التفاصيل</Button><Button size="sm" variant="success" className="w-full whitespace-nowrap" disabled={actionId === request.id} onClick={() => setReviewingRequest(request)}>مراجعة وإرسال</Button><Button size="sm" variant="danger" className="w-full whitespace-nowrap" disabled={actionId === request.id} onClick={() => void reject(request)}>رفض الطلب</Button></div>
+                  <div className="mt-4 grid grid-cols-1 gap-2 min-[420px]:grid-cols-3"><Button size="sm" variant="secondary" className="w-full whitespace-nowrap" onClick={() => setSelectedRequest(request)}>عرض التفاصيل</Button><Button size="sm" variant="success" className="w-full whitespace-nowrap" disabled={actionId === request.id} onClick={() => setReviewingRequest(request)}>مراجعة واعتماد</Button><Button size="sm" variant="danger" className="w-full whitespace-nowrap" disabled={actionId === request.id} onClick={() => void reject(request)}>رفض الطلب</Button></div>
                 </article>
               );
             })}
@@ -246,6 +247,7 @@ const AccountingPurchaseRequestsPage: React.FC = () => {
         isOpen={Boolean(reviewingRequest)}
         reviewMode="accounting"
         onConfirm={(financialData) => { if (reviewingRequest) void approve(reviewingRequest, financialData); }}
+        onReject={(comment) => { if (reviewingRequest) void reject(reviewingRequest, comment); }}
         onClose={() => { if (actionId === null) setReviewingRequest(null); }}
         isSubmitting={actionId === reviewingRequest?.id}
       />

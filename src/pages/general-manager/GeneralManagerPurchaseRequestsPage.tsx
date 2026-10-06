@@ -24,6 +24,7 @@ import { getSummaryParcels, getSummaryRegions, getSummaryQuantities } from '../.
 import { UnifiedNotesCard } from '../../components/common/UnifiedNotesCard';
 import { formatCleanNumber } from '../../utils/numberFormat';
 import { SmartKgPricingInput } from '../../components/common/SmartKgPricingInput';
+import { useAuth } from '../../context/AuthContext';
 
 interface DraftItemState extends PurchaseRequestItemFormInput {
   id?: number;
@@ -71,6 +72,8 @@ export const isPrReturnedFromProcurement = (request: PurchaseRequest | null | un
 };
 
 export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
+  const { user, hasRole } = useAuth();
+  const isFinancialDirector = hasRole('accountant') && !hasRole('admin');
   const [requests, setRequests] = useState<PurchaseRequest[]>([]);
   const [selected, setSelected] = useState<PurchaseRequest | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -165,6 +168,7 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
   };
 
   const updateItem = (index: number, field: keyof PurchaseRequestItemFormInput | keyof DraftItemState, value: any) => {
+    if (isFinancialDirector) return;
     setDraftItems((items) =>
       items.map((item, itemIndex) => {
         if (itemIndex !== index) return item;
@@ -180,6 +184,7 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
   };
 
   const toggleExcludeItem = (index: number) => {
+    if (isFinancialDirector) return;
     setDraftItems((items) =>
       items.map((item, itemIndex) =>
         itemIndex === index ? { ...item, isExcluded: !item.isExcluded } : item,
@@ -188,6 +193,7 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
   };
 
   const removeItemPermanently = (index: number) => {
+    if (isFinancialDirector) return;
     setDraftItems((items) => items.filter((_, itemIndex) => itemIndex !== index));
   };
 
@@ -234,19 +240,21 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
     setError(null);
     try {
       const isModified =
-        activeApprovedItems.length !== (selected.items || []).length ||
-        draftNotes !== (selected.notes || '') ||
-        activeApprovedItems.some((item, i) => {
-          const original = selected.items?.[i];
-          if (!original) return true;
-          return (
-            item.item_description !== original.item_description ||
-            Number(item.quantity) !== Number(original.quantity) ||
-            item.item_reference !== (original.item_reference || '') ||
-            item.region !== (original.region || '') ||
-            Number(item.estimated_unit_price || 0) !== Number(original.estimated_unit_price || 0)
-          );
-        });
+        !isFinancialDirector && (
+          activeApprovedItems.length !== (selected.items || []).length ||
+          draftNotes !== (selected.notes || '') ||
+          activeApprovedItems.some((item, i) => {
+            const original = selected.items?.[i];
+            if (!original) return true;
+            return (
+              item.item_description !== original.item_description ||
+              Number(item.quantity) !== Number(original.quantity) ||
+              item.item_reference !== (original.item_reference || '') ||
+              item.region !== (original.region || '') ||
+              Number(item.estimated_unit_price || 0) !== Number(original.estimated_unit_price || 0)
+            );
+          })
+        );
 
       if (isModified) {
         // Send the updated clean items (only approved ones) with preserved supplier and pricing
@@ -694,13 +702,17 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
               {/* Comment */}
               <div>
                 <label className="text-xs font-bold text-slate-300">
-                  تعليق أو توجيه المدير العام
+                  {isFinancialDirector ? 'ملاحظات المدير المالي (اختياري)' : 'تعليق أو توجيه المدير العام'}
                   <textarea
                     value={comment}
                     onChange={(event) => setComment(event.target.value)}
                     rows={2}
                     className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
-                    placeholder="اكتب توجيهاتك لقسم المشتريات (اختياري للاعتماد، وإلزامي للرفض)..."
+                    placeholder={
+                      isFinancialDirector
+                        ? 'اكتب أي ملاحظات على الطلب...'
+                        : 'اكتب توجيهاتك لقسم المشتريات (اختياري للاعتماد، وإلزامي للرفض)...'
+                    }
                   />
                 </label>
               </div>
@@ -710,12 +722,14 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-800 pb-3">
                   <div>
                     <h3 className="text-sm font-black text-slate-100 flex items-center gap-2">
-                      <span>📦</span> مراجعة بنود الطلب والاعتماد الجزئي
+                      <span>📦</span> {isFinancialDirector ? 'بنود الطلب والتكلفة التقديرية (للعرض فقط)' : 'مراجعة بنود الطلب والاعتماد الجزئي'}
                     </h3>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="rounded-full bg-emerald-950/80 border border-emerald-800/60 px-3 py-1 text-xs font-bold text-emerald-300">
-                      معتمد: {activeApprovedItems.length} من {draftItems.length} بند
+                      {isFinancialDirector
+                        ? `عدد البنود: ${draftItems.length} بند`
+                        : `معتمد: ${activeApprovedItems.length} من ${draftItems.length} بند`}
                     </span>
                   </div>
                 </div>
@@ -764,7 +778,7 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
                               </td>
                               <td className="px-3 py-2.5 min-w-[140px]">
                                 <input
-                                  disabled={isExcluded}
+                                  disabled={isExcluded || isFinancialDirector}
                                   value={item.item_description}
                                   onChange={(e) => updateItem(index, 'item_description', e.target.value)}
                                   className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1 text-slate-100 disabled:bg-slate-950 disabled:text-slate-500"
@@ -772,7 +786,7 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
                               </td>
                               <td className="px-3 py-2.5 min-w-[130px]">
                                 <input
-                                  disabled={isExcluded}
+                                  disabled={isExcluded || isFinancialDirector}
                                   value={item.specifications || ''}
                                   onChange={(e) => updateItem(index, 'specifications', e.target.value)}
                                   placeholder="مواصفات البند..."
@@ -781,7 +795,7 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
                               </td>
                               <td className="px-3 py-2.5">
                                 <input
-                                  disabled={isExcluded}
+                                  disabled={isExcluded || isFinancialDirector}
                                   value={item.item_reference || ''}
                                   onChange={(e) => updateItem(index, 'item_reference', e.target.value)}
                                   className="w-24 rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1 text-slate-100 font-mono text-xs disabled:bg-slate-950 disabled:text-slate-500"
@@ -789,7 +803,7 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
                               </td>
                               <td className="px-3 py-2.5">
                                 <input
-                                  disabled={isExcluded}
+                                  disabled={isExcluded || isFinancialDirector}
                                   value={item.region || ''}
                                   onChange={(e) => updateItem(index, 'region', e.target.value)}
                                   className="w-24 rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1 text-slate-100 disabled:bg-slate-950 disabled:text-slate-500"
@@ -798,7 +812,7 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
                               <td className="px-3 py-2.5 whitespace-nowrap">
                                 <div className="flex items-center gap-1">
                                   <input
-                                    disabled={isExcluded}
+                                    disabled={isExcluded || isFinancialDirector}
                                     type="number"
                                     min="0.01"
                                     step="any"
@@ -820,7 +834,7 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
                                   quantity={item.quantity}
                                   uom={item.uom}
                                   itemDescription={item.item_description}
-                                  disabled={isExcluded}
+                                  disabled={isExcluded || isFinancialDirector}
                                   onChangeUnitPrice={(newPrice) => updateItem(index, 'estimated_unit_price', newPrice)}
                                   onConvertToTon={(newQty, tonPrice) => {
                                     setDraftItems((prev) => prev.map((it, i) => i === index ? {
@@ -840,28 +854,32 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
                                 {formatCleanNumber(lineTotal)} ج.م
                               </td>
                               <td className="px-3 py-2.5 text-center whitespace-nowrap">
-                                <div className="flex items-center justify-center gap-1.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleExcludeItem(index)}
-                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors ${
-                                      isExcluded
-                                        ? 'border-emerald-600 bg-emerald-950/60 text-emerald-300 hover:bg-emerald-900/60'
-                                        : 'border-amber-600/60 bg-amber-950/40 text-amber-200 hover:bg-amber-900/60'
-                                    }`}
-                                    title={isExcluded ? 'إلغاء الاستبعاد وإعادة اعتماد البند' : 'استبعاد البند من أمر الشراء'}
-                                  >
-                                    {isExcluded ? '↩️ استرجاع البند' : '🚫 استبعاد البند'}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => removeItemPermanently(index)}
-                                    className="px-2 py-1 rounded-lg text-xs text-rose-400 hover:bg-rose-950/50 hover:text-rose-200 border border-transparent hover:border-rose-800/60"
-                                    title="حذف البند نهائياً من الطلب"
-                                  >
-                                    🗑️
-                                  </button>
-                                </div>
+                                {isFinancialDirector ? (
+                                  <span className="text-[11px] text-slate-500 font-medium">عرض فقط</span>
+                                ) : (
+                                  <div className="flex items-center justify-center gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleExcludeItem(index)}
+                                      className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors ${
+                                        isExcluded
+                                          ? 'border-emerald-600 bg-emerald-950/60 text-emerald-300 hover:bg-emerald-900/60'
+                                          : 'border-amber-600/60 bg-amber-950/40 text-amber-200 hover:bg-amber-900/60'
+                                      }`}
+                                      title={isExcluded ? 'إلغاء الاستبعاد وإعادة اعتماد البند' : 'استبعاد البند من أمر الشراء'}
+                                    >
+                                      {isExcluded ? '↩️ استرجاع البند' : '🚫 استبعاد البند'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => removeItemPermanently(index)}
+                                      className="px-2 py-1 rounded-lg text-xs text-rose-400 hover:bg-rose-950/50 hover:text-rose-200 border border-transparent hover:border-rose-800/60"
+                                      title="حذف البند نهائياً من الطلب"
+                                    >
+                                      🗑️
+                                    </button>
+                                  </div>
+                                )}
                               </td>
                             </tr>
                           );
@@ -913,29 +931,29 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
                             <div>
                               <label className="text-slate-400 block mb-1">اسم الصنف</label>
                               <input
-                                disabled={isExcluded}
+                                disabled={isExcluded || isFinancialDirector}
                                 value={item.item_description}
                                 onChange={(e) => updateItem(index, 'item_description', e.target.value)}
-                                className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-slate-100"
+                                className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-slate-100 disabled:bg-slate-950 disabled:text-slate-500"
                               />
                             </div>
                             <div className="grid grid-cols-2 gap-2">
                               <div>
                                 <label className="text-slate-400 block mb-1">رقم القطعة</label>
                                 <input
-                                  disabled={isExcluded}
+                                  disabled={isExcluded || isFinancialDirector}
                                   value={item.item_reference || ''}
                                   onChange={(e) => updateItem(index, 'item_reference', e.target.value)}
-                                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-slate-100"
+                                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-slate-100 disabled:bg-slate-950 disabled:text-slate-500"
                                 />
                               </div>
                               <div>
                                 <label className="text-slate-400 block mb-1">المنطقة</label>
                                 <input
-                                  disabled={isExcluded}
+                                  disabled={isExcluded || isFinancialDirector}
                                   value={item.region || ''}
                                   onChange={(e) => updateItem(index, 'region', e.target.value)}
-                                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-slate-100"
+                                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-slate-100 disabled:bg-slate-950 disabled:text-slate-500"
                                 />
                               </div>
                             </div>
@@ -943,13 +961,13 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
                               <div>
                                 <label className="text-slate-400 block mb-1">الكمية ({getUnitLabel(item.uom)})</label>
                                 <input
-                                  disabled={isExcluded}
+                                  disabled={isExcluded || isFinancialDirector}
                                   type="number"
                                   min="0.01"
                                   step="any"
                                   value={item.quantity}
                                   onChange={(e) => updateItem(index, 'quantity', e.target.value)}
-                                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-slate-100 font-bold"
+                                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-slate-100 font-bold disabled:bg-slate-950 disabled:text-slate-500"
                                 />
                               </div>
                               <div className="mt-2">
@@ -961,7 +979,7 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
                                   quantity={item.quantity}
                                   uom={item.uom}
                                   itemDescription={item.item_description}
-                                  disabled={isExcluded}
+                                  disabled={isExcluded || isFinancialDirector}
                                   onChangeUnitPrice={(newPrice) => updateItem(index, 'estimated_unit_price', newPrice)}
                                   onConvertToTon={(newQty, tonPrice) => {
                                     setDraftItems((prev) => prev.map((it, i) => i === index ? {
@@ -992,26 +1010,28 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-2 pt-1">
-                            <button
-                              type="button"
-                              onClick={() => toggleExcludeItem(index)}
-                              className={`flex-1 py-1.5 rounded-lg text-xs font-bold border ${
-                                isExcluded
-                                  ? 'border-emerald-600 bg-emerald-950 text-emerald-300'
-                                  : 'border-amber-600 bg-amber-950 text-amber-200'
-                              }`}
-                            >
-                              {isExcluded ? '↩️ استرجاع البند' : '🚫 استبعاد هذا البند'}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => removeItemPermanently(index)}
-                              className="px-3 py-1.5 rounded-lg text-xs border border-rose-800 text-rose-300 bg-rose-950/40"
-                            >
-                              🗑️
-                            </button>
-                          </div>
+                          {!isFinancialDirector && (
+                            <div className="flex items-center gap-2 pt-1">
+                              <button
+                                type="button"
+                                onClick={() => toggleExcludeItem(index)}
+                                className={`flex-1 py-1.5 rounded-lg text-xs font-bold border ${
+                                  isExcluded
+                                    ? 'border-emerald-600 bg-emerald-950 text-emerald-300'
+                                    : 'border-amber-600 bg-amber-950 text-amber-200'
+                                }`}
+                              >
+                                {isExcluded ? '↩️ استرجاع البند' : '🚫 استبعاد هذا البند'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => removeItemPermanently(index)}
+                                className="px-3 py-1.5 rounded-lg text-xs border border-rose-800 text-rose-300 bg-rose-950/40"
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          )}
                         </article>
                       );
                     })}
@@ -1050,7 +1070,9 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
                   className="flex-1 sm:flex-none min-h-11 text-xs sm:text-sm font-black bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-slate-950 shadow-lg"
                 >
                   <span>
-                    ✓ اعتماد البنود المحددة ({activeApprovedItems.length}) وإرسال للمشتريات
+                    {isFinancialDirector
+                      ? '✓ اعتماد وموافقة على الطلب'
+                      : `✓ اعتماد البنود المحددة (${activeApprovedItems.length}) وإرسال للمشتريات`}
                   </span>
                 </Button>
                 <Button
