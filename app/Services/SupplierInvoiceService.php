@@ -30,9 +30,19 @@ class SupplierInvoiceService
 
     public const SITE_ACCOUNTANT_DEPARTMENT_CODES = ['EXECUTION', 'FINISHING', 'BUILDINGS'];
 
+    public function isGeneralAccountant(?User $user): bool
+    {
+        return $user?->isGeneralAccountant() ?? false;
+    }
+
     public function getDepartmentAccountantRole(?User $user): ?string
     {
         if (! $user) {
+            return null;
+        }
+
+        // General Accountant has unrestricted access across all company departments
+        if ($this->isGeneralAccountant($user)) {
             return null;
         }
 
@@ -47,7 +57,7 @@ class SupplierInvoiceService
 
     public function isRestrictedDepartmentAccountant(?User $user): bool
     {
-        if (! $user || $user->hasRole('admin')) {
+        if (! $user || $user->hasRole('admin') || $this->isGeneralAccountant($user)) {
             return false;
         }
 
@@ -61,7 +71,7 @@ class SupplierInvoiceService
 
     public function getAllowedDepartmentCodesForAccountant(?User $user): ?array
     {
-        if (! $user || $user->hasRole('admin')) {
+        if (! $user || $user->hasRole('admin') || $this->isGeneralAccountant($user)) {
             return null;
         }
 
@@ -71,6 +81,50 @@ class SupplierInvoiceService
         }
 
         return null;
+    }
+
+    /**
+     * Get the active General Accountant user (Eng. Habiba).
+     */
+    public function getGeneralAccountant(): ?User
+    {
+        return User::where('is_active', true)
+            ->where(function ($q) {
+                $q->whereHas('roles', fn ($rq) => $rq->where('slug', 'general_accountant'))
+                  ->orWhere('email', 'habiba@gmail.com')
+                  ->orWhere('email', 'habiba@ashbiliya.com');
+            })
+            ->first();
+    }
+
+    /**
+     * Resolve accountants for a given department.
+     * If the department has a dedicated accountant (e.g., licenses, buffet, execution), return them.
+     * Otherwise, fallback to the General Accountant (Eng. Habiba) as the default accountant for all other departments.
+     */
+    public function getAccountantsForDepartment(?string $deptCode): \Illuminate\Support\Collection
+    {
+        $deptAccountants = collect();
+        if ($deptCode) {
+            foreach (self::ACCOUNTANT_DEPARTMENT_MAPPINGS as $roleSlug => $deptCodes) {
+                if (in_array($deptCode, $deptCodes, true)) {
+                    $deptAccountants = User::whereHas('roles', fn ($q) => $q->where('slug', $roleSlug))
+                        ->where('is_active', true)
+                        ->get();
+                    break;
+                }
+            }
+        }
+
+        // Default Fallback: If no dedicated department accountant is mapped for this department, route to General Accountant (Eng. Habiba)
+        if ($deptAccountants->isEmpty()) {
+            $generalAccountant = $this->getGeneralAccountant();
+            if ($generalAccountant) {
+                $deptAccountants = collect([$generalAccountant]);
+            }
+        }
+
+        return $deptAccountants;
     }
 
     public function approvedReceipts(int $limit = 100, ?User $user = null, ?string $statusFilter = 'pending')
@@ -767,18 +821,22 @@ class SupplierInvoiceService
 
     public function calculateReceiptValue(PurchaseReceipt $receipt): float
     {
+        $receipt->loadMissing('items.purchaseOrderItem');
+
         $po = $receipt->purchaseOrder;
         if ($po) {
+            $orderTotal = (float) ($po->grand_total ?: $po->total_amount);
             // When an Actual PO is issued/finalized, its grand total is the authoritative Single Source of Truth
-            if ($po->isActualPo() || ((float) $po->grand_total > 0 && $po->status !== 'PO_DRAFT')) {
-                return (float) $po->grand_total;
+            if ($orderTotal > 0 && ($po->isActualPo() || $po->status !== 'PO_DRAFT')) {
+                return $orderTotal;
             }
         }
 
         return round($receipt->items->sum(function ($receiptItem): float {
             $poItem = $receiptItem->purchaseOrderItem;
-            if ($poItem && (float) $poItem->line_total > 0) {
-                return (float) $poItem->line_total;
+            $lineTotal = (float) ($poItem?->line_total ?: $poItem?->total_price);
+            if ($lineTotal > 0) {
+                return $lineTotal;
             }
             $qty = (float) ($poItem?->quantity ?? $receiptItem->received_quantity);
             $price = (float) ($poItem?->unit_price ?? 0);

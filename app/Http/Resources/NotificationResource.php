@@ -65,7 +65,7 @@ class NotificationResource extends JsonResource
                 } elseif ($this->notifiable_type === PurchaseRequest::class) {
                     $targetUrl = "/accounting/purchase-requests?open={$this->notifiable_id}";
                 }
-            } elseif (in_array($role, ['site_accountant', 'licenses_accountant', 'buffet_accountant'], true)) {
+            } elseif (in_array($role, ['general_accountant', 'site_accountant', 'licenses_accountant', 'buffet_accountant'], true)) {
                 if ($this->purchase_receipt_id) {
                     $targetUrl = "/accounting/supplier-payments?purchase_receipt_id={$this->purchase_receipt_id}&action=create_invoice";
                 } elseif ($this->type === 'purchase_order_and_receipt_ready_accounting' || $this->notifiable_type === PurchaseOrder::class || $this->purchase_order_id) {

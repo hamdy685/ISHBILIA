@@ -20,7 +20,7 @@ class AccountingPurchaseRequestController extends Controller
     public function index(Request $request): AnonymousResourceCollection
     {
         $perPage = min((int) $request->query('per_page', 50), 100);
-        return PurchaseRequestResource::collection($this->service->getPendingRequests($perPage));
+        return PurchaseRequestResource::collection($this->service->getPendingRequests($perPage, $request->user()));
     }
 
     public function suppliers(): AnonymousResourceCollection

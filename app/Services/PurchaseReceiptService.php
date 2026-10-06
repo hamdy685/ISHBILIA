@@ -413,23 +413,13 @@ class PurchaseReceiptService
                 );
             }
 
-            // Notify Site Accountant (محاسب الموقع)
+            // Notify Accountant (scoped department accountant with General Accountant fallback)
             $receipt->purchaseOrder->loadMissing('purchaseRequest.department');
             $deptCode = $receipt->purchaseOrder->purchaseRequest?->department?->code;
-            $deptAccountants = collect();
-            if ($deptCode) {
-                foreach (\App\Services\SupplierInvoiceService::ACCOUNTANT_DEPARTMENT_MAPPINGS as $roleSlug => $deptCodes) {
-                    if (in_array($deptCode, $deptCodes, true)) {
-                        $deptAccountants = User::whereHas('roles', fn ($q) => $q->where('slug', $roleSlug))
-                            ->where('is_active', true)
-                            ->get();
-                        break;
-                    }
-                }
-            }
+            $deptAccountants = app(\App\Services\SupplierInvoiceService::class)->getAccountantsForDepartment($deptCode);
             $targetAccountants = $deptAccountants->isNotEmpty()
                 ? $deptAccountants
-                : User::whereHas('roles', fn ($q) => $q->whereIn('slug', ['site_accountant', 'accountant', 'general_accountant']))
+                : User::whereHas('roles', fn ($q) => $q->whereIn('slug', ['general_accountant', 'site_accountant', 'accountant']))
                     ->where('is_active', true)
                     ->get();
 
@@ -544,17 +534,7 @@ class PurchaseReceiptService
 
             $receipt->purchaseOrder->loadMissing('purchaseRequest.department');
             $deptCode = $receipt->purchaseOrder->purchaseRequest?->department?->code;
-            $deptAccountants = collect();
-            if ($deptCode) {
-                foreach (\App\Services\SupplierInvoiceService::ACCOUNTANT_DEPARTMENT_MAPPINGS as $roleSlug => $deptCodes) {
-                    if (in_array($deptCode, $deptCodes, true)) {
-                        $deptAccountants = User::whereHas('roles', fn ($q) => $q->where('slug', $roleSlug))
-                            ->where('is_active', true)
-                            ->get();
-                        break;
-                    }
-                }
-            }
+            $deptAccountants = app(\App\Services\SupplierInvoiceService::class)->getAccountantsForDepartment($deptCode);
             $targetAccountants = $deptAccountants->isNotEmpty() ? $deptAccountants : $accountants;
 
             $notificationService->queueAccountingWithPurchaseOrderAndReceipt(

@@ -737,17 +737,7 @@ class PurchaseOrderService
 
             $lockedPo->loadMissing('purchaseRequest.department');
             $deptCode = $lockedPo->purchaseRequest?->department?->code;
-            $deptAccountants = collect();
-            if ($deptCode) {
-                foreach (SupplierInvoiceService::ACCOUNTANT_DEPARTMENT_MAPPINGS as $roleSlug => $deptCodes) {
-                    if (in_array($deptCode, $deptCodes, true)) {
-                        $deptAccountants = User::whereHas('roles', fn ($q) => $q->where('slug', $roleSlug))
-                            ->where('is_active', true)
-                            ->get();
-                        break;
-                    }
-                }
-            }
+            $deptAccountants = app(SupplierInvoiceService::class)->getAccountantsForDepartment($deptCode);
 
             $targetAccountants = $deptAccountants->isNotEmpty() ? $deptAccountants : $accountants;
 
@@ -881,17 +871,7 @@ class PurchaseOrderService
 
             $lockedPo->loadMissing('purchaseRequest.department');
             $deptCode = $lockedPo->purchaseRequest?->department?->code;
-            $deptAccountants = collect();
-            if ($deptCode) {
-                foreach (\App\Services\SupplierInvoiceService::ACCOUNTANT_DEPARTMENT_MAPPINGS as $roleSlug => $deptCodes) {
-                    if (in_array($deptCode, $deptCodes, true)) {
-                        $deptAccountants = User::whereHas('roles', fn ($q) => $q->where('slug', $roleSlug))
-                            ->where('is_active', true)
-                            ->get();
-                        break;
-                    }
-                }
-            }
+            $deptAccountants = app(SupplierInvoiceService::class)->getAccountantsForDepartment($deptCode);
 
             // Exclude Financial Director (role 'accountant') - notify only scoped department accountant for awareness
             $targetAccountants = $deptAccountants->isNotEmpty()

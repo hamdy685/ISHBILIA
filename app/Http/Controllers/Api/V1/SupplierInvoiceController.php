@@ -44,17 +44,19 @@ class SupplierInvoiceController extends Controller
             'accountant_recording_notes' => $notes,
         ]);
 
-        \App\Models\SystemEvent::record(
-            actor: $user,
-            eventType: 'ACCOUNTANT_RECORDED',
-            entityType: 'purchase_receipt',
-            entityId: $receipt->id,
-            summary: "تم تأكيد تسجيل إذن الاستلام {$receipt->receipt_number} في شيت الإكسيل الخارجي بواسطة المحاسب {$user->name}.",
-            details: [
-                'receipt_number' => $receipt->receipt_number,
-                'po_number' => $receipt->purchaseOrder?->po_number,
-                'recorded_at' => now()->toIso8601String(),
-                'notes' => $notes,
+        app(\App\Services\SystemEventService::class)->recordAction(
+            entity: $receipt,
+            action: 'ACCOUNTANT_RECORDED',
+            description: "تم تأكيد تسجيل إذن الاستلام {$receipt->receipt_number} في شيت الإكسيل الخارجي بواسطة المحاسب {$user->name}.",
+            context: [
+                'event_type' => 'purchase_receipt.accountant_recorded',
+                'actor_user_id' => $user->id,
+                'metadata' => [
+                    'receipt_number' => $receipt->receipt_number,
+                    'po_number' => $receipt->purchaseOrder?->po_number,
+                    'recorded_at' => now()->toIso8601String(),
+                    'notes' => $notes,
+                ],
             ]
         );
 
@@ -112,20 +114,22 @@ class SupplierInvoiceController extends Controller
         }
 
         // 2. Permission check: must have accounting.invoice.create
-        if ($user && ! $user->hasRole('admin') && ! $user->hasPermission('accounting.invoice.create')) {
+        if ($user && ! $user->hasRole('admin') && ! $this->service->isGeneralAccountant($user) && ! $user->hasPermission('accounting.invoice.create')) {
             return response()->json([
                 'message' => 'غير مصرح لك بتسجيل الفواتير المالية. هذا الإجراء مخصص للإدارة المالية ومحاسبي الأقسام فقط.',
             ], 403);
         }
 
         // 3. Financial Director restricted (assigned to department accountants)
-        if ($user && $user->hasRole('accountant') && ! $user->hasRole('admin') && ! $this->service->isRestrictedDepartmentAccountant($user)) {
+        if ($user && $user->hasRole('accountant') && ! $user->hasRole('admin') && ! $this->service->isGeneralAccountant($user) && ! $this->service->isRestrictedDepartmentAccountant($user)) {
             return response()->json([
                 'message' => 'غير مصرح للمدير المالي بتسجيل الفواتير؛ تسجيل الفواتير مسند لمحاسب القسم التابع له أمر الشراء فقط.',
             ], 403);
         }
 
-        $po = PurchaseOrder::with('purchaseRequest.department')->findOrFail($validated['purchase_order_id']);
+        $po = PurchaseOrder::withoutGlobalScope(\App\Scopes\DataIsolationScope::class)
+            ->with('purchaseRequest.department')
+            ->findOrFail($validated['purchase_order_id']);
 
         // 4. Scoped department check
         $allowedCodes = $this->service->getAllowedDepartmentCodesForAccountant($request->user());
@@ -136,10 +140,13 @@ class SupplierInvoiceController extends Controller
             }
         }
 
+        $receipt = PurchaseReceipt::withoutGlobalScope(\App\Scopes\DataIsolationScope::class)
+            ->findOrFail($validated['purchase_receipt_id']);
+
         $invoice = $this->service->createInvoice(
             $request->user(),
-            PurchaseOrder::findOrFail($validated['purchase_order_id']),
-            PurchaseReceipt::findOrFail($validated['purchase_receipt_id']),
+            $po,
+            $receipt,
             (float) $validated['amount'],
             $validated['invoice_number'] ?? null,
             $validated['invoice_date'] ?? null,

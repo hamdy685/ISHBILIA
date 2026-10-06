@@ -17,8 +17,10 @@ class AccountingPurchaseRequestService
     public const PENDING_STATUS = 'PENDING_ACCOUNTING_APPROVAL';
     public const APPROVED_STATUS = 'APPROVED_BY_ACCOUNTING';
 
-    public function getPendingRequests(int $perPage = 50): LengthAwarePaginator
+    public function getPendingRequests(int $perPage = 50, ?User $user = null): LengthAwarePaginator
     {
+        $allowedCodes = $user ? app(SupplierInvoiceService::class)->getAllowedDepartmentCodesForAccountant($user) : null;
+
         return PurchaseRequest::query()
             ->with([
                 'requester:id,name,email',
@@ -31,6 +33,11 @@ class AccountingPurchaseRequestService
                 'approvalHistory.actor',
             ])
             ->where('status', self::PENDING_STATUS)
+            ->when($allowedCodes !== null, function ($query) use ($allowedCodes) {
+                $query->whereHas('department', function ($dq) use ($allowedCodes) {
+                    $dq->whereIn('code', $allowedCodes);
+                });
+            })
             ->orderByDesc('updated_at')
             ->paginate(min(max($perPage, 1), 100));
     }

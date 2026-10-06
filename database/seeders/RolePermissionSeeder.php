@@ -221,6 +221,26 @@ class RolePermissionSeeder extends Seeder
                     'purchase_request.submit',
                 ],
             ],
+            'general_accountant' => [
+                'name' => 'General Accountant',
+                'description' => 'المحاسب العام - تسجيل الفواتير والمطابقة المالية والاطلاع الشامل على كافة أقسام الشركة (المهندسة حبيبة)',
+                'permissions' => [
+                    'accounting.invoice.view',
+                    'accounting.invoice.create',
+                    'accounting.invoice.match',
+                    'accounting.payment.create',
+                    'supplier.account.view',
+                    'purchase_order.view',
+                    'purchase_order.view_accounting',
+                    'purchase_request.create',
+                    'purchase_request.view_own',
+                    'purchase_request.edit_own',
+                    'purchase_request.submit',
+                    'purchase_request.accounting_view',
+                    'purchase_request.accounting_approve',
+                    'purchase_request.accounting_reject',
+                ],
+            ],
             'general_manager' => [
                 'name' => 'General Manager',
                 'description' => 'Executive decision maker for purchase requests and viewer of issued purchase orders',
@@ -254,7 +274,7 @@ class RolePermissionSeeder extends Seeder
             ],
         ];
 
-        $requestCreatorRoles = ['reviewer', 'site_engineer', 'warehouse_keeper', 'procurement_manager', 'accountant', 'general_manager', 'execution_manager', 'site_accountant', 'licenses_accountant', 'buffet_accountant'];
+        $requestCreatorRoles = ['reviewer', 'site_engineer', 'warehouse_keeper', 'procurement_manager', 'accountant', 'general_manager', 'execution_manager', 'site_accountant', 'licenses_accountant', 'buffet_accountant', 'general_accountant'];
         $requestCreatorPermissions = ['purchase_request.create', 'purchase_request.view_own', 'purchase_request.edit_own', 'purchase_request.submit'];
         $receiptPermissions = ['purchase_receipt.view_assigned', 'purchase_receipt.edit', 'purchase_receipt.approve'];
 

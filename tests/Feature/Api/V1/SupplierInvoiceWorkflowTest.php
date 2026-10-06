@@ -507,16 +507,216 @@ class SupplierInvoiceWorkflowTest extends TestCase
         $allowedRes->assertStatus(201);
     }
 
+    public function test_general_accountant_sees_all_departments_and_can_create_invoice_and_record_receipt(): void
+    {
+        $habiba = $this->makeUser('habiba@gmail.com', 'المهندسة حبيبة', 'general_accountant');
+        $buffetDept = Department::firstOrCreate(['code' => 'BUFFET'], ['name' => 'البوفيه', 'is_active' => true]);
+        $licensesDept = Department::firstOrCreate(['code' => 'LICENSES'], ['name' => 'التراخيص', 'is_active' => true]);
+        $itDept = Department::firstOrCreate(['code' => 'IT'], ['name' => 'تكنولوجيا المعلومات', 'is_active' => true]);
+
+        $employee = $this->makeUser('emp-all@test', 'موظف عام', 'employee');
+
+        // 1. Order & Receipt for BUFFET
+        $prBuffet = PurchaseRequest::create([
+            'request_number' => 'PR-BUF-GEN',
+            'user_id' => $employee->id,
+            'department_id' => $buffetDept->id,
+            'site_engineer_user_id' => $this->siteEngineer->id,
+            'priority' => 'NORMAL',
+            'status' => 'APPROVED_BY_PROCUREMENT',
+            'total_estimated_cost' => 150,
+            'date_needed' => '2026-08-01',
+        ]);
+        $orderBuffet = PurchaseOrder::create([
+            'po_number' => 'PO-BUF-GEN',
+            'purchase_request_id' => $prBuffet->id,
+            'supplier_id' => $this->supplier->id,
+            'created_by_user_id' => $employee->id,
+            'status' => 'ISSUED',
+            'subtotal' => 150,
+            'grand_total' => 150,
+            'delivery_status' => 'NOT_STARTED',
+        ]);
+        $orderBuffet->items()->create([
+            'item_description' => 'شاي وسكر',
+            'quantity' => 1,
+            'uom' => 'PCS',
+            'unit_price' => 150,
+            'line_total' => 150,
+        ]);
+        $receiptBuffet = $this->approveReceipt($orderBuffet, 1);
+
+        // 2. Order & Receipt for LICENSES
+        $prLicenses = PurchaseRequest::create([
+            'request_number' => 'PR-LIC-GEN',
+            'user_id' => $employee->id,
+            'department_id' => $licensesDept->id,
+            'site_engineer_user_id' => $this->siteEngineer->id,
+            'priority' => 'NORMAL',
+            'status' => 'APPROVED_BY_PROCUREMENT',
+            'total_estimated_cost' => 600,
+            'date_needed' => '2026-08-01',
+        ]);
+        $orderLicenses = PurchaseOrder::create([
+            'po_number' => 'PO-LIC-GEN',
+            'purchase_request_id' => $prLicenses->id,
+            'supplier_id' => $this->supplier->id,
+            'created_by_user_id' => $employee->id,
+            'status' => 'ISSUED',
+            'subtotal' => 600,
+            'grand_total' => 600,
+            'delivery_status' => 'NOT_STARTED',
+        ]);
+        $orderLicenses->items()->create([
+            'item_description' => 'تجديد تصريح',
+            'quantity' => 1,
+            'uom' => 'PCS',
+            'unit_price' => 600,
+            'line_total' => 600,
+        ]);
+        $receiptLicenses = $this->approveReceipt($orderLicenses, 1);
+
+        // 3. Order & Receipt for IT
+        $prIt = PurchaseRequest::create([
+            'request_number' => 'PR-IT-GEN',
+            'user_id' => $employee->id,
+            'department_id' => $itDept->id,
+            'site_engineer_user_id' => $this->siteEngineer->id,
+            'priority' => 'NORMAL',
+            'status' => 'APPROVED_BY_PROCUREMENT',
+            'total_estimated_cost' => 1200,
+            'date_needed' => '2026-08-01',
+        ]);
+        $orderIt = PurchaseOrder::create([
+            'po_number' => 'PO-IT-GEN',
+            'purchase_request_id' => $prIt->id,
+            'supplier_id' => $this->supplier->id,
+            'created_by_user_id' => $employee->id,
+            'status' => 'ISSUED',
+            'subtotal' => 1200,
+            'grand_total' => 1200,
+            'delivery_status' => 'NOT_STARTED',
+        ]);
+        $orderIt->items()->create([
+            'item_description' => 'راوتر شبكة',
+            'quantity' => 1,
+            'uom' => 'PCS',
+            'unit_price' => 1200,
+            'line_total' => 1200,
+        ]);
+        $receiptIt = $this->approveReceipt($orderIt, 1);
+
+        $service = app(SupplierInvoiceService::class);
+        $receipts = $service->approvedReceipts(100, $habiba);
+        $this->assertTrue($receipts->contains('id', $receiptBuffet->id));
+        $this->assertTrue($receipts->contains('id', $receiptLicenses->id));
+        $this->assertTrue($receipts->contains('id', $receiptIt->id));
+
+        // General Accountant can record invoices for any department
+        $resBuffet = $this->actingAs($habiba, 'sanctum')->postJson('/api/v1/accounting/invoices', [
+            'purchase_order_id' => $orderBuffet->id,
+            'purchase_receipt_id' => $receiptBuffet->id,
+            'invoice_number' => 'INV-GEN-BUF',
+            'amount' => 150,
+        ]);
+        $resBuffet->assertStatus(201);
+
+        $resLicenses = $this->actingAs($habiba, 'sanctum')->postJson('/api/v1/accounting/invoices', [
+            'purchase_order_id' => $orderLicenses->id,
+            'purchase_receipt_id' => $receiptLicenses->id,
+            'invoice_number' => 'INV-GEN-LIC',
+            'amount' => 600,
+        ]);
+        $resLicenses->assertStatus(201);
+
+        // General Accountant can mark receipt as recorded
+        $resRecorded = $this->actingAs($habiba, 'sanctum')->postJson("/api/v1/accounting/receipts/{$receiptIt->id}/mark-recorded", [
+            'notes' => 'تم التسجيل في شيت الإكسيل بواسطة المهندسة حبيبة',
+        ]);
+        $resRecorded->assertStatus(200);
+        $this->assertNotNull($receiptIt->fresh()->accountant_recorded_at);
+        $this->assertSame($habiba->id, $receiptIt->fresh()->accountant_recorded_by_user_id);
+    }
+
+    public function test_unmapped_departments_route_notifications_to_general_accountant_fallback(): void
+    {
+        $habiba = $this->makeUser('habiba@gmail.com', 'المهندسة حبيبة', 'general_accountant');
+        $service = app(SupplierInvoiceService::class);
+
+        // 1. BUFFET routes to buffet accountant
+        $buffetAccountant = $this->makeUser('shorouk-route@test', 'شروق', 'buffet_accountant');
+        $accountantsBuf = $service->getAccountantsForDepartment('BUFFET');
+        $this->assertTrue($accountantsBuf->contains('id', $buffetAccountant->id));
+
+        // 2. LICENSES routes to licenses accountant
+        $licensesAccountant = $this->makeUser('ahmed-route@test', 'أحمد', 'licenses_accountant');
+        $accountantsLic = $service->getAccountantsForDepartment('LICENSES');
+        $this->assertTrue($accountantsLic->contains('id', $licensesAccountant->id));
+
+        // 3. Any unmapped department (e.g. IT, LEGAL, MARKETING, null) falls back to General Accountant (Habiba)
+        $accountantsIt = $service->getAccountantsForDepartment('IT');
+        $this->assertTrue($accountantsIt->contains('id', $habiba->id));
+
+        $accountantsLegal = $service->getAccountantsForDepartment('LEGAL');
+        $this->assertTrue($accountantsLegal->contains('id', $habiba->id));
+
+        $accountantsUnknown = $service->getAccountantsForDepartment(null);
+        $this->assertTrue($accountantsUnknown->contains('id', $habiba->id));
+    }
+
+    public function test_general_accountant_can_view_and_approve_direct_requests_for_any_department(): void
+    {
+        $habiba = $this->makeUser('habiba@gmail.com', 'المهندسة حبيبة', 'general_accountant');
+        $itDept = Department::firstOrCreate(['code' => 'IT'], ['name' => 'تكنولوجيا المعلومات', 'is_active' => true]);
+        $employee = $this->makeUser('emp-it@test', 'مهندس الشبكات', 'employee');
+
+        $pr = PurchaseRequest::create([
+            'request_number' => 'PR-IT-DIRECT-001',
+            'user_id' => $employee->id,
+            'department_id' => $itDept->id,
+            'status' => 'PENDING_ACCOUNTING_APPROVAL',
+            'procurement_route' => 'DIRECT',
+            'direct_supplier_id' => $this->supplier->id,
+            'total_estimated_cost' => 5000.00,
+            'date_needed' => now()->addDays(3)->toDateString(),
+        ]);
+        $pr->items()->create([
+            'item_description' => 'خادم سحابي محلي',
+            'quantity' => 1,
+            'uom' => 'PCS',
+            'supplier_id' => $this->supplier->id,
+            'estimated_unit_price' => 5000.00,
+            'estimated_line_total' => 5000.00,
+        ]);
+
+        // General Accountant can view pending requests from IT
+        $resIndex = $this->actingAs($habiba, 'sanctum')->getJson('/api/v1/accounting/purchase-requests/direct-approval');
+        $resIndex->assertStatus(200);
+        $resIndex->assertJsonFragment(['request_number' => 'PR-IT-DIRECT-001']);
+
+        // General Accountant can approve request
+        $resApprove = $this->actingAs($habiba, 'sanctum')->postJson("/api/v1/accounting/purchase-requests/{$pr->id}/direct-approve", [
+            'comment' => 'معتمد من المحاسب العام المهندسة حبيبة',
+        ]);
+        $resApprove->assertStatus(200);
+        $this->assertSame('APPROVED_BY_ACCOUNTING', $pr->fresh()->status);
+    }
+
     private function makeUser(string $email, string $name, string $roleSlug): User
     {
-        $user = User::create([
-            'department_id' => $this->department?->id,
-            'name' => $name,
-            'email' => $email,
-            'password' => Hash::make('Secret123!'),
-            'is_active' => true,
-        ]);
-        $user->roles()->attach(Role::where('slug', $roleSlug)->firstOrFail()->id);
-        return $user;
+        $user = User::firstOrCreate(
+            ['email' => $email],
+            [
+                'department_id' => $this->department?->id,
+                'name' => $name,
+                'password' => Hash::make('Secret123!'),
+                'is_active' => true,
+            ]
+        );
+        $role = Role::where('slug', $roleSlug)->firstOrFail();
+        if (! $user->roles()->where('roles.id', $role->id)->exists()) {
+            $user->roles()->attach($role->id);
+        }
+        return $user->fresh(['roles.permissions']);
     }
 }

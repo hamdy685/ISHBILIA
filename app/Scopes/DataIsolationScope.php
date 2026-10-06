@@ -105,7 +105,7 @@ class DataIsolationScope implements Scope
             return;
         }
 
-        if ($user->hasRole('site_accountant') || $user->hasAnyRole(['licenses_accountant', 'buffet_accountant', 'accountant'])) {
+        if ($user->hasRole('site_accountant') || $user->hasAnyRole(['licenses_accountant', 'buffet_accountant', 'accountant', 'general_accountant']) || $user->isGeneralAccountant()) {
             $builder->where(function (Builder $q) use ($user) {
                 $q->where('user_id', $user->id)
                   ->orWhereIn('status', [
@@ -183,7 +183,7 @@ class DataIsolationScope implements Scope
             return;
         }
 
-        if ($user->hasRole('site_accountant') || $user->hasAnyRole(['licenses_accountant', 'buffet_accountant', 'accountant'])) {
+        if ($user->hasRole('site_accountant') || $user->hasAnyRole(['licenses_accountant', 'buffet_accountant', 'accountant', 'general_accountant']) || $user->isGeneralAccountant()) {
             $builder->where(function (Builder $q) use ($user) {
                 $q->where(function ($sub) {
                     $sub->whereNotNull('finalized_at')
@@ -256,7 +256,7 @@ class DataIsolationScope implements Scope
             return;
         }
 
-        if ($user->hasRole('site_accountant') || $user->hasAnyRole(['licenses_accountant', 'buffet_accountant', 'accountant'])) {
+        if ($user->hasRole('site_accountant') || $user->hasAnyRole(['licenses_accountant', 'buffet_accountant', 'accountant', 'general_accountant']) || $user->isGeneralAccountant()) {
             $allowedCodes = app(SupplierInvoiceService::class)->getAllowedDepartmentCodesForAccountant($user);
             if ($allowedCodes !== null) {
                 $builder->whereHas('purchaseRequest.department', function ($dq) use ($allowedCodes) {
@@ -291,7 +291,7 @@ class DataIsolationScope implements Scope
      */
     protected function applySupplierInvoiceIsolation(Builder $builder, User $user): void
     {
-        if ($user->hasRole('site_accountant') || $user->hasAnyRole(['licenses_accountant', 'buffet_accountant', 'accountant'])) {
+        if ($user->hasRole('site_accountant') || $user->hasAnyRole(['licenses_accountant', 'buffet_accountant', 'accountant', 'general_accountant']) || $user->isGeneralAccountant()) {
             $allowedCodes = app(SupplierInvoiceService::class)->getAllowedDepartmentCodesForAccountant($user);
             if ($allowedCodes !== null) {
                 $builder->where(function (Builder $q) use ($allowedCodes, $user) {

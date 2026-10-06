@@ -46,12 +46,12 @@ class SupplierInvoicePolicy
         }
 
         // 3. User must have accounting.invoice.create permission
-        if (! $user->hasPermission('accounting.invoice.create')) {
+        if (! $user->hasRole('admin') && ! $this->invoiceService->isGeneralAccountant($user) && ! $user->hasPermission('accounting.invoice.create')) {
             return Response::deny('غير مصرح لك بتسجيل الفواتير المالية. هذا الإجراء مخصص للإدارة المالية ومحاسبي الأقسام فقط.');
         }
 
         // 4. Financial Director cannot record department invoices directly (assigned to department accountants)
-        if ($user->hasRole('accountant') && ! $this->invoiceService->isRestrictedDepartmentAccountant($user)) {
+        if ($user->hasRole('accountant') && ! $this->invoiceService->isGeneralAccountant($user) && ! $this->invoiceService->isRestrictedDepartmentAccountant($user)) {
             return Response::deny('غير مصرح للمدير المالي بتسجيل الفواتير؛ تسجيل الفواتير مسند لمحاسب القسم التابع له أمر الشراء فقط.');
         }
 

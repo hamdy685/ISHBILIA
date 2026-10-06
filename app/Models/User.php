@@ -148,4 +148,18 @@ class User extends Authenticatable
             });
         });
     }
+
+    public function isGeneralAccountant(): bool
+    {
+        if ($this->hasRole('general_accountant')) {
+            return true;
+        }
+
+        $email = strtolower(trim((string) $this->email));
+        if ($email === 'habiba@gmail.com' || $email === 'habiba@ashbiliya.com') {
+            return true;
+        }
+
+        return false;
+    }
 }
