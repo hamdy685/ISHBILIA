@@ -10,42 +10,84 @@ use App\Models\PurchaseRequest;
 use App\Models\PurchaseRequestItem;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 class PurchaseRequestService
 {
     /**
      * Generate sequential unique Purchase Request number (PR-YYYY-XXXXX).
-     * Uses MAX extraction from existing numbers to avoid duplicates after record deletions.
+     * Extracts the highest registered number for the given year,
+     * and increments by 1 (MAX + 1) to eliminate duplicate collisions.
      */
     public function generateRequestNumber(): string
     {
         $year = date('Y');
         $prefix = "PR-{$year}-";
+        $prefixLen = strlen($prefix);
 
-        // Extract the highest existing sequence number from the database
-        $maxNumber = PurchaseRequest::withTrashed()
-            ->where('request_number', 'like', $prefix . '%')
-            ->selectRaw("MAX(CAST(SUBSTRING(request_number, ?) AS UNSIGNED)) as max_seq", [strlen($prefix) + 1])
-            ->value('max_seq');
+        // 1. Database-level aggregation of max integer sequence
+        $dbMax = null;
+        try {
+            $record = PurchaseRequest::withTrashed()
+                ->where('request_number', 'like', $prefix . '%')
+                ->selectRaw("MAX(CAST(SUBSTRING(request_number, " . ($prefixLen + 1) . ") AS UNSIGNED)) as max_seq")
+                ->first();
 
-        $nextSeq = ($maxNumber ?? 0) + 1;
-
-        // Retry loop to handle rare race conditions
-        for ($attempt = 0; $attempt < 10; $attempt++) {
-            $candidate = sprintf('PR-%s-%05d', $year, $nextSeq);
-            $exists = PurchaseRequest::withTrashed()
-                ->where('request_number', $candidate)
-                ->exists();
-
-            if (! $exists) {
-                return $candidate;
+            if ($record && isset($record->max_seq) && is_numeric($record->max_seq)) {
+                $dbMax = (int) $record->max_seq;
             }
+        } catch (\Throwable $e) {
+            Log::warning('PurchaseRequestService: SQL MAX calculation error: ' . $e->getMessage());
+        }
+
+        // 2. Scan recent records for this year to ensure no sequence is missed
+        $scannedMax = 0;
+        try {
+            $sampleNumbers = PurchaseRequest::withTrashed()
+                ->where('request_number', 'like', $prefix . '%')
+                ->orderByDesc('id')
+                ->limit(100)
+                ->pluck('request_number');
+
+            foreach ($sampleNumbers as $nr) {
+                if (preg_match('/^PR-' . $year . '-(\d+)/i', $nr, $matches)) {
+                    $val = (int) $matches[1];
+                    if ($val > $scannedMax) {
+                        $scannedMax = $val;
+                    }
+                }
+            }
+
+            // Also check alphabetically highest request_number
+            $alphaNumbers = PurchaseRequest::withTrashed()
+                ->where('request_number', 'like', $prefix . '%')
+                ->orderByDesc('request_number')
+                ->limit(20)
+                ->pluck('request_number');
+
+            foreach ($alphaNumbers as $nr) {
+                if (preg_match('/^PR-' . $year . '-(\d+)/i', $nr, $matches)) {
+                    $val = (int) $matches[1];
+                    if ($val > $scannedMax) {
+                        $scannedMax = $val;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('PurchaseRequestService: Failed to scan sample request numbers: ' . $e->getMessage());
+        }
+
+        $highestSeq = max((int) $dbMax, $scannedMax);
+        $nextSeq = $highestSeq + 1;
+
+        // 3. Double-check uniqueness against existing database records
+        while (PurchaseRequest::withTrashed()->where('request_number', sprintf('PR-%s-%05d', $year, $nextSeq))->exists()) {
             $nextSeq++;
         }
 
-        // Absolute fallback: use timestamp to guarantee uniqueness
         return sprintf('PR-%s-%05d', $year, $nextSeq);
     }
 
@@ -128,164 +170,191 @@ class PurchaseRequestService
 
     /**
      * Create a new draft Purchase Request with line items.
+     * Includes automated retry mechanism (up to 5 attempts) to prevent race condition failures.
      */
     public function createRequest(User $user, array $data): PurchaseRequest
     {
-        return DB::transaction(function () use ($user, $data) {
-            $requestType = ($data['request_type'] ?? 'PROJECT') === 'OFFICE_SUPPLIES' ? 'OFFICE_SUPPLIES' : 'PROJECT';
-            $isOffice = $requestType === 'OFFICE_SUPPLIES';
+        $maxAttempts = 5;
 
-            $parcelReference = trim((string) ($data['parcel_reference'] ?? $data['parcel'] ?? $data['parcel_name'] ?? ''));
-            $region = trim((string) ($data['region'] ?? ''));
-            $landParcelId = !empty($data['land_parcel_id']) ? (int) $data['land_parcel_id'] : null;
+        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+            try {
+                return DB::transaction(function () use ($user, $data) {
+                    $requestType = ($data['request_type'] ?? 'PROJECT') === 'OFFICE_SUPPLIES' ? 'OFFICE_SUPPLIES' : 'PROJECT';
+                    $isOffice = $requestType === 'OFFICE_SUPPLIES';
 
-            if ($landParcelId && ($parcelReference === '' || $region === '')) {
-                $lp = LandParcel::find($landParcelId);
-                if ($lp) {
-                    if ($parcelReference === '') $parcelReference = $lp->parcel_reference;
-                    if ($region === '') $region = $lp->region;
-                }
-            }
+                    $parcelReference = trim((string) ($data['parcel_reference'] ?? $data['parcel'] ?? $data['parcel_name'] ?? ''));
+                    $region = trim((string) ($data['region'] ?? ''));
+                    $landParcelId = !empty($data['land_parcel_id']) ? (int) $data['land_parcel_id'] : null;
 
-            if ($isOffice) {
-                if ($parcelReference === '') {
-                    $parcelReference = 'مقر الشركة';
-                }
-                if ($region === '') {
-                    $region = 'إداري / المقر الرئيسي';
-                }
-            } else {
-                if ($parcelReference === '' && !empty($data['items'][0]['item_reference'])) {
-                    $parcelReference = trim((string) $data['items'][0]['item_reference']);
-                }
-                if ($region === '' && !empty($data['items'][0]['region'])) {
-                    $region = trim((string) $data['items'][0]['region']);
-                }
-
-                if ($parcelReference === '' || $region === '') {
-                    $errors = [];
-                    if ($parcelReference === '') {
-                        $errors['parcel_reference'] = ['رقم قطعة الأرض مطلوب للطلب ولا يمكن أن يكون فارغًا.'];
+                    if ($landParcelId && ($parcelReference === '' || $region === '')) {
+                        $lp = LandParcel::find($landParcelId);
+                        if ($lp) {
+                            if ($parcelReference === '') $parcelReference = $lp->parcel_reference;
+                            if ($region === '') $region = $lp->region;
+                        }
                     }
-                    if ($region === '') {
-                        $errors['region'] = ['المنطقة مطلوبة للطلب ولا يمكن أن تكون فارغة.'];
+
+                    if ($isOffice) {
+                        if ($parcelReference === '') {
+                            $parcelReference = 'مقر الشركة';
+                        }
+                        if ($region === '') {
+                            $region = 'إداري / المقر الرئيسي';
+                        }
+                    } else {
+                        if ($parcelReference === '' && !empty($data['items'][0]['item_reference'])) {
+                            $parcelReference = trim((string) $data['items'][0]['item_reference']);
+                        }
+                        if ($region === '' && !empty($data['items'][0]['region'])) {
+                            $region = trim((string) $data['items'][0]['region']);
+                        }
+
+                        if ($parcelReference === '' || $region === '') {
+                            $errors = [];
+                            if ($parcelReference === '') {
+                                $errors['parcel_reference'] = ['رقم قطعة الأرض مطلوب للطلب ولا يمكن أن يكون فارغًا.'];
+                            }
+                            if ($region === '') {
+                                $errors['region'] = ['المنطقة مطلوبة للطلب ولا يمكن أن تكون فارغة.'];
+                            }
+                            throw ValidationException::withMessages($errors);
+                        }
+
+                        if (! $landParcelId) {
+                            $existingLp = LandParcel::where('parcel_reference', $parcelReference)->where('region', $region)->first();
+                            if ($existingLp) {
+                                $landParcelId = $existingLp->id;
+                            }
+                        }
                     }
-                    throw ValidationException::withMessages($errors);
-                }
 
-                if (! $landParcelId) {
-                    $existingLp = LandParcel::where('parcel_reference', $parcelReference)->where('region', $region)->first();
-                    if ($existingLp) {
-                        $landParcelId = $existingLp->id;
+                    $normalizedItems = $this->normalizeItems($data['items'] ?? [], $isOffice, $parcelReference, $region);
+                    $requestNumber = $this->generateRequestNumber();
+                    $targetDepartmentId = (int) ($data['target_department_id'] ?? $data['department_id'] ?? $user->department_id);
+                    $targetDepartment = Department::with(['manager', 'siteEngineer'])->find($targetDepartmentId);
+
+                    if (!$targetDepartment) {
+                        throw ValidationException::withMessages([
+                            'target_department_id' => ['اختر قسمًا مستهدفًا صحيحًا للطلب.'],
+                        ]);
                     }
+
+                    $isExecutiveRequester = $user->hasRole('general_manager');
+                    $isBypassRole = $user->hasAnyRole(['general_manager', 'procurement_manager', 'accountant', 'admin']);
+                    $isReviewerSameDept = $user->hasRole('reviewer') && ((int) $targetDepartment->id === (int) $user->department_id);
+
+                    $assignedManager = $targetDepartment->manager;
+                    if (!$assignedManager) {
+                        $assignedManager = User::where('department_id', $targetDepartment->id)
+                            ->where('is_active', true)
+                            ->whereHas('roles', fn ($q) => $q->where('slug', 'reviewer'))
+                            ->first();
+                    }
+                    if (!$assignedManager) {
+                        $emailMap = (array) config('procurement.default_department_reviewers', []);
+                        if (isset($emailMap[$targetDepartment->code])) {
+                            $assignedManager = User::where('email', $emailMap[$targetDepartment->code])->first();
+                        }
+                    }
+                    if ($assignedManager && !$targetDepartment->manager_user_id) {
+                        $targetDepartment->update(['manager_user_id' => $assignedManager->id]);
+                    }
+
+                    // Backward compatibility for old clients/drafts that still send explicit assignments.
+                    if (!$assignedManager && !empty($data['reviewer_user_id'])) {
+                        $assignedManager = User::query()->whereKey((int) $data['reviewer_user_id'])->where('is_active', true)->first();
+                    }
+                    $siteEngineer = null;
+                    if (!empty($data['site_engineer_user_id'])) {
+                        $siteEngineer = User::query()->whereKey((int) $data['site_engineer_user_id'])->where('is_active', true)->first();
+                    }
+                    if (!$siteEngineer && !$isOffice && $targetDepartment->site_engineer_user_id) {
+                        $siteEngineer = $targetDepartment->siteEngineer;
+                    }
+
+                    if ($isReviewerSameDept && !$assignedManager) {
+                        $assignedManager = $user;
+                    }
+
+                    if (!$assignedManager && !$isBypassRole && !$isReviewerSameDept) {
+                        throw ValidationException::withMessages([
+                            'target_department_id' => ['لا يمكن إرسال الطلب قبل تعيين مراجع أو مدير للقسم المستهدف.'],
+                        ]);
+                    }
+
+                    $pr = PurchaseRequest::create([
+                        'request_number' => $requestNumber,
+                        'request_type' => $requestType,
+                        'parcel_reference' => $parcelReference,
+                        'region' => $region,
+                        'land_parcel_id' => $landParcelId,
+                        'user_id' => $user->id,
+                        'department_id' => $user->department_id ?? $targetDepartment->id,
+                        'target_department_id' => $targetDepartment->id,
+                        // Keep legacy reviewer_user_id populated with the department manager.
+                        // The general manager is the final business approver for their own request;
+                        // never route their request to the target department manager.
+                        'reviewer_user_id' => $isExecutiveRequester ? null : $assignedManager?->id,
+                        'site_engineer_user_id' => $isOffice ? null : $siteEngineer?->id,
+                        'priority' => $data['priority'] ?? 'NORMAL',
+                        'status' => 'DRAFT',
+                        'procurement_route' => 'UNDECIDED',
+                        'total_estimated_cost' => 0,
+                        'date_needed' => $this->normalizeNeededDate($data['date_needed'] ?? $data['required_date'] ?? $data['required_delivery_date'] ?? null),
+                        'notes' => $data['notes'] ?? null,
+                    ]);
+
+                    foreach ($normalizedItems as $itemData) {
+                        $pr->items()->create([
+                            'item_id' => $itemData['item_id'] ?? null,
+                            'item_description' => $itemData['item_description'],
+                            'item_reference' => $itemData['item_reference'],
+                            'region' => $itemData['region'],
+                            'quantity' => $itemData['quantity'],
+                            'uom' => $itemData['uom'],
+                            'specifications' => $itemData['specifications'] ?? null,
+                            'notes' => $itemData['notes'] ?? null,
+                        ]);
+                    }
+
+                    AuditLog::create([
+                        'user_id' => $user->id,
+                        'action' => 'CREATED',
+                        'entity_type' => PurchaseRequest::class,
+                        'entity_id' => $pr->id,
+                        'new_value' => json_encode([
+                            'request_number' => $pr->request_number,
+                            'request_type' => $pr->request_type,
+                            'parcel_reference' => $pr->parcel_reference,
+                            'region' => $pr->region,
+                            'status' => 'DRAFT',
+                        ], JSON_UNESCAPED_UNICODE),
+                    ]);
+
+                    return $pr->load(['requester.roles', 'requester:id,name,email,department_id', 'department:id,name,code', 'assignedReviewer:id,name,email,department_id', 'siteEngineer:id,name,email,department_id', 'landParcel', 'items.item', 'items.supplier']);
+                });
+            } catch (QueryException $e) {
+                $isDuplicate = $e->getCode() == 23000
+                    || ($e->errorInfo[1] ?? null) == 1062
+                    || str_contains($e->getMessage(), '1062')
+                    || str_contains($e->getMessage(), 'Duplicate entry')
+                    || str_contains($e->getMessage(), 'request_number');
+
+                if ($isDuplicate && $attempt < $maxAttempts) {
+                    Log::warning("PurchaseRequestService: Duplicate request_number collision detected on attempt {$attempt}, retrying...", [
+                        'user_id' => $user->id,
+                        'attempt' => $attempt,
+                        'error' => $e->getMessage(),
+                    ]);
+                    usleep(random_int(20000, 100000));
+                    continue;
                 }
-            }
 
-            $normalizedItems = $this->normalizeItems($data['items'] ?? [], $isOffice, $parcelReference, $region);
-            $requestNumber = $this->generateRequestNumber();
-            $targetDepartmentId = (int) ($data['target_department_id'] ?? $data['department_id'] ?? $user->department_id);
-            $targetDepartment = Department::with(['manager', 'siteEngineer'])->find($targetDepartmentId);
-
-            if (!$targetDepartment) {
-                throw ValidationException::withMessages([
-                    'target_department_id' => ['اختر قسمًا مستهدفًا صحيحًا للطلب.'],
-                ]);
+                throw $e;
             }
+        }
 
-            $isExecutiveRequester = $user->hasRole('general_manager');
-            $isBypassRole = $user->hasAnyRole(['general_manager', 'procurement_manager', 'accountant', 'admin']);
-            $isReviewerSameDept = $user->hasRole('reviewer') && ((int) $targetDepartment->id === (int) $user->department_id);
-
-            $assignedManager = $targetDepartment->manager;
-            if (!$assignedManager) {
-                $assignedManager = User::where('department_id', $targetDepartment->id)
-                    ->where('is_active', true)
-                    ->whereHas('roles', fn ($q) => $q->where('slug', 'reviewer'))
-                    ->first();
-            }
-            if (!$assignedManager) {
-                $emailMap = (array) config('procurement.default_department_reviewers', []);
-                if (isset($emailMap[$targetDepartment->code])) {
-                    $assignedManager = User::where('email', $emailMap[$targetDepartment->code])->first();
-                }
-            }
-            if ($assignedManager && !$targetDepartment->manager_user_id) {
-                $targetDepartment->update(['manager_user_id' => $assignedManager->id]);
-            }
-
-            // Backward compatibility for old clients/drafts that still send explicit assignments.
-            if (!$assignedManager && !empty($data['reviewer_user_id'])) {
-                $assignedManager = User::query()->whereKey((int) $data['reviewer_user_id'])->where('is_active', true)->first();
-            }
-            $siteEngineer = null;
-            if (!empty($data['site_engineer_user_id'])) {
-                $siteEngineer = User::query()->whereKey((int) $data['site_engineer_user_id'])->where('is_active', true)->first();
-            }
-            if (!$siteEngineer && !$isOffice && $targetDepartment->site_engineer_user_id) {
-                $siteEngineer = $targetDepartment->siteEngineer;
-            }
-
-            if ($isReviewerSameDept && !$assignedManager) {
-                $assignedManager = $user;
-            }
-
-            if (!$assignedManager && !$isBypassRole && !$isReviewerSameDept) {
-                throw ValidationException::withMessages([
-                    'target_department_id' => ['لا يمكن إرسال الطلب قبل تعيين مراجع أو مدير للقسم المستهدف.'],
-                ]);
-            }
-
-            $pr = PurchaseRequest::create([
-                'request_number' => $requestNumber,
-                'request_type' => $requestType,
-                'parcel_reference' => $parcelReference,
-                'region' => $region,
-                'land_parcel_id' => $landParcelId,
-                'user_id' => $user->id,
-                'department_id' => $user->department_id ?? $targetDepartment->id,
-                'target_department_id' => $targetDepartment->id,
-                // Keep legacy reviewer_user_id populated with the department manager.
-                // The general manager is the final business approver for their own request;
-                // never route their request to the target department manager.
-                'reviewer_user_id' => $isExecutiveRequester ? null : $assignedManager?->id,
-                'site_engineer_user_id' => $isOffice ? null : $siteEngineer?->id,
-                'priority' => $data['priority'] ?? 'NORMAL',
-                'status' => 'DRAFT',
-                'procurement_route' => 'UNDECIDED',
-                'total_estimated_cost' => 0,
-                'date_needed' => $this->normalizeNeededDate($data['date_needed'] ?? $data['required_date'] ?? $data['required_delivery_date'] ?? null),
-                'notes' => $data['notes'] ?? null,
-            ]);
-
-            foreach ($normalizedItems as $itemData) {
-                $pr->items()->create([
-                    'item_id' => $itemData['item_id'] ?? null,
-                    'item_description' => $itemData['item_description'],
-                    'item_reference' => $itemData['item_reference'],
-                    'region' => $itemData['region'],
-                    'quantity' => $itemData['quantity'],
-                    'uom' => $itemData['uom'],
-                    'specifications' => $itemData['specifications'] ?? null,
-                    'notes' => $itemData['notes'] ?? null,
-                ]);
-            }
-
-            AuditLog::create([
-                'user_id' => $user->id,
-                'action' => 'CREATED',
-                'entity_type' => PurchaseRequest::class,
-                'entity_id' => $pr->id,
-                'new_value' => json_encode([
-                    'request_number' => $pr->request_number,
-                    'request_type' => $pr->request_type,
-                    'parcel_reference' => $pr->parcel_reference,
-                    'region' => $pr->region,
-                    'status' => 'DRAFT',
-                ], JSON_UNESCAPED_UNICODE),
-            ]);
-
-            return $pr->load(['requester.roles', 'requester:id,name,email,department_id', 'department:id,name,code', 'assignedReviewer:id,name,email,department_id', 'siteEngineer:id,name,email,department_id', 'landParcel', 'items.item', 'items.supplier']);
-        });
+        throw new \RuntimeException('تعذر إنشاء طلب الشراء بسبب تداخل أرقام الطلبات. يرجى إعادة المحاولة.');
     }
 
     /**

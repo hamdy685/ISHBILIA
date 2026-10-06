@@ -8,8 +8,10 @@ use App\Models\PurchaseRequest;
 use App\Models\User;
 use App\Models\Supplier;
 use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Validation\ValidationException;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 
 class ProcurementPurchaseRequestService
 {
@@ -377,25 +379,69 @@ class ProcurementPurchaseRequestService
     }
 
     /**
+     * Generate sequential unique Direct Purchase Request number (PR-DIRECT-YYYY-XXXXX).
+     */
+    public function generateDirectRequestNumber(): string
+    {
+        $year = date('Y');
+        $prefix = "PR-DIRECT-{$year}-";
+        $prefixLen = strlen($prefix);
+
+        $dbMax = null;
+        try {
+            $record = PurchaseRequest::withTrashed()
+                ->where('request_number', 'like', $prefix . '%')
+                ->selectRaw("MAX(CAST(SUBSTRING(request_number, " . ($prefixLen + 1) . ") AS UNSIGNED)) as max_seq")
+                ->first();
+
+            if ($record && isset($record->max_seq) && is_numeric($record->max_seq)) {
+                $dbMax = (int) $record->max_seq;
+            }
+        } catch (\Throwable $e) {
+            Log::warning('ProcurementPurchaseRequestService: SQL MAX calculation error: ' . $e->getMessage());
+        }
+
+        $scannedMax = 0;
+        try {
+            $sampleNumbers = PurchaseRequest::withTrashed()
+                ->where('request_number', 'like', $prefix . '%')
+                ->orderByDesc('id')
+                ->limit(100)
+                ->pluck('request_number');
+
+            foreach ($sampleNumbers as $nr) {
+                if (preg_match('/^PR-DIRECT-' . $year . '-(\d+)/i', $nr, $matches)) {
+                    $val = (int) $matches[1];
+                    if ($val > $scannedMax) {
+                        $scannedMax = $val;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // Ignore
+        }
+
+        $highestSeq = max((int) $dbMax, $scannedMax);
+        $nextSeq = $highestSeq + 1;
+
+        while (PurchaseRequest::withTrashed()->where('request_number', sprintf('PR-DIRECT-%s-%05d', $year, $nextSeq))->exists()) {
+            $nextSeq++;
+        }
+
+        return sprintf('PR-DIRECT-%s-%05d', $year, $nextSeq);
+    }
+
+    /**
      * Create a direct purchase request that must pass accounting approval before PO creation.
      */
     public function createDirectPurchaseRequest(User $procurementManager, array $data): PurchaseRequest
     {
-        return DB::transaction(function () use ($procurementManager, $data): PurchaseRequest {
-            $year = date('Y');
-            $prefix = "PR-DIRECT-{$year}-";
-            $maxNumber = PurchaseRequest::withTrashed()
-                ->where('request_number', 'like', $prefix . '%')
-                ->selectRaw("MAX(CAST(SUBSTRING(request_number, ?) AS UNSIGNED)) as max_seq", [strlen($prefix) + 1])
-                ->value('max_seq');
-            $nextSeq = ($maxNumber ?? 0) + 1;
+        $maxAttempts = 5;
 
-            // Retry to avoid duplicates
-            $prNumber = sprintf('PR-DIRECT-%s-%05d', $year, $nextSeq);
-            while (PurchaseRequest::withTrashed()->where('request_number', $prNumber)->exists()) {
-                $nextSeq++;
-                $prNumber = sprintf('PR-DIRECT-%s-%05d', $year, $nextSeq);
-            }
+        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+            try {
+                return DB::transaction(function () use ($procurementManager, $data): PurchaseRequest {
+                    $prNumber = $this->generateDirectRequestNumber();
             $total = 0.0;
 
             foreach ($data['items'] as $item) {
@@ -486,6 +532,28 @@ class ProcurementPurchaseRequestService
                 'approvalHistory.actor',
             ]);
         });
+            } catch (QueryException $e) {
+                $isDuplicate = $e->getCode() == 23000
+                    || ($e->errorInfo[1] ?? null) == 1062
+                    || str_contains($e->getMessage(), '1062')
+                    || str_contains($e->getMessage(), 'Duplicate entry')
+                    || str_contains($e->getMessage(), 'request_number');
+
+                if ($isDuplicate && $attempt < $maxAttempts) {
+                    Log::warning("ProcurementPurchaseRequestService: Duplicate request_number collision detected on attempt {$attempt}, retrying...", [
+                        'user_id' => $procurementManager->id,
+                        'attempt' => $attempt,
+                        'error' => $e->getMessage(),
+                    ]);
+                    usleep(random_int(20000, 100000));
+                    continue;
+                }
+
+                throw $e;
+            }
+        }
+
+        throw new \RuntimeException('تعذر إنشاء طلب الشراء المباشر بسبب تداخل أرقام الطلبات. يرجى إعادة المحاولة.');
     }
 
     /**

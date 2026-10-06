@@ -10,38 +10,79 @@ use App\Models\PurchaseRequest;
 use App\Models\Supplier;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 class PurchaseOrderService
 {
     /**
      * Generate sequential unique Purchase Order number (PO-YYYY-XXXXX).
-     * Uses MAX extraction from existing numbers to avoid duplicates after record deletions.
+     * Extracts the highest registered number for the given year,
+     * and increments by 1 (MAX + 1) to eliminate duplicate collisions.
      */
     public function generatePoNumber(): string
     {
         $year = date('Y');
         $prefix = "PO-{$year}-";
+        $prefixLen = strlen($prefix);
 
-        // Extract the highest existing sequence number from the database
-        $maxNumber = PurchaseOrder::withTrashed()
-            ->where('po_number', 'like', $prefix . '%')
-            ->selectRaw("MAX(CAST(SUBSTRING(po_number, ?) AS UNSIGNED)) as max_seq", [strlen($prefix) + 1])
-            ->value('max_seq');
+        // 1. Database-level aggregation
+        $dbMax = null;
+        try {
+            $record = PurchaseOrder::withTrashed()
+                ->where('po_number', 'like', $prefix . '%')
+                ->selectRaw("MAX(CAST(SUBSTRING(po_number, " . ($prefixLen + 1) . ") AS UNSIGNED)) as max_seq")
+                ->first();
 
-        $nextSeq = ($maxNumber ?? 0) + 1;
-
-        // Retry loop to handle rare race conditions
-        for ($attempt = 0; $attempt < 10; $attempt++) {
-            $candidate = sprintf('PO-%s-%05d', $year, $nextSeq);
-            $exists = PurchaseOrder::withTrashed()
-                ->where('po_number', $candidate)
-                ->exists();
-
-            if (! $exists) {
-                return $candidate;
+            if ($record && isset($record->max_seq) && is_numeric($record->max_seq)) {
+                $dbMax = (int) $record->max_seq;
             }
+        } catch (\Throwable $e) {
+            Log::warning('PurchaseOrderService: SQL MAX calculation error: ' . $e->getMessage());
+        }
+
+        // 2. Scan recent records
+        $scannedMax = 0;
+        try {
+            $sampleNumbers = PurchaseOrder::withTrashed()
+                ->where('po_number', 'like', $prefix . '%')
+                ->orderByDesc('id')
+                ->limit(100)
+                ->pluck('po_number');
+
+            foreach ($sampleNumbers as $nr) {
+                if (preg_match('/^PO-' . $year . '-(\d+)/i', $nr, $matches)) {
+                    $val = (int) $matches[1];
+                    if ($val > $scannedMax) {
+                        $scannedMax = $val;
+                    }
+                }
+            }
+
+            $alphaNumbers = PurchaseOrder::withTrashed()
+                ->where('po_number', 'like', $prefix . '%')
+                ->orderByDesc('po_number')
+                ->limit(20)
+                ->pluck('po_number');
+
+            foreach ($alphaNumbers as $nr) {
+                if (preg_match('/^PO-' . $year . '-(\d+)/i', $nr, $matches)) {
+                    $val = (int) $matches[1];
+                    if ($val > $scannedMax) {
+                        $scannedMax = $val;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // Ignore
+        }
+
+        $highestSeq = max((int) $dbMax, $scannedMax);
+        $nextSeq = $highestSeq + 1;
+
+        while (PurchaseOrder::withTrashed()->where('po_number', sprintf('PO-%s-%05d', $year, $nextSeq))->exists()) {
             $nextSeq++;
         }
 
