@@ -131,25 +131,33 @@ class ProcurementPurchaseRequestService
             'selectedQuote.supplier',
             'quotes.supplier',
             'approvalHistory.actor',
-            'supplements',
+            'supplements.items.item',
+            'supplements.requester',
+            'supplements.reviewer',
+            'purchaseOrders.supplier',
         ])
             ->withCount(['purchaseOrders as issued_purchase_orders_count' => function ($query) {
                 $query->whereNotIn('status', ['REJECTED']);
             }])
-            ->whereDoesntHave('purchaseOrders', function ($query): void {
-                $query->whereNotIn('status', ['REJECTED']);
-            })
             ->where(function ($query): void {
-                $query->where(function ($quotePath): void {
-                    $quotePath
-                        ->where('status', 'APPROVED_BY_PROCUREMENT')
-                        ->where(function ($route): void {
-                            $route->whereNull('procurement_route')->orWhere('procurement_route', '!=', 'DIRECT');
+                $query->where(function ($regularQuery): void {
+                    $regularQuery->whereDoesntHave('purchaseOrders', function ($poQuery): void {
+                        $poQuery->whereNotIn('status', ['REJECTED']);
+                    })->where(function ($statusQuery): void {
+                        $statusQuery->where(function ($quotePath): void {
+                            $quotePath
+                                ->where('status', 'APPROVED_BY_PROCUREMENT')
+                                ->where(function ($route): void {
+                                    $route->whereNull('procurement_route')->orWhere('procurement_route', '!=', 'DIRECT');
+                                });
+                        })->orWhere(function ($directPath): void {
+                            $directPath
+                                ->where('status', 'APPROVED_BY_ACCOUNTING')
+                                ->where('procurement_route', 'DIRECT');
                         });
-                })->orWhere(function ($directPath): void {
-                    $directPath
-                        ->where('status', 'APPROVED_BY_ACCOUNTING')
-                        ->where('procurement_route', 'DIRECT');
+                    });
+                })->orWhereHas('supplements', function ($suppQuery): void {
+                    $suppQuery->whereIn('status', ['PENDING_PROCUREMENT_APPROVAL', 'REVIEWER_APPROVED']);
                 });
             })
             ->orderBy('updated_at', 'desc')

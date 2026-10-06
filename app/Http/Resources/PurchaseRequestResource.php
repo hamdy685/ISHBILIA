@@ -238,6 +238,24 @@ class PurchaseRequestResource extends JsonResource
                     'notes' => $supp->notes,
                     'rejection_reason' => $supp->rejection_reason,
                     'created_at' => $supp->created_at?->toIso8601String(),
+                    'requester' => $supp->relationLoaded('requester') && $supp->requester ? [
+                        'id' => $supp->requester->id,
+                        'name' => $supp->requester->name,
+                    ] : null,
+                    'reviewer' => $supp->relationLoaded('reviewer') && $supp->reviewer ? [
+                        'id' => $supp->reviewer->id,
+                        'name' => $supp->reviewer->name,
+                    ] : null,
+                    'items' => $supp->relationLoaded('items') ? $supp->items->map(fn ($it) => [
+                        'id' => $it->id,
+                        'item_description' => $it->item_description,
+                        'quantity' => $it->quantity,
+                        'uom' => $it->uom,
+                        'estimated_unit_price' => $it->estimated_unit_price,
+                        'item_reference' => $it->item_reference,
+                        'region' => $it->region,
+                        'specifications' => $it->specifications,
+                    ]) : [],
                 ])->values();
             }),
         ];

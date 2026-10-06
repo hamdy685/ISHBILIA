@@ -145,6 +145,7 @@ export interface PurchaseRequestItem {
   date_needed?: string | null;
   is_supplementary?: boolean;
   supplement_batch?: number | null;
+  supplement_id?: number | null;
 }
 
 export interface Attachment {
@@ -287,6 +288,7 @@ export interface PurchaseRequest {
     status: string;
     delivery_status?: string | null;
     total_amount?: string | number | null;
+    supplier_id?: number | null;
     supplier?: { id: number; company_name: string } | null;
     has_approved_receipt?: boolean;
     finalized_at?: string | null;
@@ -314,6 +316,8 @@ export interface PurchaseRequest {
 export interface PurchaseRequestSupplement {
   id: number;
   purchase_request_id: number;
+  batch_number: number;
+  requested_by_user_id?: number;
   supplement_number?: string | null;
   status:
     | 'DRAFT'
@@ -322,13 +326,17 @@ export interface PurchaseRequestSupplement {
     | 'PENDING_PROCUREMENT_APPROVAL'
     | 'PROCESSED'
     | 'PROCUREMENT_PROCESSED'
-    | 'REJECTED';
+    | 'REJECTED'
+    | string;
   requested_quantity?: number | null;
   approved_quantity?: number | null;
   unit_price?: number | null;
   total_amount?: number | null;
   supplier_id?: number | null;
   supplier?: { id: number; company_name: string } | null;
+  reviewer?: { id: number; name: string } | null;
+  requester?: { id: number; name: string } | null;
+  items?: PurchaseRequestItem[];
   notes?: string | null;
   rejection_reason?: string | null;
   created_at?: string | null;

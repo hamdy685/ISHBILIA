@@ -8,6 +8,7 @@ import { PurchaseRequest } from '../../types/purchaseRequest';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import ErrorMessage from '../../components/ErrorMessage';
 import DirectPoModal from '../../components/procurement/DirectPoModal';
+import { ProcurementSupplementProcessModal } from '../../components/supplements/ProcurementSupplementProcessModal';
 import { parseApiError } from '../../utils/apiError';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -70,6 +71,13 @@ export const CreatePurchaseOrderPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const [isDirectPoModalOpen, setIsDirectPoModalOpen] = useState<boolean>(false);
+  const [isSupplementModalOpen, setIsSupplementModalOpen] = useState<boolean>(false);
+
+  const pendingSupplement = useMemo(() => {
+    return Array.isArray(pr?.supplements)
+      ? pr.supplements.find((s: any) => ['PENDING_PROCUREMENT_APPROVAL', 'REVIEWER_APPROVED'].includes(s.status))
+      : null;
+  }, [pr?.supplements]);
 
   useEffect(() => {
     const init = async () => {
@@ -86,6 +94,10 @@ export const CreatePurchaseOrderPage: React.FC = () => {
           if (quoteId && prData?.selected_quote?.id && quoteId !== prData.selected_quote.id) {
             throw new Error('العرض المختار في الرابط لا يطابق العرض المعتمد لهذا الطلب.');
           }
+          const pendingSupp = Array.isArray(prData?.supplements)
+            ? prData.supplements.find((s: any) => ['PENDING_PROCUREMENT_APPROVAL', 'REVIEWER_APPROVED'].includes(s.status))
+            : null;
+
           let initialSupplierId = '';
           if (prData?.selected_quote?.supplier_id) {
             initialSupplierId = String(prData.selected_quote.supplier_id);
@@ -93,12 +105,22 @@ export const CreatePurchaseOrderPage: React.FC = () => {
             const firstItemSupplier = prData.items?.find((i) => i.supplier_id)?.supplier_id;
             initialSupplierId = String(firstItemSupplier || prData.direct_supplier_id || '');
           }
+          if (!initialSupplierId && prData?.purchase_orders?.[0]?.supplier_id) {
+            initialSupplierId = String(prData.purchase_orders[0].supplier_id);
+          }
           setSupplierId(initialSupplierId);
 
           if (prData && prData.items) {
-            // Keep ALL approved PR items in the unified Purchase Order with automatic rebar-to-ton conversion
+            // If PR already has an issued PO and has a pending supplement, focus on supplement items
+            const sourceItems = (pendingSupp && prData.purchase_orders?.length)
+              ? prData.items.filter((i) => i.is_supplementary || i.supplement_id === pendingSupp.id)
+              : prData.items;
+
+            const itemsToMap = sourceItems.length > 0 ? sourceItems : prData.items;
+
+            // Keep approved PR items in the Purchase Order with automatic rebar-to-ton conversion
             setPoItems(
-              prData.items.map((i) => {
+              itemsToMap.map((i) => {
                 const rawQty = parseFloat(i.quantity) || 1;
                 const uomUpper = (i.uom || '').trim().toUpperCase();
                 const isRebar = isRebarUnit(i.uom) || uomUpper === 'PARCEL' || (i.uom || '').includes('طرد');
@@ -458,6 +480,31 @@ export const CreatePurchaseOrderPage: React.FC = () => {
 
       <form onSubmit={handleSubmit} className="space-y-6">
         
+        {/* SUPPLEMENT NOTICE BANNER */}
+        {pendingSupplement && (
+          <div className="rounded-xl border border-amber-500/40 bg-gradient-to-r from-amber-950/40 via-slate-900 to-amber-950/30 p-4 flex flex-wrap items-center justify-between gap-4 shadow-lg shadow-amber-900/10">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-amber-300 font-black text-sm">
+                <span className="text-xl">⚡</span>
+                <span>طلب كمالة معتمد (دفعة #{pendingSupplement.batch_number}) على هذا الطلب</span>
+              </div>
+              <p className="text-xs text-slate-300">
+                معتمد من رئيس القسم: <strong className="text-emerald-300">{pendingSupplement.reviewer?.name || pr?.assigned_reviewer?.name || 'م. مصطفى (رئيس قسم التراخيص)'}</strong>.
+                {pr?.purchase_orders && pr.purchase_orders.length > 0 ? ' تم إصدار أمر شراء سابق للبنود الأصلية، والبنود الموضحة أدناه تخص ملحق الكمالة فقط.' : ''}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black whitespace-nowrap shadow-md shadow-amber-600/20"
+              onClick={() => setIsSupplementModalOpen(true)}
+            >
+              ⚡ إصدار أمر شراء سريع للكمالة
+            </Button>
+          </div>
+        )}
+
         {/* SECTION 1: REFERENCE PURCHASE REQUEST (READ ONLY) */}
         {pr && (
           <Card className="space-y-4 border-cyan-500/30 bg-slate-900/90">
@@ -1052,6 +1099,20 @@ export const CreatePurchaseOrderPage: React.FC = () => {
         onClose={() => setIsDirectPoModalOpen(false)}
         onSuccess={() => navigate('/procurement')}
       />
+
+      {/* Procurement Supplement Process Modal */}
+      {isSupplementModalOpen && pr && pendingSupplement && (
+        <ProcurementSupplementProcessModal
+          isOpen={isSupplementModalOpen}
+          request={pr}
+          supplement={pendingSupplement as any}
+          onClose={() => setIsSupplementModalOpen(false)}
+          onSuccess={() => {
+            setIsSupplementModalOpen(false);
+            navigate('/procurement/purchase-orders');
+          }}
+        />
+      )}
     </div>
   );
 };

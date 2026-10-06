@@ -66,10 +66,27 @@ class ProcurementPurchaseOrderController extends Controller
      */
     public function showApprovedPr(Request $request, string|int $id): JsonResponse|PurchaseRequestResource
     {
-        $pr = PurchaseRequest::with(['requester', 'department', 'assignedReviewer', 'siteEngineer', 'directSupplier', 'items.item', 'approvalHistory.actor', 'quotes.supplier', 'quotes.recommendations.user', 'selectedQuote.supplier'])
+        $pr = PurchaseRequest::with([
+            'requester',
+            'department',
+            'assignedReviewer',
+            'siteEngineer',
+            'directSupplier',
+            'items.item',
+            'approvalHistory.actor',
+            'quotes.supplier',
+            'quotes.recommendations.user',
+            'selectedQuote.supplier',
+            'supplements.items.item',
+            'supplements.requester',
+            'supplements.reviewer',
+            'purchaseOrders.supplier',
+        ])
             ->findOrFail((int) $id);
 
-        if (! in_array($pr->status, ['PENDING_PROCUREMENT_APPROVAL', 'PENDING_QUOTE_RECOMMENDATIONS', 'PENDING_EXECUTIVE_QUOTE_DECISION', 'APPROVED_BY_PROCUREMENT', 'APPROVED_BY_ACCOUNTING'])) {
+        $hasPendingSupplement = $pr->supplements()->whereIn('status', ['PENDING_PROCUREMENT_APPROVAL', 'REVIEWER_APPROVED'])->exists();
+
+        if (! $hasPendingSupplement && ! in_array($pr->status, ['PENDING_PROCUREMENT_APPROVAL', 'PENDING_QUOTE_RECOMMENDATIONS', 'PENDING_EXECUTIVE_QUOTE_DECISION', 'APPROVED_BY_PROCUREMENT', 'APPROVED_BY_ACCOUNTING'])) {
             return response()->json(['message' => 'Purchase request is not in a procurement queue status.'], 409);
         }
 

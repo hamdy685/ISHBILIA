@@ -7,6 +7,7 @@ import { TableSkeleton } from '../../components/ui/StateFeedback';
 import ErrorMessage from '../../components/ErrorMessage';
 import PrDetailsModal from '../../components/procurement/PrDetailsModal';
 import DirectPoModal from '../../components/procurement/DirectPoModal';
+import { ProcurementSupplementProcessModal } from '../../components/supplements/ProcurementSupplementProcessModal';
 import { parseApiError } from '../../utils/apiError';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -16,6 +17,7 @@ import { Input, Select } from '../../components/ui/FormField';
 import TableFilterBar from '../../components/ui/TableFilterBar';
 import { getDefaultDateFrom, getTodayInputDate, isDefaultTodayRange } from '../../utils/dateFilters';
 import { getUnitLabel } from '../../utils/units';
+import { formatCleanQty } from '../../utils/numberFormat';
 import { getSummaryParcels, getSummaryRegions, getSummaryQuantities } from '../../utils/formatRequestSummary';
 
 export const ApprovedPurchaseRequestsPage: React.FC = () => {
@@ -33,6 +35,10 @@ export const ApprovedPurchaseRequestsPage: React.FC = () => {
 
   const [selectedPr, setSelectedPr] = useState<PurchaseRequest | null>(null);
   const [isDirectPoModalOpen, setIsDirectPoModalOpen] = useState<boolean>(false);
+  const [selectedSupplementPr, setSelectedSupplementPr] = useState<{
+    request: PurchaseRequest;
+    supplement: any;
+  } | null>(null);
 
   const { hasPermission } = useAuth();
 
@@ -59,15 +65,29 @@ export const ApprovedPurchaseRequestsPage: React.FC = () => {
   );
 
   const filteredRequests = requests.filter(r => {
-    if (r.issued_purchase_orders_count && r.issued_purchase_orders_count > 0) {
+    const pendingSupplement = Array.isArray(r.supplements)
+      ? r.supplements.find((s: any) => ['PENDING_PROCUREMENT_APPROVAL', 'REVIEWER_APPROVED'].includes(s.status))
+      : null;
+
+    if (r.issued_purchase_orders_count && r.issued_purchase_orders_count > 0 && !pendingSupplement) {
       return false;
     }
+    const qLower = searchTerm.toLowerCase();
     const matchesSearch =
-      r.request_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (r.requester?.name && r.requester.name.toLowerCase().includes(searchTerm.toLowerCase()));
+      r.request_number.toLowerCase().includes(qLower) ||
+      (r.requester?.name && r.requester.name.toLowerCase().includes(qLower)) ||
+      (pendingSupplement && (
+        'كمالة'.includes(qLower) ||
+        'تكميلي'.includes(qLower) ||
+        `دفعة ${pendingSupplement.batch_number}`.includes(qLower) ||
+        (pendingSupplement.reviewer?.name && pendingSupplement.reviewer.name.toLowerCase().includes(qLower)) ||
+        (pendingSupplement.notes && pendingSupplement.notes.toLowerCase().includes(qLower)) ||
+        (pendingSupplement.items && pendingSupplement.items.some((it: any) => (it.item_description || '').toLowerCase().includes(qLower)))
+      ));
 
     const matchesDepartment = !departmentFilter || r.department?.name === departmentFilter;
-    const matchesRoute = routeFilter === 'ALL' || (routeFilter === 'DIRECT' ? r.procurement_route === 'DIRECT' : r.procurement_route !== 'DIRECT');
+    const isDirectRoute = r.procurement_route === 'DIRECT' || Boolean(pendingSupplement);
+    const matchesRoute = routeFilter === 'ALL' || (routeFilter === 'DIRECT' ? isDirectRoute : (!isDirectRoute));
     const approvedDate = r.updated_at ? r.updated_at.slice(0, 10) : '';
     const ignoreDefaultDateForSearch = Boolean(searchTerm.trim()) && isDefaultTodayRange(dateFrom, dateTo);
     const matchesFrom = ignoreDefaultDateForSearch || !dateFrom || approvedDate >= dateFrom;
@@ -156,47 +176,108 @@ export const ApprovedPurchaseRequestsPage: React.FC = () => {
             </TableHeader>
             <TableBody>
               {filteredRequests.map(r => {
-                const itemNames = r.items?.map((item) => item.item_description || item.item?.name).filter(Boolean) || [];
+                const pendingSupplement = Array.isArray(r.supplements)
+                  ? r.supplements.find((s: any) => ['PENDING_PROCUREMENT_APPROVAL', 'REVIEWER_APPROVED'].includes(s.status))
+                  : null;
+                const suppItems = pendingSupplement?.items || [];
+                const itemNames = (suppItems.length > 0 ? suppItems : (r.items || []))
+                  .map((item: any) => item.item_description || item.item?.name)
+                  .filter(Boolean);
                 const itemsDisplay = itemNames.length === 0
                   ? '—'
                   : itemNames.length === 1
                     ? itemNames[0]
                     : `${itemNames[0]} (+${itemNames.length - 1} أصناف)`;
-                const parcelsDisplay = getSummaryParcels(r);
-                const regionsDisplay = getSummaryRegions(r);
+                const suppParcels = suppItems.map((it: any) => it.item_reference).filter(Boolean);
+                const suppRegions = suppItems.map((it: any) => it.region).filter(Boolean);
+                const parcelsDisplay = suppParcels.length > 0 ? Array.from(new Set(suppParcels)).join('، ') : getSummaryParcels(r);
+                const regionsDisplay = suppRegions.length > 0 ? Array.from(new Set(suppRegions)).join('، ') : getSummaryRegions(r);
                 const quantitiesInfo = getSummaryQuantities(r.items);
+                const quantitiesDisplay = suppItems.length > 0
+                  ? suppItems.map((it: any) => `${formatCleanQty(it.quantity)} ${getUnitLabel(it.uom)}`).join(' + ')
+                  : quantitiesInfo.display;
+
+                const originalSupplierName = r.purchase_orders?.[0]?.supplier?.company_name || r.direct_supplier?.company_name || r.selected_quote?.supplier?.company_name;
 
                 return (
-                  <TableRow key={r.id}>
+                  <TableRow key={r.id} className={pendingSupplement ? 'bg-amber-950/10 border-amber-800/30' : undefined}>
                     <TableCell className="whitespace-nowrap font-mono font-bold text-cyan-400">
-                      <Link to={`/procurement/purchase-requests/${r.id}`} className="hover:underline">{r.request_number}</Link>
+                      <div className="flex flex-col gap-1 items-start">
+                        <Link to={`/procurement/purchase-requests/${r.id}`} className="hover:underline">{r.request_number}</Link>
+                        {pendingSupplement && (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/20 px-2 py-0.5 text-[10px] font-black text-amber-300 border border-amber-500/40 animate-pulse">
+                            ⚡ كمالة دفعة #{pendingSupplement.batch_number}
+                          </span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
-                      <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${r.procurement_route === 'DIRECT' ? 'bg-amber-400/15 text-amber-300' : 'bg-cyan-400/15 text-cyan-300'}`}>
-                        {r.procurement_route === 'DIRECT' ? 'شراء مباشر' : 'عروض أسعار'}
-                      </span>
+                      {pendingSupplement ? (
+                        <span className="rounded-full px-2.5 py-1 text-[10px] font-black bg-gradient-to-r from-amber-500/25 to-amber-600/25 text-amber-300 border border-amber-500/40">
+                          ⚡ شراء مباشر (كمالة)
+                        </span>
+                      ) : (
+                        <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${r.procurement_route === 'DIRECT' ? 'bg-amber-400/15 text-amber-300' : 'bg-cyan-400/15 text-cyan-300'}`}>
+                          {r.procurement_route === 'DIRECT' ? 'شراء مباشر' : 'عروض أسعار'}
+                        </span>
+                      )}
                     </TableCell>
-                    <TableCell className="max-w-[160px] text-slate-300">{r.department?.name || '—'}</TableCell>
+                    <TableCell className="max-w-[160px] text-slate-300">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-semibold">{r.department?.name || '—'}</span>
+                        {pendingSupplement?.reviewer?.name && (
+                          <span className="text-[10px] text-emerald-400 font-bold">
+                            معتمد من: {pendingSupplement.reviewer.name}
+                          </span>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell className="max-w-[180px] font-semibold text-slate-100 text-xs truncate">
                       <span title={itemNames.join('، ')}>{itemsDisplay}</span>
                     </TableCell>
                     <TableCell className="font-mono text-cyan-300 text-xs whitespace-nowrap">{parcelsDisplay}</TableCell>
                     <TableCell className="text-slate-300 text-xs whitespace-nowrap">{regionsDisplay}</TableCell>
                     <TableCell className="font-mono font-bold text-amber-300 text-xs whitespace-nowrap">
-                      <span title={quantitiesInfo.tooltip}>{quantitiesInfo.display}</span>
+                      <span title={suppItems.length > 0 ? quantitiesDisplay : quantitiesInfo.tooltip}>{quantitiesDisplay}</span>
                     </TableCell>
                     <TableCell className="font-mono font-bold text-amber-300 text-xs whitespace-nowrap">{r.date_needed || '—'}</TableCell>
-                    <TableCell className="max-w-[180px] font-bold text-emerald-300">{r.direct_supplier?.company_name || r.selected_quote?.supplier?.company_name || '—'}</TableCell>
+                    <TableCell className="max-w-[180px] font-bold text-emerald-300">
+                      <div>
+                        {originalSupplierName || (pendingSupplement ? 'تحديد عند الإصدار' : '—')}
+                        {pendingSupplement && originalSupplierName && (
+                          <span className="text-[10px] text-slate-400 block font-normal">(مورد الطلب الأصلي)</span>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell className="max-w-[160px] text-slate-300">{r.requester?.name || '—'}</TableCell>
-                    <TableCell className="whitespace-nowrap text-cyan-200">{PR_STATUS_LABELS[r.status] || r.status}</TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {pendingSupplement ? (
+                        <span className="text-[11px] font-bold text-amber-300 bg-amber-950/60 border border-amber-600/40 px-2 py-0.5 rounded-full inline-block">
+                          بانتظار أمر شراء الكمالة
+                        </span>
+                      ) : (
+                        <span className="text-cyan-200">{PR_STATUS_LABELS[r.status] || r.status}</span>
+                      )}
+                    </TableCell>
                     <TableCell className="whitespace-nowrap font-mono text-slate-400">{r.updated_at ? new Date(r.updated_at).toLocaleDateString('ar-SA') : '—'}</TableCell>
                     <TableCell className="text-center">
                       <div className="flex items-center justify-center gap-2">
                         <Button variant="secondary" size="sm" className="whitespace-nowrap px-2 py-0.5 text-[10px]" onClick={() => setSelectedPr(r)}>معاينة</Button>
                         {hasPermission('purchase_order.create') && (
-                          <Link to={`/procurement/purchase-orders/create?pr=${r.id}`}>
-                            <Button variant="primary" size="sm" className="whitespace-nowrap px-2 py-0.5 text-[10px]">+ إنشاء أمر شراء</Button>
-                          </Link>
+                          pendingSupplement ? (
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              className="whitespace-nowrap px-2.5 py-1 text-[11px] font-black bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 shadow-md shadow-amber-600/20"
+                              onClick={() => setSelectedSupplementPr({ request: r, supplement: pendingSupplement })}
+                            >
+                              ⚡ إصدار أمر شراء للكمالة
+                            </Button>
+                          ) : (
+                            <Link to={`/procurement/purchase-orders/create?pr=${r.id}`}>
+                              <Button variant="primary" size="sm" className="whitespace-nowrap px-2 py-0.5 text-[10px]">+ إنشاء أمر شراء</Button>
+                            </Link>
+                          )
                         )}
                       </div>
                     </TableCell>
@@ -208,36 +289,100 @@ export const ApprovedPurchaseRequestsPage: React.FC = () => {
         </div>
         <div className="space-y-3 md:hidden">
           {filteredRequests.map(r => {
-            const itemNames = r.items?.map((item) => item.item_description || item.item?.name).filter(Boolean) || [];
-            const parcelsDisplay = getSummaryParcels(r);
-            const regionsDisplay = getSummaryRegions(r);
+            const pendingSupplement = Array.isArray(r.supplements)
+              ? r.supplements.find((s: any) => ['PENDING_PROCUREMENT_APPROVAL', 'REVIEWER_APPROVED'].includes(s.status))
+              : null;
+            const suppItems = pendingSupplement?.items || [];
+            const itemNames = (suppItems.length > 0 ? suppItems : (r.items || []))
+              .map((item: any) => item.item_description || item.item?.name)
+              .filter(Boolean);
+            const suppParcels = suppItems.map((it: any) => it.item_reference).filter(Boolean);
+            const suppRegions = suppItems.map((it: any) => it.region).filter(Boolean);
+            const parcelsDisplay = suppParcels.length > 0 ? Array.from(new Set(suppParcels)).join('، ') : getSummaryParcels(r);
+            const regionsDisplay = suppRegions.length > 0 ? Array.from(new Set(suppRegions)).join('، ') : getSummaryRegions(r);
             const quantitiesInfo = getSummaryQuantities(r.items);
+            const quantitiesDisplay = suppItems.length > 0
+              ? suppItems.map((it: any) => `${formatCleanQty(it.quantity)} ${getUnitLabel(it.uom)}`).join(' + ')
+              : quantitiesInfo.display;
+
+            const originalSupplierName = r.purchase_orders?.[0]?.supplier?.company_name || r.direct_supplier?.company_name || r.selected_quote?.supplier?.company_name;
 
             return (
-              <article key={`mobile-approved-${r.id}`} className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
+              <article key={`mobile-approved-${r.id}`} className={`min-w-0 rounded-2xl border p-4 ${pendingSupplement ? 'border-amber-700/50 bg-slate-900/95 shadow-lg shadow-amber-900/10' : 'border-slate-800 bg-slate-900/80'}`}>
                 <div className="flex min-w-0 items-start justify-between gap-3">
-                  <Link to={`/procurement/purchase-requests/${r.id}`} className="min-w-0 break-normal font-mono text-sm font-black text-cyan-300 hover:underline">{r.request_number}</Link>
-                  <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold ${r.procurement_route === 'DIRECT' ? 'bg-amber-400/15 text-amber-300' : 'bg-cyan-400/15 text-cyan-300'}`}>
-                    {r.procurement_route === 'DIRECT' ? 'شراء مباشر' : 'عروض أسعار'}
-                  </span>
+                  <div className="flex flex-col gap-1">
+                    <Link to={`/procurement/purchase-requests/${r.id}`} className="min-w-0 break-normal font-mono text-sm font-black text-cyan-300 hover:underline">{r.request_number}</Link>
+                    {pendingSupplement && (
+                      <span className="w-fit rounded-md bg-amber-500/20 px-2 py-0.5 text-[10px] font-black text-amber-300 border border-amber-500/40">
+                        ⚡ كمالة دفعة #{pendingSupplement.batch_number}
+                      </span>
+                    )}
+                  </div>
+                  {pendingSupplement ? (
+                    <span className="shrink-0 rounded-full px-2 py-1 text-[10px] font-black bg-amber-500/25 text-amber-300 border border-amber-500/40">
+                      ⚡ شراء مباشر (كمالة)
+                    </span>
+                  ) : (
+                    <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold ${r.procurement_route === 'DIRECT' ? 'bg-amber-400/15 text-amber-300' : 'bg-cyan-400/15 text-cyan-300'}`}>
+                      {r.procurement_route === 'DIRECT' ? 'شراء مباشر' : 'عروض أسعار'}
+                    </span>
+                  )}
                 </div>
                 <dl className="mt-4 grid min-w-0 grid-cols-1 gap-3 text-xs min-[420px]:grid-cols-2">
-                  <div className="min-w-0"><dt className="text-slate-500">القسم</dt><dd className="mt-1 break-normal text-slate-300">{r.department?.name || 'غير محدد'}</dd></div>
-                  <div className="min-w-0"><dt className="text-slate-500">المورد</dt><dd className="mt-1 break-normal font-bold leading-6 text-emerald-300">{r.direct_supplier?.company_name || r.selected_quote?.supplier?.company_name || 'غير محدد'}</dd></div>
-                  <div className="min-w-0 min-[420px]:col-span-2"><dt className="text-slate-500">الصنف وقطعة الأرض</dt><dd className="mt-1 break-normal font-bold leading-6 text-slate-100">{itemNames.join('، ') || 'غير محدد'} <span className="font-mono text-cyan-300">({parcelsDisplay})</span></dd></div>
+                  <div className="min-w-0">
+                    <dt className="text-slate-500">القسم</dt>
+                    <dd className="mt-1 break-normal text-slate-300 font-semibold">{r.department?.name || 'غير محدد'}</dd>
+                    {pendingSupplement?.reviewer?.name && (
+                      <span className="text-[10px] text-emerald-400 font-bold block mt-0.5">
+                        معتمد من: {pendingSupplement.reviewer.name}
+                      </span>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-slate-500">المورد</dt>
+                    <dd className="mt-1 break-normal font-bold leading-6 text-emerald-300">
+                      {originalSupplierName || (pendingSupplement ? 'تحديد عند الإصدار' : 'غير محدد')}
+                    </dd>
+                  </div>
+                  <div className="min-w-0 min-[420px]:col-span-2">
+                    <dt className="text-slate-500">الصنف وقطعة الأرض</dt>
+                    <dd className="mt-1 break-normal font-bold leading-6 text-slate-100">
+                      {itemNames.join('، ') || 'غير محدد'} <span className="font-mono text-cyan-300">({parcelsDisplay})</span>
+                    </dd>
+                  </div>
                   <div className="min-w-0"><dt className="text-slate-500">المنطقة</dt><dd className="mt-1 break-normal text-slate-200">{regionsDisplay}</dd></div>
-                  <div className="min-w-0"><dt className="text-slate-500">الكمية / العدد</dt><dd className="mt-1 font-mono font-bold text-amber-300">{quantitiesInfo.display}</dd></div>
+                  <div className="min-w-0"><dt className="text-slate-500">الكمية / العدد</dt><dd className="mt-1 font-mono font-bold text-amber-300">{quantitiesDisplay}</dd></div>
                   <div className="min-w-0"><dt className="text-slate-500">تاريخ الاحتياج</dt><dd className="mt-1 font-mono font-bold text-amber-300">{r.date_needed || 'غير محدد'}</dd></div>
                   <div className="min-w-0"><dt className="text-slate-500">صاحب الطلب</dt><dd className="mt-1 break-normal text-slate-300">{r.requester?.name || 'غير محدد'}</dd></div>
-                  <div className="min-w-0"><dt className="text-slate-500">الحالة الحالية</dt><dd className="mt-1 break-normal text-cyan-200">{PR_STATUS_LABELS[r.status] || r.status}</dd></div>
+                  <div className="min-w-0">
+                    <dt className="text-slate-500">الحالة الحالية</dt>
+                    <dd className="mt-1 break-normal">
+                      {pendingSupplement ? (
+                        <span className="text-amber-300 font-bold">بانتظار أمر شراء الكمالة</span>
+                      ) : (
+                        <span className="text-cyan-200">{PR_STATUS_LABELS[r.status] || r.status}</span>
+                      )}
+                    </dd>
+                  </div>
                   <div className="min-w-0"><dt className="text-slate-500">تاريخ الاعتماد</dt><dd className="mt-1 whitespace-nowrap font-mono text-slate-400">{r.updated_at ? new Date(r.updated_at).toLocaleDateString('ar-SA') : '—'}</dd></div>
                 </dl>
                 <div className="mt-4 grid grid-cols-1 gap-2 min-[420px]:grid-cols-2">
                   <Button variant="secondary" size="sm" className="w-full whitespace-nowrap" onClick={() => setSelectedPr(r)}>معاينة الطلب</Button>
                   {hasPermission('purchase_order.create') && (
-                    <Link to={`/procurement/purchase-orders/create?pr=${r.id}`} className="block">
-                      <Button variant="primary" size="sm" className="w-full whitespace-nowrap">إنشاء أمر شراء</Button>
-                    </Link>
+                    pendingSupplement ? (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        className="w-full whitespace-nowrap font-black bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950"
+                        onClick={() => setSelectedSupplementPr({ request: r, supplement: pendingSupplement })}
+                      >
+                        ⚡ إصدار أمر شراء للكمالة
+                      </Button>
+                    ) : (
+                      <Link to={`/procurement/purchase-orders/create?pr=${r.id}`} className="block">
+                        <Button variant="primary" size="sm" className="w-full whitespace-nowrap">إنشاء أمر شراء</Button>
+                      </Link>
+                    )
                   )}
                 </div>
               </article>
@@ -265,6 +410,20 @@ export const ApprovedPurchaseRequestsPage: React.FC = () => {
         onClose={() => setIsDirectPoModalOpen(false)}
         onSuccess={() => { setIsDirectPoModalOpen(false); void loadRequests(); }}
       />
+
+      {/* Procurement Supplement Process Modal */}
+      {selectedSupplementPr && (
+        <ProcurementSupplementProcessModal
+          isOpen={!!selectedSupplementPr}
+          request={selectedSupplementPr.request}
+          supplement={selectedSupplementPr.supplement}
+          onClose={() => setSelectedSupplementPr(null)}
+          onSuccess={() => {
+            setSelectedSupplementPr(null);
+            void loadRequests();
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -452,18 +452,29 @@ export const ProcurementManagerPage: React.FC = () => {
 
   const filteredQueueRows = useMemo(() => queueRows.filter(({ request, stage }) => {
     const search = queueSearch.trim();
+    const pendingSupplement = request.supplements?.find(
+      (s: any) => ['PENDING_PROCUREMENT_APPROVAL', 'REVIEWER_APPROVED', 'SUBMITTED'].includes(s.status)
+    );
     const matchesSearch = !search ||
       containsText(request.request_number, search) ||
       containsText(request.requester?.name, search) ||
       containsText(request.department?.name, search) ||
       containsText(request.target_department?.name, search) ||
+      (pendingSupplement && (
+        containsText('كمالة', search) ||
+        containsText('تكميلي', search) ||
+        containsText(pendingSupplement.reviewer?.name, search) ||
+        containsText(pendingSupplement.notes, search) ||
+        pendingSupplement.items?.some((it: any) => containsText(it.item_description, search))
+      )) ||
       request.items?.some(item => containsText(item.item?.name || item.item_description, search) || containsText(item.item_reference, search) || containsText(item.region, search));
 
     const matchesDept = queueDepartment === 'ALL' || request.department?.id === Number(queueDepartment) || request.department?.name === queueDepartment;
-    const matchesRoute = queueRoute === 'ALL' || (queueRoute === 'UNDECIDED' && !request.procurement_route) || request.procurement_route === queueRoute;
+    const isDirect = request.procurement_route === 'DIRECT' || Boolean(pendingSupplement);
+    const matchesRoute = queueRoute === 'ALL' || (queueRoute === 'UNDECIDED' && !request.procurement_route) || (queueRoute === 'DIRECT' ? isDirect : request.procurement_route === queueRoute);
     const matchesStage = queueStage === 'ALL' || stage === queueStage;
-    const reqDate = String(request.created_at || '').slice(0, 10);
-    const matchesDate = (!queueDateFrom || reqDate >= queueDateFrom) && (!queueDateTo || reqDate <= queueDateTo);
+    const reqDate = String(pendingSupplement?.created_at || request.updated_at || request.created_at || '').slice(0, 10);
+    const matchesDate = Boolean(pendingSupplement) || ((!queueDateFrom || reqDate >= queueDateFrom) && (!queueDateTo || reqDate <= queueDateTo));
 
     return matchesSearch && matchesDept && matchesRoute && matchesStage && matchesDate;
   }), [queueRows, queueSearch, queueDepartment, queueRoute, queueStage, queueDateFrom, queueDateTo]);
@@ -934,17 +945,28 @@ export const ProcurementManagerPage: React.FC = () => {
           ) : (
             <div className="space-y-4">
               {filteredQueueRows.map(({ request, stage }) => {
-                const itemNames = request.items?.map((item) => item.item?.name || item.item_description).filter(Boolean).join('، ') || '—';
-                const parcelsDisplay = getSummaryParcels(request);
-                const regionsDisplay = getSummaryRegions(request);
-                const quantitiesInfo = getSummaryQuantities(request.items);
+                const pendingSupplement = request.supplements?.find(
+                  (s: any) => ['PENDING_PROCUREMENT_APPROVAL', 'REVIEWER_APPROVED', 'SUBMITTED'].includes(s.status)
+                );
+                const suppItems = pendingSupplement?.items || [];
+                const itemNames = (suppItems.length > 0 ? suppItems : (request.items || []))
+                  .map((item: any) => item.item?.name || item.item_description)
+                  .filter(Boolean)
+                  .join('، ') || '—';
+                const suppParcels = suppItems.map((it: any) => it.item_reference).filter(Boolean);
+                const suppRegions = suppItems.map((it: any) => it.region).filter(Boolean);
+                const parcelsDisplay = suppParcels.length > 0 ? Array.from(new Set(suppParcels)).join('، ') : getSummaryParcels(request);
+                const regionsDisplay = suppRegions.length > 0 ? Array.from(new Set(suppRegions)).join('، ') : getSummaryRegions(request);
+                const quantitiesInfo = getSummaryQuantities(suppItems.length > 0 ? suppItems : request.items);
                 const supplier = request.direct_supplier?.company_name || getSelectedQuote(request)?.supplier?.company_name;
                 const stageClass = stage === 'PENDING_ROUTE' 
                   ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30' 
                   : stage === 'QUOTE_SETUP' 
                   ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' 
                   : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30';
-                const route = request.procurement_route === 'DIRECT' 
+                const route = pendingSupplement
+                  ? '⚡ شراء مباشر (كمالة)'
+                  : request.procurement_route === 'DIRECT' 
                   ? 'شراء مباشر' 
                   : request.procurement_route === 'QUOTES' 
                   ? 'عروض أسعار' 
@@ -953,7 +975,11 @@ export const ProcurementManagerPage: React.FC = () => {
                 return (
                   <article
                     key={`${stage}-${request.id}`}
-                    className="rounded-2xl border border-slate-800/90 bg-gradient-to-b from-slate-900/90 to-slate-950/90 p-4 sm:p-5 shadow-lg hover:border-slate-700 transition-all space-y-4"
+                    className={`rounded-2xl border p-4 sm:p-5 shadow-lg transition-all space-y-4 ${
+                      pendingSupplement
+                        ? 'border-amber-500/60 bg-gradient-to-b from-slate-900 via-amber-950/20 to-slate-950 shadow-amber-950/30'
+                        : 'border-slate-800/90 bg-gradient-to-b from-slate-900/90 to-slate-950/90 hover:border-slate-700'
+                    }`}
                   >
                     {/* Header Row */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3.5">
@@ -964,7 +990,11 @@ export const ProcurementManagerPage: React.FC = () => {
                         <span className={`rounded-full border px-2.5 py-0.5 text-xs font-bold ${stageClass}`}>
                           {QUEUE_STAGE_LABELS[stage]}
                         </span>
-                        <span className="rounded-full bg-slate-800 border border-slate-700 px-2.5 py-0.5 text-xs font-bold text-slate-300">
+                        <span className={`rounded-full border px-2.5 py-0.5 text-xs font-bold ${
+                          pendingSupplement
+                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                            : 'bg-slate-800 border-slate-700 text-slate-300'
+                        }`}>
                           {route}
                         </span>
                         {request.priority && request.priority !== 'NORMAL' && (
@@ -972,10 +1002,10 @@ export const ProcurementManagerPage: React.FC = () => {
                             عاجل
                           </span>
                         )}
-                        {request.supplements && request.supplements.some((s: any) => ['PENDING_PROCUREMENT_APPROVAL', 'REVIEWER_APPROVED', 'SUBMITTED'].includes(s.status)) && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 border border-amber-500/50 px-2.5 py-0.5 text-[11px] font-black text-amber-300 animate-pulse shadow-sm shadow-amber-500/20">
+                        {pendingSupplement && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-500/25 to-amber-600/25 border border-amber-500/50 px-3 py-1 text-xs font-black text-amber-300 animate-pulse shadow-sm shadow-amber-500/20">
                             <span>⚡</span>
-                            <span>كمالة معلقة</span>
+                            <span>كمالة دفعة #{pendingSupplement.batch_number} معتمدة ({pendingSupplement.reviewer?.name || 'م. مصطفى رئيس قسم التراخيص'})</span>
                           </span>
                         )}
                       </div>
@@ -1015,7 +1045,7 @@ export const ProcurementManagerPage: React.FC = () => {
                           مقدم الطلب: <strong className="text-slate-100 font-semibold">{request.requester?.name || '—'}</strong>
                         </div>
                         <div className="text-slate-300 truncate">
-                          المراجع: <strong className="text-slate-200 font-semibold">{reviewerName(request, departments)}</strong>
+                          المراجع: <strong className="text-emerald-300 font-bold">{pendingSupplement?.reviewer?.name || reviewerName(request, departments)}</strong>
                         </div>
                       </div>
 
@@ -1057,34 +1087,19 @@ export const ProcurementManagerPage: React.FC = () => {
 
                       <div className="flex flex-wrap items-center gap-2">
                         {/* ── Supplement Fast-Track Button (replaces standard quote buttons) ── */}
-                        {(request.supplements && request.supplements.length > 0) ? (
+                        {pendingSupplement ? (
                           <>
                             <Button
                               variant="primary"
                               size="sm"
                               onClick={() => {
-                                setSupplementLoading(true);
-                                void (async () => {
-                                  try {
-                                    const resp = await getSupplementsForPrApi(request.id);
-                                    const pending = (resp.data || []).find(
-                                      (s) => ['PENDING_PROCUREMENT_APPROVAL', 'REVIEWER_APPROVED', 'SUBMITTED'].includes(s.status)
-                                    );
-                                    if (pending) {
-                                      setSupplementModalPr(request);
-                                      setSupplementModalData(pending);
-                                      setSupplementModalOpen(true);
-                                    }
-                                  } catch (err) {
-                                    console.error('Failed to load supplement:', err);
-                                  } finally {
-                                    setSupplementLoading(false);
-                                  }
-                                })();
+                                setSupplementModalPr(request);
+                                setSupplementModalData(pendingSupplement as unknown as PurchaseRequestSupplement);
+                                setSupplementModalOpen(true);
                               }}
                               className="font-black bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 hover:from-amber-400 hover:to-amber-600 text-slate-950 shadow-lg shadow-amber-800/30 border border-amber-400/30"
                             >
-                              ⚡ إصدار ملحق توريد سريع
+                              ⚡ إصدار ملحق توريد سريع (كمالة)
                             </Button>
                             <Button
                               variant="danger"

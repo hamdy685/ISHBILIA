@@ -142,7 +142,15 @@ class PurchaseOrderService
             // Lock PR row to prevent race condition during concurrent PO creation
             $lockedPr = PurchaseRequest::where('id', $pr->id)->lockForUpdate()->first();
 
-            $allowedStatuses = ['APPROVED_BY_ACCOUNTING', 'APPROVED_BY_PROCUREMENT', 'APPROVED_BY_EXECUTIVE', 'PENDING_PROCUREMENT_APPROVAL'];
+            $pendingSupplement = $pr->supplements()
+                ->whereIn('status', ['PENDING_PROCUREMENT_APPROVAL', 'REVIEWER_APPROVED'])
+                ->latest()
+                ->first();
+
+            $allowedStatuses = ['APPROVED_BY_ACCOUNTING', 'APPROVED_BY_PROCUREMENT', 'APPROVED_BY_EXECUTIVE', 'PENDING_PROCUREMENT_APPROVAL', 'APPROVED_BY_REVIEWER', 'APPROVED_BY_GM'];
+            if ($pendingSupplement) {
+                $allowedStatuses = array_merge($allowedStatuses, ['PO_ISSUED', 'ISSUED']);
+            }
             if (! in_array($lockedPr->status, $allowedStatuses, true)) {
                 throw new \RuntimeException('تغيرت حالة طلب الشراء أثناء الإنشاء. أعد تحميل الطلب وحاول مرة أخرى.');
             }
@@ -160,7 +168,7 @@ class PurchaseOrderService
                 $pr->update(['manual_request_number' => $manualPrNumber]);
             }
 
-            if ($existingPo) {
+            if ($existingPo && ! $pendingSupplement) {
                 if (in_array($existingPo->status, ['PO_DRAFT', 'RETURNED_TO_PROCUREMENT'], true)) {
                     $existingPo->update([
                         'manual_po_number' => $manualPoNumber ?? $existingPo->manual_po_number,
@@ -318,6 +326,14 @@ class PurchaseOrderService
                 'old_value' => null,
                 'new_value' => $po->po_number,
             ]);
+
+            if ($pendingSupplement) {
+                $pendingSupplement->update([
+                    'status' => 'PROCESSED_TO_PO',
+                    'purchase_order_id' => $po->id,
+                    'processed_at' => now(),
+                ]);
+            }
 
             return $po->fresh(['purchaseRequest.requester', 'purchaseRequest.department', 'purchaseRequest.assignedReviewer', 'purchaseRequest.approvalHistory.actor', 'selectedQuote', 'supplier', 'createdBy', 'items.item']);
         });

@@ -383,7 +383,7 @@ export const SupplementaryRequestsPage: React.FC = () => {
                                     ملحق كمالة (دفعة #{supp.batch_number})
                                   </strong>
                                   <span className="text-xs text-slate-400">
-                                    بواسطة: {supp.requester?.name || 'مستخدم'} ({new Date(supp.created_at).toLocaleDateString('ar-EG')})
+                                    بواسطة: {supp.requester?.name || 'مستخدم'} ({supp.created_at ? new Date(supp.created_at).toLocaleDateString('ar-EG') : '—'})
                                   </span>
                                 </div>
 

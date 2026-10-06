@@ -212,7 +212,17 @@ class PurchaseRequest extends Model
         }
 
         // 2. Must be an approved/issued requisition
-        $validStatuses = ['APPROVED_BY_REVIEWER', 'APPROVED_BY_GM', 'PO_ISSUED', 'ACCOUNTING_APPROVED'];
+        $validStatuses = [
+            'APPROVED_BY_REVIEWER',
+            'APPROVED_BY_GM',
+            'PO_ISSUED',
+            'ISSUED',
+            'ACCOUNTING_APPROVED',
+            'APPROVED_BY_ACCOUNTING',
+            'APPROVED_BY_PROCUREMENT',
+            'PENDING_PROCUREMENT_APPROVAL',
+            'PENDING_EXECUTIVE_APPROVAL',
+        ];
         if (! in_array($this->status, $validStatuses, true) && $this->purchaseOrders()->count() === 0) {
             return false;
         }

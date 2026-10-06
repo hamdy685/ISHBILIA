@@ -43,7 +43,17 @@ class PurchaseRequestSupplementService
             'items.item',
         ])
             ->where(function ($q) {
-                $q->whereIn('status', ['APPROVED_BY_REVIEWER', 'APPROVED_BY_GM', 'PO_ISSUED', 'ACCOUNTING_APPROVED'])
+                $q->whereIn('status', [
+                    'APPROVED_BY_REVIEWER',
+                    'APPROVED_BY_GM',
+                    'PO_ISSUED',
+                    'ISSUED',
+                    'ACCOUNTING_APPROVED',
+                    'APPROVED_BY_ACCOUNTING',
+                    'APPROVED_BY_PROCUREMENT',
+                    'PENDING_PROCUREMENT_APPROVAL',
+                    'PENDING_EXECUTIVE_APPROVAL',
+                ])
                     ->orWhereHas('purchaseOrders');
             })
             // Exclude requests where materials have already been received at the site/warehouse
