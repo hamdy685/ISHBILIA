@@ -19,74 +19,45 @@ class PurchaseOrderService
 {
     /**
      * Generate sequential unique Purchase Order number (PO-YYYY-XXXXX).
-     * Extracts the highest registered number for the given year,
-     * and increments by 1 (MAX + 1) to eliminate duplicate collisions.
+     * Uses DB::table directly with lockForUpdate to prevent race conditions and bypass global scopes.
      */
     public function generatePoNumber(): string
     {
         $year = date('Y');
         $prefix = "PO-{$year}-";
+
+        $latestOrder = DB::table('purchase_orders')
+            ->where('po_number', 'like', "{$prefix}%")
+            ->orderBy('id', 'desc')
+            ->lockForUpdate()
+            ->first();
+
+        $nextNumber = 1;
+        if ($latestOrder) {
+            $parts = explode('-', $latestOrder->po_number);
+            $lastSeq = end($parts);
+            $nextNumber = intval($lastSeq) + 1;
+        }
+
         $prefixLen = strlen($prefix);
-
-        // 1. Database-level aggregation
-        $dbMax = null;
         try {
-            $record = PurchaseOrder::withTrashed()
-                ->where('po_number', 'like', $prefix . '%')
+            $rawMax = DB::table('purchase_orders')
+                ->where('po_number', 'like', "{$prefix}%")
                 ->selectRaw("MAX(CAST(SUBSTRING(po_number, " . ($prefixLen + 1) . ") AS UNSIGNED)) as max_seq")
-                ->first();
+                ->value('max_seq');
 
-            if ($record && isset($record->max_seq) && is_numeric($record->max_seq)) {
-                $dbMax = (int) $record->max_seq;
+            if ($rawMax && intval($rawMax) >= $nextNumber) {
+                $nextNumber = intval($rawMax) + 1;
             }
         } catch (\Throwable $e) {
-            Log::warning('PurchaseOrderService: SQL MAX calculation error: ' . $e->getMessage());
+            Log::warning('PurchaseOrderService: Failed rawMax query on DB::table: ' . $e->getMessage());
         }
 
-        // 2. Scan recent records
-        $scannedMax = 0;
-        try {
-            $sampleNumbers = PurchaseOrder::withTrashed()
-                ->where('po_number', 'like', $prefix . '%')
-                ->orderByDesc('id')
-                ->limit(100)
-                ->pluck('po_number');
-
-            foreach ($sampleNumbers as $nr) {
-                if (preg_match('/^PO-' . $year . '-(\d+)/i', $nr, $matches)) {
-                    $val = (int) $matches[1];
-                    if ($val > $scannedMax) {
-                        $scannedMax = $val;
-                    }
-                }
-            }
-
-            $alphaNumbers = PurchaseOrder::withTrashed()
-                ->where('po_number', 'like', $prefix . '%')
-                ->orderByDesc('po_number')
-                ->limit(20)
-                ->pluck('po_number');
-
-            foreach ($alphaNumbers as $nr) {
-                if (preg_match('/^PO-' . $year . '-(\d+)/i', $nr, $matches)) {
-                    $val = (int) $matches[1];
-                    if ($val > $scannedMax) {
-                        $scannedMax = $val;
-                    }
-                }
-            }
-        } catch (\Throwable $e) {
-            // Ignore
+        while (DB::table('purchase_orders')->where('po_number', sprintf("%s%05d", $prefix, $nextNumber))->exists()) {
+            $nextNumber++;
         }
 
-        $highestSeq = max((int) $dbMax, $scannedMax);
-        $nextSeq = $highestSeq + 1;
-
-        while (PurchaseOrder::withTrashed()->where('po_number', sprintf('PO-%s-%05d', $year, $nextSeq))->exists()) {
-            $nextSeq++;
-        }
-
-        return sprintf('PO-%s-%05d', $year, $nextSeq);
+        return sprintf("%s%05d", $prefix, $nextNumber);
     }
 
     /**

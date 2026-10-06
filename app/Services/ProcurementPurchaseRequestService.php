@@ -380,55 +380,45 @@ class ProcurementPurchaseRequestService
 
     /**
      * Generate sequential unique Direct Purchase Request number (PR-DIRECT-YYYY-XXXXX).
+     * Uses DB::table directly with lockForUpdate to prevent race conditions and bypass global scopes.
      */
     public function generateDirectRequestNumber(): string
     {
         $year = date('Y');
         $prefix = "PR-DIRECT-{$year}-";
+
+        $latestRequest = DB::table('purchase_requests')
+            ->where('request_number', 'like', "{$prefix}%")
+            ->orderBy('id', 'desc')
+            ->lockForUpdate()
+            ->first();
+
+        $nextNumber = 1;
+        if ($latestRequest) {
+            $parts = explode('-', $latestRequest->request_number);
+            $lastSeq = end($parts);
+            $nextNumber = intval($lastSeq) + 1;
+        }
+
         $prefixLen = strlen($prefix);
-
-        $dbMax = null;
         try {
-            $record = PurchaseRequest::withTrashed()
-                ->where('request_number', 'like', $prefix . '%')
+            $rawMax = DB::table('purchase_requests')
+                ->where('request_number', 'like', "{$prefix}%")
                 ->selectRaw("MAX(CAST(SUBSTRING(request_number, " . ($prefixLen + 1) . ") AS UNSIGNED)) as max_seq")
-                ->first();
+                ->value('max_seq');
 
-            if ($record && isset($record->max_seq) && is_numeric($record->max_seq)) {
-                $dbMax = (int) $record->max_seq;
+            if ($rawMax && intval($rawMax) >= $nextNumber) {
+                $nextNumber = intval($rawMax) + 1;
             }
         } catch (\Throwable $e) {
-            Log::warning('ProcurementPurchaseRequestService: SQL MAX calculation error: ' . $e->getMessage());
+            Log::warning('ProcurementPurchaseRequestService: Failed rawMax query on DB::table: ' . $e->getMessage());
         }
 
-        $scannedMax = 0;
-        try {
-            $sampleNumbers = PurchaseRequest::withTrashed()
-                ->where('request_number', 'like', $prefix . '%')
-                ->orderByDesc('id')
-                ->limit(100)
-                ->pluck('request_number');
-
-            foreach ($sampleNumbers as $nr) {
-                if (preg_match('/^PR-DIRECT-' . $year . '-(\d+)/i', $nr, $matches)) {
-                    $val = (int) $matches[1];
-                    if ($val > $scannedMax) {
-                        $scannedMax = $val;
-                    }
-                }
-            }
-        } catch (\Throwable $e) {
-            // Ignore
+        while (DB::table('purchase_requests')->where('request_number', sprintf("%s%05d", $prefix, $nextNumber))->exists()) {
+            $nextNumber++;
         }
 
-        $highestSeq = max((int) $dbMax, $scannedMax);
-        $nextSeq = $highestSeq + 1;
-
-        while (PurchaseRequest::withTrashed()->where('request_number', sprintf('PR-DIRECT-%s-%05d', $year, $nextSeq))->exists()) {
-            $nextSeq++;
-        }
-
-        return sprintf('PR-DIRECT-%s-%05d', $year, $nextSeq);
+        return sprintf("%s%05d", $prefix, $nextNumber);
     }
 
     /**

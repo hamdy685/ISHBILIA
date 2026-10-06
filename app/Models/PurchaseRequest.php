@@ -45,6 +45,15 @@ class PurchaseRequest extends Model
 
     use HasFactory, SoftDeletes, RecordsSystemEvents, ScopesDataByUserRole;
 
+    protected static function booted(): void
+    {
+        static::creating(function (PurchaseRequest $model) {
+            if (empty($model->request_number)) {
+                $model->request_number = app(\App\Services\PurchaseRequestService::class)->generateUniqueRequestNumber();
+            }
+        });
+    }
+
     protected $table = 'purchase_requests';
 
     protected $attributes = [

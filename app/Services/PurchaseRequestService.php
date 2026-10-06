@@ -19,76 +19,56 @@ class PurchaseRequestService
 {
     /**
      * Generate sequential unique Purchase Request number (PR-YYYY-XXXXX).
-     * Extracts the highest registered number for the given year,
-     * and increments by 1 (MAX + 1) to eliminate duplicate collisions.
+     * Uses DB::table directly with lockForUpdate to prevent race conditions and bypass global scopes.
      */
-    public function generateRequestNumber(): string
+    public function generateUniqueRequestNumber(): string
     {
         $year = date('Y');
         $prefix = "PR-{$year}-";
+
+        // جلب أحدث رقم مسجل يبدأ بنفس السنة مع قفل السطر لمنع التداخل وتجاوز الـ Global Scopes
+        $latestRequest = DB::table('purchase_requests')
+            ->where('request_number', 'like', "{$prefix}%")
+            ->orderBy('id', 'desc')
+            ->lockForUpdate()
+            ->first();
+
+        $nextNumber = 1;
+        if ($latestRequest) {
+            $parts = explode('-', $latestRequest->request_number);
+            $lastSeq = end($parts);
+            $nextNumber = intval($lastSeq) + 1;
+        }
+
+        // فحص إضافي لأعلى رقم تسلسلي مسجل في جدول قاعدة البيانات مباشرة
         $prefixLen = strlen($prefix);
-
-        // 1. Database-level aggregation of max integer sequence
-        $dbMax = null;
         try {
-            $record = PurchaseRequest::withTrashed()
-                ->where('request_number', 'like', $prefix . '%')
+            $rawMax = DB::table('purchase_requests')
+                ->where('request_number', 'like', "{$prefix}%")
                 ->selectRaw("MAX(CAST(SUBSTRING(request_number, " . ($prefixLen + 1) . ") AS UNSIGNED)) as max_seq")
-                ->first();
+                ->value('max_seq');
 
-            if ($record && isset($record->max_seq) && is_numeric($record->max_seq)) {
-                $dbMax = (int) $record->max_seq;
+            if ($rawMax && intval($rawMax) >= $nextNumber) {
+                $nextNumber = intval($rawMax) + 1;
             }
         } catch (\Throwable $e) {
-            Log::warning('PurchaseRequestService: SQL MAX calculation error: ' . $e->getMessage());
+            Log::warning('PurchaseRequestService: Failed rawMax query on DB::table: ' . $e->getMessage());
         }
 
-        // 2. Scan recent records for this year to ensure no sequence is missed
-        $scannedMax = 0;
-        try {
-            $sampleNumbers = PurchaseRequest::withTrashed()
-                ->where('request_number', 'like', $prefix . '%')
-                ->orderByDesc('id')
-                ->limit(100)
-                ->pluck('request_number');
-
-            foreach ($sampleNumbers as $nr) {
-                if (preg_match('/^PR-' . $year . '-(\d+)/i', $nr, $matches)) {
-                    $val = (int) $matches[1];
-                    if ($val > $scannedMax) {
-                        $scannedMax = $val;
-                    }
-                }
-            }
-
-            // Also check alphabetically highest request_number
-            $alphaNumbers = PurchaseRequest::withTrashed()
-                ->where('request_number', 'like', $prefix . '%')
-                ->orderByDesc('request_number')
-                ->limit(20)
-                ->pluck('request_number');
-
-            foreach ($alphaNumbers as $nr) {
-                if (preg_match('/^PR-' . $year . '-(\d+)/i', $nr, $matches)) {
-                    $val = (int) $matches[1];
-                    if ($val > $scannedMax) {
-                        $scannedMax = $val;
-                    }
-                }
-            }
-        } catch (\Throwable $e) {
-            Log::warning('PurchaseRequestService: Failed to scan sample request numbers: ' . $e->getMessage());
+        // التأكد من عدم وجود الرقم مسبقاً في الجدول
+        while (DB::table('purchase_requests')->where('request_number', sprintf("%s%05d", $prefix, $nextNumber))->exists()) {
+            $nextNumber++;
         }
 
-        $highestSeq = max((int) $dbMax, $scannedMax);
-        $nextSeq = $highestSeq + 1;
+        return sprintf("%s%05d", $prefix, $nextNumber);
+    }
 
-        // 3. Double-check uniqueness against existing database records
-        while (PurchaseRequest::withTrashed()->where('request_number', sprintf('PR-%s-%05d', $year, $nextSeq))->exists()) {
-            $nextSeq++;
-        }
-
-        return sprintf('PR-%s-%05d', $year, $nextSeq);
+    /**
+     * Backward-compatible alias for generateUniqueRequestNumber.
+     */
+    public function generateRequestNumber(): string
+    {
+        return $this->generateUniqueRequestNumber();
     }
 
     /**
@@ -229,7 +209,7 @@ class PurchaseRequestService
                     }
 
                     $normalizedItems = $this->normalizeItems($data['items'] ?? [], $isOffice, $parcelReference, $region);
-                    $requestNumber = $this->generateRequestNumber();
+                    $requestNumber = $this->generateUniqueRequestNumber();
                     $targetDepartmentId = (int) ($data['target_department_id'] ?? $data['department_id'] ?? $user->department_id);
                     $targetDepartment = Department::with(['manager', 'siteEngineer'])->find($targetDepartmentId);
 
