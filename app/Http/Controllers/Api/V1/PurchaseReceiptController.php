@@ -225,8 +225,8 @@ class PurchaseReceiptController extends Controller
         $receipt = PurchaseReceipt::with(['purchaseOrder.purchaseRequest.department', 'purchaseOrder.purchaseRequest.targetDepartment', 'purchaseRequest.department', 'purchaseRequest.targetDepartment'])->findOrFail((int) $id);
 
         // Departmental and Site Isolation:
-        // Central roles have global oversight: admin, general_manager, procurement_manager, accountant, warehouse_keeper
-        if (! $user->hasAnyRole(['admin', 'general_manager', 'procurement_manager', 'accountant', 'warehouse_keeper'])) {
+        // Central roles have global oversight: admin, general_manager, procurement_manager, accountant, general_accountant, warehouse_keeper
+        if (! $user->hasAnyRole(['admin', 'general_manager', 'procurement_manager', 'accountant', 'general_accountant', 'warehouse_keeper']) && ! $user->isGeneralAccountant()) {
             $pr = $receipt->purchaseOrder?->purchaseRequest ?: $receipt->purchaseRequest;
             if ($pr) {
                 if ($user->hasRole('site_accountant')) {

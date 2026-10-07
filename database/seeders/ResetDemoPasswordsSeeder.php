@@ -25,6 +25,8 @@ class ResetDemoPasswordsSeeder extends Seeder
             'youssef@gmail.com',
             'islam@gmail.com',
             'banhawy@gmail.com',
+            'mahmoud@gmail.com',
+            'ahmed.dev@gmail.com',
         ];
 
         $standardEmails = array_diff($emails, ['salam@gmail.com']);

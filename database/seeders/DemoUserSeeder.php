@@ -38,14 +38,15 @@ class DemoUserSeeder extends Seeder
             ]);
         };
 
-        // Deactivate all old departments not in the official 5
-        Department::whereNotIn('code', ['EXECUTION', 'BUILDINGS', 'FINISHING', 'LICENSES', 'BUFFET'])->update(['is_active' => false]);
+        // Deactivate all old departments not in the official 6
+        Department::whereNotIn('code', ['EXECUTION', 'BUILDINGS', 'FINISHING', 'LICENSES', 'BUFFET', 'DEVELOPMENT'])->update(['is_active' => false]);
 
         $executionDept = $upsertDepartment('EXECUTION', 'التنفيذ');
         $buildingsDept = $upsertDepartment('BUILDINGS', 'المباني');
         $finishingDept = $upsertDepartment('FINISHING', 'التشطيبات');
         $licensesDept = $upsertDepartment('LICENSES', 'التراخيص');
         $buffetDept = $upsertDepartment('BUFFET', 'البوفيه');
+        $developmentDept = $upsertDepartment('DEVELOPMENT', 'التطوير');
 
         $roles = [
             'employee' => Role::where('slug', 'employee')->firstOrFail(),
@@ -68,6 +69,7 @@ class DemoUserSeeder extends Seeder
             ['email' => 'kheshen@gmail.com', 'name' => 'المهندس مصطفى الخشن', 'role' => 'reviewer', 'department_id' => $finishingDept->id],
             ['email' => 'mostafa@gmail.com', 'name' => 'م. مصطفى', 'role' => 'reviewer', 'department_id' => $licensesDept->id],
             ['email' => 'amr@gmail.com', 'name' => 'أ. عمرو', 'role' => 'reviewer', 'department_id' => $buffetDept->id],
+            ['email' => 'mahmoud@gmail.com', 'name' => 'المهندس محمود', 'role' => 'reviewer', 'department_id' => $developmentDept->id],
 
             // Procurement, Financial Director, Department Accountants, General Manager, Admin, Warehouse
             ['email' => 'ahmed@gmail.com', 'name' => 'المهندس أحمد بدوي', 'role' => 'procurement_manager', 'department_id' => $executionDept->id],
@@ -75,6 +77,7 @@ class DemoUserSeeder extends Seeder
             ['email' => 'habiba@gmail.com', 'name' => 'حبيبة', 'role' => 'site_accountant', 'department_id' => $executionDept->id],
             ['email' => 'ahmed.licenses@gmail.com', 'name' => 'المهندس أحمد', 'role' => 'licenses_accountant', 'department_id' => $licensesDept->id],
             ['email' => 'shorouk@gmail.com', 'name' => 'المهندسة شروق', 'role' => 'buffet_accountant', 'department_id' => $buffetDept->id],
+            ['email' => 'ahmed.dev@gmail.com', 'name' => 'المهندس أحمد', 'role' => 'accountant', 'department_id' => $developmentDept->id],
             ['email' => 'mohamed@gmail.com', 'name' => 'المهندس محمد عبدالكريم', 'role' => 'general_manager', 'department_id' => $executionDept->id],
             ['email' => 'admin@gmail.com', 'name' => 'Admin', 'role' => 'admin', 'department_id' => $executionDept->id],
             ['email' => 'salam@gmail.com', 'name' => 'عم سلامة', 'role' => 'warehouse_keeper', 'department_id' => $executionDept->id],
@@ -109,12 +112,14 @@ class DemoUserSeeder extends Seeder
         $finishingManager = User::where('email', 'kheshen@gmail.com')->firstOrFail();
         $licensesManager = User::where('email', 'mostafa@gmail.com')->firstOrFail();
         $buffetManager = User::where('email', 'amr@gmail.com')->firstOrFail();
+        $developmentManager = User::where('email', 'mahmoud@gmail.com')->firstOrFail();
 
         $executionDept->update(['manager_user_id' => $executionManager->id]);
         $buildingsDept->update(['manager_user_id' => $buildingsManager->id]);
         $finishingDept->update(['manager_user_id' => $finishingManager->id]);
         $licensesDept->update(['manager_user_id' => $licensesManager->id]);
         $buffetDept->update(['manager_user_id' => $buffetManager->id]);
+        $developmentDept->update(['manager_user_id' => $developmentManager->id]);
     }
 }
 

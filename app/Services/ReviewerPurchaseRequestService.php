@@ -72,9 +72,11 @@ class ReviewerPurchaseRequestService
                         $rq->where('manager_id', $user->id);
                     });
 
-                // 3. Departmental reviewer: designated manager of target department
+                // 3. Departmental reviewer: designated manager of target department or requester department
                 if (! $user->hasRole('execution_manager')) {
                     $scopeQuery->orWhereHas('targetDepartment', function ($departmentQuery) use ($user) {
+                        $departmentQuery->where('manager_user_id', $user->id);
+                    })->orWhereHas('department', function ($departmentQuery) use ($user) {
                         $departmentQuery->where('manager_user_id', $user->id);
                     });
                 }

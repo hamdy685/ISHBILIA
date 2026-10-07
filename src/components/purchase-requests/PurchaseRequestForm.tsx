@@ -244,7 +244,7 @@ export const PurchaseRequestForm: React.FC<Props> = ({
     }
 
     const selectedDepartment = departmentOptions.find((department) => department.id === Number(targetDepartmentId));
-    if (targetDepartmentId && !isGeneralManager && !selectedDepartment?.manager && !['EXECUTION', 'BUILDINGS', 'FINISHING', 'LICENSES', 'BUFFET'].includes(selectedDepartment?.code || '')) {
+    if (targetDepartmentId && !isGeneralManager && !selectedDepartment?.manager && !['EXECUTION', 'BUILDINGS', 'FINISHING', 'LICENSES', 'BUFFET', 'DEVELOPMENT'].includes(selectedDepartment?.code || '')) {
       nextFieldErrors.targetDepartment = 'القسم المختار لا يحتوي على مدير قسم معين من الإدارة.';
     }
 
@@ -405,14 +405,16 @@ export const PurchaseRequestForm: React.FC<Props> = ({
                   dept.code === 'BUILDINGS' ? '🏢' :
                   dept.code === 'FINISHING' ? '🎨' :
                   dept.code === 'LICENSES' ? '📜' :
-                  dept.code === 'BUFFET' ? '☕' : '🏢';
+                  dept.code === 'BUFFET' ? '☕' :
+                  dept.code === 'DEVELOPMENT' ? '💻' : '🏢';
                 const managerName =
                   dept.manager?.name ||
                   (dept.code === 'EXECUTION' ? 'م. أيمن ماهر' :
                    dept.code === 'BUILDINGS' ? 'المهندس حاتم' :
                    dept.code === 'FINISHING' ? 'المهندس مصطفى الخشن' :
                    dept.code === 'LICENSES' ? 'م. مصطفى' :
-                   dept.code === 'BUFFET' ? 'أ. عمرو' : '');
+                   dept.code === 'BUFFET' ? 'أ. عمرو' :
+                   dept.code === 'DEVELOPMENT' ? 'المهندس محمود' : '');
                 return (
                   <option key={dept.id} value={dept.id}>
                     {icon} {dept.name} {managerName ? `— (المراجع: ${managerName})` : ''}

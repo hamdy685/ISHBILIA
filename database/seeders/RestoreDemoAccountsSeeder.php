@@ -20,6 +20,7 @@ class RestoreDemoAccountsSeeder extends Seeder
             'FINISHING' => 'التشطيبات',
             'LICENSES' => 'التراخيص',
             'BUFFET' => 'البوفيه',
+            'DEVELOPMENT' => 'التطوير',
         ] as $code => $name) {
             $departments[$code] = Department::withTrashed()->firstOrCreate(
                 ['code' => $code],
@@ -42,10 +43,12 @@ class RestoreDemoAccountsSeeder extends Seeder
             ['kheshen@gmail.com', 'المهندس مصطفى الخشن', 'reviewer', 'FINISHING'],
             ['mostafa@gmail.com', 'م. مصطفى', 'reviewer', 'LICENSES'],
             ['amr@gmail.com', 'أ. عمرو', 'reviewer', 'BUFFET'],
+            ['mahmoud@gmail.com', 'المهندس محمود', 'reviewer', 'DEVELOPMENT'],
 
             // Management & Operations
             ['ahmed@gmail.com', 'المهندس أحمد بدوي', 'procurement_manager', 'EXECUTION'],
             ['hasan@gmail.com', 'حسن', 'accountant', 'EXECUTION'],
+            ['ahmed.dev@gmail.com', 'المهندس أحمد', 'accountant', 'DEVELOPMENT'],
             ['mohamed@gmail.com', 'المهندس محمد عبدالكريم', 'general_manager', 'EXECUTION'],
             ['admin@gmail.com', 'Admin', 'admin', 'EXECUTION'],
             ['salam@gmail.com', 'عم سلامة', 'warehouse_keeper', 'EXECUTION'],
@@ -90,6 +93,7 @@ class RestoreDemoAccountsSeeder extends Seeder
             'FINISHING' => 'kheshen@gmail.com',
             'LICENSES' => 'mostafa@gmail.com',
             'BUFFET' => 'amr@gmail.com',
+            'DEVELOPMENT' => 'mahmoud@gmail.com',
         ] as $department => $email) {
             if (isset($departments[$department])) {
                 $deptModel = Department::find($departments[$department]->id);

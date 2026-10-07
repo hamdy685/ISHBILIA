@@ -114,17 +114,37 @@ class SupplierInvoiceService
                     break;
                 }
             }
-        }
 
-        // Default Fallback: If no dedicated department accountant is mapped for this department, route to General Accountant (Eng. Habiba)
-        if ($deptAccountants->isEmpty()) {
-            $generalAccountant = $this->getGeneralAccountant();
-            if ($generalAccountant) {
-                $deptAccountants = collect([$generalAccountant]);
+            // Also resolve any accountants directly assigned to this department (e.g. Eng. Ahmed in Development)
+            $department = \App\Models\Department::where('code', $deptCode)->first();
+            if ($department) {
+                $deptUsers = User::where('department_id', $department->id)
+                    ->whereHas('roles', fn ($q) => $q->whereIn('slug', ['accountant', 'site_accountant', 'licenses_accountant', 'buffet_accountant']))
+                    ->where('is_active', true)
+                    ->get();
+                if ($deptUsers->isNotEmpty()) {
+                    $deptAccountants = $deptAccountants->merge($deptUsers)->unique('id');
+                }
             }
         }
 
-        return $deptAccountants;
+        $generalAccountant = $this->getGeneralAccountant();
+
+        // Default Fallback: If no dedicated department accountant is mapped for this department, route to General Accountant (Eng. Habiba)
+        if ($deptAccountants->isEmpty()) {
+            if ($generalAccountant) {
+                $deptAccountants = collect([$generalAccountant]);
+            }
+        } else {
+            // Guarantee: For DEVELOPMENT department, General Accountant (Eng. Habiba)
+            // MUST always be included alongside the department accountant (Eng. Ahmed)
+            // so all financial notifications, POs, and receipts reach her dashboard without exception!
+            if ($generalAccountant && $deptCode === 'DEVELOPMENT' && ! $deptAccountants->contains('id', $generalAccountant->id)) {
+                $deptAccountants->push($generalAccountant);
+            }
+        }
+
+        return $deptAccountants->values();
     }
 
     public function approvedReceipts(int $limit = 100, ?User $user = null, ?string $statusFilter = 'pending')
