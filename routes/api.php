@@ -476,6 +476,7 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(functi
 Route::middleware(['auth:sanctum', 'permission:system.users.manage'])->prefix('admin')->group(function () {
     // One-time historical data fixes
     Route::post('/fix-rebar-quantities', [AdminController::class, 'fixHistoricalRebar']);
+    Route::post('/purge-operational-data', [AdminController::class, 'purgeOperationalData']);
 
     // Users
     Route::get('/users', [AdminController::class, 'indexUsers']);

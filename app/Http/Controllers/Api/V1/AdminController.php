@@ -692,4 +692,17 @@ class AdminController extends Controller
             'recalculated_pos' => array_keys($recalculatedPos),
         ]);
     }
+
+    /**
+     * تصفير وتفريغ جميع طلبات الشراء والحركات التشغيلية بأمان مع التحقق الصارم من الحفاظ على البيانات الأساسية.
+     */
+    public function purgeOperationalData(\App\Services\SystemPurgeService $purgeService): JsonResponse
+    {
+        $result = $purgeService->purgeOperationalPurchasingData();
+
+        return response()->json([
+            'message' => 'تم تصفير طلبات الشراء والحركات التشغيلية في قاعدة البيانات بنجاح تام، والنظام جاهز للإنتاج.',
+            'result' => $result,
+        ]);
+    }
 }
