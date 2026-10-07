@@ -107,16 +107,13 @@ class SystemPurgeService
         $this->disableForeignKeyConstraints($driver);
 
         try {
-            DB::transaction(function () use (&$purgedCounts, &$supplierBalancesReset, $driver) {
+            DB::transaction(function () use (&$purgedCounts, &$supplierBalancesReset) {
                 // تفريغ جداول الحركات التشغيلية
                 foreach (self::OPERATIONAL_TABLES as $table) {
                     if (Schema::hasTable($table)) {
                         $count = DB::table($table)->count();
                         DB::table($table)->delete();
                         $purgedCounts[$table] = $count;
-
-                        // إعادة ضبط Auto Increment / Sequence إن أمكن
-                        $this->resetAutoIncrement($table, $driver);
                     }
                 }
 
@@ -131,6 +128,13 @@ class SystemPurgeService
                     ]);
                 }
             });
+
+            // إعادة ضبط Auto Increment / Sequence بعد إتمام الـ Transaction لتجنب Implicit Commit في MySQL
+            foreach (self::OPERATIONAL_TABLES as $table) {
+                if (Schema::hasTable($table)) {
+                    $this->resetAutoIncrement($table, $driver);
+                }
+            }
         } finally {
             // 3. إعادة تفعيل فحص المفاتيح الأجنبية فوراً في كتلة finally لضمان التنفيذ مهما حدث
             $this->enableForeignKeyConstraints($driver);
