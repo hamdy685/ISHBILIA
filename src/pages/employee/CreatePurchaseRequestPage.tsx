@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { saveFavoriteRequest, FavoriteRequest } from '../../utils/favoriteRequestsStorage';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
+import ApproveRequestDialog from '../../components/reviewer/ApproveRequestDialog';
 import { FormField, Input, Select, Textarea } from '../../components/ui/FormField';
 import {
   createPurchaseRequestApi,
@@ -205,6 +206,9 @@ const CreatePurchaseRequestPage: React.FC = () => {
   const location = useLocation();
   const { hasRole, user } = useAuth();
   const isGeneralManager = hasRole('general_manager');
+  const isReviewer = hasRole('reviewer');
+  const [isReviewerModalOpen, setIsReviewerModalOpen] = useState(false);
+  const [pendingSaveToFavorites, setPendingSaveToFavorites] = useState(false);
   const [data, setData] = useState<CreatePurchaseRequestPayload>(() => getInitialData());
   const [landParcels, setLandParcels] = useState<LandParcel[]>([]);
   const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([]);
@@ -464,6 +468,22 @@ const CreatePurchaseRequestPage: React.FC = () => {
       return;
     }
 
+    // إذا كان مقدم الطلب مراجعاً ولم يكن طلباً مكتبياً: افتح نافذة اعتماد المراجع وتحديد مسؤول الاستلام ومسار المخزن
+    if (isReviewer && !isOffice) {
+      setPendingSaveToFavorites(saveToFavorites);
+      setIsReviewerModalOpen(true);
+      return;
+    }
+
+    await executeSubmission(saveToFavorites);
+  };
+
+  const executeSubmission = async (
+    saveToFavorites = false,
+    reviewerReceiverId?: number | null,
+    reviewerRequiresWhReceipt?: boolean,
+    reviewerComment?: string
+  ) => {
     setError(null);
     setIsSubmitting(true);
     try {
@@ -492,17 +512,23 @@ const CreatePurchaseRequestPage: React.FC = () => {
       }
 
       const draft = await ensureServerDraft();
+      const effectiveReceiverId = reviewerReceiverId !== undefined ? reviewerReceiverId : (data.site_engineer_user_id || undefined);
       await submitPurchaseRequestApi(draft.id, {
-        site_engineer_user_id: data.site_engineer_user_id || undefined,
+        site_engineer_user_id: effectiveReceiverId,
+        requires_warehouse_receipt: reviewerRequiresWhReceipt,
+        comment: reviewerComment,
       });
       window.localStorage.removeItem(DRAFT_STORAGE_KEY);
       emitAppDataUpdated();
       const successMsg = saveToFavorites
         ? 'تم إرسال طلب الشراء وحفظه في الطلبات المفضلة بنجاح! ⭐'
-        : isGeneralManager
-          ? 'تم إرسال طلب الشراء مباشرة إلى مدير المشتريات بنجاح بعد تحديد مسؤول الاستلام.'
-          : 'تم إرسال طلب الشراء للمراجعة بنجاح.';
+        : isReviewer
+          ? 'تم اعتماد طلب الشراء وتحديد مسار الاستلام وإرساله إلى المدير التنفيذي بنجاح.'
+          : isGeneralManager
+            ? 'تم إرسال طلب الشراء مباشرة إلى مدير المشتريات بنجاح بعد تحديد مسؤول الاستلام.'
+            : 'تم إرسال طلب الشراء للمراجعة بنجاح.';
       toast.success(successMsg);
+      setIsReviewerModalOpen(false);
       navigate(`/requests/${draft.id}`, {
         state: {
           message: successMsg,
@@ -541,7 +567,11 @@ const CreatePurchaseRequestPage: React.FC = () => {
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs sm:text-sm font-black text-slate-100 truncate">
-                  {isGeneralManager ? 'طلب شراء تنفيذي جديد' : 'إنشاء وإرسال طلب شراء'}
+                  {isReviewer
+                    ? 'إنشاء واعتماد طلب شراء (كمراجع)'
+                    : isGeneralManager
+                      ? 'طلب شراء تنفيذي جديد'
+                      : 'إنشاء وإرسال طلب شراء'}
                 </span>
                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold bg-slate-900 border border-slate-700 text-slate-300 shrink-0">
                   <span className={`h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${requestHasErrors ? 'bg-amber-400' : 'bg-emerald-400 animate-pulse'}`} />
@@ -1374,10 +1404,33 @@ const CreatePurchaseRequestPage: React.FC = () => {
             isLoading={isSubmitting}
             className="flex-1 sm:flex-initial px-4 sm:px-6 py-2.5 shadow-lg shadow-cyan-600/30 text-xs sm:text-sm font-bold justify-center"
           >
-            🚀 {isGeneralManager ? 'إرسال مباشر للمشتريات' : 'إرسال طلب الشراء فوراً'}
+            🚀 {isReviewer
+              ? 'اعتماد وإرسال للمدير التنفيذي'
+              : isGeneralManager
+                ? 'إرسال مباشر للمشتريات'
+                : 'إرسال طلب الشراء فوراً'}
           </Button>
         </div>
       </div>
+
+      {/* نافذة اعتماد المراجع وتحديد مسؤول الاستلام ومسار المخزن */}
+      {isReviewer && (
+        <ApproveRequestDialog
+          isOpen={isReviewerModalOpen}
+          requestNumber="طلب شراء جديد"
+          title="اعتماد طلب الشراء وتحديد مسؤول الاستلام ومسار المخزن"
+          subtitle="طلب شراء جديد — سيتم الاعتماد والإرسال مباشرةً إلى المدير التنفيذي"
+          promptText="بصفتك مراجعاً للقسم، حدد المسؤول عن فحص واستلام المواد (مهندس الموقع أو أمين المخزن أو استلام المواد بنفسك) وما إذا كان الطلب سيمر على عم سلامة في المخزن:"
+          confirmButtonText="اعتماد وإرسال إلى المدير التنفيذي 🚀"
+          initialSiteEngineerId={data.site_engineer_user_id || user?.id || null}
+          initialRequiresWarehouseReceipt={true}
+          isApproving={isSubmitting}
+          onConfirm={(comment, siteEngineerUserId, requiresWarehouseReceipt) => {
+            void executeSubmission(pendingSaveToFavorites, siteEngineerUserId, requiresWarehouseReceipt, comment);
+          }}
+          onCancel={() => setIsReviewerModalOpen(false)}
+        />
+      )}
     </div>
   );
 };

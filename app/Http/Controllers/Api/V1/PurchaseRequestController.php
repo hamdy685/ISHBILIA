@@ -328,10 +328,17 @@ class PurchaseRequestController extends Controller
 
         try {
             $siteEngineerUserId = $request->input('site_engineer_user_id');
+            $requiresWarehouseReceipt = $request->has('requires_warehouse_receipt')
+                ? $request->boolean('requires_warehouse_receipt')
+                : null;
+            $comment = $request->input('comment');
+
             $submittedPr = $this->purchaseRequestService->submitRequest(
                 $request->user(),
                 $pr,
-                $siteEngineerUserId ? (int) $siteEngineerUserId : null
+                $siteEngineerUserId ? (int) $siteEngineerUserId : null,
+                $requiresWarehouseReceipt,
+                $comment
             );
 
             return response()->json([

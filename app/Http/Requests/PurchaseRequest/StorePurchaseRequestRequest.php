@@ -117,6 +117,7 @@ class StorePurchaseRequestRequest extends FormRequest
             'department_id' => ['nullable', 'integer', 'exists:departments,id'],
             'reviewer_user_id' => ['nullable', 'integer', 'exists:users,id'],
             'site_engineer_user_id' => ['nullable', 'integer', 'exists:users,id'],
+            'requires_warehouse_receipt' => ['nullable', 'boolean'],
 
             'date_needed' => ['nullable', 'date'],
             'required_date' => ['nullable', 'date'],

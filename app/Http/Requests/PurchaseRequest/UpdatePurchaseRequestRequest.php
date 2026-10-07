@@ -95,6 +95,7 @@ class UpdatePurchaseRequestRequest extends FormRequest
             'target_department_id' => ['sometimes', 'integer', 'exists:departments,id'],
             'department_id' => ['nullable', 'integer', 'exists:departments,id'],
             'site_engineer_user_id' => ['nullable', 'integer', 'exists:users,id'],
+            'requires_warehouse_receipt' => ['nullable', 'boolean'],
             'date_needed' => ['nullable', 'date'],
             'required_date' => ['nullable', 'date'],
             'required_delivery_date' => ['nullable', 'date'],

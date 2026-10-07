@@ -61,7 +61,11 @@ export const deletePurchaseRequestApi = async (id: number): Promise<void> => {
 
 export const submitPurchaseRequestApi = async (
   id: number,
-  payload?: { site_engineer_user_id?: number | null }
+  payload?: {
+    site_engineer_user_id?: number | null;
+    requires_warehouse_receipt?: boolean;
+    comment?: string;
+  }
 ): Promise<PurchaseRequest> => {
   const response = await apiClient.post<{ message: string; data: PurchaseRequest }>(
     `/purchase-requests/${id}/submit`,

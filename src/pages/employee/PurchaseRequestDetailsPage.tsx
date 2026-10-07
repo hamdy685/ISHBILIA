@@ -5,6 +5,7 @@ import LoadingSpinner from '../../components/LoadingSpinner';
 import PurchaseRequestStatusBadge from '../../components/purchase-requests/PurchaseRequestStatusBadge';
 import DeleteRequestDialog from '../../components/purchase-requests/DeleteRequestDialog';
 import SubmitRequestDialog from '../../components/purchase-requests/SubmitRequestDialog';
+import ApproveRequestDialog from '../../components/reviewer/ApproveRequestDialog';
 import PurchaseRequestPrintModal from '../../components/purchase-requests/PurchaseRequestPrintModal';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -41,7 +42,8 @@ export const PurchaseRequestDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const { hasPermission } = useAuth();
+  const { hasPermission, hasRole, user } = useAuth();
+  const isReviewer = hasRole('reviewer');
 
   const [requestData, setRequestData] = useState<PurchaseRequest | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -273,7 +275,7 @@ export const PurchaseRequestDetailsPage: React.FC = () => {
           )}
           {canSubmit && (
             <Button variant="primary" size="sm" onClick={() => setIsSubmitModalOpen(true)}>
-              تقديم
+              {isReviewer ? '🚀 اعتماد وإرسال للمدير التنفيذي' : 'تقديم'}
             </Button>
           )}
           {canDelete && (
@@ -513,13 +515,46 @@ export const PurchaseRequestDetailsPage: React.FC = () => {
       )}
 
       {/* Dialogs */}
-      <SubmitRequestDialog
-        isOpen={isSubmitModalOpen}
-        requestNumber={requestData.request_number}
-        isSubmitting={isSubmitting}
-        onConfirm={handleConfirmSubmit}
-        onCancel={() => setIsSubmitModalOpen(false)}
-      />
+      {isReviewer && !isOffice ? (
+        <ApproveRequestDialog
+          isOpen={isSubmitModalOpen}
+          requestNumber={requestData.request_number}
+          title="اعتماد طلب الشراء وتحديد مسؤول الاستلام ومسار المخزن"
+          subtitle={`طلب رقم ${requestData.request_number} — سيتم الاعتماد والإرسال مباشرةً إلى المدير التنفيذي`}
+          promptText="بصفتك مراجعاً للقسم، حدد المسؤول عن فحص واستلام المواد (مهندس الموقع أو أمين المخزن أو استلام المواد بنفسك) وما إذا كان الطلب سيمر على عم سلامة في المخزن:"
+          confirmButtonText="اعتماد وإرسال إلى المدير التنفيذي 🚀"
+          initialSiteEngineerId={requestData.site_engineer_user_id || user?.id || null}
+          initialRequiresWarehouseReceipt={requestData.requires_warehouse_receipt ?? true}
+          isApproving={isSubmitting}
+          onConfirm={async (comment, siteEngineerUserId, requiresWarehouseReceipt) => {
+            if (!requestData) return;
+            setIsSubmitting(true);
+            try {
+              await submitPurchaseRequestApi(requestData.id, {
+                site_engineer_user_id: siteEngineerUserId,
+                requires_warehouse_receipt: requiresWarehouseReceipt,
+                comment,
+              });
+              setIsSubmitModalOpen(false);
+              setFlashMessage('تم اعتماد طلب الشراء وتحديد مسار الاستلام وإرساله إلى المدير التنفيذي بنجاح.');
+              await fetchRequest();
+            } catch (err) {
+              setError(parseApiError(err));
+            } finally {
+              setIsSubmitting(false);
+            }
+          }}
+          onCancel={() => setIsSubmitModalOpen(false)}
+        />
+      ) : (
+        <SubmitRequestDialog
+          isOpen={isSubmitModalOpen}
+          requestNumber={requestData.request_number}
+          isSubmitting={isSubmitting}
+          onConfirm={handleConfirmSubmit}
+          onCancel={() => setIsSubmitModalOpen(false)}
+        />
+      )}
       <DeleteRequestDialog
         isOpen={isDeleteModalOpen}
         requestNumber={requestData.request_number}

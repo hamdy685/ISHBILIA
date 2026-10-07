@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\ApprovalHistory;
 use App\Models\AuditLog;
 use Carbon\Carbon;
 use App\Models\Department;
@@ -262,6 +263,9 @@ class PurchaseRequestService
                         'status' => 'DRAFT',
                         'procurement_route' => 'UNDECIDED',
                         'total_estimated_cost' => 0,
+                        'requires_warehouse_receipt' => array_key_exists('requires_warehouse_receipt', $data)
+                            ? (bool) $data['requires_warehouse_receipt']
+                            : true,
                         'date_needed' => $this->normalizeNeededDate($data['date_needed'] ?? $data['required_date'] ?? $data['required_delivery_date'] ?? null),
                         'notes' => $data['notes'] ?? null,
                     ]);
@@ -428,6 +432,9 @@ class PurchaseRequestService
             if (array_key_exists('site_engineer_user_id', $data)) {
                 $updateFields['site_engineer_user_id'] = $isOffice ? null : (!empty($data['site_engineer_user_id']) ? (int) $data['site_engineer_user_id'] : null);
             }
+            if (array_key_exists('requires_warehouse_receipt', $data)) {
+                $updateFields['requires_warehouse_receipt'] = (bool) $data['requires_warehouse_receipt'];
+            }
             if (array_key_exists('date_needed', $data)) {
                 $updateFields['date_needed'] = $this->normalizeNeededDate($data['date_needed']);
             }
@@ -547,8 +554,13 @@ class PurchaseRequestService
     /**
      * Submit a draft Purchase Request for review.
      */
-    public function submitRequest(User $user, PurchaseRequest $request, ?int $siteEngineerUserId = null): PurchaseRequest
-    {
+    public function submitRequest(
+        User $user,
+        PurchaseRequest $request,
+        ?int $siteEngineerUserId = null,
+        ?bool $requiresWarehouseReceipt = null,
+        ?string $comment = null
+    ): PurchaseRequest {
         if (! in_array($request->status, ['DRAFT', 'REJECTED', 'RETURNED'], true)) {
             throw new \RuntimeException('يمكن فقط إرسال طلبات الشراء التي في حالة مسودة أو معادة/مرفوضة.');
         }
@@ -559,7 +571,7 @@ class PurchaseRequestService
             ]);
         }
 
-        return DB::transaction(function () use ($user, $request, $siteEngineerUserId) {
+        return DB::transaction(function () use ($user, $request, $siteEngineerUserId, $requiresWarehouseReceipt, $comment) {
             // إعادة تحميل الطلب مع قفل الصف لمنع الإرسال المزدوج أو انتقالين متزامنين من المسودة.
             $request = PurchaseRequest::query()->whereKey($request->id)->lockForUpdate()->firstOrFail();
             if (! in_array($request->status, ['DRAFT', 'REJECTED', 'RETURNED'], true)) {
@@ -571,11 +583,12 @@ class PurchaseRequestService
             $isDepartmentManagerRequester = $user->hasRole('reviewer');
             // مدير المشتريات والحسابات: يتجاوزان المراجع ويذهبان مباشرةً للمدير التنفيذي.
             $isProcurementOrAccounting = $user->hasAnyRole(['procurement_manager', 'accountant']);
-            $sameDepartment = (int) $request->department_id === (int) $request->target_department_id;
-            $canSkipReviewer = $isDepartmentManagerRequester && $sameDepartment;
+            $isTargetDeptManager = (int) $request->targetDepartment?->manager_user_id === (int) $user->id;
+            $sameDepartment = (int) $request->department_id === (int) $request->target_department_id || (int) $user->department_id === (int) $request->target_department_id;
+            $canSkipReviewer = $isDepartmentManagerRequester && ($sameDepartment || $isTargetDeptManager || ! $request->department_id);
             $nextStatus = $isExecutiveRequester
                 ? 'PENDING_PROCUREMENT_APPROVAL'
-                : ($isProcurementOrAccounting || $canSkipReviewer
+                : ($isProcurementOrAccounting || $canSkipReviewer || $isDepartmentManagerRequester
                     ? 'PENDING_EXECUTIVE_APPROVAL'
                     : 'SUBMITTED');
 
@@ -584,25 +597,49 @@ class PurchaseRequestService
                 $assignedSiteEngineerId = $siteEngineerUserId;
             }
 
-            // إذا كان مقدم الطلب هو المدير التنفيذي وطلب مشروعات/موقع، يجب تحديد مسؤول الاستلام قبل الإرسال للمشتريات
-            if ($isExecutiveRequester && $request->request_type !== 'OFFICE_SUPPLIES') {
+            // إذا كان مقدم الطلب هو المدير التنفيذي أو مراجع القسم لطلب مشروعات/موقع، يجب تحديد مسؤول الاستلام
+            $requiresReceiverSelection = ($isExecutiveRequester || ($isDepartmentManagerRequester && $nextStatus === 'PENDING_EXECUTIVE_APPROVAL'))
+                && $request->request_type !== 'OFFICE_SUPPLIES';
+
+            if ($requiresReceiverSelection) {
                 if (!$assignedSiteEngineerId && $request->targetDepartment?->site_engineer_user_id) {
                     $assignedSiteEngineerId = $request->targetDepartment->site_engineer_user_id;
                 }
                 if (!$assignedSiteEngineerId) {
+                    $msg = $isExecutiveRequester
+                        ? 'طالما أن طلب الشراء صادر من المدير التنفيذي ولا يمر على مراجع، يجب تحديد مهندس الموقع أو مسؤول الاستلام قبل إرسال الطلب إلى المشتريات.'
+                        : 'يجب تحديد مهندس الموقع أو مسؤول الاستلام (أو اختيار المراجع لنفسه) قبل اعتماد الطلب وإرساله إلى المدير التنفيذي.';
                     throw ValidationException::withMessages([
-                        'site_engineer_user_id' => ['طالما أن طلب الشراء صادر من المدير التنفيذي ولا يمر على مراجع، يجب تحديد مهندس الموقع أو مسؤول الاستلام قبل إرسال الطلب إلى المشتريات.'],
+                        'site_engineer_user_id' => [$msg],
                     ]);
                 }
             }
 
-            $request->update([
+            $updateData = [
                 'status' => $nextStatus,
                 'date_needed' => $normalizedNeededDate,
                 'submitted_at' => now(),
-                'reviewer_user_id' => $isExecutiveRequester ? null : $request->reviewer_user_id,
+                'reviewer_user_id' => $isExecutiveRequester ? null : ($isDepartmentManagerRequester ? $user->id : $request->reviewer_user_id),
                 'site_engineer_user_id' => $request->request_type === 'OFFICE_SUPPLIES' ? null : $assignedSiteEngineerId,
-            ]);
+            ];
+
+            if ($requiresWarehouseReceipt !== null) {
+                $updateData['requires_warehouse_receipt'] = (bool) $requiresWarehouseReceipt;
+            }
+
+            $request->update($updateData);
+
+            if ($isDepartmentManagerRequester && $nextStatus === 'PENDING_EXECUTIVE_APPROVAL') {
+                ApprovalHistory::create([
+                    'target_type' => PurchaseRequest::class,
+                    'target_id' => $request->id,
+                    'actor_user_id' => $user->id,
+                    'action' => 'APPROVED_BY_REVIEWER',
+                    'from_state' => 'DRAFT',
+                    'to_state' => 'PENDING_EXECUTIVE_APPROVAL',
+                    'comments' => $comment ?: 'أنشأ واعتمد مراجع القسم الطلب وحدد مسؤول الاستلام ومسار المخزن وأرسله إلى المدير التنفيذي.',
+                ]);
+            }
 
             AuditLog::create([
                 'user_id' => $user->id,
@@ -617,6 +654,7 @@ class PurchaseRequestService
                 $eventMessage = match (true) {
                     $nextStatus === 'PENDING_PROCUREMENT_APPROVAL' => 'أنشأ المدير التنفيذي طلب شراء وأرسله مباشرة إلى مدير المشتريات.',
                     $nextStatus === 'PENDING_EXECUTIVE_APPROVAL' && $isProcurementOrAccounting => 'أنشأ مدير المشتريات / الحسابات طلب شراء وأرسله مباشرةً للمدير التنفيذي متجاوزاً مرحلة المراجع.',
+                    $nextStatus === 'PENDING_EXECUTIVE_APPROVAL' && $isDepartmentManagerRequester => 'أنشأ واعتمد مراجع القسم الطلب وحدد مسؤول الاستلام ومسار المخزن وأرسله مباشرةً إلى المدير التنفيذي.',
                     $nextStatus === 'PENDING_EXECUTIVE_APPROVAL' => 'أرسل مراجع القسم الطلب إلى المدير التنفيذي مباشرة لأن القسم المستهدف هو نفس قسمه.',
                     default => 'أرسل الطلب إلى مدير القسم المستهدف للمراجعة.',
                 };

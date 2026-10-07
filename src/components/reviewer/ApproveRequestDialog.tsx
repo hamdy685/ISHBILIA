@@ -4,6 +4,7 @@ import { Button } from '../ui/Button';
 import { FormField, Textarea, Select } from '../ui/FormField';
 import { getSiteEngineerReceiverOptionsApi } from '../../api/purchaseRequests';
 import { SiteEngineerReceiverOption } from '../../types/purchaseRequest';
+import { useAuth } from '../../context/AuthContext';
 
 interface Props {
   isOpen: boolean;
@@ -13,6 +14,10 @@ interface Props {
   isApproving: boolean;
   onConfirm: (comment?: string, siteEngineerUserId?: number | null, requiresWarehouseReceipt?: boolean) => void;
   onCancel: () => void;
+  title?: string;
+  subtitle?: string;
+  confirmButtonText?: string;
+  promptText?: string;
 }
 
 export const ApproveRequestDialog: React.FC<Props> = ({
@@ -23,7 +28,12 @@ export const ApproveRequestDialog: React.FC<Props> = ({
   isApproving,
   onConfirm,
   onCancel,
+  title,
+  subtitle,
+  confirmButtonText,
+  promptText,
 }) => {
+  const { user } = useAuth();
   const [comment, setComment] = useState('');
   const [selectedEngineerId, setSelectedEngineerId] = useState<number | ''>(
     initialSiteEngineerId || ''
@@ -67,7 +77,7 @@ export const ApproveRequestDialog: React.FC<Props> = ({
     e.preventDefault();
     if (isApproving) return;
     if (!selectedEngineerId) {
-      setSelectionError('يرجى اختيار المسؤول عن الاستلام (مهندس الموقع أو أمين المخزن) أولاً قبل اعتماد الطلب.');
+      setSelectionError('يرجى اختيار المسؤول عن الاستلام (مهندس الموقع أو أمين المخزن أو المراجع نفسه) أولاً قبل اعتماد الطلب.');
       return;
     }
     setSelectionError(null);
@@ -78,8 +88,8 @@ export const ApproveRequestDialog: React.FC<Props> = ({
     <Modal
       isOpen={isOpen}
       onClose={onCancel}
-      title="اعتماد طلب الشراء وتحديد مسؤول الاستلام"
-      subtitle={`طلب رقم ${requestNumber}`}
+      title={title || "اعتماد طلب الشراء وتحديد مسؤول الاستلام"}
+      subtitle={subtitle || (requestNumber ? `طلب رقم ${requestNumber}` : undefined)}
       footer={
         <>
           <Button variant="secondary" size="sm" onClick={onCancel} disabled={isApproving}>
@@ -93,20 +103,45 @@ export const ApproveRequestDialog: React.FC<Props> = ({
             isLoading={isApproving}
             disabled={isApproving}
           >
-            اعتماد الطلب
+            {confirmButtonText || "اعتماد الطلب"}
           </Button>
         </>
       }
     >
       <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-        <p className="text-slate-200">
-          هل أنت متأكد من اعتماد طلب الشراء <strong className="text-emerald-400 font-mono">{requestNumber}</strong> وتحويله للمدير التنفيذي؟
-        </p>
+        {promptText ? (
+          <p className="text-slate-200">{promptText}</p>
+        ) : (
+          <p className="text-slate-200">
+            هل أنت متأكد من اعتماد طلب الشراء <strong className="text-emerald-400 font-mono">{requestNumber}</strong> وتحويله للمدير التنفيذي؟
+          </p>
+        )}
 
         <FormField
-          label="المسؤول عن استلام المواد (مهندس الموقع أو أمين المخزن) *"
+          label="المسؤول عن استلام المواد (مهندس الموقع أو أمين المخزن أو المراجع نفسه) *"
           error={selectionError || undefined}
         >
+          {user && (
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedEngineerId(user.id);
+                  setSelectionError(null);
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                  selectedEngineerId === user.id
+                    ? 'bg-cyan-500/20 text-cyan-300 border-cyan-400 shadow-sm shadow-cyan-500/20'
+                    : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 border-slate-700'
+                }`}
+              >
+                <span>⭐</span>
+                <span>أنا المستلم بنفسي ({user.name})</span>
+              </button>
+              <span className="text-[10px] text-slate-400">أو اختر مهندس موقع / مستلم آخر من القائمة:</span>
+            </div>
+          )}
+
           {isLoadingOptions ? (
             <div className="text-slate-400 text-xs py-2">جاري تحميل قائمة المهندسين وأمناء المخازن...</div>
           ) : (
@@ -118,7 +153,14 @@ export const ApproveRequestDialog: React.FC<Props> = ({
               }}
               className={`font-bold text-slate-100 bg-slate-900 ${selectionError ? 'border-rose-500' : 'border-slate-700'}`}
             >
-              <option value="">-- اختر المسؤول عن الاستلام (مهندس الموقع أو أمين المخزن) --</option>
+              <option value="">-- اختر المسؤول عن الاستلام (مهندس الموقع أو أمين المخزن أو نفسك) --</option>
+              {user && (
+                <optgroup label="⭐ خيار الاستلام الذاتي (المراجع نفسه)">
+                  <option value={user.id}>
+                    ⭐ أنا المراجع ({user.name}) — سأقوم بالاستلام والفحص بنفسي
+                  </option>
+                </optgroup>
+              )}
               {siteEngineers.length > 0 && (
                 <optgroup label="👷 مهندسو الموقع الأساسيون">
                   {siteEngineers.map((eng) => (
@@ -137,13 +179,15 @@ export const ApproveRequestDialog: React.FC<Props> = ({
                   ))}
                 </optgroup>
               )}
-              {otherUsers.length > 0 && (
+              {otherUsers.filter((u) => u.id !== user?.id).length > 0 && (
                 <optgroup label="👥 مستخدمو النظام الآخرون (تفويض أي دور آخر)">
-                  {otherUsers.map((u) => (
-                    <option key={`other-${u.id}`} value={u.id}>
-                      {u.name} — {u.role_name || 'مستخدم'} {u.department_name ? `(${u.department_name})` : ''}
-                    </option>
-                  ))}
+                  {otherUsers
+                    .filter((u) => u.id !== user?.id)
+                    .map((u) => (
+                      <option key={`other-${u.id}`} value={u.id}>
+                        {u.name} — {u.role_name || 'مستخدم'} {u.department_name ? `(${u.department_name})` : ''}
+                      </option>
+                    ))}
                 </optgroup>
               )}
             </Select>

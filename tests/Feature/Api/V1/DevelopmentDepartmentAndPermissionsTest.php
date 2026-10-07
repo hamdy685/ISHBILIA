@@ -217,4 +217,88 @@ class DevelopmentDepartmentAndPermissionsTest extends TestCase
         $this->assertInstanceOf(SupplierInvoice::class, $invoice);
         $this->assertEquals(5000.00, (float) $invoice->amount);
     }
+
+    public function test_reviewer_can_assign_receiver_and_warehouse_route_when_creating_request(): void
+    {
+        $dept = Department::where('code', 'DEVELOPMENT')->firstOrFail();
+        $mahmoud = User::where('email', 'mahmoud@gmail.com')->firstOrFail();
+
+        // 1. Create a draft request by reviewer
+        $pr = PurchaseRequest::create([
+            'request_number' => 'PR-DEV-SUBMIT-1',
+            'user_id' => $mahmoud->id,
+            'department_id' => $dept->id,
+            'target_department_id' => $dept->id,
+            'status' => 'DRAFT',
+            'request_type' => 'PROJECT',
+            'parcel_reference' => 'PARCEL-100',
+            'region' => 'DEV-ZONE',
+        ]);
+
+        $pr->items()->create([
+            'item_description' => 'Server Equipment',
+            'quantity' => 2,
+            'uom' => 'PCS',
+        ]);
+
+        $service = app(\App\Services\PurchaseRequestService::class);
+
+        // 2. Reviewer submits choosing HIMSELF as the receiver and requires_warehouse_receipt = false (direct delivery)
+        $submitted = $service->submitRequest(
+            $mahmoud,
+            $pr,
+            $mahmoud->id, // Choosing himself as the receiver!
+            false, // Bypassing Uncle Salama (requires_warehouse_receipt = false)
+            'اعتماد مبدئي من مراجع قسم التطوير مع الاستلام الشخصي'
+        );
+
+        $this->assertEquals('PENDING_EXECUTIVE_APPROVAL', $submitted->status);
+        $this->assertEquals($mahmoud->id, $submitted->site_engineer_user_id, 'Reviewer can designate himself as the receiver.');
+        $this->assertFalse($submitted->requires_warehouse_receipt, 'Requires warehouse receipt should be false when reviewer specifies direct delivery.');
+        $this->assertEquals($mahmoud->id, $submitted->reviewer_user_id);
+
+        // Verify ApprovalHistory was created
+        $history = \App\Models\ApprovalHistory::where('target_id', $pr->id)
+            ->where('actor_user_id', $mahmoud->id)
+            ->first();
+
+        $this->assertNotNull($history, 'Approval history should be recorded for reviewer submission.');
+        $this->assertEquals('APPROVED_BY_REVIEWER', $history->action);
+        $this->assertEquals('PENDING_EXECUTIVE_APPROVAL', $history->to_state);
+    }
+
+    public function test_reviewer_submitting_via_api_with_uncle_salama_warehouse_routing(): void
+    {
+        $dept = Department::where('code', 'DEVELOPMENT')->firstOrFail();
+        $mahmoud = User::where('email', 'mahmoud@gmail.com')->firstOrFail();
+        $ayman = User::where('email', 'ayman@gmail.com')->firstOrFail();
+
+        $pr = PurchaseRequest::create([
+            'request_number' => 'PR-DEV-SUBMIT-2',
+            'user_id' => $mahmoud->id,
+            'department_id' => $dept->id,
+            'target_department_id' => $dept->id,
+            'status' => 'DRAFT',
+            'request_type' => 'PROJECT',
+            'parcel_reference' => 'PARCEL-200',
+            'region' => 'DEV-ZONE-2',
+        ]);
+
+        $pr->items()->create([
+            'item_description' => 'Cables & Routers',
+            'quantity' => 10,
+            'uom' => 'PCS',
+        ]);
+
+        $response = $this->actingAs($mahmoud)->postJson("/api/v1/purchase-requests/{$pr->id}/submit", [
+            'site_engineer_user_id' => $ayman->id,
+            'requires_warehouse_receipt' => true,
+            'comment' => 'إرسال للمدير التنفيذي مع المرور على عم سلامة في المخزن',
+        ]);
+
+        $response->assertOk();
+        $this->assertEquals('PENDING_EXECUTIVE_APPROVAL', $response->json('data.status'));
+        $this->assertEquals($ayman->id, $response->json('data.site_engineer_user_id'));
+        $this->assertTrue($response->json('data.requires_warehouse_receipt'));
+    }
 }
