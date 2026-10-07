@@ -173,12 +173,15 @@ class SupplierInvoiceService
         ])
             ->where('status', 'APPROVED')
             ->where(function ($query) {
-                // Internal warehouse receipts require a completed Actual PO before appearing in Accounting
-                $query->where(function ($nonWhQuery) {
-                    $internalSupplier = \App\Models\Supplier::getOrCreateInternalWarehouseSupplier();
+                // Internal warehouse receipts and office supplies receipts require a completed Actual PO before appearing in Accounting
+                $internalSupplier = \App\Models\Supplier::getOrCreateInternalWarehouseSupplier();
+                $query->where(function ($nonWhQuery) use ($internalSupplier) {
                     $nonWhQuery->where('supplier_id', '!=', $internalSupplier->id)
                                ->whereHas('purchaseOrder', function ($poQ) use ($internalSupplier) {
-                                   $poQ->where('supplier_id', '!=', $internalSupplier->id);
+                                   $poQ->where('supplier_id', '!=', $internalSupplier->id)
+                                       ->whereDoesntHave('purchaseRequest', function ($prQ) {
+                                           $prQ->where('request_type', 'OFFICE_SUPPLIES');
+                                       });
                                });
                 })->orWhereHas('purchaseOrder', function ($poQuery) {
                     $poQuery->where('status', '!=', 'PENDING_ACTUAL_PO')
@@ -247,9 +250,13 @@ class SupplierInvoiceService
             throw new \RuntimeException('إذن الاستلام غير مرتبط بأمر الشراء المحدد.');
         }
         if ($receipt->status !== 'APPROVED') {
-            throw new \RuntimeException('لا يمكن تسجيل فاتورة قبل اعتماد إذن الاستلام من مهندس الموقع.');
+            throw new \RuntimeException('لا يمكن تسجيل فاتورة قبل اعتماد إذن الاستلام.');
         }
-        if ($receipt->isInternalWarehouse() && ($purchaseOrder->status === 'PENDING_ACTUAL_PO' || ! $purchaseOrder->finalized_at)) {
+        $purchaseOrder->loadMissing('purchaseRequest');
+        if ($purchaseOrder->status === 'PENDING_ACTUAL_PO' && ($receipt->isInternalWarehouse() || $purchaseOrder->purchaseRequest?->isOfficeRequest())) {
+            throw new \RuntimeException('يحظر تسجيل فاتورة أو قيود محاسبية قبل إصدار أمر الشراء الفعلي بالكامل من إدارة المشتريات.');
+        }
+        if ($receipt->isInternalWarehouse() && ! $purchaseOrder->finalized_at) {
             throw new \RuntimeException('يحظر تسجيل فاتورة أو قيود محاسبية لطلبات المخزن الداخلي قبل إصدار أمر الشراء الفعلي بالكامل.');
         }
 

@@ -594,6 +594,7 @@ class ProcurementPurchaseOrderController extends Controller
             'receipts.items.purchaseOrderItem',
             'receipts.warehouseKeeper',
             'receipts.siteEngineer',
+            'receipts.receiver',
         ])
         ->where('status', 'PENDING_ACTUAL_PO')
         ->when($search !== '', function ($q) use ($search) {

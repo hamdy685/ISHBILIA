@@ -193,7 +193,7 @@ export const PurchaseRequestDetailsPage: React.FC = () => {
               <div>
                 <div className="font-bold text-sm text-slate-100">المستلزمات المكتبية جاهزة / تم توريدها للاستلام</div>
                 <p className="text-indigo-300/90 text-[11px] mt-0.5">
-                  بصفتك مقدم الطلب، يمكنك تأكيد استلام الأصناف المكتبية مباشرة لنقل أمر الشراء ({activeOfficePo.po_number}) للحسابات وصرف المستحقات.
+                  بصفتك مقدم الطلب، يمكنك تأكيد استلام الأصناف المكتبية لإحالة أمر الشراء ({activeOfficePo.po_number}) لإدارة المشتريات لإصدار أمر الشراء الفعلي تمهيداً للحسابات.
                 </p>
               </div>
             </div>

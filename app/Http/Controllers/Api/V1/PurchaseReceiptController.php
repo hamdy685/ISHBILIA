@@ -203,7 +203,7 @@ class PurchaseReceiptController extends Controller
         }
 
         return response()->json([
-            'message' => 'تم تأكيد استلام المستلزمات المكتبية بنجاح وإرسال الإشعار للحسابات.',
+            'message' => 'تم تأكيد استلام المستلزمات المكتبية بنجاح وإحالة الأمر لإدارة المشتريات لإصدار أمر الشراء الفعلي.',
             'data' => $receipt,
         ], 201);
     }

@@ -420,7 +420,7 @@ Route::middleware('auth:sanctum')->prefix('purchase-receipts')->group(function (
     Route::post('/purchase-orders/{purchaseOrderId}', [PurchaseReceiptController::class, 'store'])
         ->middleware('permission:purchase_receipt.edit');
     Route::post('/purchase-orders/{purchaseOrderId}/confirm-office', [PurchaseReceiptController::class, 'confirmOfficeReceipt'])
-        ->middleware('permission:purchase_receipt.edit');
+        ->middleware('permission:purchase_receipt.edit|purchase_request.view_own');
     Route::put('/{id}', [PurchaseReceiptController::class, 'update'])
         ->middleware('permission:purchase_receipt.edit');
     Route::post('/{id}/approve', [PurchaseReceiptController::class, 'approve'])

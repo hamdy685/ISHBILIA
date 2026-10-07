@@ -804,7 +804,7 @@ export const ProcurementManagerPage: React.FC = () => {
                         {po.po_number}
                       </span>
                       <span className="rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 px-2.5 py-0.5 text-[11px] font-black">
-                        استلام معتمد بالموقع
+                        {po.purchase_request?.request_type === 'OFFICE_SUPPLIES' || latestReceipt?.receipt_type === 'REQUESTER_OFFICE' ? 'استلام مكتبي معتمد' : 'استلام معتمد بالموقع'}
                       </span>
                     </div>
 
@@ -848,6 +848,12 @@ export const ProcurementManagerPage: React.FC = () => {
                           <div className="flex items-center justify-between">
                             <span className="text-slate-400">👷 معتمد الموقع:</span>
                             <strong className="text-slate-200">{latestReceipt.site_engineer.name}</strong>
+                          </div>
+                        )}
+                        {latestReceipt.receiver && !latestReceipt.site_engineer && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-400">👤 مستلم المقر:</span>
+                            <strong className="text-slate-200">{latestReceipt.receiver.name}</strong>
                           </div>
                         )}
                         {latestReceipt.warehouse_keeper && (

@@ -39,7 +39,7 @@ export const OfficeReceiptModal: React.FC<Props> = ({
       const res = await confirmOfficeReceiptApi(purchaseOrderId, {
         notes: notes.trim() || undefined,
       });
-      onSuccess(res.message || 'تم تأكيد استلام المستلزمات المكتبية بنجاح وإرسال الإشعار للحسابات.');
+      onSuccess(res.message || 'تم تأكيد استلام المستلزمات المكتبية بنجاح وإحالة الأمر لإدارة المشتريات لإصدار أمر الشراء الفعلي.');
       onClose();
     } catch (err) {
       setError(parseApiError(err));
@@ -74,7 +74,7 @@ export const OfficeReceiptModal: React.FC<Props> = ({
 
         <div className="rounded-xl border border-indigo-900/60 bg-indigo-950/30 p-3.5 text-xs text-indigo-200 leading-relaxed">
           <span>ℹ️ </span>
-          بصفتك مقدم الطلب والمستلم الفعلي، يؤكد هذا الإجراء استلامك للأصناف في مقر الشركة، ويحوّل أمر الشراء للحسابات لمطابقة الفاتورة وصرف مستحقات المورد مباشرة.
+          بصفتك مقدم الطلب والمستلم الفعلي، يؤكد هذا الإجراء استلامك للأصناف في مقر الشركة، ويحوّل أمر الشراء إلى إدارة المشتريات لإصدار أمر الشراء الفعلي قبل إرساله للحسابات وصرف المستحقات.
         </div>
 
         {supplierName && (
