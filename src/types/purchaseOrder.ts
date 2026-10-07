@@ -279,6 +279,29 @@ export interface PurchaseOrderPayload {
     specifications?: string;
     supplier_id?: number | null;
   }>;
+  groups?: PurchaseOrderGroupPayload[];
+}
+
+export interface PurchaseOrderGroupPayload {
+  group_name?: string;
+  supplier_id?: number;
+  one_time_supplier_name?: string;
+  payment_terms?: string;
+  delivery_terms?: string;
+  delivery_date?: string;
+  notes?: string;
+  items: Array<{
+    pr_item_id: number;
+    item_id?: number | null;
+    item_description?: string;
+    item_reference?: string;
+    region?: string;
+    quantity: number;
+    uom?: string;
+    unit_price: number;
+    specifications?: string;
+    supplier_id?: number | null;
+  }>;
 }
 
 export interface PurchaseOrderItemPayload {

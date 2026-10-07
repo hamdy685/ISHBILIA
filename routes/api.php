@@ -239,6 +239,9 @@ Route::middleware('auth:sanctum')->prefix('procurement')->group(function () {
     Route::get('/purchase-orders/{id}/combined-document', [ProcurementPurchaseOrderController::class, 'combinedDocument'])
         ->middleware('permission:purchase_order.view|purchase_order.view_gm');
 
+    Route::post('/purchase-orders/batch', [ProcurementPurchaseOrderController::class, 'storeBatchPo'])
+        ->middleware('permission:purchase_order.create');
+
     Route::post('/purchase-orders', [ProcurementPurchaseOrderController::class, 'storePo'])
         ->middleware('permission:purchase_order.create');
 

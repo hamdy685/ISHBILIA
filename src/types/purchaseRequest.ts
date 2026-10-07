@@ -146,6 +146,8 @@ export interface PurchaseRequestItem {
   is_supplementary?: boolean;
   supplement_batch?: number | null;
   supplement_id?: number | null;
+  is_ordered?: boolean;
+  purchase_order_id?: number | null;
 }
 
 export interface Attachment {

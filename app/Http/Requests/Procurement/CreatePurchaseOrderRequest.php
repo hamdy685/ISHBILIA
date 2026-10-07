@@ -37,6 +37,14 @@ class CreatePurchaseOrderRequest extends FormRequest
             'items.*.specifications' => ['nullable', 'string'],
             'items.*.change_reason' => ['nullable', 'string'],
             'items.*.supplier_id' => ['nullable', 'integer', 'exists:suppliers,id'],
+            'groups' => ['nullable', 'array'],
+            'groups.*.group_name' => ['nullable', 'string', 'max:150'],
+            'groups.*.supplier_id' => ['nullable', 'integer', 'exists:suppliers,id'],
+            'groups.*.one_time_supplier_name' => ['nullable', 'string', 'max:150'],
+            'groups.*.manual_po_number' => ['nullable', 'string', 'max:50'],
+            'groups.*.payment_terms' => ['nullable', 'string', 'max:150'],
+            'groups.*.delivery_date' => ['nullable', 'date'],
+            'groups.*.items' => ['required_with:groups', 'array', 'min:1'],
         ];
     }
 
@@ -46,6 +54,18 @@ class CreatePurchaseOrderRequest extends FormRequest
         $validator->after(function ($validator) {
             $supplierId = $this->input('supplier_id');
             $oneTimeName = trim((string) $this->input('one_time_supplier_name', ''));
+
+            $hasGroups = $this->has('groups') && is_array($this->input('groups')) && count($this->input('groups')) > 0;
+            if ($hasGroups) {
+                foreach ($this->input('groups') as $idx => $grp) {
+                    $grpSup = $grp['supplier_id'] ?? $supplierId;
+                    $grpOneTime = trim((string)($grp['one_time_supplier_name'] ?? $oneTimeName));
+                    if (empty($grpSup) && empty($grpOneTime)) {
+                        $validator->errors()->add("groups.{$idx}.supplier_id", 'يجب تحديد المورد للمجموعة رقم ' . ($idx + 1));
+                    }
+                }
+                return;
+            }
 
             if (empty($supplierId) && empty($oneTimeName)) {
                 $validator->errors()->add('supplier_id', 'يجب اختيار مورد معتمد أو إدخال اسم مورد لعملية واحدة فقط.');

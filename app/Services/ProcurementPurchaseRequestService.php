@@ -141,8 +141,16 @@ class ProcurementPurchaseRequestService
             }])
             ->where(function ($query): void {
                 $query->where(function ($regularQuery): void {
-                    $regularQuery->whereDoesntHave('purchaseOrders', function ($poQuery): void {
-                        $poQuery->whereNotIn('status', ['REJECTED']);
+                    $regularQuery->where(function ($eligibilityQuery): void {
+                        $eligibilityQuery->whereDoesntHave('purchaseOrders', function ($poQuery): void {
+                            $poQuery->whereNotIn('status', ['REJECTED', 'CANCELLED', 'VOIDED']);
+                        })->orWhereHas('items', function ($itemQuery): void {
+                            $itemQuery->whereDoesntHave('purchaseOrderItems', function ($poiQuery): void {
+                                $poiQuery->whereHas('purchaseOrder', function ($poQuery): void {
+                                    $poQuery->whereNotIn('status', ['REJECTED', 'CANCELLED', 'VOIDED']);
+                                });
+                            });
+                        });
                     })->where(function ($statusQuery): void {
                         $statusQuery->where(function ($quotePath): void {
                             $quotePath

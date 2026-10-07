@@ -20,6 +20,7 @@ use App\Services\PurchaseOrderService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 
 class ProcurementPurchaseOrderController extends Controller
 {
@@ -321,6 +322,17 @@ class ProcurementPurchaseOrderController extends Controller
             'receipts.receiver',
         ])->findOrFail((int) $id);
 
+        // عزل الحزمة المستندية للحسابات: حصر بنود طلب الشراء على البنود المرتبطة بأمر الشراء هذا فقط
+        if ($po->purchaseRequest && $po->relationLoaded('items')) {
+            $poPrItemIds = $po->items->pluck('pr_item_id')->filter()->all();
+            if (!empty($poPrItemIds)) {
+                $isolatedPrItems = $po->purchaseRequest->items->filter(function ($prItem) use ($poPrItemIds) {
+                    return in_array($prItem->id, $poPrItemIds);
+                })->values();
+                $po->purchaseRequest->setRelation('items', $isolatedPrItems);
+            }
+        }
+
         $poResource = new PurchaseOrderResource($po);
         $prResource = new PurchaseRequestResource($po->purchaseRequest);
         $receipts = $poResource['receipts'] ?? [];
@@ -342,6 +354,10 @@ class ProcurementPurchaseOrderController extends Controller
      */
     public function storePo(CreatePurchaseOrderRequest $request): JsonResponse
     {
+        if ($request->filled('groups') && is_array($request->validated('groups')) && count($request->validated('groups')) > 0) {
+            return $this->storeBatchPo($request);
+        }
+
         $prId = (int) $request->validated('purchase_request_id');
         $supplierId = (int) $request->validated('supplier_id');
 
@@ -370,6 +386,69 @@ class ProcurementPurchaseOrderController extends Controller
         return (new PurchaseOrderResource($po))
             ->response()
             ->setStatusCode(201);
+    }
+
+    /**
+     * Create batch Purchase Orders from groups of items (individual items or bundled shipments like steel).
+     */
+    public function storeBatchPo(CreatePurchaseOrderRequest $request): JsonResponse
+    {
+        $validated = $request->validated();
+        $prId = (int) $validated['purchase_request_id'];
+        $groups = $validated['groups'] ?? [];
+
+        if (empty($groups)) {
+            return response()->json(['message' => 'لم يتم تحديد أي مجموعات بنود لإنشاء أوامر الشراء.'], 422);
+        }
+
+        $createdPos = [];
+
+        try {
+            DB::transaction(function () use ($request, $prId, $groups, &$createdPos) {
+                foreach ($groups as $group) {
+                    $groupSupplierId = !empty($group['supplier_id']) ? (int) $group['supplier_id'] : (int) ($request->validated('supplier_id') ?? 0);
+
+                    if (!$groupSupplierId && !empty($group['one_time_supplier_name'])) {
+                        $sup = \App\Models\Supplier::firstOrCreate(
+                            ['company_name' => trim($group['one_time_supplier_name'])],
+                            ['contact_name' => 'مورد لعملية واحدة', 'is_active' => true, 'opening_balance' => 0]
+                        );
+                        $groupSupplierId = $sup->id;
+                    } elseif (!$groupSupplierId && $request->filled('one_time_supplier_name')) {
+                        $sup = \App\Models\Supplier::firstOrCreate(
+                            ['company_name' => trim($request->input('one_time_supplier_name'))],
+                            ['contact_name' => 'مورد لعملية واحدة', 'is_active' => true, 'opening_balance' => 0]
+                        );
+                        $groupSupplierId = $sup->id;
+                    }
+
+                    if (!$groupSupplierId) {
+                        throw new \RuntimeException('يجب تحديد مورد لكل حزمة/بند أو اختيار مورد عام للطلب.');
+                    }
+
+                    $payload = array_merge($request->validated(), $group);
+                    $payload['supplier_id'] = $groupSupplierId;
+                    $payload['items'] = $group['items'];
+
+                    $po = $this->poService->createPoFromPr(
+                        $request->user(),
+                        $prId,
+                        $groupSupplierId,
+                        $payload
+                    );
+
+                    $po = $this->poService->submitToAccounting($request->user(), $po);
+                    $createdPos[] = $po;
+                }
+            });
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 409);
+        }
+
+        return response()->json([
+            'message' => 'تم إنشاء وإصدار ' . count($createdPos) . ' أمر شراء بنجاح وفق التوزيع المحدد وإرسالها للحسابات.',
+            'data' => PurchaseOrderResource::collection(collect($createdPos)),
+        ], 201);
     }
 
 

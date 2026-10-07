@@ -112,4 +112,13 @@ class PurchaseRequestItem extends Model
     {
         return $this->hasMany(PurchaseOrderItem::class, 'pr_item_id');
     }
+
+    public function isOrdered(): bool
+    {
+        return $this->purchaseOrderItems()
+            ->whereHas('purchaseOrder', function ($q) {
+                $q->whereNotIn('status', ['REJECTED', 'CANCELLED', 'VOIDED']);
+            })
+            ->exists();
+    }
 }

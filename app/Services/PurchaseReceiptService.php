@@ -360,6 +360,11 @@ class PurchaseReceiptService
             app(NotificationService::class)->markEntityNotificationsAsRead($receipt);
             app(NotificationService::class)->markEntityNotificationsAsRead($receipt->purchaseOrder);
 
+            $itemDescriptions = $receipt->items->map(function ($item) {
+                return $item->item_description ?: ($item->purchaseOrderItem?->item_description ?: null);
+            })->filter()->unique()->values()->all();
+            $itemsSummary = !empty($itemDescriptions) ? ' [البنود: ' . implode('، ', array_slice($itemDescriptions, 0, 3)) . (count($itemDescriptions) > 3 ? '...' : '') . ']' : '';
+
             ApprovalHistory::create([
                 'target_type' => PurchaseReceipt::class,
                 'target_id' => $receipt->id,
@@ -368,8 +373,8 @@ class PurchaseReceiptService
                 'from_state' => 'PENDING_SITE_ENGINEER',
                 'to_state' => 'APPROVED',
                 'comments' => $isInternalWarehouse
-                    ? ($notes ? "{$notes} — استلام وتفريغ من المخزن الداخلي، بانتظار إصدار أمر الشراء الفعلي." : 'اعتمد مهندس الموقع استلام المواد المنصرفة من المخزن الداخلي، وبانتظار مراجعة وإصدار أمر الشراء الفعلي من إدارة المشتريات.')
-                    : ($notes ?? 'اعتمد مهندس الموقع الكميات المستلمة وأُعيد الملف لإدارة المشتريات لإصدار أمر الشراء الفعلي.'),
+                    ? ($notes ? "{$notes} — استلام وتفريغ{$itemsSummary} من المخزن الداخلي، بانتظار إصدار أمر الشراء الفعلي." : "اعتمد مهندس الموقع استلام المواد{$itemsSummary} المنصرفة من المخزن الداخلي، وبانتظار مراجعة وإصدار أمر الشراء الفعلي.")
+                    : ($notes ? "{$notes} — البنود المستلمة{$itemsSummary}" : "اعتمد مهندس الموقع فحص واستلام البنود{$itemsSummary} وأُعيد الملف لإدارة المشتريات لإصدار أمر الشراء الفعلي المستقل الخاص بها."),
             ]);
 
             $notificationService = app(NotificationService::class);
@@ -381,10 +386,10 @@ class PurchaseReceiptService
                 $notificationService->queueUsers(
                     $procurementUsers,
                     'grn_approved_pending_actual_po',
-                    'إذن استلام معتمد — بانتظار إصدار أمر الشراء الفعلي',
+                    'بند/شحنة مستلمة ومفحوصة — جاهز لأمر الشراء الفعلي',
                     $isInternalWarehouse
-                        ? "اعتمد مهندس الموقع إذن استلام المخزن {$receipt->receipt_number} لأمر الشراء {$receipt->purchaseOrder->po_number}. يرجى مراجعة الكميات وإصدار أمر الشراء الفعلي."
-                        : "اعتمد مهندس الموقع إذن الاستلام {$receipt->receipt_number} لأمر الشراء {$receipt->purchaseOrder->po_number}. يرجى مراجعة الكميات وإصدار أمر الشراء الفعلي.",
+                        ? "اعتمد مهندس الموقع إذن استلام المخزن {$receipt->receipt_number} لأمر الشراء {$receipt->purchaseOrder->po_number}{$itemsSummary}. يرجى مراجعة الكميات وإصدار أمر الشراء الفعلي الخاص بها."
+                        : "اعتمد وفحص مهندس الموقع إذن الاستلام {$receipt->receipt_number} لأمر الشراء {$receipt->purchaseOrder->po_number}{$itemsSummary}. هذا البند/الشحنة جاهز الآن لإصدار أمر الشراء الفعلي المستقل الخاص به.",
                     $receipt->purchaseOrder
                 );
             }

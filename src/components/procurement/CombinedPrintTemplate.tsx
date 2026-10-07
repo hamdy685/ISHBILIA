@@ -149,8 +149,23 @@ export const CombinedPrintTemplate = React.forwardRef<HTMLDivElement, CombinedPr
       po?.executive_approver?.name ||
       '---';
 
-    // PR Line Items
-    const rawPrItems = props.prItems || props.items || resolvedPr?.items || [];
+    // PR Line Items - strictly isolate to items belonging to this PO
+    let rawPrItems = props.prItems || props.items || resolvedPr?.items || [];
+    if (po?.items && po.items.length > 0 && rawPrItems.length > 0) {
+      const poPrItemIds = po.items.map((pi: any) => pi.pr_item_id).filter(Boolean);
+      const poItemNames = po.items.map((pi: any) => (pi.item_description || pi.item_name || '').trim().toLowerCase());
+      const filtered = rawPrItems.filter((item: any) => {
+        if (poPrItemIds.length > 0 && item.id && poPrItemIds.includes(item.id)) {
+          return true;
+        }
+        const desc = (item.item_description || item.item_name || item.item?.name || '').trim().toLowerCase();
+        return desc && poItemNames.includes(desc);
+      });
+      if (filtered.length > 0) {
+        rawPrItems = filtered;
+      }
+    }
+
     const resolvedPrItems = rawPrItems.length > 0
       ? rawPrItems.map((item: any) => ({
           description: item.item_description || item.item_name || item.item?.name || '---',
@@ -243,8 +258,15 @@ export const CombinedPrintTemplate = React.forwardRef<HTMLDivElement, CombinedPr
       resolvedPr?.site_engineer?.name ||
       '---';
 
-    // GRN Line Items: map receipt items, falling back to PO items with matching received quantities
-    const rawGrnItems = props.grnItems || resolvedReceipt?.items || [];
+    // GRN Line Items: map receipt items, strictly filtering out zero-quantity or non-received items
+    const rawGrnItems = (props.grnItems || resolvedReceipt?.items || []).filter((item: any) => {
+      const qty = Number(item.received_quantity ?? item.quantity ?? 0);
+      if (qty <= 0) return false;
+      if (po?.id && item.purchase_order_id && Number(item.purchase_order_id) !== Number(po.id)) {
+        return false;
+      }
+      return true;
+    });
     const resolvedGrnItems = rawGrnItems.length > 0
       ? rawGrnItems.map((item: any) => {
           const poItem = item.purchase_order_item || po?.items?.find((p: any) => p.id === item.purchase_order_item_id);

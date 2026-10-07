@@ -40,6 +40,10 @@ class PurchaseRequestItemResource extends JsonResource
             'notes' => $this->notes,
             'is_supplementary' => (bool) $this->is_supplementary,
             'supplement_batch' => $this->supplement_batch ? (int) $this->supplement_batch : null,
+            'is_ordered' => method_exists($this->resource, 'isOrdered') ? $this->isOrdered() : false,
+            'purchase_order_id' => $this->relationLoaded('purchaseOrderItems')
+                ? $this->purchaseOrderItems->firstWhere('purchaseOrder.status', '!==', 'REJECTED')?->purchase_order_id
+                : null,
         ];
     }
 }

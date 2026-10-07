@@ -157,11 +157,9 @@ class PurchaseOrderService
                 throw new \RuntimeException('تغيرت حالة طلب الشراء أثناء الإنشاء. أعد تحميل الطلب وحاول مرة أخرى.');
             }
 
-            // Check if unified PO already exists for this PR
-            $existingPoQuery = PurchaseOrder::where('purchase_request_id', $pr->id)
-                ->whereNotIn('status', ['REJECTED']);
-
-            $existingPo = $existingPoQuery->first();
+            // Check if items or PO already exist for this PR
+            $itemsInput = $options['items'] ?? null;
+            $targetPrItemIds = !empty($itemsInput) ? collect($itemsInput)->pluck('pr_item_id')->filter()->map(fn ($v) => (int) $v)->all() : [];
 
             $manualPoNumber = !empty($options['manual_po_number']) ? trim((string) $options['manual_po_number']) : null;
             $manualPrNumber = !empty($options['manual_pr_number']) ? trim((string) $options['manual_pr_number']) : null;
@@ -170,24 +168,53 @@ class PurchaseOrderService
                 $pr->update(['manual_request_number' => $manualPrNumber]);
             }
 
-            if ($existingPo && ! $pendingSupplement) {
-                if (in_array($existingPo->status, ['PO_DRAFT', 'RETURNED_TO_PROCUREMENT'], true)) {
-                    $existingPo->update([
-                        'manual_po_number' => $manualPoNumber ?? $existingPo->manual_po_number,
-                        'manual_pr_number' => $manualPrNumber ?? $existingPo->manual_pr_number,
-                        'supplier_id' => $supplier?->id ?? $existingPo->supplier_id,
-                        'payment_terms' => $options['payment_terms'] ?? $existingPo->payment_terms,
-                        'delivery_terms' => $options['delivery_terms'] ?? $existingPo->delivery_terms,
-                        'delivery_date' => !empty($options['delivery_date']) ? $options['delivery_date'] : ($existingPo->delivery_date ?? now()->toDateString()),
-                        'budget_code' => $options['budget_code'] ?? $existingPo->budget_code,
-                        'notes' => $options['notes'] ?? $existingPo->notes,
-                    ]);
-                    return $existingPo;
+            if (! $pendingSupplement) {
+                if (!empty($targetPrItemIds)) {
+                    // Check if any of these specific PR items are already in an active (non-draft) PO
+                    $alreadyOrderedItems = PurchaseOrderItem::whereIn('pr_item_id', $targetPrItemIds)
+                        ->whereHas('purchaseOrder', function ($q) {
+                            $q->whereNotIn('status', ['REJECTED', 'CANCELLED', 'VOIDED', 'PO_DRAFT', 'RETURNED_TO_PROCUREMENT']);
+                        })
+                        ->with('purchaseOrder')
+                        ->get();
+
+                    if ($alreadyOrderedItems->isNotEmpty()) {
+                        $firstConflict = $alreadyOrderedItems->first();
+                        throw new \RuntimeException("البند [{$firstConflict->item_description}] تم إصدار أمر شراء سابق له بالفعل (#{$firstConflict->purchaseOrder?->po_number}).");
+                    }
+                } else {
+                    // Fallback when no items array provided
+                    $existingPo = PurchaseOrder::where('purchase_request_id', $pr->id)
+                        ->whereNotIn('status', ['REJECTED'])
+                        ->first();
+
+                    if ($existingPo) {
+                        if (in_array($existingPo->status, ['PO_DRAFT', 'RETURNED_TO_PROCUREMENT'], true)) {
+                            $existingPo->update([
+                                'manual_po_number' => $manualPoNumber ?? $existingPo->manual_po_number,
+                                'manual_pr_number' => $manualPrNumber ?? $existingPo->manual_pr_number,
+                                'supplier_id' => $supplier?->id ?? $existingPo->supplier_id,
+                                'payment_terms' => $options['payment_terms'] ?? $existingPo->payment_terms,
+                                'delivery_terms' => $options['delivery_terms'] ?? $existingPo->delivery_terms,
+                                'delivery_date' => !empty($options['delivery_date']) ? $options['delivery_date'] : ($existingPo->delivery_date ?? now()->toDateString()),
+                                'budget_code' => $options['budget_code'] ?? $existingPo->budget_code,
+                                'notes' => $options['notes'] ?? $existingPo->notes,
+                            ]);
+                            return $existingPo;
+                        }
+                        if ($existingPo->status === 'PENDING_ACCOUNTING_REVIEW') {
+                            return $existingPo;
+                        }
+
+                        $unassignedCount = $pr->items()->whereDoesntHave('purchaseOrderItems', function ($q) {
+                            $q->whereHas('purchaseOrder', fn ($poq) => $poq->whereNotIn('status', ['REJECTED', 'CANCELLED', 'VOIDED']));
+                        })->count();
+
+                        if ($unassignedCount === 0) {
+                            throw new \RuntimeException('يوجد أمر شراء مصدر بالفعل لهذا الطلب (' . $existingPo->po_number . ').');
+                        }
+                    }
                 }
-                if ($existingPo->status === 'PENDING_ACCOUNTING_REVIEW') {
-                    return $existingPo;
-                }
-                throw new \RuntimeException('يوجد أمر شراء مصدر بالفعل لهذا الطلب (' . $existingPo->po_number . ').');
             }
 
             $poNumber = $this->generatePoNumber();
@@ -261,9 +288,11 @@ class PurchaseOrderService
                     }
                 }
             } else {
-                // When no items array supplied: copy PR items.
-                // Keep all items together in the unified purchase order.
-                $prItems = $pr->items;
+                // When no items array supplied: copy unassigned PR items
+                $prItems = $pr->items->filter(fn ($item) => ! $item->isOrdered());
+                if ($prItems->isEmpty()) {
+                    $prItems = $pr->items;
+                }
                 foreach ($prItems as $prItem) {
                     [$itemReference, $region] = $this->requireReferenceFields(
                         $prItem->item_reference,
@@ -850,18 +879,27 @@ class PurchaseOrderService
 
             if ($lockedPo->purchaseRequest) {
                 $pr = $lockedPo->purchaseRequest;
-                $prFromState = $pr->status;
-                $pr->update(['status' => 'ISSUED']);
+                $allPrItemsCount = $pr->items()->count();
+                $coveredPrItemsCount = $pr->items()
+                    ->whereHas('purchaseOrderItems', function ($q) {
+                        $q->whereHas('purchaseOrder', fn ($poq) => $poq->whereNotIn('status', ['REJECTED', 'CANCELLED', 'VOIDED']));
+                    })
+                    ->count();
 
-                ApprovalHistory::create([
-                    'target_type' => PurchaseRequest::class,
-                    'target_id'   => $pr->id,
-                    'actor_user_id' => $user->id,
-                    'action'      => 'PO_ISSUED',
-                    'from_state'  => $prFromState,
-                    'to_state'    => 'ISSUED',
-                    'comments'    => 'تم إصدار أمر الشراء رقم ' . $lockedPo->po_number . ' للمورد.',
-                ]);
+                if ($allPrItemsCount > 0 && $coveredPrItemsCount >= $allPrItemsCount) {
+                    $prFromState = $pr->status;
+                    $pr->update(['status' => 'ISSUED']);
+
+                    ApprovalHistory::create([
+                        'target_type' => PurchaseRequest::class,
+                        'target_id'   => $pr->id,
+                        'actor_user_id' => $user->id,
+                        'action'      => 'PO_ISSUED',
+                        'from_state'  => $prFromState,
+                        'to_state'    => 'ISSUED',
+                        'comments'    => 'تم إصدار أوامر الشراء لجميع بنود طلب الشراء بالكامل (' . $lockedPo->po_number . ').',
+                    ]);
+                }
             }
 
             app(SystemEventService::class)->recordAction(

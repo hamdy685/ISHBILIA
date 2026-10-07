@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { getApprovedPurchaseRequestApi } from '../../api/procurement';
 import { getSuppliersApi } from '../../api/suppliers';
-import { createPurchaseOrderApi, submitPurchaseOrderApi } from '../../api/purchaseOrders';
+import { createPurchaseOrderApi, createBatchPurchaseOrdersApi, submitPurchaseOrderApi } from '../../api/purchaseOrders';
 import { المورد } from '../../types/purchaseOrder';
 import { PurchaseRequest } from '../../types/purchaseRequest';
 import LoadingSpinner from '../../components/LoadingSpinner';
@@ -44,6 +44,10 @@ interface PoItemInput {
   raw_pr_quantity?: number;
   raw_pr_uom?: string;
   is_rebar_converted?: boolean;
+  is_already_ordered?: boolean;
+  selected?: boolean;
+  group_id?: string;
+  group_name?: string;
 }
 
 export const CreatePurchaseOrderPage: React.FC = () => {
@@ -65,6 +69,8 @@ export const CreatePurchaseOrderPage: React.FC = () => {
   const [manualPoNumber, setManualPoNumber] = useState<string>('');
   const [showCombinedPrintModal, setShowCombinedPrintModal] = useState<boolean>(false);
   const [poItems, setPoItems] = useState<PoItemInput[]>([]);
+  const [orderMode, setOrderMode] = useState<'SEPARATE_DEFAULT' | 'COMBINED_SINGLE'>('SEPARATE_DEFAULT');
+  const [nextGroupIndex, setNextGroupIndex] = useState<number>(1);
 
   const [loading, setLoading] = useState<boolean>(false);
   const [fetching, setFetching] = useState<boolean>(true);
@@ -165,6 +171,10 @@ export const CreatePurchaseOrderPage: React.FC = () => {
                   raw_pr_quantity: rawQty,
                   raw_pr_uom: i.uom || 'PCS',
                   is_rebar_converted: isConverted,
+                  is_already_ordered: Boolean(i.is_ordered || (i as any).purchase_order_id),
+                  selected: false,
+                  group_id: '',
+                  group_name: '',
                 };
               })
             );
@@ -236,6 +246,158 @@ export const CreatePurchaseOrderPage: React.FC = () => {
     return poItems.reduce((sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.unit_price) || 0), 0);
   };
 
+  const activeItems = useMemo(() => {
+    return poItems.filter((i) => !i.is_already_ordered);
+  }, [poItems]);
+
+  const hasMultipleSteelItems = useMemo(() => {
+    const steelItems = activeItems.filter((i) =>
+      isRebarUnit(i.uom) ||
+      (i.item_description || '').includes('حديد') ||
+      (i.uom || '').trim().toUpperCase() === 'TON' ||
+      (i.uom || '').trim().toUpperCase() === 'PARCEL'
+    );
+    return steelItems.length >= 2;
+  }, [activeItems]);
+
+  const resolvedGroups = useMemo(() => {
+    if (orderMode === 'COMBINED_SINGLE') {
+      return [{
+        id: 'all',
+        name: 'أمر شراء مجمع لكافة البنود',
+        items: activeItems,
+        isCustomGroup: false,
+      }];
+    }
+
+    const map = new Map<string, { id: string; name: string; items: PoItemInput[]; isCustomGroup: boolean }>();
+
+    activeItems.forEach((item, idx) => {
+      const gid = item.group_id ? `group_${item.group_id}` : `separate_item_${item.pr_item_id || idx}`;
+      const gname = item.group_name || `بند مستقل: ${item.item_description}`;
+      if (!map.has(gid)) {
+        map.set(gid, {
+          id: gid,
+          name: gname,
+          items: [],
+          isCustomGroup: Boolean(item.group_id),
+        });
+      }
+      map.get(gid)!.items.push(item);
+    });
+
+    return Array.from(map.values());
+  }, [orderMode, activeItems]);
+
+  const handleToggleSelectItem = (index: number) => {
+    setPoItems((prev) => {
+      const updated = [...prev];
+      if (updated[index] && !updated[index].is_already_ordered) {
+        updated[index] = { ...updated[index], selected: !updated[index].selected };
+      }
+      return updated;
+    });
+  };
+
+  const handleSelectAllActive = (select: boolean) => {
+    setPoItems((prev) =>
+      prev.map((item) =>
+        item.is_already_ordered ? item : { ...item, selected: select }
+      )
+    );
+  };
+
+  const handleGroupSelectedItems = () => {
+    const selectedIndices = poItems
+      .map((item, idx) => (!item.is_already_ordered && item.selected ? idx : -1))
+      .filter((idx) => idx !== -1);
+
+    if (selectedIndices.length < 2) {
+      setError('يرجى تحديد بندين على الأقل لدمجهما كحزمة شحنة واحدة (مثل أصناف حديد التسليح المختلفة).');
+      return;
+    }
+
+    const gid = String(nextGroupIndex);
+    const gname = `حزمة شحنة مدمجة #${nextGroupIndex} (حديد/مواد مشتركة)`;
+
+    setPoItems((prev) => {
+      const updated = [...prev];
+      selectedIndices.forEach((idx) => {
+        updated[idx] = {
+          ...updated[idx],
+          group_id: gid,
+          group_name: gname,
+          selected: false,
+        };
+      });
+      return updated;
+    });
+
+    setNextGroupIndex((prev) => prev + 1);
+    setError(null);
+  };
+
+  const handleUngroupSelectedItems = () => {
+    setPoItems((prev) =>
+      prev.map((item) =>
+        item.selected
+          ? { ...item, group_id: '', group_name: '', selected: false }
+          : item
+      )
+    );
+    setError(null);
+  };
+
+  const handleAutoGroupSteel = () => {
+    const steelIndices = poItems
+      .map((item, idx) => {
+        if (item.is_already_ordered) return -1;
+        const isSteel =
+          isRebarUnit(item.uom) ||
+          (item.item_description || '').includes('حديد') ||
+          (item.uom || '').trim().toUpperCase() === 'TON' ||
+          (item.uom || '').trim().toUpperCase() === 'PARCEL';
+        return isSteel ? idx : -1;
+      })
+      .filter((idx) => idx !== -1);
+
+    if (steelIndices.length < 2) {
+      setError('لم يتم العثور على بندين أو أكثر من حديد التسليح لدمجهما تلقائياً.');
+      return;
+    }
+
+    const gid = `steel_${nextGroupIndex}`;
+    const gname = `شحنة حديد تسليح مدمجة (وزن مشترك)`;
+
+    setPoItems((prev) => {
+      const updated = [...prev];
+      steelIndices.forEach((idx) => {
+        updated[idx] = {
+          ...updated[idx],
+          group_id: gid,
+          group_name: gname,
+          selected: false,
+        };
+      });
+      return updated;
+    });
+
+    setNextGroupIndex((prev) => prev + 1);
+    setError(null);
+  };
+
+  const handleResetAllSeparations = () => {
+    setPoItems((prev) =>
+      prev.map((item) => ({
+        ...item,
+        group_id: '',
+        group_name: '',
+        selected: false,
+      }))
+    );
+    setError(null);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!prId) {
@@ -257,44 +419,88 @@ export const CreatePurchaseOrderPage: React.FC = () => {
       return;
     }
 
+    const finalGroups = resolvedGroups.filter((g) => g.items.length > 0);
+    if (finalGroups.length === 0) {
+      setError('لا توجد بنود متاحة لإصدار أمر شراء (ربما تم إصدار أوامر شراء لجميع البنود مسبقاً).');
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
     try {
-      const po = await createPurchaseOrderApi({
-        purchase_request_id: prId,
-        supplier_id: supplierId ? Number(supplierId) : undefined,
-        one_time_supplier_name: oneTimeSupplierName.trim() || undefined,
-        payment_terms: paymentTerms || undefined,
-        delivery_date: deliveryDate || undefined,
-        budget_code: budgetCode || undefined,
-        notes: notes || undefined,
-        manual_po_number: manualPoNumber.trim() || undefined,
-        manual_pr_number: manualPrNumber.trim() || undefined,
-        items: poItems.map((item) => ({
-          pr_item_id: item.pr_item_id,
-          item_id: item.item_id,
-          item_description: item.item_description,
-          item_reference: item.item_reference,
-          region: item.region,
-          quantity: Number(item.quantity) || 1,
-          uom: item.uom,
-          unit_price: Number(item.unit_price) || 0,
-          specifications: item.specifications,
-          supplier_id: item.supplier_id || (supplierId ? Number(supplierId) : undefined),
-        })),
-      });
+      if (finalGroups.length === 1 && orderMode === 'COMBINED_SINGLE') {
+        const po = await createPurchaseOrderApi({
+          purchase_request_id: prId,
+          supplier_id: supplierId ? Number(supplierId) : undefined,
+          one_time_supplier_name: oneTimeSupplierName.trim() || undefined,
+          payment_terms: paymentTerms || undefined,
+          delivery_date: deliveryDate || undefined,
+          budget_code: budgetCode || undefined,
+          notes: notes || undefined,
+          manual_po_number: manualPoNumber.trim() || undefined,
+          manual_pr_number: manualPrNumber.trim() || undefined,
+          items: finalGroups[0].items.map((item) => ({
+            pr_item_id: item.pr_item_id,
+            item_id: item.item_id,
+            item_description: item.item_description,
+            item_reference: item.item_reference,
+            region: item.region,
+            quantity: Number(item.quantity) || 1,
+            uom: item.uom,
+            unit_price: Number(item.unit_price) || 0,
+            specifications: item.specifications,
+            supplier_id: item.supplier_id || (supplierId ? Number(supplierId) : undefined),
+          })),
+        });
 
+        if (po?.status === 'PO_DRAFT' || po?.status === 'RETURNED_TO_PROCUREMENT') {
+          await submitPurchaseOrderApi(po.id);
+        }
 
-      if (po?.status === 'PO_DRAFT' || po?.status === 'RETURNED_TO_PROCUREMENT') {
-        await submitPurchaseOrderApi(po.id);
+        const returnUrl = searchParams.get('returnUrl') || (location.state as { returnTo?: string })?.returnTo || '/procurement';
+        navigate(returnUrl, {
+          state: {
+            successMessage: `تم إصدار أمر الشراء ${po?.po_number ? `#${po.po_number}` : ''} بنجاح.`,
+          },
+        });
+      } else {
+        const groupsPayload = finalGroups.map((g) => ({
+          group_name: g.name,
+          supplier_id: g.items[0]?.supplier_id || (supplierId ? Number(supplierId) : undefined),
+          payment_terms: paymentTerms || undefined,
+          delivery_date: deliveryDate || undefined,
+          notes: notes || undefined,
+          items: g.items.map((item) => ({
+            pr_item_id: item.pr_item_id,
+            item_id: item.item_id,
+            item_description: item.item_description,
+            item_reference: item.item_reference,
+            region: item.region,
+            quantity: Number(item.quantity) || 1,
+            uom: item.uom,
+            unit_price: Number(item.unit_price) || 0,
+            specifications: item.specifications,
+            supplier_id: item.supplier_id || (supplierId ? Number(supplierId) : undefined),
+          })),
+        }));
+
+        await createBatchPurchaseOrdersApi({
+          purchase_request_id: prId,
+          supplier_id: supplierId ? Number(supplierId) : undefined,
+          one_time_supplier_name: oneTimeSupplierName.trim() || undefined,
+          delivery_date: deliveryDate || undefined,
+          notes: notes || undefined,
+          groups: groupsPayload,
+        });
+
+        const returnUrl = searchParams.get('returnUrl') || (location.state as { returnTo?: string })?.returnTo || '/procurement';
+        navigate(returnUrl, {
+          state: {
+            successMessage: `تم بنجاح إصدار ${finalGroups.length} أمر شراء مستقل/مدمج وفق التوزيع المحدد وإرسالها للحسابات.`,
+          },
+        });
       }
-      const returnUrl = searchParams.get('returnUrl') || (location.state as { returnTo?: string })?.returnTo || '/procurement';
-      navigate(returnUrl, {
-        state: {
-          successMessage: `تم إصدار أمر الشراء ${po?.po_number ? `#${po.po_number}` : ''} بنجاح. يمكنك مواصلة باقي الطلبات.`,
-        },
-      });
     } catch (err) {
       const parsed = parseApiError(err);
       setError(parsed.message);
@@ -728,6 +934,97 @@ export const CreatePurchaseOrderPage: React.FC = () => {
             </div>
           )}
 
+          {/* Workflow & Item Separation/Grouping Controls */}
+          <div className="rounded-2xl border border-cyan-800/40 bg-gradient-to-r from-slate-900 via-slate-900/95 to-cyan-950/30 p-4 space-y-3.5 shadow-lg">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <span className="text-xl">⚙️</span>
+                <div>
+                  <h3 className="text-xs sm:text-sm font-bold text-slate-100 flex items-center gap-2">
+                    <span>دورة تداول البنود (فصل البنود المنفصلة وتجميع شحنات المواد الإنشائية)</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    الأصل: استلام كل بند بمعزل عن غيره وتوليد إذن استلام وأمر شراء فعلي منفصل. يمكنك تجميع مقاسات حديد التسليح والمواد المشتركة في شحنة واحدة.
+                  </p>
+                </div>
+              </div>
+
+              {/* Mode switch */}
+              <div className="inline-flex rounded-xl bg-slate-950 p-1 border border-slate-800 text-xs shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setOrderMode('SEPARATE_DEFAULT')}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                    orderMode === 'SEPARATE_DEFAULT'
+                      ? 'bg-cyan-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  ⚡ الوضع الافتراضي (فصل البنود)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOrderMode('COMBINED_SINGLE')}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                    orderMode === 'COMBINED_SINGLE'
+                      ? 'bg-cyan-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  📦 أمر شراء مجمع للكل
+                </button>
+              </div>
+            </div>
+
+            {orderMode === 'SEPARATE_DEFAULT' && (
+              <div className="flex flex-wrap items-center justify-between gap-2.5 pt-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-semibold text-slate-300">
+                    المحدد: <strong className="text-cyan-400 font-mono">{poItems.filter(i => i.selected && !i.is_already_ordered).length}</strong> بند
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleGroupSelectedItems}
+                    disabled={poItems.filter(i => i.selected && !i.is_already_ordered).length < 2}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 px-3 py-1.5 text-xs font-bold transition-all disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
+                    title="دمج البنود المحددة في أمر شراء واحد لأنها تأتي بشحنة ووزن واحد"
+                  >
+                    <span>🔗</span> دمج البنود المحددة كشحنة واحدة (حديد/مواد مشتركة)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleUngroupSelectedItems}
+                    disabled={!poItems.some(i => i.selected && i.group_id)}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-3 py-1.5 text-xs font-medium transition-all disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
+                    title="إلغاء دمج البنود المحددة وإرجاعها كأوامر شراء منفصلة"
+                  >
+                    <span>✂️</span> فك الدمج
+                  </button>
+                  {hasMultipleSteelItems && (
+                    <button
+                      type="button"
+                      onClick={handleAutoGroupSteel}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-700/60 px-3 py-1.5 text-xs font-bold transition-all cursor-pointer"
+                      title="دمج جميع مقاسات حديد التسليح تلقائياً في شحنة واحدة"
+                    >
+                      <span>🏗️</span> تجميع تلقائي لبنود حديد التسليح
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleResetAllSeparations}
+                    className="text-xs text-slate-400 hover:text-rose-300 underline underline-offset-4 transition-colors cursor-pointer"
+                  >
+                    إعادة تعيين (فصل تام لكافة البنود)
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Commercial Line Items */}
           <div className="space-y-3 pt-2">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -745,7 +1042,19 @@ export const CreatePurchaseOrderPage: React.FC = () => {
               <table className="w-full text-right text-xs text-slate-200 border-collapse">
                 <thead className="bg-slate-950 text-slate-400 font-semibold border-b border-slate-800">
                   <tr>
+                    {orderMode === 'SEPARATE_DEFAULT' && (
+                      <th className="p-3 w-10 text-center">
+                        <input
+                          type="checkbox"
+                          aria-label="تحديد كافة البنود"
+                          checked={activeItems.length > 0 && activeItems.every((i) => i.selected)}
+                          onChange={(e) => handleSelectAllActive(e.target.checked)}
+                          className="rounded border-slate-700 text-cyan-500 focus:ring-0 cursor-pointer"
+                        />
+                      </th>
+                    )}
                     <th className="p-3">#</th>
+                    <th className="p-3">مسار المستند والتوزيع</th>
                     <th className="p-3">رقم قطعة الأرض</th>
                     <th className="p-3">المنطقة</th>
                     <th className="p-3">الصنف</th>
@@ -765,8 +1074,34 @@ export const CreatePurchaseOrderPage: React.FC = () => {
                     const isQtyChanged = diff !== 0;
 
                     return (
-                      <tr key={index} className="hover:bg-slate-800/40 transition-colors">
+                      <tr key={index} className={`hover:bg-slate-800/40 transition-colors ${item.selected ? 'bg-cyan-950/30' : ''}`}>
+                        {orderMode === 'SEPARATE_DEFAULT' && (
+                          <td className="p-3 text-center">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(item.selected)}
+                              disabled={Boolean(item.is_already_ordered)}
+                              onChange={() => handleToggleSelectItem(index)}
+                              className="rounded border-slate-700 text-cyan-500 focus:ring-0 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                            />
+                          </td>
+                        )}
                         <td className="p-3 font-mono text-slate-400">{index + 1}</td>
+                        <td className="p-3 whitespace-nowrap">
+                          {item.is_already_ordered ? (
+                            <span className="inline-flex items-center gap-1 rounded bg-emerald-950/80 border border-emerald-700/70 px-2 py-0.5 text-[10.5px] font-bold text-emerald-300">
+                              ✅ تم إصداره مسبقاً
+                            </span>
+                          ) : item.group_id ? (
+                            <span className="inline-flex items-center gap-1 rounded bg-amber-950/80 border border-amber-600/70 px-2 py-0.5 text-[10.5px] font-bold text-amber-300">
+                              🔗 {item.group_name || 'حزمة مدمجة'}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded bg-slate-800 border border-slate-700 px-2 py-0.5 text-[10.5px] font-bold text-cyan-300">
+                              📦 أمر شراء مستقل
+                            </span>
+                          )}
+                        </td>
                         <td className="p-3">
                           <input
                             type="text"
@@ -899,12 +1234,40 @@ export const CreatePurchaseOrderPage: React.FC = () => {
                 const isQtyChanged = diff !== 0;
 
                 return (
-                  <article key={`mobile-po-item-${item.pr_item_id || index}`} className="rounded-xl border border-slate-800 bg-slate-900/90 p-4 space-y-3 shadow-lg">
+                  <article key={`mobile-po-item-${item.pr_item_id || index}`} className={`rounded-xl border border-slate-800 bg-slate-900/90 p-4 space-y-3 shadow-lg ${item.selected ? 'ring-1 ring-cyan-500' : ''}`}>
                     <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
-                      <span className="font-bold text-slate-100 text-sm">{item.item_description}</span>
+                      <div className="flex items-center gap-2">
+                        {orderMode === 'SEPARATE_DEFAULT' && (
+                          <input
+                            type="checkbox"
+                            checked={Boolean(item.selected)}
+                            disabled={Boolean(item.is_already_ordered)}
+                            onChange={() => handleToggleSelectItem(index)}
+                            className="rounded border-slate-700 text-cyan-500 focus:ring-0 cursor-pointer disabled:opacity-30"
+                          />
+                        )}
+                        <span className="font-bold text-slate-100 text-sm">{item.item_description}</span>
+                      </div>
                       <span className="shrink-0 rounded bg-cyan-950 border border-cyan-800/60 px-2 py-0.5 text-[10px] font-bold text-cyan-300 font-mono">
                         #{index + 1}
                       </span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-slate-400">مسار المستند:</span>
+                      {item.is_already_ordered ? (
+                        <span className="inline-flex items-center gap-1 rounded bg-emerald-950/80 border border-emerald-700/70 px-2 py-0.5 text-[10.5px] font-bold text-emerald-300">
+                          ✅ تم إصداره مسبقاً
+                        </span>
+                      ) : item.group_id ? (
+                        <span className="inline-flex items-center gap-1 rounded bg-amber-950/80 border border-amber-600/70 px-2 py-0.5 text-[10.5px] font-bold text-amber-300">
+                          🔗 {item.group_name || 'حزمة مدمجة'}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded bg-slate-800 border border-slate-700 px-2 py-0.5 text-[10.5px] font-bold text-cyan-300">
+                          📦 أمر شراء مستقل
+                        </span>
+                      )}
                     </div>
 
                     <div className="text-xs">
@@ -1045,6 +1408,39 @@ export const CreatePurchaseOrderPage: React.FC = () => {
                 <span>{tafqeetCurrency(calculateGrandTotal())}</span>
               </div>
             </div>
+
+            {/* Purchase Orders Batch Issuance Summary */}
+            <div className="rounded-xl border border-cyan-800/50 bg-slate-900/90 p-4 space-y-2.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-200">
+                  <span>📊</span>
+                  <span>ملخص أوامر الشراء التي سيتم إصدارها:</span>
+                </div>
+                <span className="text-xs font-mono font-black text-cyan-300 bg-cyan-950 border border-cyan-800 px-2.5 py-0.5 rounded-full">
+                  إجمالي: {resolvedGroups.length} أمر شراء {orderMode === 'SEPARATE_DEFAULT' ? 'مستقل/مدمج' : 'موحد'}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 text-xs">
+                {resolvedGroups.map((g, gIdx) => (
+                  <div
+                    key={g.id}
+                    className={`rounded-lg border p-2.5 space-y-1 ${
+                      g.isCustomGroup
+                        ? 'bg-amber-950/20 border-amber-600/40 text-amber-200'
+                        : 'bg-slate-950 border-slate-800 text-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-1 font-bold text-[11px]">
+                      <span className="truncate">{gIdx + 1}. {g.name}</span>
+                      <span className="font-mono text-[10px] opacity-80 shrink-0">({g.items.length} بنود)</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 line-clamp-2">
+                      {g.items.map((it) => it.item_description).join(' + ')}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
           {/* Form الإجراءات */}
@@ -1091,9 +1487,9 @@ export const CreatePurchaseOrderPage: React.FC = () => {
               <button
                 type="submit"
                 disabled={loading || !supplierId || !prId}
-                className="bg-cyan-600 hover:bg-cyan-500 text-white text-xs px-6 py-2.5 rounded-lg font-bold shadow-lg shadow-cyan-600/20 disabled:opacity-50"
+                className="bg-cyan-600 hover:bg-cyan-500 text-white text-xs px-6 py-2.5 rounded-lg font-bold shadow-lg shadow-cyan-600/20 disabled:opacity-50 cursor-pointer"
               >
-                {loading ? 'جاري إصدار وإرسال أمر الشراء...' : 'إصدار وإرسال أمر الشراء للاستلام ←'}
+                {loading ? 'جاري إصدار وإرسال أوامر الشراء...' : resolvedGroups.length > 1 ? `إصدار وإرسال (${resolvedGroups.length}) أمر شراء للاستلام ←` : 'إصدار وإرسال أمر الشراء للاستلام ←'}
               </button>
             </div>
           </div>

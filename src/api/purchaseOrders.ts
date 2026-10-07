@@ -48,6 +48,12 @@ export const createPurchaseOrderApi = async (p: PurchaseOrderPayload) => {
   return response.data.data;
 };
 
+export const createBatchPurchaseOrdersApi = async (p: PurchaseOrderPayload) => {
+  const response = await apiClient.post<{ message: string; data: PurchaseOrder[] }>(`${base}/batch`, p);
+  invalidateCachedGet(base);
+  return response.data.data;
+};
+
 export const updatePurchaseOrderApi = async (id: number, p: PurchaseOrderPayload) => {
   const response = await apiClient.put<{ data: PurchaseOrder }>(`${base}/${id}`, p);
   invalidateCachedGet(base);
