@@ -15,6 +15,15 @@ class PurchaseOrder extends Model
 {
     use HasFactory, SoftDeletes, RecordsSystemEvents, ScopesDataByUserRole;
 
+    protected static function booted(): void
+    {
+        static::creating(function (PurchaseOrder $model) {
+            if (empty($model->po_number)) {
+                $model->po_number = app(\App\Services\PurchaseOrderService::class)->generatePoNumber();
+            }
+        });
+    }
+
     protected $table = 'purchase_orders';
 
     protected $fillable = [

@@ -18,49 +18,48 @@ use Illuminate\Validation\ValidationException;
 class PurchaseRequestService
 {
     /**
-     * Generate sequential unique Purchase Request number (PR-YYYY-XXXXX).
-     * Uses DB::table directly with lockForUpdate to prevent race conditions and bypass global scopes.
+     * Generate sequential unique Purchase Request number (PR-1, PR-2, ...).
+     * Simple, clean, ascending starting from 1 with no leading zeros.
      */
-    public function generateUniqueRequestNumber(): string
+    public function generateUniqueRequestNumber(string $prefix = 'PR-'): string
     {
-        $year = date('Y');
-        $prefix = "PR-{$year}-";
-
-        // جلب أحدث رقم مسجل يبدأ بنفس السنة مع قفل السطر لمنع التداخل وتجاوز الـ Global Scopes
         $latestRequest = DB::table('purchase_requests')
             ->where('request_number', 'like', "{$prefix}%")
             ->orderBy('id', 'desc')
             ->lockForUpdate()
             ->first();
 
-        $nextNumber = 1;
+        $maxSeq = 0;
         if ($latestRequest) {
             $parts = explode('-', $latestRequest->request_number);
-            $lastSeq = end($parts);
-            $nextNumber = intval($lastSeq) + 1;
-        }
-
-        // فحص إضافي لأعلى رقم تسلسلي مسجل في جدول قاعدة البيانات مباشرة
-        $prefixLen = strlen($prefix);
-        try {
-            $rawMax = DB::table('purchase_requests')
-                ->where('request_number', 'like', "{$prefix}%")
-                ->selectRaw("MAX(CAST(SUBSTRING(request_number, " . ($prefixLen + 1) . ") AS UNSIGNED)) as max_seq")
-                ->value('max_seq');
-
-            if ($rawMax && intval($rawMax) >= $nextNumber) {
-                $nextNumber = intval($rawMax) + 1;
+            $lastPart = end($parts);
+            if (is_numeric($lastPart)) {
+                $maxSeq = (int) $lastPart;
             }
-        } catch (\Throwable $e) {
-            Log::warning('PurchaseRequestService: Failed rawMax query on DB::table: ' . $e->getMessage());
         }
 
-        // التأكد من عدم وجود الرقم مسبقاً في الجدول
-        while (DB::table('purchase_requests')->where('request_number', sprintf("%s%05d", $prefix, $nextNumber))->exists()) {
+        $existing = DB::table('purchase_requests')
+            ->where('request_number', 'like', "{$prefix}%")
+            ->pluck('request_number');
+
+        foreach ($existing as $num) {
+            $parts = explode('-', (string) $num);
+            $lastPart = end($parts);
+            if (is_numeric($lastPart)) {
+                $seq = (int) $lastPart;
+                if ($seq > $maxSeq) {
+                    $maxSeq = $seq;
+                }
+            }
+        }
+
+        $nextNumber = max(1, $maxSeq + 1);
+
+        while (DB::table('purchase_requests')->where('request_number', "{$prefix}{$nextNumber}")->exists()) {
             $nextNumber++;
         }
 
-        return sprintf("%s%05d", $prefix, $nextNumber);
+        return "{$prefix}{$nextNumber}";
     }
 
     /**

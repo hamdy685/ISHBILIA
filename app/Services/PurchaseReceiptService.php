@@ -12,53 +12,48 @@ use Illuminate\Validation\ValidationException;
 class PurchaseReceiptService
 {
     /**
-     * Generate unique sequential receipt number with year and prefix (e.g. GRN-2026-00001).
+     * Generate sequential unique receipt number (REC-1, REC-2, ...).
+     * Simple, clean, ascending starting from 1 with no leading zeros.
      */
-    public function generateUniqueReceiptNumber(string $prefix = 'GRN-'): string
+    public function generateUniqueReceiptNumber(string $prefix = 'REC-'): string
     {
-        $year = date('Y');
-        $fullPrefix = "{$prefix}{$year}-";
-
         $latestReceipt = DB::table('purchase_receipts')
-            ->where('receipt_number', 'like', "{$fullPrefix}%")
+            ->where('receipt_number', 'like', "{$prefix}%")
             ->orderBy('id', 'desc')
             ->lockForUpdate()
             ->first();
 
-        $nextNumber = 1;
+        $maxSeq = 0;
         if ($latestReceipt) {
             $parts = explode('-', $latestReceipt->receipt_number);
-            $lastSeq = end($parts);
-            $nextNumber = intval($lastSeq) + 1;
-        }
-
-        $prefixLen = strlen($fullPrefix);
-        try {
-            $rawMax = DB::table('purchase_receipts')
-                ->where('receipt_number', 'like', "{$fullPrefix}%")
-                ->selectRaw("MAX(CAST(SUBSTRING(receipt_number, " . ($prefixLen + 1) . ") AS UNSIGNED)) as max_seq")
-                ->value('max_seq');
-
-            if ($rawMax && intval($rawMax) >= $nextNumber) {
-                $nextNumber = intval($rawMax) + 1;
+            $lastPart = end($parts);
+            if (is_numeric($lastPart)) {
+                $maxSeq = (int) $lastPart;
             }
-        } catch (\Throwable $e) {
-            try {
-                $rawMaxSqlite = DB::table('purchase_receipts')
-                    ->where('receipt_number', 'like', "{$fullPrefix}%")
-                    ->selectRaw("MAX(CAST(substr(receipt_number, " . ($prefixLen + 1) . ") AS INTEGER)) as max_seq")
-                    ->value('max_seq');
-                if ($rawMaxSqlite && intval($rawMaxSqlite) >= $nextNumber) {
-                    $nextNumber = intval($rawMaxSqlite) + 1;
-                }
-            } catch (\Throwable) {}
         }
 
-        while (DB::table('purchase_receipts')->where('receipt_number', sprintf("%s%05d", $fullPrefix, $nextNumber))->exists()) {
+        $existing = DB::table('purchase_receipts')
+            ->where('receipt_number', 'like', "{$prefix}%")
+            ->pluck('receipt_number');
+
+        foreach ($existing as $num) {
+            $parts = explode('-', (string) $num);
+            $lastPart = end($parts);
+            if (is_numeric($lastPart)) {
+                $seq = (int) $lastPart;
+                if ($seq > $maxSeq) {
+                    $maxSeq = $seq;
+                }
+            }
+        }
+
+        $nextNumber = max(1, $maxSeq + 1);
+
+        while (DB::table('purchase_receipts')->where('receipt_number', "{$prefix}{$nextNumber}")->exists()) {
             $nextNumber++;
         }
 
-        return sprintf("%s%05d", $fullPrefix, $nextNumber);
+        return "{$prefix}{$nextNumber}";
     }
     public function warehouseQueue(int $perPage = 15)
     {
@@ -183,7 +178,7 @@ class PurchaseReceiptService
                 'supplier_id' => $supplierId,
                 'warehouse_keeper_user_id' => $warehouseKeeper->id,
                 'site_engineer_user_id' => $siteEngineerId,
-                'receipt_number' => $this->generateUniqueReceiptNumber('GRN-'),
+                'receipt_number' => $this->generateUniqueReceiptNumber('REC-'),
                 'status' => 'PENDING_SITE_ENGINEER',
                 'received_at' => $receivedAt ?: now()->toDateString(),
                 'warehouse_submitted_at' => now(),
@@ -474,7 +469,7 @@ class PurchaseReceiptService
                 'warehouse_keeper_user_id' => null,
                 'site_engineer_user_id' => null,
                 'receiver_user_id' => $requester->id,
-                'receipt_number' => 'OFFICE-RCV-' . now()->format('YmdHis') . '-' . $purchaseOrder->id,
+                'receipt_number' => $this->generateUniqueReceiptNumber('REC-OFFICE-'),
                 'receipt_type' => 'REQUESTER_OFFICE',
                 'status' => 'APPROVED',
                 'received_at' => now()->toDateString(),
@@ -602,7 +597,7 @@ class PurchaseReceiptService
                 'supplier_id' => $supplierId,
                 'warehouse_keeper_user_id' => null,
                 'site_engineer_user_id' => $siteEngineerId,
-                'receipt_number' => $this->generateUniqueReceiptNumber('GRN-SITE-'),
+                'receipt_number' => $this->generateUniqueReceiptNumber('REC-SITE-'),
                 'receipt_type' => 'SITE_DIRECT',
                 'status' => 'PENDING_SITE_ENGINEER',
                 'received_at' => now()->toDateString(),

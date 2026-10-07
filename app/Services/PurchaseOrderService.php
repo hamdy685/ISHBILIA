@@ -18,46 +18,48 @@ use Illuminate\Validation\ValidationException;
 class PurchaseOrderService
 {
     /**
-     * Generate sequential unique Purchase Order number (PO-YYYY-XXXXX).
-     * Uses DB::table directly with lockForUpdate to prevent race conditions and bypass global scopes.
+     * Generate sequential unique Purchase Order number (PO-1, PO-2, ...).
+     * Simple, clean, ascending starting from 1 with no leading zeros.
      */
-    public function generatePoNumber(): string
+    public function generatePoNumber(string $prefix = 'PO-'): string
     {
-        $year = date('Y');
-        $prefix = "PO-{$year}-";
-
         $latestOrder = DB::table('purchase_orders')
             ->where('po_number', 'like', "{$prefix}%")
             ->orderBy('id', 'desc')
             ->lockForUpdate()
             ->first();
 
-        $nextNumber = 1;
+        $maxSeq = 0;
         if ($latestOrder) {
             $parts = explode('-', $latestOrder->po_number);
-            $lastSeq = end($parts);
-            $nextNumber = intval($lastSeq) + 1;
-        }
-
-        $prefixLen = strlen($prefix);
-        try {
-            $rawMax = DB::table('purchase_orders')
-                ->where('po_number', 'like', "{$prefix}%")
-                ->selectRaw("MAX(CAST(SUBSTRING(po_number, " . ($prefixLen + 1) . ") AS UNSIGNED)) as max_seq")
-                ->value('max_seq');
-
-            if ($rawMax && intval($rawMax) >= $nextNumber) {
-                $nextNumber = intval($rawMax) + 1;
+            $lastPart = end($parts);
+            if (is_numeric($lastPart)) {
+                $maxSeq = (int) $lastPart;
             }
-        } catch (\Throwable $e) {
-            Log::warning('PurchaseOrderService: Failed rawMax query on DB::table: ' . $e->getMessage());
         }
 
-        while (DB::table('purchase_orders')->where('po_number', sprintf("%s%05d", $prefix, $nextNumber))->exists()) {
+        $existing = DB::table('purchase_orders')
+            ->where('po_number', 'like', "{$prefix}%")
+            ->pluck('po_number');
+
+        foreach ($existing as $num) {
+            $parts = explode('-', (string) $num);
+            $lastPart = end($parts);
+            if (is_numeric($lastPart)) {
+                $seq = (int) $lastPart;
+                if ($seq > $maxSeq) {
+                    $maxSeq = $seq;
+                }
+            }
+        }
+
+        $nextNumber = max(1, $maxSeq + 1);
+
+        while (DB::table('purchase_orders')->where('po_number', "{$prefix}{$nextNumber}")->exists()) {
             $nextNumber++;
         }
 
-        return sprintf("%s%05d", $prefix, $nextNumber);
+        return "{$prefix}{$nextNumber}";
     }
 
     /**

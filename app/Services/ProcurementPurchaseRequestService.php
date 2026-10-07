@@ -387,46 +387,48 @@ class ProcurementPurchaseRequestService
     }
 
     /**
-     * Generate sequential unique Direct Purchase Request number (PR-DIRECT-YYYY-XXXXX).
-     * Uses DB::table directly with lockForUpdate to prevent race conditions and bypass global scopes.
+     * Generate sequential unique Direct Purchase Request number (PR-DIRECT-1, PR-DIRECT-2, ...).
+     * Simple, clean, ascending starting from 1 with no leading zeros.
      */
-    public function generateDirectRequestNumber(): string
+    public function generateDirectRequestNumber(string $prefix = 'PR-DIRECT-'): string
     {
-        $year = date('Y');
-        $prefix = "PR-DIRECT-{$year}-";
-
         $latestRequest = DB::table('purchase_requests')
             ->where('request_number', 'like', "{$prefix}%")
             ->orderBy('id', 'desc')
             ->lockForUpdate()
             ->first();
 
-        $nextNumber = 1;
+        $maxSeq = 0;
         if ($latestRequest) {
             $parts = explode('-', $latestRequest->request_number);
-            $lastSeq = end($parts);
-            $nextNumber = intval($lastSeq) + 1;
-        }
-
-        $prefixLen = strlen($prefix);
-        try {
-            $rawMax = DB::table('purchase_requests')
-                ->where('request_number', 'like', "{$prefix}%")
-                ->selectRaw("MAX(CAST(SUBSTRING(request_number, " . ($prefixLen + 1) . ") AS UNSIGNED)) as max_seq")
-                ->value('max_seq');
-
-            if ($rawMax && intval($rawMax) >= $nextNumber) {
-                $nextNumber = intval($rawMax) + 1;
+            $lastPart = end($parts);
+            if (is_numeric($lastPart)) {
+                $maxSeq = (int) $lastPart;
             }
-        } catch (\Throwable $e) {
-            Log::warning('ProcurementPurchaseRequestService: Failed rawMax query on DB::table: ' . $e->getMessage());
         }
 
-        while (DB::table('purchase_requests')->where('request_number', sprintf("%s%05d", $prefix, $nextNumber))->exists()) {
+        $existing = DB::table('purchase_requests')
+            ->where('request_number', 'like', "{$prefix}%")
+            ->pluck('request_number');
+
+        foreach ($existing as $num) {
+            $parts = explode('-', (string) $num);
+            $lastPart = end($parts);
+            if (is_numeric($lastPart)) {
+                $seq = (int) $lastPart;
+                if ($seq > $maxSeq) {
+                    $maxSeq = $seq;
+                }
+            }
+        }
+
+        $nextNumber = max(1, $maxSeq + 1);
+
+        while (DB::table('purchase_requests')->where('request_number', "{$prefix}{$nextNumber}")->exists()) {
             $nextNumber++;
         }
 
-        return sprintf("%s%05d", $prefix, $nextNumber);
+        return "{$prefix}{$nextNumber}";
     }
 
     /**

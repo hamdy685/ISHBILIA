@@ -13,6 +13,15 @@ class PurchaseReceipt extends Model
 {
     use HasFactory, ScopesDataByUserRole;
 
+    protected static function booted(): void
+    {
+        static::creating(function (PurchaseReceipt $model) {
+            if (empty($model->receipt_number)) {
+                $model->receipt_number = app(\App\Services\PurchaseReceiptService::class)->generateUniqueReceiptNumber();
+            }
+        });
+    }
+
     protected $fillable = [
         'purchase_order_id',
         'purchase_request_id',

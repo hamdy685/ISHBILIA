@@ -251,13 +251,24 @@ class SupplierInvoiceService
 
         $normalizedInvoiceNumber = trim((string) $invoiceNumber);
         if ($normalizedInvoiceNumber === '') {
-            $year = now()->format('Y');
-            $maxId = (int) (SupplierInvoice::max('id') ?? 0);
-            $seq = $maxId + 1;
-            $normalizedInvoiceNumber = sprintf('INV-%s-%05d', $year, $seq);
+            $prefix = 'INV-';
+            $maxSeq = 0;
+            $existing = SupplierInvoice::where('invoice_number', 'like', "{$prefix}%")->pluck('invoice_number');
+            foreach ($existing as $num) {
+                $parts = explode('-', (string) $num);
+                $lastPart = end($parts);
+                if (is_numeric($lastPart)) {
+                    $seq = (int) $lastPart;
+                    if ($seq > $maxSeq) {
+                        $maxSeq = $seq;
+                    }
+                }
+            }
+            $seq = max(1, $maxSeq + 1);
+            $normalizedInvoiceNumber = "{$prefix}{$seq}";
             while (SupplierInvoice::where('invoice_number', $normalizedInvoiceNumber)->exists()) {
                 $seq++;
-                $normalizedInvoiceNumber = sprintf('INV-%s-%05d', $year, $seq);
+                $normalizedInvoiceNumber = "{$prefix}{$seq}";
             }
         } elseif (SupplierInvoice::where('invoice_number', $normalizedInvoiceNumber)->exists()) {
             throw ValidationException::withMessages(['invoice_number' => ['رقم الفاتورة مستخدم من قبل. أدخل رقمًا مختلفًا أو راجع أرشيف فواتير المورد.']]);
@@ -382,10 +393,30 @@ class SupplierInvoiceService
             $supplierId = $supplier->id;
             $remaining = round($amount, 2);
 
+            $payPrefix = 'PAY-';
+            $maxPaySeq = 0;
+            $existingPayments = SupplierPayment::where('payment_number', 'like', "{$payPrefix}%")->pluck('payment_number');
+            foreach ($existingPayments as $pNum) {
+                $parts = explode('-', (string) $pNum);
+                $lastPart = end($parts);
+                if (is_numeric($lastPart)) {
+                    $pSeq = (int) $lastPart;
+                    if ($pSeq > $maxPaySeq) {
+                        $maxPaySeq = $pSeq;
+                    }
+                }
+            }
+            $paySeq = max(1, $maxPaySeq + 1);
+            $paymentNumber = "{$payPrefix}{$paySeq}";
+            while (SupplierPayment::where('payment_number', $paymentNumber)->exists()) {
+                $paySeq++;
+                $paymentNumber = "{$payPrefix}{$paySeq}";
+            }
+
             $payment = SupplierPayment::create([
                 'supplier_id' => $supplierId,
                 'accountant_user_id' => $accountant->id,
-                'payment_number' => 'PAY-' . now()->format('YmdHisv'),
+                'payment_number' => $paymentNumber,
                 'amount' => round($amount, 2),
                 'payment_date' => $paymentDate ?: now()->toDateString(),
                 'payment_method' => $paymentMethod,
