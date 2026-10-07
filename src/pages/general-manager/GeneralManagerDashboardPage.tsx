@@ -17,6 +17,7 @@ import { getDefaultDateFrom, getTodayInputDate } from '../../utils/dateFilters';
 import ActionRequiredInbox, { ActionInboxItem } from '../../components/dashboard/ActionRequiredInbox';
 import QuickLauncherBar from '../../components/dashboard/QuickLauncherBar';
 import { PushNotificationPrompt } from '../../components/notifications/PushNotificationPrompt';
+import { formatDateTime24h } from '../../utils/dateTime';
 
 import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh';
 
@@ -200,7 +201,8 @@ export const GeneralManagerDashboardPage: React.FC = () => {
                 ? 'مراجعة الأسعار والمورد وتعديل الطلب'
                 : 'مراجعة وتعديل الطلب',
 
-              timeAgo: req.created_at ? req.created_at.slice(0, 10) : undefined,
+              created_at: req.created_at,
+              timeAgo: req.created_at ? formatDateTime24h(req.created_at) : undefined,
               request_type: req.request_type,
               date_needed: req.date_needed || undefined,
               priority: req.priority,
@@ -255,7 +257,8 @@ export const GeneralManagerDashboardPage: React.FC = () => {
               reason: 'عروض أسعار موصى بها من القسم المختص بانتظار اعتماد الترسية التنفيذية',
               actionUrl: `/general-manager/purchase-quotes?open=${q.id}`,
               actionLabel: 'البت والاعتماد التنفيذي لعروض الأسعار',
-              timeAgo: q.created_at ? q.created_at.slice(0, 10) : undefined,
+              created_at: q.created_at || undefined,
+              timeAgo: q.created_at ? formatDateTime24h(q.created_at) : undefined,
               items_count: q.items?.length || 0,
               items_list: q.items?.map((it) => ({
                 description: it.item_description || it.item?.name || 'صنف',

@@ -358,7 +358,11 @@ describe('Scenario 8: مرونة واجهة المستخدم (UI Resilience & Gr
         );
       };
 
-      render(<TestApprovalWorkflow />);
+      render(
+        <AuthProvider>
+          <TestApprovalWorkflow />
+        </AuthProvider>
+      );
 
       // Open Approve Modal
       const openBtn = screen.getByRole('button', { name: /فتح نافذة الاعتماد/i });

@@ -28,6 +28,7 @@ import ThreeWayMatchPrintModal from '../../components/accounting/ThreeWayMatchPr
 import { InvoiceRegistrationModal } from '../../components/accounting/InvoiceRegistrationModal';
 import { shareReceiptOnWhatsApp } from '../../utils/whatsapp';
 import { getSummaryParcels, getSummaryRegions, getSummaryQuantities, getItemsSummaryDisplay } from '../../utils/formatRequestSummary';
+import { formatDateTime24h } from '../../utils/dateTime';
 
 const cleanDate = (d?: string | null) => (d ? String(d).slice(0, 10) : '—');
 const money = (value: string | number | null | undefined) =>
@@ -247,8 +248,8 @@ export const SiteAccountantDashboardPage: React.FC = () => {
         onAction: () => {
           setRegisterInvoiceReceipt(receipt);
         },
-        timeAgo: cleanDate(receipt.received_at),
-        created_at: receipt.received_at || undefined,
+        timeAgo: po?.purchase_request?.created_at ? formatDateTime24h(po.purchase_request.created_at) : (receipt.received_at ? formatDateTime24h(receipt.received_at) : cleanDate(receipt.received_at)),
+        created_at: po?.purchase_request?.created_at || receipt.received_at || undefined,
         items_count: itemsList.length,
         items_list: itemsList,
         onDirectApprove: async (_item: any, comment?: string) => {
@@ -276,8 +277,8 @@ export const SiteAccountantDashboardPage: React.FC = () => {
         reason: 'فاتورة مورد تم إدخالها وتتطلب تنفيذ المطابقة الثلاثية لإرسالها للصرف المالي.',
         actionUrl: '/accounting/supplier-finance?tab=payments',
         actionLabel: 'تنفيذ المطابقة',
-        timeAgo: cleanDate(invoice.created_at || invoice.invoice_date),
-        created_at: (invoice.created_at || invoice.invoice_date) ?? undefined,
+        timeAgo: invoice.purchase_order?.purchase_request?.created_at ? formatDateTime24h(invoice.purchase_order.purchase_request.created_at) : (invoice.created_at ? formatDateTime24h(invoice.created_at) : cleanDate(invoice.created_at || invoice.invoice_date)),
+        created_at: (invoice.purchase_order?.purchase_request?.created_at || invoice.created_at || invoice.invoice_date) ?? undefined,
       });
     }
 
@@ -295,7 +296,7 @@ export const SiteAccountantDashboardPage: React.FC = () => {
         reason: 'مسودة طلب شراء محفوظة لديك وجاهزة للإرسال لدورة المراجعة والاعتماد.',
         actionUrl: `/requests/${pr.id}`,
         actionLabel: 'إرسال للاعتماد',
-        timeAgo: cleanDate(pr.created_at || pr.date_needed),
+        timeAgo: pr.created_at ? formatDateTime24h(pr.created_at) : cleanDate(pr.created_at || pr.date_needed),
         created_at: pr.created_at || undefined,
         items_count: pr.items?.length || 0,
         items_list: pr.items?.map((it) => ({

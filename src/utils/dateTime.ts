@@ -43,3 +43,38 @@ export const formatDateTime12h = (dateStr?: string | Date | null, useArabicSuffi
     return '';
   }
 };
+
+/**
+ * Formats a date/time string or Date object into standard 'YYYY-MM-DD HH:mm' (24-hour format).
+ * Example: '2026-09-01T15:17:04Z' -> '2026-09-01 15:17'
+ */
+export const formatDateTime24h = (dateStr?: string | Date | null): string => {
+  if (!dateStr) return '';
+  if (typeof dateStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateStr.trim())) {
+    return dateStr.trim();
+  }
+  try {
+    const raw = typeof dateStr === 'string'
+      ? (dateStr.includes(' ') && !dateStr.includes('T') ? dateStr.replace(' ', 'T') : dateStr)
+      : dateStr;
+    const d = typeof raw === 'string' ? new Date(raw) : raw;
+    if (isNaN(d.getTime())) {
+      return String(dateStr);
+    }
+
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+
+    return `${year}-${month}-${day} ${hours}:${minutes}`;
+  } catch {
+    return String(dateStr || '');
+  }
+};
+
+/**
+ * Standard alias for formatDateTime24h
+ */
+export const formatDateTime = formatDateTime24h;

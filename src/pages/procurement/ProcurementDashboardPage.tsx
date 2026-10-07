@@ -14,6 +14,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '.
 import { CurrencyDisplay } from '../../components/ui/CurrencyDisplay';
 import ProcurementCharts from '../../components/procurement/ProcurementCharts';
 import ActionRequiredInbox, { ActionInboxItem } from '../../components/dashboard/ActionRequiredInbox';
+import { formatDateTime24h } from '../../utils/dateTime';
 
 export const ProcurementDashboardPage: React.FC = () => {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -145,7 +146,8 @@ export const ProcurementDashboardPage: React.FC = () => {
             reason: 'طلب كمالة تكميلية معتمد من المراجع ينتظر إصدار أمر توريد سريع لنفس المورد — تأخيره يعطل العمل بالموقع.',
             actionUrl: `/procurement?openSupplement=${pr.id}&tab=0`,
             actionLabel: '⚡ إصدار ملحق توريد سريع',
-            timeAgo: pr.created_at ? pr.created_at.slice(0, 10) : undefined,
+            created_at: pr.created_at,
+            timeAgo: pr.created_at ? formatDateTime24h(pr.created_at) : undefined,
             request_type: pr.request_type,
             date_needed: pr.date_needed || undefined,
             priority: 'URGENT' as const,
@@ -180,7 +182,8 @@ export const ProcurementDashboardPage: React.FC = () => {
               reason: 'طلب معتمد جاهز للتسعير أو إصدار أمر الشراء فوراً',
               actionUrl: `/procurement/purchase-orders/create?pr=${pr.id}`,
               actionLabel: 'إصدار أمر الشراء',
-              timeAgo: pr.created_at ? pr.created_at.slice(0, 10) : undefined,
+              created_at: pr.created_at,
+              timeAgo: pr.created_at ? formatDateTime24h(pr.created_at) : undefined,
               request_type: pr.request_type,
               date_needed: pr.date_needed || undefined,
               priority: pr.priority,
@@ -236,7 +239,8 @@ export const ProcurementDashboardPage: React.FC = () => {
                 reason: 'تم استلام البضاعة واعتماد إذن الاستلام بالموقع — أمر الشراء بانتظار إصدار الأمر الفعلي من المشتريات لإرساله للإدارة المالية.',
                 actionUrl: `/procurement/purchase-orders/${po.id}/edit`,
                 actionLabel: '⚡ إصدار أمر الشراء الفعلي',
-                timeAgo: po.updated_at ? po.updated_at.slice(0, 10) : undefined,
+                created_at: po.purchase_request?.created_at || po.created_at || undefined,
+                timeAgo: (po.purchase_request?.created_at || po.created_at || po.updated_at) ? formatDateTime24h(po.purchase_request?.created_at || po.created_at || po.updated_at) : undefined,
                 items_count: itemsList.length,
                 items_list: itemsList,
               };
@@ -256,7 +260,8 @@ export const ProcurementDashboardPage: React.FC = () => {
               reason: 'أمر شراء معاد من الحسابات/الإدارة يتطلب التعديل والمراجعة',
               actionUrl: `/procurement/purchase-orders/${po.id}/edit`,
               actionLabel: 'تعديل أمر الشراء',
-              timeAgo: po.created_at ? po.created_at.slice(0, 10) : undefined,
+              created_at: po.purchase_request?.created_at || po.created_at || undefined,
+              timeAgo: (po.purchase_request?.created_at || po.created_at) ? formatDateTime24h(po.purchase_request?.created_at || po.created_at) : undefined,
               items_count: po.items?.length || 0,
               items_list: po.items?.map((it: any) => {
                 const poQty = Number(it.quantity ?? it.actual_quantity ?? 0);

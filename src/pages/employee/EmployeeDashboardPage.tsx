@@ -18,6 +18,7 @@ import { KpiCard, KpiPill, KpiPillsBar } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import ActionRequiredInbox, { ActionInboxItem } from '../../components/dashboard/ActionRequiredInbox';
 import QuickLauncherBar from '../../components/dashboard/QuickLauncherBar';
+import { formatDateTime24h } from '../../utils/dateTime';
 
 import { useRealtimeRefresh, emitAppDataUpdated } from '../../hooks/useRealtimeRefresh';
 
@@ -178,7 +179,8 @@ export const EmployeeDashboardPage: React.FC = () => {
               reason: 'مسودة لم تُرسل بعد للمراجعة والاعتماد',
               actionUrl: `/employee/requests/${r.id}/edit`,
               actionLabel: 'فتح وتعديل المسودة',
-              timeAgo: r.created_at ? r.created_at.slice(0, 10) : undefined,
+              created_at: r.created_at,
+              timeAgo: r.created_at ? formatDateTime24h(r.created_at) : undefined,
               request_type: r.request_type,
               date_needed: r.date_needed || undefined,
               priority: r.priority,

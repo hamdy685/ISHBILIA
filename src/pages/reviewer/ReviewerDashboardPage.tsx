@@ -20,6 +20,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '.
 import ActionRequiredInbox, { ActionInboxItem } from '../../components/dashboard/ActionRequiredInbox';
 import QuickLauncherBar from '../../components/dashboard/QuickLauncherBar';
 import { getUnitLabel } from '../../utils/units';
+import { formatDateTime24h } from '../../utils/dateTime';
 
 import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh';
 
@@ -129,7 +130,8 @@ export const ReviewerDashboardPage: React.FC = () => {
         reason: req.status === 'SUBMITTED' ? 'طلب جديد مقدم بانتظار مراجعتك واعتمادك الفني' : 'طلب قيد المراجعة الفنية',
         actionUrl: hasPermission('purchase_request.review') ? `/reviewer/requests/${req.id}/review` : `/reviewer/requests/${req.id}`,
         actionLabel: req.status === 'SUBMITTED' ? 'مراجعة وتعديل الطلب' : 'استكمال المراجعة',
-        timeAgo: req.created_at ? req.created_at.slice(0, 10) : undefined,
+        created_at: req.created_at,
+        timeAgo: req.created_at ? formatDateTime24h(req.created_at) : undefined,
         request_type: req.request_type,
         date_needed: req.date_needed || undefined,
         priority: req.priority,

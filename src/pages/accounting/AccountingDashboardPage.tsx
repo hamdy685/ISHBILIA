@@ -14,6 +14,7 @@ import { DashboardBars, DashboardDonut } from '../../components/ui/DashboardChar
 import ActionRequiredInbox, { ActionInboxItem } from '../../components/dashboard/ActionRequiredInbox';
 import QuickLauncherBar from '../../components/dashboard/QuickLauncherBar';
 import { formatCleanNumber } from '../../utils/numberFormat';
+import { formatDateTime24h } from '../../utils/dateTime';
 
 import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh';
 
@@ -139,8 +140,8 @@ export const AccountingDashboardPage: React.FC = () => {
             reason: 'أمر شراء صادر بانتظار المراجعة والاعتماد المالي',
             actionUrl: `/accounting/purchase-orders/${po.id}`,
             actionLabel: 'المراجعة والاعتماد المالي',
-            timeAgo: po.created_at ? po.created_at.slice(0, 10) : undefined,
-            created_at: po.created_at || undefined,
+            created_at: (po.purchase_request as any)?.created_at || po.created_at || undefined,
+            timeAgo: ((po.purchase_request as any)?.created_at || po.created_at) ? formatDateTime24h((po.purchase_request as any)?.created_at || po.created_at) : undefined,
             items_count: po.items?.length || 0,
             items_list: po.items?.map((it: any) => {
               const poQty = Number(it.quantity ?? it.actual_quantity ?? 0);
@@ -178,8 +179,8 @@ export const AccountingDashboardPage: React.FC = () => {
             reason: 'طلب شراء بالمسار المباشر بانتظار موافقة وتحديد أسعار الحسابات',
             actionUrl: `/accounting/purchase-requests?open=${pr.id}`,
             actionLabel: 'مراجعة وتحديد الأسعار والاعتماد',
-            timeAgo: pr.created_at ? pr.created_at.slice(0, 10) : undefined,
             created_at: pr.created_at || undefined,
+            timeAgo: pr.created_at ? formatDateTime24h(pr.created_at) : undefined,
             request_type: pr.request_type,
             date_needed: pr.date_needed || undefined,
             priority: pr.priority,
@@ -212,8 +213,8 @@ export const AccountingDashboardPage: React.FC = () => {
             reason: 'عروض أسعار مسجلة بانتظار الرقابة والمراجعة المالية وترشيح الأسعار',
             actionUrl: `/accounting/purchase-quotes?open=${q.id}`,
             actionLabel: 'مراجعة عروض الأسعار والترشيح',
-            timeAgo: q.created_at ? q.created_at.slice(0, 10) : undefined,
             created_at: q.created_at || undefined,
+            timeAgo: q.created_at ? formatDateTime24h(q.created_at) : undefined,
             items_count: q.items?.length || 0,
             items_list: q.items?.map((it) => ({
               description: it.item_description || it.item?.name || 'صنف',

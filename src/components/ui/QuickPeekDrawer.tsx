@@ -7,6 +7,7 @@ import { PurchaseOrder } from '../../types/purchaseOrder';
 import { CurrencyDisplay } from './CurrencyDisplay';
 import { StatusBadge } from './StatusBadge';
 import { getUnitLabel } from '../../utils/units';
+import { formatDateTime24h } from '../../utils/dateTime';
 
 export type PeekType = 'PR' | 'PO';
 
@@ -144,8 +145,12 @@ export const QuickPeekDrawer: React.FC<QuickPeekDrawerProps> = ({
                         <span className="text-xs font-bold text-slate-200 mt-0.5 block">{prData.department?.name || '—'}</span>
                       </div>
                       <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                        <span className="text-[10px] font-bold text-slate-500 block">تاريخ ووقت تقديم الطلب</span>
+                        <span className="text-xs font-mono font-bold text-cyan-300 mt-0.5 block" dir="ltr">{formatDateTime24h(prData.created_at)}</span>
+                      </div>
+                      <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
                         <span className="text-[10px] font-bold text-slate-500 block">تاريخ الحاجة</span>
-                        <span className="text-xs font-mono font-bold text-cyan-300 mt-0.5 block">{prData.date_needed || 'غير محدد'}</span>
+                        <span className="text-xs font-mono font-bold text-amber-300 mt-0.5 block">{prData.date_needed || 'غير محدد'}</span>
                       </div>
                     </>
                   )}
@@ -155,6 +160,10 @@ export const QuickPeekDrawer: React.FC<QuickPeekDrawerProps> = ({
                       <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
                         <span className="text-[10px] font-bold text-slate-500 block">المورد المعتمد</span>
                         <span className="text-xs font-bold text-slate-200 mt-0.5 block">{poData.supplier?.company_name || 'غير محدد'}</span>
+                      </div>
+                      <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                        <span className="text-[10px] font-bold text-slate-500 block">تاريخ ووقت الطلب الأصلي</span>
+                        <span className="text-xs font-mono font-bold text-cyan-300 mt-0.5 block" dir="ltr">{formatDateTime24h(poData.purchase_request?.created_at || poData.created_at)}</span>
                       </div>
                       <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
                         <span className="text-[10px] font-bold text-slate-500 block">الإجمالي المالي</span>
@@ -168,7 +177,7 @@ export const QuickPeekDrawer: React.FC<QuickPeekDrawerProps> = ({
                       </div>
                       <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
                         <span className="text-[10px] font-bold text-slate-500 block">تاريخ التسليم</span>
-                        <span className="text-xs font-mono font-bold text-cyan-300 mt-0.5 block">{poData.delivery_date || '—'}</span>
+                        <span className="text-xs font-mono font-bold text-amber-300 mt-0.5 block">{poData.delivery_date || '—'}</span>
                       </div>
                     </>
                   )}

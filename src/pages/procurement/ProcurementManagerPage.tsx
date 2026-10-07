@@ -47,6 +47,7 @@ import QuickLauncherBar from '../../components/dashboard/QuickLauncherBar';
 import { getSupplementsForPrApi, PrSupplementsResponse } from '../../api/supplements';
 import { PurchaseRequestSupplement } from '../../types/supplement';
 import { ProcurementSupplementProcessModal } from '../../components/supplements/ProcurementSupplementProcessModal';
+import { formatDateTime24h } from '../../utils/dateTime';
 
 const STATUS_LABELS: Record<string, string> = {
   PO_DRAFT: 'مسودة',
@@ -819,6 +820,13 @@ export const ProcurementManagerPage: React.FC = () => {
                       </div>
                     )}
 
+                    {(po.purchase_request?.created_at || po.created_at) && (
+                      <div className="text-[11px] font-mono text-slate-300 flex items-center gap-1.5 bg-slate-900/60 border border-slate-800 px-2.5 py-1 rounded-lg">
+                        <span className="text-slate-500 font-sans">🕒 تاريخ ووقت الطلب:</span>
+                        <strong className="text-cyan-300 tracking-tight" dir="ltr">{formatDateTime24h(po.purchase_request?.created_at || po.created_at)}</strong>
+                      </div>
+                    )}
+
                     {(() => {
                       const parcel = po.purchase_request?.parcel_reference || po.items?.find((i: any) => i.item_reference)?.item_reference;
                       const region = po.purchase_request?.region || po.items?.find((i: any) => i.region)?.region;
@@ -1042,8 +1050,9 @@ export const ProcurementManagerPage: React.FC = () => {
                           <span>👁️</span>
                           <span>عرض تفاصيل الطلب كاملة</span>
                         </button>
-                        <span className="font-mono text-xs text-slate-400">
-                          {fmtDate(request.created_at)}
+                        <span className="font-mono text-xs text-slate-300 bg-slate-950/80 border border-slate-800 px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-xs" title="تاريخ ووقت تقديم الطلب">
+                          <span className="text-amber-400 text-xs">🕒</span>
+                          <span dir="ltr">{formatDateTime24h(request.created_at)}</span>
                         </span>
                       </div>
                     </div>

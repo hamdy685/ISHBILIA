@@ -9,6 +9,7 @@ import { getUnitLabel } from '../../utils/units';
 import { toast } from '../../utils/toast';
 import { formatCleanNumber, formatCleanQty } from '../../utils/numberFormat';
 import { formatRebarDisplay } from '../../utils/rebar';
+import { formatDateTime24h } from '../../utils/dateTime';
 
 export interface ActionInboxItemDetail {
   description: string;
@@ -405,6 +406,10 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                 displaySubtitle = undefined;
               }
 
+              const itemDateDisplay = item.created_at
+                ? formatDateTime24h(item.created_at)
+                : (item.timeAgo && /^\d{4}-\d{2}-\d{2}/.test(item.timeAgo) ? formatDateTime24h(item.timeAgo) : (item.timeAgo || null));
+
               return (
                 <div
                   key={`${item.type}-${item.id}`}
@@ -455,10 +460,15 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                         )}
                       </div>
 
-                      {item.timeAgo && (
-                        <span className="text-[11px] text-slate-400 font-mono shrink-0">
-                          {item.timeAgo}
-                        </span>
+                      {itemDateDisplay && (
+                        <div
+                          className="flex items-center gap-1.5 text-[11px] font-mono text-slate-300 bg-slate-900/90 border border-slate-700/70 px-2.5 py-1 rounded-lg shrink-0 shadow-xs"
+                          title="تاريخ ووقت تقديم الطلب"
+                        >
+                          <span className="text-amber-400 font-sans text-xs">🕒</span>
+                          <span className="text-slate-400 text-[10px] font-sans">تاريخ الطلب:</span>
+                          <span className="font-bold text-slate-100 tracking-tight" dir="ltr">{itemDateDisplay}</span>
+                        </div>
                       )}
                     </div>
 
@@ -584,6 +594,13 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                           <span className="px-2 py-0.5 rounded-md text-[11px] font-black bg-cyan-950/80 border border-cyan-700/60 text-cyan-300">
                             {item.target_department}
                           </span>
+                        </div>
+                      )}
+
+                      {itemDateDisplay && (
+                        <div className="flex items-center gap-1.5 font-mono text-[11px]">
+                          <span className="text-slate-500 font-sans">🕒 تاريخ ووقت الطلب:</span>
+                          <strong className="text-cyan-300 font-bold tracking-tight" dir="ltr">{itemDateDisplay}</strong>
                         </div>
                       )}
 
@@ -769,6 +786,9 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
               <div className="mt-2.5 pt-2 border-t border-emerald-800/40 text-slate-200 space-y-1 font-mono">
                 <div>• المعاملة: <strong>{approveModal.item.title}</strong></div>
                 {approveModal.item.department && <div>• القسم: {approveModal.item.department}</div>}
+                {(approveModal.item.created_at || approveModal.item.timeAgo) && (
+                  <div>• تاريخ ووقت التقديم: <strong dir="ltr">{formatDateTime24h(approveModal.item.created_at || approveModal.item.timeAgo)}</strong></div>
+                )}
               </div>
             )}
           </div>
@@ -910,6 +930,14 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
             <p className="text-slate-300">
               يرجى توضيح سبب الرفض بالتفصيل لمقدم الطلب ليتمكن من معالجته.
             </p>
+            {rejectModal.item && (
+              <div className="mt-2.5 pt-2 border-t border-rose-800/40 text-slate-200 space-y-1 font-mono text-xs">
+                <div>• المعاملة: <strong>{rejectModal.item.title || rejectModal.item.code}</strong></div>
+                {(rejectModal.item.created_at || rejectModal.item.timeAgo) && (
+                  <div>• تاريخ ووقت التقديم: <strong dir="ltr">{formatDateTime24h(rejectModal.item.created_at || rejectModal.item.timeAgo)}</strong></div>
+                )}
+              </div>
+            )}
           </div>
 
           <div>
