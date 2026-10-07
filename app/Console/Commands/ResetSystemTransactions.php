@@ -1,10 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Console\Commands;
 
+use App\Services\SystemPurgeService;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 class ResetSystemTransactions extends Command
 {
@@ -20,67 +21,42 @@ class ResetSystemTransactions extends Command
      *
      * @var string
      */
-    protected $description = 'Zero out all transactional data (PRs, POs, Receipts, Quotes, Invoices, Payments, Notifications) while preserving users, roles, permissions, departments, suppliers, and catalog items.';
+    protected $description = 'Zero out all transactional data (PRs, POs, Receipts, Quotes, Supplements, Invoices, Payments, Notifications) while preserving users, roles, permissions, departments, suppliers, and catalog items.';
 
     /**
      * Execute the console command.
      */
-    public function handle(): int
+    public function handle(SystemPurgeService $purgeService): int
     {
-        if (! $this->option('force') && ! $this->confirm('هل أنت متأكد من رغبتك في تصفير جميع حركات المعاملات والطلبات والفواتير والإشعارات في النظام والبدء من الصفر؟ (لن يتم المساس بالمستخدمين أو الصلاحيات)')) {
+        if (! $this->option('force') && ! $this->confirm('هل أنت متأكد من رغبتك في تصفير جميع حركات المعاملات والطلبات والفواتير والإشعارات في النظام والبدء من الصفر للإنتاج؟ (لن يتم المساس بالمستخدمين أو الموردين أو الأصناف أو الأقسام)')) {
             $this->warn('تم إلغاء العملية.');
             return self::SUCCESS;
         }
 
-        $this->info('جاري تصفير معاملات النظام للإنتاج...');
+        $this->info('جاري تصفير معاملات النظام للإنتاج بأمان...');
 
-        Schema::disableForeignKeyConstraints();
+        try {
+            $result = $purgeService->purgeOperationalPurchasingData();
 
-        $tablesToClear = [
-            'supplier_invoice_land_allocations',
-            'land_parcel_transactions',
-            'supplier_payment_allocations',
-            'supplier_payments',
-            'supplier_invoices',
-            'purchase_receipt_items',
-            'purchase_receipts',
-            'purchase_order_items',
-            'purchase_orders',
-            'purchase_request_quote_recommendations',
-            'purchase_quote_recommendations',
-            'purchase_request_quotes',
-            'purchase_request_items',
-            'purchase_requests',
-            'approval_history',
-            'audit_logs',
-            'system_events',
-            'notifications',
-            'attachments',
-        ];
-
-        foreach ($tablesToClear as $table) {
-            if (Schema::hasTable($table)) {
-                $count = DB::table($table)->count();
-                DB::table($table)->delete();
+            foreach ($result['purged_counts'] as $table => $count) {
                 $this->line(" - تم تفريغ جدول: {$table} ({$count} سجل)");
             }
+
+            if ($result['supplier_balances_reset'] > 0) {
+                $this->line(' - تم تصفير أرصدة الموردين مع الحفاظ التام على بيانات الموردين.');
+            }
+
+            $this->info('🛡️ التحقق من سلامة الجداول المحمية:');
+            foreach ($result['preserved_counts'] as $table => $count) {
+                $this->line(" + جدول {$table}: {$count} سجل (محفوظ 100%)");
+            }
+
+            $this->info('✅ تم تصفير السيستم بنجاح تام! النظام الآن نظيف 100% للإنتاج، مع بقاء كافة المستخدمين والأدوار والموردين والأصناف والبيانات الأساسية.');
+
+            return self::SUCCESS;
+        } catch (\Throwable $e) {
+            $this->error('حدث خطأ أثناء تصفير النظام: ' . $e->getMessage());
+            return self::FAILURE;
         }
-
-        if (Schema::hasTable('supplier_balances')) {
-            DB::table('supplier_balances')->update([
-                'total_invoiced' => 0,
-                'total_paid' => 0,
-                'balance' => 0,
-                'last_activity_at' => null,
-                'updated_at' => now(),
-            ]);
-            $this->line(' - تم تصفير أرصدة الموردين.');
-        }
-
-        Schema::enableForeignKeyConstraints();
-
-        $this->info('✅ تم تصفير السيستم بنجاح تام! النظام الآن نظيف 100% للإنتاج، مع بقاء كافة المستخدمين والأدوار والبيانات الأساسية.');
-
-        return self::SUCCESS;
     }
 }
