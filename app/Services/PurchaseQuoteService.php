@@ -327,6 +327,7 @@ class PurchaseQuoteService
             );
 
             $notificationService = app(NotificationService::class);
+            $notificationService->markEntityNotificationsAsRead($request);
             $notificationService->queueUsers(
                 $notificationService->resolveUsersWithPermission('purchase_request.approve_procurement'),
                 'purchase_quote_decision_complete',

@@ -67,6 +67,8 @@ class NotificationController extends Controller
                           ->orWhere('type', 'like', 'system_issue%')
                           ->orWhere('type', 'like', 'system_alert%');
                     });
+                } elseif ($this->notificationService->isExecutiveUser($user)) {
+                    $this->notificationService->scopeExecutiveNotifications($query, $user);
                 }
 
                 $notifications = $query->orderBy('id')

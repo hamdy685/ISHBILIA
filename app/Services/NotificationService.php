@@ -122,6 +122,44 @@ class NotificationService
         return ' • ' . implode(' | ', $parts);
     }
 
+    public const EXECUTIVE_ACTIONABLE_TYPES = [
+        'purchase_request_pending_executive',
+        'purchase_request_pending_executive_approval',
+        'purchase_quote_recommendations_ready',
+    ];
+
+    public function isExecutiveUser(User $user): bool
+    {
+        return ($user->hasRole('general_manager') || $user->hasRole('execution_manager')) && ! $user->hasRole('admin');
+    }
+
+    public function scopeExecutiveNotifications(\Illuminate\Database\Eloquent\Builder $query, User $user): void
+    {
+        $query->whereIn('type', self::EXECUTIVE_ACTIONABLE_TYPES)
+            ->where('notifiable_type', PurchaseRequest::class)
+            ->whereHasMorph(
+                'notifiable',
+                [PurchaseRequest::class],
+                function ($prQuery) use ($user) {
+                    $prQuery->whereIn('status', [
+                        'PENDING_EXECUTIVE_APPROVAL',
+                        'PENDING_EXECUTIVE_QUOTE_DECISION',
+                    ]);
+
+                    if ($user->hasRole('general_manager')) {
+                        $prQuery->whereDoesntHave('requester.manager.roles', function ($rq) {
+                            $rq->where('slug', 'execution_manager');
+                        });
+                    } elseif ($user->hasRole('execution_manager')) {
+                        $prQuery->where(function ($eq) use ($user) {
+                            $eq->where('reviewer_user_id', $user->id)
+                               ->orWhereHas('requester', fn ($rq) => $rq->where('manager_id', $user->id));
+                        });
+                    }
+                }
+            );
+    }
+
     public function createNotification(User|int $recipient, string $type, string $title, string $message, Model $notifiable): ?Notification
     {
         $userId = $recipient instanceof User ? $recipient->id : (int) $recipient;
@@ -141,31 +179,39 @@ class NotificationService
             return null;
         }
 
-        // Do not route notifications to General Manager if the request/order belongs to an Execution Manager's subordinate
-        if ($user->hasRole('general_manager') && ! $user->hasRole('admin')) {
-            if ($notifiable instanceof PurchaseRequest) {
+        // Strict Gate for Executive Directors (Eng. Mohamed & Eng. Karim):
+        // ZERO Informational Notifications. Only actionable decision-pending notifications are permitted.
+        if ($this->isExecutiveUser($user)) {
+            // 1. Must be strictly an allowed actionable decision type
+            if (! in_array($type, self::EXECUTIVE_ACTIONABLE_TYPES, true)) {
+                return null;
+            }
+
+            // 2. Notifiable must be a PurchaseRequest
+            if (! ($notifiable instanceof PurchaseRequest)) {
+                return null;
+            }
+
+            // 3. The PurchaseRequest must currently be in the active actionable pending status
+            if (in_array($type, ['purchase_request_pending_executive', 'purchase_request_pending_executive_approval'], true)) {
+                if ($notifiable->status !== 'PENDING_EXECUTIVE_APPROVAL') {
+                    return null;
+                }
+            } elseif ($type === 'purchase_quote_recommendations_ready') {
+                if ($notifiable->status !== 'PENDING_EXECUTIVE_QUOTE_DECISION') {
+                    return null;
+                }
+            }
+
+            // 4. Role & Team Isolation between Eng. Mohamed (GM) and Eng. Karim (Execution Manager)
+            if ($user->hasRole('general_manager')) {
                 $notifiable->loadMissing('requester.manager.roles');
                 if ($notifiable->requester?->manager?->hasRole('execution_manager')) {
                     return null;
                 }
-            } elseif ($notifiable instanceof PurchaseOrder) {
-                $notifiable->loadMissing('purchaseRequest.requester.manager.roles');
-                if ($notifiable->purchaseRequest?->requester?->manager?->hasRole('execution_manager')) {
-                    return null;
-                }
-            }
-        }
-
-        // An Execution Manager only receives workflow notifications for their own subordinates
-        if ($user->hasRole('execution_manager')) {
-            if ($notifiable instanceof PurchaseRequest) {
+            } elseif ($user->hasRole('execution_manager')) {
                 $notifiable->loadMissing('requester');
-                if ((int) $notifiable->requester?->manager_id !== (int) $user->id) {
-                    return null;
-                }
-            } elseif ($notifiable instanceof PurchaseOrder) {
-                $notifiable->loadMissing('purchaseRequest.requester');
-                if ((int) $notifiable->purchaseRequest?->requester?->manager_id !== (int) $user->id) {
+                if ((int) $notifiable->requester?->manager_id !== (int) $user->id && (int) $notifiable->reviewer_user_id !== (int) $user->id) {
                     return null;
                 }
             }
@@ -400,38 +446,12 @@ class NotificationService
             ->paginate($perPage);
         }
 
-        if ($user->hasRole('general_manager') && ! $user->hasRole('admin')) {
-            $query->whereDoesntHaveMorph(
-                'notifiable',
-                [PurchaseRequest::class, PurchaseOrder::class],
-                function ($mQuery, $type) {
-                    if ($type === PurchaseRequest::class) {
-                        $mQuery->whereHas('requester.manager.roles', function ($rq) {
-                            $rq->where('slug', 'execution_manager');
-                        });
-                    } elseif ($type === PurchaseOrder::class) {
-                        $mQuery->whereHas('purchaseRequest.requester.manager.roles', function ($rq) {
-                            $rq->where('slug', 'execution_manager');
-                        });
-                    }
-                }
-            );
-        } elseif ($user->hasRole('execution_manager')) {
-            $query->whereDoesntHaveMorph(
-                'notifiable',
-                [PurchaseRequest::class, PurchaseOrder::class],
-                function ($mQuery, $type) use ($user) {
-                    if ($type === PurchaseRequest::class) {
-                        $mQuery->whereDoesntHave('requester', function ($rq) use ($user) {
-                            $rq->where('manager_id', $user->id);
-                        });
-                    } elseif ($type === PurchaseOrder::class) {
-                        $mQuery->whereDoesntHave('purchaseRequest.requester', function ($rq) use ($user) {
-                            $rq->where('manager_id', $user->id);
-                        });
-                    }
-                }
-            );
+        if ($this->isExecutiveUser($user)) {
+            $this->scopeExecutiveNotifications($query, $user);
+
+            return $query->orderBy('created_at', 'desc')
+                ->orderBy('id', 'desc')
+                ->paginate($perPage);
         }
 
         return $query->where(function ($q) {
@@ -458,38 +478,10 @@ class NotificationService
             })->count();
         }
 
-        if ($user->hasRole('general_manager') && ! $user->hasRole('admin')) {
-            $query->whereDoesntHaveMorph(
-                'notifiable',
-                [PurchaseRequest::class, PurchaseOrder::class],
-                function ($mQuery, $type) {
-                    if ($type === PurchaseRequest::class) {
-                        $mQuery->whereHas('requester.manager.roles', function ($rq) {
-                            $rq->where('slug', 'execution_manager');
-                        });
-                    } elseif ($type === PurchaseOrder::class) {
-                        $mQuery->whereHas('purchaseRequest.requester.manager.roles', function ($rq) {
-                            $rq->where('slug', 'execution_manager');
-                        });
-                    }
-                }
-            );
-        } elseif ($user->hasRole('execution_manager')) {
-            $query->whereDoesntHaveMorph(
-                'notifiable',
-                [PurchaseRequest::class, PurchaseOrder::class],
-                function ($mQuery, $type) use ($user) {
-                    if ($type === PurchaseRequest::class) {
-                        $mQuery->whereDoesntHave('requester', function ($rq) use ($user) {
-                            $rq->where('manager_id', $user->id);
-                        });
-                    } elseif ($type === PurchaseOrder::class) {
-                        $mQuery->whereDoesntHave('purchaseRequest.requester', function ($rq) use ($user) {
-                            $rq->where('manager_id', $user->id);
-                        });
-                    }
-                }
-            );
+        if ($this->isExecutiveUser($user)) {
+            $this->scopeExecutiveNotifications($query, $user);
+
+            return $query->count();
         }
 
         return $query->where(function ($q) {

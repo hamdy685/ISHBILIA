@@ -23,7 +23,7 @@ use Illuminate\Validation\ValidationException;
 class SupplierInvoiceService
 {
     public const ACCOUNTANT_DEPARTMENT_MAPPINGS = [
-        'site_accountant' => ['EXECUTION', 'FINISHING', 'BUILDINGS'],
+        'site_accountant' => ['EXECUTION', 'FINISHING', 'BUILDINGS', 'SITE'],
         'licenses_accountant' => ['LICENSES'],
         'buffet_accountant' => ['BUFFET'],
     ];
@@ -152,6 +152,22 @@ class SupplierInvoiceService
             'items.purchaseOrderItem.prItem.supplier',
         ])
             ->where('status', 'APPROVED')
+            ->where(function ($query) {
+                // Internal warehouse receipts require a completed Actual PO before appearing in Accounting
+                $query->where(function ($nonWhQuery) {
+                    $internalSupplier = \App\Models\Supplier::getOrCreateInternalWarehouseSupplier();
+                    $nonWhQuery->where('supplier_id', '!=', $internalSupplier->id)
+                               ->whereHas('purchaseOrder', function ($poQ) use ($internalSupplier) {
+                                   $poQ->where('supplier_id', '!=', $internalSupplier->id);
+                               });
+                })->orWhereHas('purchaseOrder', function ($poQuery) {
+                    $poQuery->where('status', '!=', 'PENDING_ACTUAL_PO')
+                        ->where(function ($q) {
+                            $q->whereNotNull('finalized_at')
+                              ->orWhereIn('status', ['ISSUED', 'APPROVED_BY_ACCOUNTING', 'FINAL_APPROVED']);
+                        });
+                });
+            })
             ->when($statusFilter === 'recorded', function ($query) {
                 $query->whereNotNull('accountant_recorded_at');
             })
@@ -212,6 +228,9 @@ class SupplierInvoiceService
         }
         if ($receipt->status !== 'APPROVED') {
             throw new \RuntimeException('لا يمكن تسجيل فاتورة قبل اعتماد إذن الاستلام من مهندس الموقع.');
+        }
+        if ($receipt->isInternalWarehouse() && ($purchaseOrder->status === 'PENDING_ACTUAL_PO' || ! $purchaseOrder->finalized_at)) {
+            throw new \RuntimeException('يحظر تسجيل فاتورة أو قيود محاسبية لطلبات المخزن الداخلي قبل إصدار أمر الشراء الفعلي بالكامل.');
         }
 
         $allowedCodes = $this->getAllowedDepartmentCodesForAccountant($accountant);

@@ -178,12 +178,14 @@ class InternalWarehouseStockReceiptWorkflowTest extends TestCase
     /**
      * Scenario 3: Site Engineer approves internal warehouse GRN.
      * Crucial Business Logic:
-     * - Parent PO is marked FINAL_APPROVED and DELIVERED immediately.
-     * - No commercial Actual PO or external vendor invoice required.
-     * - Notification is sent to Site Accountant indicating internal warehouse stock withdrawal with zero cost.
-     * - Audit log records INTERNAL_STOCK_RECEIPT_APPROVED.
+     * - Parent PO is marked PENDING_ACTUAL_PO and DELIVERED.
+     * - Procurement is notified to issue the Actual Purchase Order (grn_approved_pending_actual_po).
+     * - Accounting MUST NOT be notified nor receive documents prior to Actual PO finalization.
+     * - Accounting approved receipts queue hides the receipt while waiting for Actual PO.
+     * - Once Procurement finalizes Actual PO, PO transitions to ISSUED, finalized_at is recorded,
+     *   and Accounting is officially notified and able to see the receipt.
      */
-    public function test_site_engineer_approves_internal_warehouse_grn_completes_po_and_notifies_accounting(): void
+    public function test_site_engineer_approves_internal_warehouse_grn_requires_actual_po_before_accounting(): void
     {
         Notification::fake();
 
@@ -225,35 +227,72 @@ class InternalWarehouseStockReceiptWorkflowTest extends TestCase
 
         $response->assertStatus(200);
 
-        // 1. Assert Receipt status
+        // 1. Assert Receipt status is APPROVED
         $receipt->refresh();
         $this->assertEquals('APPROVED', $receipt->status);
         $this->assertEquals($this->internalWarehouseSupplier->id, $receipt->supplier_id);
 
-        // 2. Assert PO completed without requiring commercial Actual PO
+        // 2. Assert PO moved to PENDING_ACTUAL_PO waiting for Actual PO (NOT FINAL_APPROVED yet)
         $po->refresh();
-        $this->assertEquals('FINAL_APPROVED', $po->status);
+        $this->assertEquals('PENDING_ACTUAL_PO', $po->status);
         $this->assertEquals('DELIVERED', $po->delivery_status);
+        $this->assertNull($po->finalized_at);
 
-        // 3. Assert ApprovalHistory logged
-        $history = ApprovalHistory::where('target_type', PurchaseReceipt::class)
-            ->where('target_id', $receipt->id)
-            ->where('action', 'INTERNAL_STOCK_RECEIPT_APPROVED')
-            ->first();
-        $this->assertNotNull($history);
-        $this->assertStringContainsString('المخزن الداخلي', $history->comments);
-        $this->assertStringContainsString('سعر 0', $history->comments);
-
-        // 4. Assert Notification dispatched to Site Accountant
+        // 3. Assert Procurement Manager notified to issue Actual PO
         Notification::assertSentTo(
-            $this->siteAccountant,
+            $this->procurementManager,
             ProcurementWorkflowNotification::class,
-            function (ProcurementWorkflowNotification $notification) use ($receipt) {
-                return $notification->type === 'internal_warehouse_grn_approved'
-                    && str_contains($notification->message, 'المخزن الداخلي')
-                    && str_contains($notification->message, 'رصيد المخزن');
+            function (ProcurementWorkflowNotification $notification) use ($po) {
+                return $notification->type === 'grn_approved_pending_actual_po'
+                    && (int) $notification->notifiable?->id === (int) $po->id;
             }
         );
+
+        // 4. Assert Accounting is NOT notified at this stage
+        Notification::assertNotSentTo(
+            $this->siteAccountant,
+            ProcurementWorkflowNotification::class
+        );
+
+        // 5. Assert Accounting approved receipts queue hides this receipt before Actual PO
+        $queueResponse = $this->actingAs($this->siteAccountant, 'sanctum')
+            ->getJson('/api/v1/accounting/receipts/approved');
+        $queueResponse->assertStatus(200);
+        $receiptIds = collect($queueResponse->json('data'))->pluck('id')->all();
+        $this->assertNotContains($receipt->id, $receiptIds);
+
+        // 6. Procurement Manager finalizes Actual PO
+        $finalizeResponse = $this->actingAs($this->procurementManager, 'sanctum')
+            ->postJson("/api/v1/procurement/purchase-orders/{$po->id}/finalize", [
+                'items' => [
+                    [
+                        'id' => $poItem->id,
+                        'item_description' => 'حديد تسليح 12 مم (فعلي من المخزن)',
+                        'quantity' => 10,
+                        'unit_price' => 0,
+                        'uom' => 'ton',
+                        'item_reference' => 'WH-REF-01',
+                        'region' => 'المستودع الرئيسي',
+                        'supplier_id' => $this->internalWarehouseSupplier->id,
+                    ],
+                ],
+                'notes' => 'اعتماد أمر الشراء الفعلي لمنصرفات المخزن الداخلي بعد الاستلام الهندسي',
+            ]);
+
+        $finalizeResponse->assertStatus(200);
+
+        // 7. Verify PO is now ISSUED & finalized
+        $po->refresh();
+        $this->assertEquals('ISSUED', $po->status);
+        $this->assertNotNull($po->finalized_at);
+        $this->assertEquals($this->procurementManager->id, $po->finalized_by_user_id);
+
+        // 8. Now Accounting CAN see the receipt in the approved queue
+        $queueResponseAfter = $this->actingAs($this->siteAccountant, 'sanctum')
+            ->getJson('/api/v1/accounting/receipts/approved');
+        $queueResponseAfter->assertStatus(200);
+        $receiptIdsAfter = collect($queueResponseAfter->json('data'))->pluck('id')->all();
+        $this->assertContains($receipt->id, $receiptIdsAfter);
     }
 
     /**

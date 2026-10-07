@@ -36,6 +36,12 @@ class SupplierInvoiceController extends Controller
         $user = $request->user();
         $receipt = PurchaseReceipt::with('purchaseOrder')->findOrFail($id);
 
+        if ($receipt->isInternalWarehouse() && ($receipt->purchaseOrder?->status === 'PENDING_ACTUAL_PO' || ! $receipt->purchaseOrder?->finalized_at)) {
+            return response()->json([
+                'message' => 'يحظر تسجيل إذن استلام المخزن في الحسابات قبل إصدار أمر الشراء الفعلي بالكامل من قِبل إدارة المشتريات.',
+            ], 422);
+        }
+
         $notes = $request->input('notes');
 
         $receipt->update([

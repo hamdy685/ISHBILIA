@@ -267,51 +267,12 @@ export const GeneralManagerDashboardPage: React.FC = () => {
                 line_total: it.estimated_line_total,
               })),
             })),
-
-          // 3. Pending Purchase Orders for Executive Signature
-          ...pos
-            .filter((p) => (p.status as string) === 'PENDING_EXECUTIVE_APPROVAL' || (p.status as string) === 'APPROVED_BY_ACCOUNTING')
-            .slice(0, 5)
-            .map((po) => ({
-              id: `po-${po.id}`,
-              rawId: po.id,
-              type: 'PO' as const,
-              code: po.po_number,
-              title: po.items?.[0]?.item_description || (po.supplier ? `توريد من ${po.supplier.company_name}` : `أمر شراء ${po.po_number}`),
-              subtitle: (po.purchase_request as any)?.justification || (po.items && po.items.length > 1 ? `${po.items.length} بنود توريد مطلوبة` : undefined),
-              department: po.department?.name || po.purchase_request?.department?.name,
-              supplier: po.supplier?.company_name,
-              amount: Number(po.grand_total || 0),
-              urgency: 'HIGH' as const,
-              reason: 'أمر شراء معتمد مالياً بانتظار الاعتماد والتوقيع التنفيذي النهائي',
-              actionUrl: `/general-manager/purchase-orders/${po.id}`,
-              actionLabel: 'معاينة وطباعة أمر الشراء',
-              timeAgo: po.created_at ? po.created_at.slice(0, 10) : undefined,
-              items_count: po.items?.length || 0,
-              items_list: po.items?.map((it: any) => {
-                const poQty = Number(it.quantity ?? it.actual_quantity ?? 0);
-                const price = Number(it.unit_price || 0);
-                const lineTotal = it.line_total !== undefined && it.line_total !== null && Number(it.line_total) > 0
-                  ? Number(it.line_total)
-                  : Math.round(poQty * price * 100) / 100;
-                return {
-                  description: it.item_description || it.item?.name || 'بند توريد',
-                  quantity: poQty,
-                  uom: it.uom,
-                  unit_price: it.unit_price,
-                  line_total: lineTotal,
-                  specifications: it.specifications,
-                  parcel: it.item_reference,
-                  region: it.region,
-                };
-              }),
-            })),
         ];
 
         return (
           <ActionRequiredInbox
-            title="القرارات والإجراءات التنفيذية المطلوبة منك الآن"
-            description="طلبات الشراء وأوامر التوريد التي تتطلب قرار المدير العام للبدء في التنفيذ."
+            title="القرارات التنفيذية المطلوبة منك الآن"
+            description="طلبات الشراء وعروض الأسعار المعلقة التي تتطلب قرارك المباشر حصراً (اعتماد، رفض، أو بت في الترسية)."
             roleName="الإدارة التنفيذية العليا"
             onItemActionComplete={() => loadData(true)}
             items={gmActionItems}

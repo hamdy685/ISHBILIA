@@ -54,8 +54,7 @@ export const getRequestLifecycle = (pr: PurchaseRequest): RequestLifecycleResolu
         Boolean(po.finalized_at) ||
         Boolean(po.is_actual_po) ||
         po.status === 'FINAL_APPROVED' ||
-        (hasApprovedReceipt && po.status === 'APPROVED_BY_ACCOUNTING') ||
-        (po.supplier?.company_name === 'المخزن الداخلي' && hasApprovedReceipt)
+        (hasApprovedReceipt && po.status === 'APPROVED_BY_ACCOUNTING')
     ) ||
     pr.approval_history?.some((h) => ['ACTUAL_PO_FINALIZED', 'ACTUAL_PO_ISSUED'].includes(h.action)) ||
     pr.status === 'ACTUAL_PO_ISSUED' ||

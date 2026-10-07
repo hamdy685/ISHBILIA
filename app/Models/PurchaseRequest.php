@@ -266,9 +266,7 @@ class PurchaseRequest extends Model
 
             $isActualPo = (bool) (
                 $latestPo->finalized_at !== null ||
-                $latestPo->status === 'FINAL_APPROVED' ||
-                ($hasApprovedReceipt && in_array($latestPo->status, ['APPROVED_BY_ACCOUNTING', 'FINAL_APPROVED'], true)) ||
-                ($latestPo->relationLoaded('supplier') && $latestPo->supplier?->company_name === 'المخزن الداخلي' && $hasApprovedReceipt)
+                ($hasApprovedReceipt && in_array($latestPo->status, ['APPROVED_BY_ACCOUNTING', 'FINAL_APPROVED'], true))
             );
 
             if ($isActualPo) {

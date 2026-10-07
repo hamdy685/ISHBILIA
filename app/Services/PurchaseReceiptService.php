@@ -354,22 +354,13 @@ class PurchaseReceiptService
                 'site_engineer_notes' => $notes,
             ]);
 
-            if ($isInternalWarehouse) {
-                // Internal stock withdrawal: direct inventory deduction, zero purchase cost, no external commercial actual PO required
-                $receipt->purchaseOrder->update([
-                    'delivery_status' => 'DELIVERED',
-                    'actual_delivery_date' => $receipt->received_at ?: now()->toDateString(),
-                    'status' => 'FINAL_APPROVED',
-                    'finalized_at' => now(),
-                    'finalized_by_user_id' => $siteEngineer->id,
-                ]);
-            } else {
-                $receipt->purchaseOrder->update([
-                    'delivery_status' => 'DELIVERED',
-                    'actual_delivery_date' => $receipt->received_at ?: now()->toDateString(),
-                    'status' => 'PENDING_ACTUAL_PO',
-                ]);
-            }
+            // Regardless of whether it is an internal warehouse order or an external supplier,
+            // once the Site Engineer approves the GRN, the order moves to PENDING_ACTUAL_PO waiting for Actual PO!
+            $receipt->purchaseOrder->update([
+                'delivery_status' => 'DELIVERED',
+                'actual_delivery_date' => $receipt->received_at ?: now()->toDateString(),
+                'status' => 'PENDING_ACTUAL_PO',
+            ]);
 
             app(NotificationService::class)->markEntityNotificationsAsRead($receipt);
             app(NotificationService::class)->markEntityNotificationsAsRead($receipt->purchaseOrder);
@@ -382,61 +373,56 @@ class PurchaseReceiptService
                 'from_state' => 'PENDING_SITE_ENGINEER',
                 'to_state' => 'APPROVED',
                 'comments' => $isInternalWarehouse
-                    ? ($notes ? "{$notes} — صرف من رصيد المخزن الداخلي (بضاعة متواجدة مسبقاً بالمستودع بسعر 0 ج.م)" : 'اعتمد مهندس الموقع استلام المواد المنصرفة من المخزن الداخلي (بضاعة متواجدة مسبقاً بالمستودع بسعر 0 ج.م) وتم خصمها من رصيد المخزن وتسليمها للموقع.')
+                    ? ($notes ? "{$notes} — استلام وتفريغ من المخزن الداخلي، بانتظار إصدار أمر الشراء الفعلي." : 'اعتمد مهندس الموقع استلام المواد المنصرفة من المخزن الداخلي، وبانتظار مراجعة وإصدار أمر الشراء الفعلي من إدارة المشتريات.')
                     : ($notes ?? 'اعتمد مهندس الموقع الكميات المستلمة وأُعيد الملف لإدارة المشتريات لإصدار أمر الشراء الفعلي.'),
             ]);
 
             $notificationService = app(NotificationService::class);
 
-            if (! $isInternalWarehouse) {
-                // Notify Procurement Managers to issue the Actual PO for external vendor purchases
-                $procurementUsers = $notificationService->resolveUsersWithPermission('purchase_order.create');
+            // Notify Procurement Managers to issue the Actual PO (for external vendors and internal warehouse alike)
+            $procurementUsers = $notificationService->resolveUsersWithPermission('purchase_order.create');
 
-                if ($procurementUsers->isNotEmpty()) {
-                    $notificationService->queueUsers(
-                        $procurementUsers,
-                        'grn_approved_pending_actual_po',
-                        'إذن استلام معتمد — بانتظار إصدار أمر الشراء الفعلي',
-                        "اعتمد مهندس الموقع إذن الاستلام {$receipt->receipt_number} لأمر الشراء {$receipt->purchaseOrder->po_number}. يرجى مراجعة الكميات وإصدار أمر الشراء الفعلي.",
-                        $receipt->purchaseOrder
-                    );
-                }
+            if ($procurementUsers->isNotEmpty()) {
+                $notificationService->queueUsers(
+                    $procurementUsers,
+                    'grn_approved_pending_actual_po',
+                    'إذن استلام معتمد — بانتظار إصدار أمر الشراء الفعلي',
+                    $isInternalWarehouse
+                        ? "اعتمد مهندس الموقع إذن استلام المخزن {$receipt->receipt_number} لأمر الشراء {$receipt->purchaseOrder->po_number}. يرجى مراجعة الكميات وإصدار أمر الشراء الفعلي."
+                        : "اعتمد مهندس الموقع إذن الاستلام {$receipt->receipt_number} لأمر الشراء {$receipt->purchaseOrder->po_number}. يرجى مراجعة الكميات وإصدار أمر الشراء الفعلي.",
+                    $receipt->purchaseOrder
+                );
             }
 
             if ($receipt->warehouse_keeper_user_id) {
                 $notificationService->queueNotification(
                     $receipt->warehouse_keeper_user_id,
                     'purchase_receipt_approved_site_engineer',
-                    $isInternalWarehouse ? 'تم اعتماد إذن الصرف والاستلام من مهندس الموقع (خصم من رصيد المخزن الداخلي)' : 'تم اعتماد إذن الاستلام من مهندس الموقع',
+                    $isInternalWarehouse ? 'تم اعتماد إذن الصرف والاستلام من مهندس الموقع (بانتظار أمر الشراء الفعلي)' : 'تم اعتماد إذن الاستلام من مهندس الموقع',
                     "اعتمد مهندس الموقع إذن الاستلام {$receipt->receipt_number} لأمر الشراء {$receipt->purchaseOrder->po_number}.",
                     $receipt
                 );
             }
 
-            // Notify Accountant (scoped department accountant with General Accountant fallback)
-            $receipt->purchaseOrder->loadMissing('purchaseRequest.department');
-            $deptCode = $receipt->purchaseOrder->purchaseRequest?->department?->code;
-            $deptAccountants = app(\App\Services\SupplierInvoiceService::class)->getAccountantsForDepartment($deptCode);
-            $targetAccountants = $deptAccountants->isNotEmpty()
-                ? $deptAccountants
-                : User::whereHas('roles', fn ($q) => $q->whereIn('slug', ['general_accountant', 'site_accountant', 'accountant']))
-                    ->where('is_active', true)
-                    ->get();
+            // Accounting notifications:
+            // CRITICAL BUSINESS RULE:
+            // For internal warehouse orders, NO data or notifications may be sent to accounting before Actual PO issuance.
+            // For external vendors, existing receipt notification is maintained for awareness.
+            if (! $isInternalWarehouse) {
+                $receipt->purchaseOrder->loadMissing('purchaseRequest.department');
+                $deptCode = $receipt->purchaseOrder->purchaseRequest?->department?->code;
+                $deptAccountants = app(\App\Services\SupplierInvoiceService::class)->getAccountantsForDepartment($deptCode);
+                $targetAccountants = $deptAccountants->isNotEmpty()
+                    ? $deptAccountants
+                    : User::whereHas('roles', fn ($q) => $q->whereIn('slug', ['general_accountant', 'site_accountant', 'accountant']))
+                        ->where('is_active', true)
+                        ->get();
 
-            if ($targetAccountants->isEmpty()) {
-                $targetAccountants = $notificationService->resolveUsersWithPermission('purchase_order.view_accounting');
-            }
+                if ($targetAccountants->isEmpty()) {
+                    $targetAccountants = $notificationService->resolveUsersWithPermission('purchase_order.view_accounting');
+                }
 
-            if ($targetAccountants->isNotEmpty()) {
-                if ($isInternalWarehouse) {
-                    $notificationService->queueUsers(
-                        $targetAccountants,
-                        'internal_warehouse_grn_approved',
-                        'إذن استلام مواد منصرفة من المخزن الداخلي معتمد (رصيد مخزن سابق)',
-                        "اعتمد مهندس الموقع إذن الاستلام {$receipt->receipt_number} لبضاعة مسحوبة من رصيد المخزن الداخلي لأمر {$receipt->purchaseOrder->po_number}. تم خصم الكميات من المستودع ولا تتطلب فاتورة مورد خارجي.",
-                        $receipt->purchaseOrder
-                    );
-                } else {
+                if ($targetAccountants->isNotEmpty()) {
                     $notificationService->queueAccountingWithPurchaseOrderAndReceipt(
                         $targetAccountants,
                         $receipt->purchaseOrder,

@@ -96,17 +96,16 @@ export const getTimelineStepIndex = (request: PurchaseRequest): number => {
     pos.some(
       (po: any) =>
         po.has_approved_receipt || (po.receipts || []).some((r: any) => r.status === 'APPROVED')
-    ) || historyHas(request, ['SITE_ENGINEER_APPROVED', 'RECEIPT_APPROVED_BY_SITE_ENGINEER']);
+    ) || historyHas(request, ['SITE_ENGINEER_APPROVED', 'RECEIPT_APPROVED_BY_SITE_ENGINEER', 'INTERNAL_STOCK_RECEIPT_APPROVED']);
 
   const hasActualPoFinalized =
     pos.some(
       (po: any) =>
         Boolean(po.finalized_at) ||
         Boolean(po.is_actual_po) ||
-        po.status === 'FINAL_APPROVED' ||
-        (po.supplier?.company_name === 'المخزن الداخلي' && (po.has_approved_receipt || hasApprovedReceipt))
+        po.status === 'FINAL_APPROVED'
     ) ||
-    historyHas(request, ['ACTUAL_PO_FINALIZED', 'ACTUAL_PO_ISSUED', 'INTERNAL_STOCK_RECEIPT_APPROVED']) ||
+    historyHas(request, ['ACTUAL_PO_FINALIZED', 'ACTUAL_PO_ISSUED']) ||
     ['COMPLETED', 'ACCOUNTING_PROCESSED'].includes(status);
 
   if (hasActualPoFinalized) return isDirect ? 8 : 9;
@@ -185,10 +184,9 @@ export const generateTimelineCards = (request: PurchaseRequest): TimelineCardIte
       (po: any) =>
         Boolean(po.finalized_at) ||
         Boolean(po.is_actual_po) ||
-        po.status === 'FINAL_APPROVED' ||
-        (po.supplier?.company_name === 'المخزن الداخلي' && (po.has_approved_receipt || hasApprovedReceipt))
+        po.status === 'FINAL_APPROVED'
     ) ||
-    historyHas(request, ['ACTUAL_PO_FINALIZED', 'ACTUAL_PO_ISSUED', 'INTERNAL_STOCK_RECEIPT_APPROVED']) ||
+    historyHas(request, ['ACTUAL_PO_FINALIZED', 'ACTUAL_PO_ISSUED']) ||
     ['COMPLETED', 'ACCOUNTING_PROCESSED'].includes(status);
 
   const cards: TimelineCardItem[] = [];
@@ -558,10 +556,9 @@ export const getActionGuidance = (request: PurchaseRequest): { text: string; bg:
       (po: any) =>
         Boolean(po.finalized_at) ||
         Boolean(po.is_actual_po) ||
-        po.status === 'FINAL_APPROVED' ||
-        (po.supplier?.company_name === 'المخزن الداخلي' && (po.has_approved_receipt || hasApprovedReceipt))
+        po.status === 'FINAL_APPROVED'
     ) ||
-    historyHas(request, ['ACTUAL_PO_FINALIZED', 'ACTUAL_PO_ISSUED', 'INTERNAL_STOCK_RECEIPT_APPROVED']) ||
+    historyHas(request, ['ACTUAL_PO_FINALIZED', 'ACTUAL_PO_ISSUED']) ||
     ['COMPLETED', 'ACCOUNTING_PROCESSED'].includes(status);
 
   if (status === 'DRAFT') {
