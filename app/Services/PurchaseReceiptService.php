@@ -191,7 +191,16 @@ class PurchaseReceiptService
                       ->orWhereNull('warehouse_keeper_user_id');
                 });
             } else {
-                $query->where('site_engineer_user_id', $user->id);
+                $query->where(function ($q) use ($user) {
+                    $q->where('site_engineer_user_id', $user->id)
+                      ->orWhereHas('purchaseOrder.purchaseRequest', function ($prQ) use ($user) {
+                          $prQ->where('site_engineer_user_id', $user->id);
+                          $parcelId = $user->parcel_id ?? $user->land_parcel_id ?? null;
+                          if ($parcelId) {
+                              $prQ->orWhere('land_parcel_id', $parcelId);
+                          }
+                      });
+                });
             }
         }
 
@@ -351,8 +360,9 @@ class PurchaseReceiptService
 
     public function updateBySiteEngineer(User $siteEngineer, PurchaseReceipt $receipt, array $items, ?string $notes = null): PurchaseReceipt
     {
-        $receipt->loadMissing(['items.purchaseOrderItem.prItem', 'purchaseOrder.items.prItem']);
-        if (! $siteEngineer->hasRole('admin') && (int) $receipt->site_engineer_user_id !== (int) $siteEngineer->id) {
+        $receipt->loadMissing(['items.purchaseOrderItem.prItem', 'purchaseOrder.purchaseRequest']);
+        $assignedSiteId = (int) ($receipt->site_engineer_user_id ?: $receipt->purchaseOrder?->purchaseRequest?->site_engineer_user_id);
+        if (! $siteEngineer->hasRole('admin') && $assignedSiteId !== (int) $siteEngineer->id) {
             throw new \RuntimeException('هذا الإذن غير مخصص لمهندس الموقع الحالي.');
         }
         if ($receipt->status !== 'PENDING_SITE_ENGINEER') {
@@ -414,11 +424,12 @@ class PurchaseReceiptService
 
     public function approveBySiteEngineer(User $siteEngineer, PurchaseReceipt $receipt, ?string $notes = null): PurchaseReceipt
     {
-        $receipt->loadMissing(['purchaseOrder', 'items']);
+        $receipt->loadMissing(['purchaseOrder.purchaseRequest', 'items']);
         if ($receipt->status === 'APPROVED') {
             return $receipt;
         }
-        if (! $siteEngineer->hasRole('admin') && (int) $receipt->site_engineer_user_id !== (int) $siteEngineer->id) {
+        $assignedSiteId = (int) ($receipt->site_engineer_user_id ?: $receipt->purchaseOrder?->purchaseRequest?->site_engineer_user_id);
+        if (! $siteEngineer->hasRole('admin') && $assignedSiteId !== (int) $siteEngineer->id) {
             throw new \RuntimeException('هذا الإذن غير مخصص لمهندس الموقع الحالي.');
         }
         if ($receipt->status !== 'PENDING_SITE_ENGINEER') {

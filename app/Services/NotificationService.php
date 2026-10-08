@@ -463,11 +463,143 @@ class NotificationService
             ->paginate($perPage);
     }
 
+    public const INFORMATIONAL_WORKFLOW_TYPES = [
+        'purchase_request_approved',
+        'purchase_order_issued',
+        'purchase_order_issued_requester',
+        'purchase_order_created',
+        'purchase_receipt_delivered',
+    ];
+
     /**
-     * Get count of unread notifications for user.
+     * Auto-dismiss unread notifications where the underlying document has already completed its actionable stage.
+     */
+    public function autoDismissResolvedNotifications(User $user): void
+    {
+        // 1. Reviewer: dismiss notifications for PRs that are no longer awaiting reviewer
+        if ($user->hasRole('reviewer')) {
+            Notification::where('user_id', $user->id)
+                ->whereNull('read_at')
+                ->where('notifiable_type', PurchaseRequest::class)
+                ->whereIn('type', [
+                    'purchase_request_submitted',
+                    'purchase_request_under_review',
+                    'purchase_request_review_assigned',
+                ])
+                ->whereHasMorph('notifiable', [PurchaseRequest::class], function ($q) {
+                    $q->whereNotIn('status', ['SUBMITTED', 'UNDER_REVIEW']);
+                })
+                ->update(['read_at' => now()]);
+
+            Notification::where('user_id', $user->id)
+                ->whereNull('read_at')
+                ->where('notifiable_type', PurchaseReceipt::class)
+                ->whereIn('type', [
+                    'purchase_receipt_pending_site_engineer',
+                    'purchase_receipt_submitted',
+                ])
+                ->whereHasMorph('notifiable', [PurchaseReceipt::class], function ($q) {
+                    $q->whereNotIn('status', ['PENDING_SITE_ENGINEER', 'WAREHOUSE_RECEIPT_SUBMITTED']);
+                })
+                ->update(['read_at' => now()]);
+        }
+
+        // 2. Site Engineer: dismiss notifications for Receipts that are already approved
+        if ($user->hasRole('site_engineer')) {
+            Notification::where('user_id', $user->id)
+                ->whereNull('read_at')
+                ->where('notifiable_type', PurchaseReceipt::class)
+                ->whereIn('type', [
+                    'purchase_receipt_pending_site_engineer',
+                    'purchase_receipt_submitted',
+                    'purchase_receipt_created',
+                ])
+                ->whereHasMorph('notifiable', [PurchaseReceipt::class], function ($q) {
+                    $q->whereNotIn('status', ['PENDING_SITE_ENGINEER', 'WAREHOUSE_RECEIPT_SUBMITTED']);
+                })
+                ->update(['read_at' => now()]);
+        }
+
+        // 3. Procurement Manager: dismiss notifications for PRs that already have POs
+        if ($user->hasRole('procurement_manager')) {
+            Notification::where('user_id', $user->id)
+                ->whereNull('read_at')
+                ->where('notifiable_type', PurchaseRequest::class)
+                ->whereIn('type', [
+                    'purchase_request_pending_procurement',
+                    'purchase_request_approved_for_procurement',
+                    'purchase_request_approved_by_accounting',
+                ])
+                ->whereHasMorph('notifiable', [PurchaseRequest::class], function ($q) {
+                    $q->whereHas('purchaseOrders', fn ($poQ) => $poQ->whereNotIn('status', ['REJECTED']));
+                })
+                ->update(['read_at' => now()]);
+
+            Notification::where('user_id', $user->id)
+                ->whereNull('read_at')
+                ->where('notifiable_type', PurchaseOrder::class)
+                ->whereIn('type', [
+                    'purchase_order_returned_procurement',
+                    'po_returned',
+                ])
+                ->whereHasMorph('notifiable', [PurchaseOrder::class], function ($q) {
+                    $q->where('status', '!=', 'RETURNED_TO_PROCUREMENT');
+                })
+                ->update(['read_at' => now()]);
+        }
+
+        // 4. Accountants: dismiss notifications for receipts that are already invoiced/matched
+        if ($user->hasAnyRole(['accountant', 'site_accountant', 'licenses_accountant', 'buffet_accountant', 'general_accountant']) || $user->isGeneralAccountant()) {
+            Notification::where('user_id', $user->id)
+                ->whereNull('read_at')
+                ->where('notifiable_type', PurchaseReceipt::class)
+                ->whereIn('type', [
+                    'purchase_order_and_receipt_ready_accounting',
+                    'purchase_receipt_ready_for_invoice',
+                    'receipt_approved',
+                ])
+                ->whereHasMorph('notifiable', [PurchaseReceipt::class], function ($q) {
+                    $q->whereNotNull('accountant_recorded_at')
+                      ->orWhereHas('supplierInvoices', fn ($iq) => $iq->whereNotIn('status', ['VOIDED', 'CANCELLED']));
+                })
+                ->update(['read_at' => now()]);
+
+            Notification::where('user_id', $user->id)
+                ->whereNull('read_at')
+                ->where('notifiable_type', SupplierInvoice::class)
+                ->whereIn('type', [
+                    'supplier_invoice_pending_matching',
+                    'supplier_invoice_pending_approval',
+                ])
+                ->whereHasMorph('notifiable', [SupplierInvoice::class], function ($q) {
+                    $q->where('matching_status', 'MATCHED');
+                })
+                ->update(['read_at' => now()]);
+        }
+
+        // 5. Employee: dismiss notifications for requests that are no longer RETURNED
+        if ($user->hasRole('employee')) {
+            Notification::where('user_id', $user->id)
+                ->whereNull('read_at')
+                ->where('notifiable_type', PurchaseRequest::class)
+                ->whereIn('type', [
+                    'purchase_request_returned',
+                    'purchase_request_needs_edit',
+                ])
+                ->whereHasMorph('notifiable', [PurchaseRequest::class], function ($q) {
+                    $q->where('status', '!=', 'RETURNED');
+                })
+                ->update(['read_at' => now()]);
+        }
+    }
+
+    /**
+     * Get count of actionable unread notifications for user.
      */
     public function getUnreadCount(User $user): int
     {
+        $this->autoDismissResolvedNotifications($user);
+
         $query = Notification::where('user_id', $user->id)->whereNull('read_at');
 
         if ($user->hasRole('admin')) {
@@ -484,10 +616,8 @@ class NotificationService
             return $query->count();
         }
 
-        return $query->where(function ($q) {
-            $q->whereIn('notifiable_type', $this->procurementNotifiableTypes())
-              ->orWhereNull('notifiable_type');
-        })->count();
+        // Exclude purely informational messages from actionable counter
+        return $query->whereNotIn('type', self::INFORMATIONAL_WORKFLOW_TYPES)->count();
     }
 
     /**
@@ -551,6 +681,16 @@ class NotificationService
             } elseif ($notifiable instanceof PurchaseRequest) {
                 if (!empty($notifiable->request_number)) {
                     $q->orWhere('message', 'like', "%{$notifiable->request_number}%");
+                }
+            } elseif ($notifiable instanceof SupplierInvoice) {
+                if (!empty($notifiable->invoice_number)) {
+                    $q->orWhere('message', 'like', "%{$notifiable->invoice_number}%");
+                }
+                if ($notifiable->purchase_order_id) {
+                    $q->orWhere('purchase_order_id', $notifiable->purchase_order_id);
+                }
+                if ($notifiable->purchase_receipt_id) {
+                    $q->orWhere('purchase_receipt_id', $notifiable->purchase_receipt_id);
                 }
             }
         })

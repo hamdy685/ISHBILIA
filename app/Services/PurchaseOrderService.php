@@ -976,9 +976,8 @@ class PurchaseOrderService
             $deptAccountants = app(SupplierInvoiceService::class)->getAccountantsForDepartment($deptCode);
 
             // Exclude Financial Director (role 'accountant') - notify only scoped department accountant for awareness
-            $targetAccountants = $deptAccountants->isNotEmpty()
-                ? $deptAccountants
-                : $accountants->reject(fn ($u) => $u->hasRole('accountant'));
+            $targetAccountants = ($deptAccountants->isNotEmpty() ? $deptAccountants : $accountants)
+                ->reject(fn ($u) => $u->hasRole('accountant'));
 
             if ($targetAccountants->isNotEmpty()) {
                 $notificationService->queueUsers(

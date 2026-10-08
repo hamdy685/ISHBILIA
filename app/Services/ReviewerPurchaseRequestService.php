@@ -42,6 +42,16 @@ class ReviewerPurchaseRequestService
             if ($targetDept?->manager_user_id !== null && (int) $targetDept->manager_user_id === (int) $user->id) {
                 return true;
             }
+
+            // 4. Departmental reviewer matched by target_department_id (or fallback department_id if target is null)
+            if ($user->hasRole('reviewer') && $user->department_id) {
+                if ((int) $request->target_department_id === (int) $user->department_id) {
+                    return true;
+                }
+                if ($request->target_department_id === null && (int) $request->department_id === (int) $user->department_id) {
+                    return true;
+                }
+            }
         }
 
         return false;
@@ -76,9 +86,21 @@ class ReviewerPurchaseRequestService
                 if (! $user->hasRole('execution_manager')) {
                     $scopeQuery->orWhereHas('targetDepartment', function ($departmentQuery) use ($user) {
                         $departmentQuery->where('manager_user_id', $user->id);
-                    })->orWhereHas('department', function ($departmentQuery) use ($user) {
-                        $departmentQuery->where('manager_user_id', $user->id);
+                    })->orWhere(function ($deptQuery) use ($user) {
+                        $deptQuery->whereNull('target_department_id')
+                            ->whereHas('department', function ($departmentQuery) use ($user) {
+                                $departmentQuery->where('manager_user_id', $user->id);
+                            });
                     });
+
+                    // 4. Departmental reviewer matched by target_department_id (or department_id if target is null)
+                    if ($user->hasRole('reviewer') && $user->department_id) {
+                        $scopeQuery->orWhere('target_department_id', $user->department_id)
+                                   ->orWhere(function ($fallbackDept) use ($user) {
+                                       $fallbackDept->whereNull('target_department_id')
+                                                    ->where('department_id', $user->department_id);
+                                   });
+                    }
                 }
             });
         }

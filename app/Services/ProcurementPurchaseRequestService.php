@@ -85,7 +85,15 @@ class ProcurementPurchaseRequestService
                     $scopeQuery->where('reviewer_user_id', $actor->id)
                         ->orWhereHas('targetDepartment', function ($departmentQuery) use ($actor): void {
                             $departmentQuery->where('manager_user_id', $actor->id);
+                        })
+                        ->orWhereHas('department', function ($departmentQuery) use ($actor): void {
+                            $departmentQuery->where('manager_user_id', $actor->id);
                         });
+
+                    if ($actor->department_id) {
+                        $scopeQuery->orWhere('department_id', $actor->department_id)
+                                   ->orWhere('target_department_id', $actor->department_id);
+                    }
                 });
         } elseif ($actor?->hasRole('accountant')) {
             // Financial Director must only see requests where ACCOUNTING recommendation is not yet submitted.

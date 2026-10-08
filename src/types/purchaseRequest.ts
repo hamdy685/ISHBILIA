@@ -44,6 +44,7 @@ export type PurchaseRequestStatus =
   | 'PENDING_ACTUAL_PO'
   | 'GRN_PENDING'
   | 'COMPLETED'
+  | 'RETURNED'
   | 'REJECTED';
 
 export type PurchaseRequestPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
@@ -68,6 +69,7 @@ export const PR_STATUS_LABELS: Record<PurchaseRequestStatus, string> = {
   PENDING_ACTUAL_PO: 'بالموقع - بانتظار الأمر الفعلي',
   GRN_PENDING: 'بانتظار فحص واعتماد الاستلام',
   COMPLETED: 'مكتمل',
+  RETURNED: 'مُعاد للتعديل',
   REJECTED: 'مرفوض',
 };
 

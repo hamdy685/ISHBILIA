@@ -21,6 +21,7 @@ import { getPurchaseOrderApi, getPurchaseOrdersApi, PurchaseOrderPaginationMeta 
 import { createSupplierApi, deleteSupplierApi, getSuppliersApi, SupplierPayload, updateSupplierApi } from '../../api/suppliers';
 import { PurchaseOrder, المورد } from '../../types/purchaseOrder';
 import { PurchaseRequest } from '../../types/purchaseRequest';
+import ActionRequiredInbox, { ActionInboxItem } from '../../components/dashboard/ActionRequiredInbox';
 import PurchaseOrderPrintModal from '../../components/procurement/PurchaseOrderPrintModal';
 import ReportPrintModal from '../../components/procurement/ReportPrintModal';
 import SupplierModal from '../../components/procurement/SupplierModal';
@@ -555,6 +556,179 @@ export const ProcurementManagerPage: React.FC = () => {
     (pr) => Boolean(getSelectedQuote(pr)) && !(pr.issued_purchase_orders_count && pr.issued_purchase_orders_count > 0)
   );
 
+  const procurementActionItems: ActionInboxItem[] = useMemo(() => {
+    const items: ActionInboxItem[] = [];
+
+    // 1. Actual POs pending issuance (Critical)
+    pendingActualPos.forEach((po) => {
+      const itemsList = po.items?.map((it: any) => ({
+        description: it.item_description || it.item?.name || 'بند توريد',
+        quantity: Number(it.quantity ?? it.actual_quantity ?? 0),
+        uom: it.uom,
+        unit_price: it.unit_price,
+        line_total: it.line_total,
+        specifications: it.specifications,
+        parcel: it.item_reference,
+        region: it.region,
+      })) || [];
+
+      items.push({
+        id: `po-actual-${po.id}`,
+        rawId: po.id,
+        type: 'PO',
+        code: po.po_number,
+        title: `📦 إذن الاستلام معتمد — مطلوب إصدار أمر الشراء الفعلي (${po.supplier?.company_name || 'المورد'})`,
+        subtitle: 'الموقع أتم الاستلام — يرجى مطابقة وتعديل الأسعار والكميات لإصدار الأمر الفعلي للإدارة المالية',
+        department: po.department?.name || po.purchase_request?.department?.name,
+        supplier: po.supplier?.company_name,
+        amount: Number(po.grand_total || 0),
+        urgency: 'CRITICAL',
+        reason: 'تم استلام البضاعة واعتماد إذن الاستلام بالموقع — أمر الشراء بانتظار إصدار الأمر الفعلي من المشتريات لإرساله للإدارة المالية.',
+        actionUrl: `/procurement/purchase-orders/${po.id}/edit`,
+        actionLabel: '⚡ إصدار أمر الشراء الفعلي',
+        created_at: po.purchase_request?.created_at || po.created_at || undefined,
+        timeAgo: (po.purchase_request?.created_at || po.created_at || po.updated_at) ? formatDateTime24h(po.purchase_request?.created_at || po.created_at || po.updated_at) : undefined,
+        items_count: itemsList.length,
+        items_list: itemsList,
+      });
+    });
+
+    // 2. Returned POs from Accounting / GM
+    pos.filter((p) => p.status === 'RETURNED_TO_PROCUREMENT').forEach((po) => {
+      items.push({
+        id: `po-ret-${po.id}`,
+        rawId: po.id,
+        type: 'PO',
+        code: po.po_number,
+        title: `أمر شراء معاد — ${po.supplier?.company_name || po.po_number}`,
+        subtitle: 'معاد من الإدارة أو الحسابات لإعادة التدقيق والمراجعة',
+        department: po.department?.name || po.purchase_request?.department?.name,
+        supplier: po.supplier?.company_name,
+        amount: Number(po.grand_total || 0),
+        urgency: 'CRITICAL',
+        reason: 'أمر شراء معاد من الحسابات/الإدارة يتطلب التعديل والمراجعة قبل إعادة الإرسال',
+        actionUrl: `/procurement/purchase-orders/${po.id}/edit`,
+        actionLabel: 'تعديل وإعادة إرسال الأمر',
+        created_at: po.created_at || undefined,
+        timeAgo: po.created_at ? formatDateTime24h(po.created_at) : undefined,
+        items_count: po.items?.length || 0,
+        items_list: po.items?.map((it: any) => ({
+          description: it.item_description || it.item?.name || 'بند',
+          quantity: it.quantity,
+          uom: it.uom,
+          unit_price: it.unit_price,
+          line_total: it.line_total,
+          parcel: it.item_reference,
+          region: it.region,
+        })),
+      });
+    });
+
+    // 3. Approved PRs waiting for PO issuance
+    approvedPrs.forEach((pr) => {
+      items.push({
+        id: `pr-app-${pr.id}`,
+        rawId: pr.id,
+        type: 'PR',
+        code: pr.request_number,
+        title: pr.justification || (pr.request_type === 'OFFICE_SUPPLIES' ? 'طلب مستلزمات مكتبية' : 'طلب مواد مشروعات'),
+        subtitle: 'معتمد وجاهز لإصدار أمر الشراء فوراً',
+        department: pr.department?.name,
+        requester: pr.requester?.name,
+        amount: pr.total_estimated_cost ? Number(pr.total_estimated_cost) : undefined,
+        urgency: pr.priority === 'HIGH' || pr.priority === 'URGENT' ? 'HIGH' : 'NORMAL',
+        reason: 'طلب شراء معتمد بالكامل — بانتظار إصدار أمر الشراء (PO) وتعميده للمورد',
+        actionUrl: `/procurement/purchase-orders/create?pr=${pr.id}`,
+        actionLabel: '📄 إصدار أمر الشراء (PO)',
+        created_at: pr.created_at,
+        timeAgo: pr.created_at ? formatDateTime24h(pr.created_at) : undefined,
+        request_type: pr.request_type,
+        date_needed: pr.date_needed || undefined,
+        priority: pr.priority,
+        parcel_number: pr.items?.[0]?.item_reference || undefined,
+        region: pr.items?.[0]?.region || undefined,
+        items_count: pr.items?.length || 0,
+        items_list: pr.items?.map((it) => ({
+          description: it.item_description || it.item?.name || 'صنف',
+          quantity: it.quantity,
+          uom: it.uom,
+          parcel: it.item_reference,
+          region: it.region,
+          unit_price: it.estimated_unit_price,
+          line_total: it.estimated_line_total,
+        })),
+      });
+    });
+
+    // 4. Pending Route PRs
+    pendingPrs.forEach((pr) => {
+      items.push({
+        id: `pr-pending-${pr.id}`,
+        rawId: pr.id,
+        type: 'PR',
+        code: pr.request_number,
+        title: pr.justification || (pr.request_type === 'OFFICE_SUPPLIES' ? 'طلب مستلزمات مكتبية' : 'طلب مواد مشروعات'),
+        subtitle: 'بانتظار تحديد مسار التوريد أو إصدار أمر الشراء المباشر',
+        department: pr.department?.name,
+        requester: pr.requester?.name,
+        amount: pr.total_estimated_cost ? Number(pr.total_estimated_cost) : undefined,
+        urgency: pr.priority === 'HIGH' || pr.priority === 'URGENT' ? 'HIGH' : 'NORMAL',
+        reason: 'طلب معتمد محال للمشتريات لتحديد المسار (شراء مباشر أو طرح عروض أسعار)',
+        actionUrl: `/procurement/purchase-orders/create?pr=${pr.id}`,
+        actionLabel: 'تحديد مسار / إصدار PO',
+        created_at: pr.created_at,
+        timeAgo: pr.created_at ? formatDateTime24h(pr.created_at) : undefined,
+        request_type: pr.request_type,
+        date_needed: pr.date_needed || undefined,
+        priority: pr.priority,
+        parcel_number: pr.items?.[0]?.item_reference || undefined,
+        region: pr.items?.[0]?.region || undefined,
+        items_count: pr.items?.length || 0,
+        items_list: pr.items?.map((it) => ({
+          description: it.item_description || it.item?.name || 'صنف',
+          quantity: it.quantity,
+          uom: it.uom,
+          parcel: it.item_reference,
+          region: it.region,
+          unit_price: it.estimated_unit_price,
+          line_total: it.estimated_line_total,
+        })),
+      });
+    });
+
+    // 5. Quote PRs
+    quotePrs.forEach((pr) => {
+      items.push({
+        id: `pr-quote-${pr.id}`,
+        rawId: pr.id,
+        type: 'QUOTE',
+        code: pr.request_number,
+        title: pr.justification || 'عروض أسعار بانتظار التسجيل والتجهيز',
+        subtitle: 'مسار منافسة — يتطلب إدخال عروض الأسعار المقدمة من الموردين',
+        department: pr.department?.name,
+        requester: pr.requester?.name,
+        amount: pr.total_estimated_cost ? Number(pr.total_estimated_cost) : undefined,
+        urgency: 'HIGH',
+        reason: 'طلب بمسار المنافسة يحتاج تسجيل عروض أسعار الموردين ورفع التوصيات',
+        actionUrl: `/procurement?tab=0`,
+        actionLabel: '🏷️ تجهيز عروض الأسعار',
+        created_at: pr.created_at,
+        timeAgo: pr.created_at ? formatDateTime24h(pr.created_at) : undefined,
+        request_type: pr.request_type,
+        items_count: pr.items?.length || 0,
+        items_list: pr.items?.map((it) => ({
+          description: it.item_description || it.item?.name || 'صنف',
+          quantity: it.quantity,
+          uom: it.uom,
+          parcel: it.item_reference,
+          region: it.region,
+        })),
+      });
+    });
+
+    return items;
+  }, [pendingActualPos, pos, approvedPrs, pendingPrs, quotePrs]);
+
   if (loading) return <div className="min-h-[400px] p-8"><TableSkeleton rows={8} columns={6} /></div>;
 
   return (
@@ -612,150 +786,13 @@ export const ProcurementManagerPage: React.FC = () => {
       <QuickLauncherBar className="mb-2" />
 
       {/* ── صندوق المهام والإجراءات المطلوبة من المشتريات الآن (Action Inbox) ── */}
-      <div className="rounded-2xl border-2 border-cyan-500/40 bg-gradient-to-r from-slate-900 via-cyan-950/20 to-slate-900 p-4 sm:p-5 shadow-xl space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-cyan-900/40 pb-3">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-600/30 border border-cyan-500/50 text-cyan-300 text-lg font-black shadow-inner">
-              ⚡
-            </span>
-            <div>
-              <h2 className="text-base font-black text-slate-100 flex items-center gap-2">
-                المهام والإجراءات المطلوبة منك الآن
-                {queueRows.length > 0 && (
-                  <span className="rounded-full bg-cyan-500 text-slate-950 px-2.5 py-0.5 text-xs font-black">
-                    {queueRows.length} طلبات تحتاج إجراءات مشتريات
-                  </span>
-                )}
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                طلبات الشراء المعتمدة المحالة لقسم المشتريات لاختيار المسار وتجهيز العروض وإصدار أوامر الشراء.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
-          {/* Card 1: Pending Route */}
-          <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-3.5 flex flex-col justify-between gap-2.5 hover:border-amber-500/60 transition-colors">
-            <div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-300 font-bold flex items-center gap-1">
-                  <span>🧭</span> تحديد مسار التوريد
-                </span>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${pendingPrs.length > 0 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'bg-slate-800 text-slate-400'}`}>
-                  {pendingPrs.length} طلب بانتظار المسار
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-400 mt-1 leading-5">
-                طلبات معتمدة تتطلب اختيار مسار الشراء المباشر أو جمع عروض أسعار.
-              </p>
-            </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="w-full text-xs font-bold border-amber-800/60 text-amber-200 hover:bg-amber-950"
-              onClick={() => handleScrollToQueue('PENDING_ROUTE')}
-            >
-              عرض طلبات تحديد المسار ({pendingPrs.length}) ←
-            </Button>
-          </div>
-
-          {/* Card 2: Quote Setup */}
-          <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-3.5 flex flex-col justify-between gap-2.5 hover:border-indigo-500/60 transition-colors">
-            <div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-300 font-bold flex items-center gap-1">
-                  <span>🏷️</span> جمع وتجهيز عروض الأسعار
-                </span>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${quotePrs.length > 0 ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40' : 'bg-slate-800 text-slate-400'}`}>
-                  {quotePrs.length} طلب بانتظار العروض
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-400 mt-1 leading-5">
-                طلبات بمسار المنافسة تحتاج تسجيل عروض أسعار الموردين ورفع التوصيات.
-              </p>
-            </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="w-full text-xs font-bold border-indigo-800/60 text-indigo-200 hover:bg-indigo-950"
-              onClick={() => handleScrollToQueue('QUOTE_SETUP')}
-            >
-              تجهيز عروض الأسعار ({quotePrs.length}) ←
-            </Button>
-          </div>
-
-          {/* Card 3: Ready for PO */}
-          <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-3.5 flex flex-col justify-between gap-2.5 hover:border-emerald-500/60 transition-colors">
-            <div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-300 font-bold flex items-center gap-1">
-                  <span>📄</span> جاهزة لإصدار أمر شراء (PO)
-                </span>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${approvedPrs.length > 0 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-slate-800 text-slate-400'}`}>
-                  {approvedPrs.length} طلب جاهز للـ PO
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-400 mt-1 leading-5">
-                طلبات معتمدة بالكامل وجاهزة لإنشاء وإصدار أمر الشراء فوراً.
-              </p>
-            </div>
-            <Button
-              variant="primary"
-              size="sm"
-              className="w-full text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-slate-950"
-              onClick={() => handleScrollToQueue('READY_FOR_PO')}
-            >
-              إنشاء أوامر الشراء ({approvedPrs.length}) ←
-            </Button>
-          </div>
-
-          {/* Card 4: Actual PO Pending */}
-          <div className={`rounded-xl border p-3.5 flex flex-col justify-between gap-2.5 transition-all shadow-lg ${
-            pendingActualPos.length > 0 
-              ? 'border-indigo-500/70 bg-gradient-to-b from-indigo-950/50 via-slate-900 to-slate-950 shadow-indigo-950/40 hover:border-indigo-400' 
-              : 'border-slate-800 bg-slate-950/80 hover:border-indigo-500/60'
-          }`}>
-            <div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-indigo-300 font-black flex items-center gap-1.5">
-                  <span>⚡</span> إصدار أمر الشراء الفعلي
-                </span>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                  pendingActualPos.length > 0 
-                    ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-mono animate-pulse' 
-                    : 'bg-slate-800 text-slate-400'
-                }`}>
-                  {pendingActualPos.length} أمر بانتظار الفعلي
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-300 mt-1 leading-5">
-                أذونات استلام معتمدة بالموقع تحتاج مطابقة الكميات والأسعار وإصدار الأمر الفعلي للإدارة المالية.
-              </p>
-            </div>
-            <Button
-              variant="primary"
-              size="sm"
-              className={`w-full text-xs font-black shadow-md ${
-                pendingActualPos.length > 0
-                  ? 'bg-gradient-to-r from-indigo-600 via-teal-600 to-emerald-600 hover:from-indigo-500 text-white shadow-indigo-950/50'
-                  : 'border-indigo-800/60 text-indigo-200 hover:bg-indigo-950'
-              }`}
-              onClick={() => {
-                const sectionEl = document.getElementById('pending-actual-pos-window');
-                if (sectionEl) {
-                  sectionEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                } else {
-                  setActiveTab(5);
-                  setSearchParams({ tab: 'actual-pos' }, { replace: true });
-                }
-              }}
-            >
-              إصدار أوامر الشراء الفعلية ({pendingActualPos.length}) ←
-            </Button>
-          </div>
-        </div>
-      </div>
+      <ActionRequiredInbox
+        title="المهام والإجراءات المطلوبة منك الآن"
+        description="الطلبات وأوامر الشراء التي تقف حالياً على إجراء قسم المشتريات (تحديد المسار، طرح العروض، إصدار أمر الشراء الفعلي، والطلبات المعادة)."
+        roleName="إدارة المشتريات"
+        onItemActionComplete={() => void loadData()}
+        items={procurementActionItems}
+      />
 
       {/* ── نافذة أوامر الشراء الفعلية بانتظار الإصدار (Actual PO Window) ── */}
       {activeTab === 0 && pendingActualPos.length > 0 && (

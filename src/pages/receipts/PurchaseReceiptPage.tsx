@@ -21,6 +21,8 @@ import {
 } from '../../api/purchaseReceipts';
 import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh';
 import { SupplementItemBadge } from '../../components/common/SupplementItemBadge';
+import ActionRequiredInbox, { ActionInboxItem } from '../../components/dashboard/ActionRequiredInbox';
+import { formatDateTime24h } from '../../utils/dateTime';
 
 interface ReceiptColorTheme {
   border: string;
@@ -231,6 +233,39 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
     ),
   );
 
+  const siteEngineerActionItems: ActionInboxItem[] = React.useMemo(() => {
+    if (mode !== 'site') return [];
+
+    return receipts.map((r) => {
+      const itemsList = r.items?.map((it) => ({
+        description: it.purchase_order_item?.item_description || 'بند استلام',
+        quantity: Number(it.received_quantity || 0),
+        uom: it.purchase_order_item?.uom,
+        parcel: it.purchase_order_item?.item_reference,
+      })) || [];
+
+      return {
+        id: `receipt-${r.id}`,
+        rawId: r.id,
+        type: 'RECEIPT' as const,
+        code: r.receipt_number,
+        title: r.purchase_order?.items?.[0]?.item_description || `إذن استلام ${r.receipt_number}`,
+        subtitle: r.purchase_order ? `لأمر الشراء ${r.purchase_order.po_number}` : undefined,
+        department: r.purchase_request?.department?.name || r.purchase_order?.purchase_request?.department?.name,
+        supplier: r.purchase_order?.supplier?.company_name || r.supplier?.company_name,
+        urgency: 'CRITICAL' as const,
+        reason: 'تم استلام المواد بالمخزن وبانتظار معاينتك ومطابقتك الهندسية بالموقع',
+        actionUrl: `/site-engineer?receipt_id=${r.id}`,
+        actionLabel: 'فحص واعتماد إذن الاستلام',
+        created_at: r.created_at || undefined,
+        timeAgo: r.created_at ? formatDateTime24h(r.created_at) : undefined,
+        items_count: itemsList.length,
+        items_list: itemsList,
+        directApproveLabel: 'اعتماد الاستلام الهندسي',
+      };
+    });
+  }, [mode, receipts]);
+
   const submitWarehouseReceipt = async (order: ReceiptPurchaseOrder) => {
     const hasUnentered = (order.items || []).some((item) => {
       const q = quantities[`${order.id}-${item.id}`];
@@ -364,6 +399,17 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
       )}
 
       {error && <ErrorMessage error={error} onDismiss={() => setError(null)} />}
+
+      {/* ── مهام وإجراءات مهندس الموقع المطلوبة (Site Engineer Action Inbox) ── */}
+      {mode === 'site' && (
+        <ActionRequiredInbox
+          title="المهام والإجراءات المطلوبة منك الآن"
+          description="أذونات الاستلام الواردة من المخزن والتي تقف على فحصك واعتمادك الفني والهندسي في الموقع."
+          roleName="مهندس الموقع / مسؤول الاستلام الفني"
+          onItemActionComplete={() => void load(true)}
+          items={siteEngineerActionItems}
+        />
+      )}
 
       {/* ── Main Navigation Tabs ── */}
       <div className="flex items-center gap-2 border-b border-slate-800 pb-2 overflow-x-auto">

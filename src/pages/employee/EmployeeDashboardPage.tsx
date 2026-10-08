@@ -165,20 +165,20 @@ export const EmployeeDashboardPage: React.FC = () => {
       {(() => {
         const employeeActionItems: ActionInboxItem[] = [
           ...requests
-            .filter((r) => r.status === 'DRAFT')
+            .filter((r) => r.status === 'DRAFT' || r.status === 'RETURNED')
             .map((r) => ({
-              id: `req-draft-${r.id}`,
+              id: `req-${r.status.toLowerCase()}-${r.id}`,
               rawId: r.id,
               type: 'PR' as const,
               code: r.request_number,
-              title: r.justification || (r.request_type === 'OFFICE_SUPPLIES' ? 'مسودة مستلزمات مكتبية' : 'مسودة طلب مواد مشروعات'),
-              subtitle: r.justification ? (r.request_type === 'OFFICE_SUPPLIES' ? 'مستلزمات مكتبية' : 'مشتريات مواقع') : undefined,
+              title: r.justification || (r.request_type === 'OFFICE_SUPPLIES' ? 'طلب مستلزمات مكتبية' : 'طلب مواد مشروعات'),
+              subtitle: r.status === 'RETURNED' ? 'طلب مُعاد إليك للتعديل' : (r.justification ? (r.request_type === 'OFFICE_SUPPLIES' ? 'مستلزمات مكتبية' : 'مشتريات مواقع') : undefined),
               department: r.department?.name,
               amount: undefined,
               urgency: 'HIGH' as const,
-              reason: 'مسودة لم تُرسل بعد للمراجعة والاعتماد',
+              reason: r.status === 'RETURNED' ? 'تمت إعادة الطلب إليك للمراجعة والتعديل قبل إعادة الإرسال' : 'مسودة لم تُرسل بعد للمراجعة والاعتماد',
               actionUrl: `/employee/requests/${r.id}/edit`,
-              actionLabel: 'فتح وتعديل المسودة',
+              actionLabel: r.status === 'RETURNED' ? 'تعديل وإعادة الإرسال' : 'فتح وتعديل المسودة',
               created_at: r.created_at,
               timeAgo: r.created_at ? formatDateTime24h(r.created_at) : undefined,
               request_type: r.request_type,
@@ -199,12 +199,10 @@ export const EmployeeDashboardPage: React.FC = () => {
             })),
         ];
 
-        if (employeeActionItems.length === 0) return null;
-
         return (
           <ActionRequiredInbox
-            title="المهام والإجراءات العاجلة المطلوبة لطلباتك"
-            description="الطلبات المسودة المطلوب إرسالها للمراجعة والاعتماد."
+            title="المهام والإجراءات المطلوبة منك الآن"
+            description="الطلبات المسودة والمُعادة المطلوب اتخاذ إجراء عليها وإرسالها للمراجعة والاعتماد."
             roleName="لوحة الموظف"
             onItemActionComplete={() => fetchRequests(true)}
             items={employeeActionItems}

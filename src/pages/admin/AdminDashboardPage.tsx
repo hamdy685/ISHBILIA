@@ -18,6 +18,7 @@ import { KpiCard, Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { DashboardBars } from '../../components/ui/DashboardCharts';
 import { exportToCsv } from '../../utils/exportCsv';
+import ActionRequiredInbox, { ActionInboxItem } from '../../components/dashboard/ActionRequiredInbox';
 
 export const AdminDashboardPage: React.FC = () => {
   const [usersCount, setUsersCount] = useState<number | null>(null);
@@ -120,6 +121,80 @@ export const AdminDashboardPage: React.FC = () => {
     loadData();
   }, []);
 
+  const adminActionItems: ActionInboxItem[] = React.useMemo(() => {
+    const items: ActionInboxItem[] = [];
+
+    // 1. Alerts from snapshot
+    if (snapshot?.alerts) {
+      snapshot.alerts
+        .filter((a) => a.status === 'open')
+        .forEach((alert, idx) => {
+          items.push({
+            id: `admin-alert-${idx}`,
+            rawId: idx,
+            type: 'PR' as const,
+            code: `ALERT-${idx + 1}`,
+            title: alert.title,
+            subtitle: alert.message,
+            urgency: alert.severity === 'critical' ? 'CRITICAL' : alert.severity === 'high' ? 'HIGH' : 'NORMAL',
+            reason: alert.message,
+            actionUrl: '/admin/system-monitor',
+            actionLabel: 'فحص التنبيه بالنظام',
+          });
+        });
+    }
+
+    // 2. Database Disconnection Alert
+    if (snapshot?.database?.status === 'disconnected') {
+      items.push({
+        id: 'admin-db-down',
+        rawId: 9991,
+        type: 'PR' as const,
+        code: 'DB-ERR',
+        title: 'قاعدة البيانات غير متصلة!',
+        subtitle: snapshot.database.error || 'فشل الاتصال بقاعدة البيانات',
+        urgency: 'CRITICAL',
+        reason: 'توقف الاتصال بقاعدة البيانات يستدعي تدخل مسؤول النظام الفوري',
+        actionUrl: '/admin/system-monitor',
+        actionLabel: 'فحص اتصال قاعدة البيانات',
+      });
+    }
+
+    // 3. Pending migrations
+    if (snapshot?.migrations?.pending_count && snapshot.migrations.pending_count > 0) {
+      items.push({
+        id: 'admin-migrations-pending',
+        rawId: 9992,
+        type: 'PR' as const,
+        code: 'MIGRATE',
+        title: `يوجد ${snapshot.migrations.pending_count} ترحيل قاعدة بيانات معلق`,
+        subtitle: 'تحديثات الجداول تحتاج تطبيق للوصول لأحدث إصدار',
+        urgency: 'HIGH',
+        reason: 'توجد ملفات ترحيل معلقة بقاعدة البيانات',
+        actionUrl: '/admin/system-monitor',
+        actionLabel: 'فحص ترحيلات النظام',
+      });
+    }
+
+    // 4. Failed Jobs
+    if (snapshot?.counts?.failed_jobs && snapshot.counts.failed_jobs > 0) {
+      items.push({
+        id: 'admin-failed-jobs',
+        rawId: 9993,
+        type: 'PR' as const,
+        code: 'JOBS-FAIL',
+        title: `يوجد ${snapshot.counts.failed_jobs} مهمة معالجة فاشلة (Failed Jobs)`,
+        subtitle: 'مهام خلفية لم تكتمل بنجاح في طابور العمليات',
+        urgency: 'HIGH',
+        reason: 'مهام في طابور العمليات الخلفية واجهت أخطاء برمجية أو انقطاع',
+        actionUrl: '/admin/system-monitor',
+        actionLabel: 'فحص طابور العمليات',
+      });
+    }
+
+    return items;
+  }, [snapshot]);
+
   if (loading) {
     return <LoadingSpinner fullScreen message="جاري تحميل لوحة تحكم الإدارة العامة بالنظام..." />;
   }
@@ -158,6 +233,15 @@ export const AdminDashboardPage: React.FC = () => {
           </Button>
         </div>
       </div>
+
+      {/* ── صندوق المهام والإجراءات الإدارية المطلوبة (Admin Action Inbox) ── */}
+      <ActionRequiredInbox
+        title="المهام والإجراءات الإدارية المطلوبة منك الآن"
+        description="تنبيهات حالة النظام، ترحيلات قواعد البيانات، والأعطال التشغيلية التي تتطلب تدخلاً إدارياً."
+        roleName="مدير النظام العام"
+        onItemActionComplete={() => void loadData()}
+        items={adminActionItems}
+      />
 
       {/* ── صندوق العمليات والإدارة السريعة (Admin Quick Actions Hub) ── */}
       <div className="rounded-2xl border-2 border-indigo-500/40 bg-gradient-to-r from-slate-900 via-indigo-950/20 to-slate-900 p-4 sm:p-5 shadow-xl space-y-4">
