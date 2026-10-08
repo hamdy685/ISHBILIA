@@ -29,7 +29,7 @@ class PurchaseReceiptController extends Controller
         $validated = $request->validate([
             'received_at' => ['nullable', 'date'],
             'warehouse_notes' => ['nullable', 'string', 'max:3000'],
-            'photo' => ['nullable', 'file', 'max:20480'], // max 20MB
+            'photo' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:20480'], // max 20MB
             'photo_base64' => ['nullable', 'string'],
             'photo_name' => ['nullable', 'string', 'max:255'],
             'items' => ['required', 'array', 'min:1'],
@@ -222,12 +222,13 @@ class PurchaseReceiptController extends Controller
             abort(401, 'انتهت جلسة الدخول. يرجى تسجيل الدخول أولاً.');
         }
 
-        $receipt = PurchaseReceipt::with(['purchaseOrder.purchaseRequest.department', 'purchaseOrder.purchaseRequest.targetDepartment', 'purchaseRequest.department', 'purchaseRequest.targetDepartment'])->findOrFail((int) $id);
+        $receipt = PurchaseReceipt::withoutGlobalScopes()->with(['purchaseOrder.purchaseRequest.department', 'purchaseOrder.purchaseRequest.targetDepartment', 'purchaseRequest.department', 'purchaseRequest.targetDepartment'])->findOrFail((int) $id);
 
         // Departmental and Site Isolation:
         // Central roles have global oversight: admin, general_manager, procurement_manager, accountant, general_accountant, warehouse_keeper
         if (! $user->hasAnyRole(['admin', 'general_manager', 'procurement_manager', 'accountant', 'general_accountant', 'warehouse_keeper']) && ! $user->isGeneralAccountant()) {
-            $pr = $receipt->purchaseOrder?->purchaseRequest ?: $receipt->purchaseRequest;
+            $po = $receipt->purchaseOrder ?: \App\Models\PurchaseOrder::withoutGlobalScopes()->with(['purchaseRequest.department', 'purchaseRequest.targetDepartment'])->find($receipt->purchase_order_id);
+            $pr = $po?->purchaseRequest ?: ($receipt->purchaseRequest ?: \App\Models\PurchaseRequest::withoutGlobalScopes()->with(['department', 'targetDepartment'])->find($po?->purchase_request_id ?: $receipt->purchase_request_id));
             if ($pr) {
                 if ($user->hasRole('site_accountant')) {
                     $allowedDepts = ['EXECUTION', 'FINISHING', 'BUILDINGS'];

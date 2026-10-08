@@ -55,7 +55,7 @@ class PurchaseQuoteController extends Controller
             'quotes.*.unit_price' => ['nullable', 'numeric', 'gt:0'],
             'quotes.*.total_amount' => ['required', 'numeric', 'gt:0'],
             'quotes.*.notes' => ['nullable', 'string', 'max:2000'],
-            'quotes.*.file' => ['nullable', 'file', 'max:25600'],
+            'quotes.*.file' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:25600'],
             'quotes.*.file_path' => ['nullable', 'string', 'max:500'],
             'quotes.*.file_name' => ['nullable', 'string', 'max:255'],
         ]);
@@ -173,7 +173,7 @@ class PurchaseQuoteController extends Controller
         // Global administrative roles have full oversight.
         // Departmental reviewers and employees are strictly scoped to their department requests.
         if (! $user->hasAnyRole(['admin', 'general_manager', 'procurement_manager', 'accountant'])) {
-            $pr = $quote->purchaseRequest;
+            $pr = $quote->purchaseRequest ?: \App\Models\PurchaseRequest::withoutGlobalScopes()->find($quote->purchase_request_id);
             if ($pr) {
                 $allowed = ($user->id === $pr->user_id)
                     || ($user->id === $pr->reviewer_user_id)
@@ -183,6 +183,8 @@ class PurchaseQuoteController extends Controller
                 if (! $allowed) {
                     abort(403, 'غير مصرح لك باستعراض وثائق عروض الأسعار لهذا القسم.');
                 }
+            } else {
+                abort(403, 'غير مصرح لك باستعراض وثائق عروض الأسعار لهذا القسم.');
             }
         }
 
@@ -212,6 +214,16 @@ class PurchaseQuoteController extends Controller
 
     public function viewFileByName(Request $request, string $filename)
     {
+        // Path Sanitization: prevent directory traversal attacks (e.g. ../ or ..\)
+        if (str_contains($filename, '..') || str_contains($filename, '/') || str_contains($filename, '\\')) {
+            abort(400, 'اسم الملف غير صالح.');
+        }
+
+        $sanitizedFilename = basename($filename);
+        if ($sanitizedFilename === '' || $sanitizedFilename !== $filename) {
+            abort(400, 'اسم الملف غير صالح.');
+        }
+
         $user = $request->user() ?: auth('sanctum')->user();
         if (! $user && $request->filled('token')) {
             $tokenModel = \Laravel\Sanctum\PersonalAccessToken::findToken($request->query('token'));
@@ -224,28 +236,55 @@ class PurchaseQuoteController extends Controller
             abort(401, 'انتهت جلسة الدخول. يرجى تسجيل الدخول أولاً.');
         }
 
-        $relativePath = 'quotes/' . $filename;
+        // Identify associated quote to prevent IDOR vulnerabilities
+        $quote = PurchaseRequestQuote::with([
+            'purchaseRequest.department',
+            'purchaseRequest.targetDepartment',
+            'purchaseRequest.items.item',
+            'supplier',
+        ])
+            ->where('file_path', 'like', "%{$sanitizedFilename}%")
+            ->orWhere('file_name', 'like', "%{$sanitizedFilename}%")
+            ->first();
+
+        if (! $quote) {
+            if (! $user->hasPermission('purchase_quote.view')) {
+                abort(403, 'غير مصرح لك باستعراض وثائق عروض الأسعار.');
+            }
+            abort(404, 'ملف عرض السعر غير موجود.');
+        }
+
+        // Authorization check: User must have purchase_quote.view permission
+        // OR be the owner (user_id) or reviewer (reviewer_user_id) of the associated purchase request.
+        $pr = $quote->purchaseRequest ?: \App\Models\PurchaseRequest::withoutGlobalScopes()->find($quote->purchase_request_id);
+        $isOwnerOrReviewer = $pr && (
+            (int) $user->id === (int) $pr->user_id ||
+            (int) $user->id === (int) $pr->reviewer_user_id
+        );
+
+        if (! $user->hasPermission('purchase_quote.view') && ! $isOwnerOrReviewer) {
+            abort(403, 'غير مصرح لك باستعراض وثائق عروض الأسعار لهذا الطلب.');
+        }
+
+        $relativePath = $quote->file_path ?: ('quotes/' . $sanitizedFilename);
 
         try {
             return \App\Services\StorageService::streamResponse(
                 $relativePath,
-                $filename,
-                'application/pdf',
+                $quote->file_name ?: $sanitizedFilename,
+                $quote->mime_type ?: 'application/pdf',
                 false
             );
         } catch (\Throwable) {
-            $quote = PurchaseRequestQuote::with(['purchaseRequest.items.item', 'supplier'])
-                ->where('file_path', 'like', "%{$filename}%")
-                ->orWhere('file_name', 'like', "%{$filename}%")
-                ->first();
-            if ($quote) {
-                return response(
-                    $this->renderCommercialQuoteDocumentHtml($quote),
-                    200,
-                    ['Content-Type' => 'text/html; charset=UTF-8']
-                );
+            if (filter_var($quote->file_path, FILTER_VALIDATE_URL)) {
+                return redirect()->away($quote->file_path);
             }
-            abort(404, 'ملف عرض السعر غير موجود.');
+
+            return response(
+                $this->renderCommercialQuoteDocumentHtml($quote),
+                200,
+                ['Content-Type' => 'text/html; charset=UTF-8']
+            );
         }
     }
 

@@ -212,8 +212,12 @@ export const AppRoutes: React.FC = () => {
                 <Route element={<RoleRoute allowedRoles={["accountant", "site_accountant", "licenses_accountant", "buffet_accountant", "general_manager", "execution_manager", "procurement_manager", "admin"]} />}>
                     <Route path="/reports" element={<UniversalReportsPage />} />
                 </Route>
-                <Route path="/purchase-quotes" element={<PurchaseQuotesDecisionPage mode="recommend" />} />
-                <Route path="/purchase-quotes/decision" element={<PurchaseQuotesDecisionPage mode="executive" />} />
+                <Route element={<RoleRoute allowedRoles={["general_manager", "execution_manager", "procurement_manager", "accountant", "reviewer", "admin"]} />}>
+                    <Route path="/purchase-quotes" element={<PurchaseQuotesDecisionPage mode="recommend" />} />
+                </Route>
+                <Route element={<RoleRoute allowedRoles={["general_manager", "execution_manager", "admin"]} />}>
+                    <Route path="/purchase-quotes/decision" element={<PurchaseQuotesDecisionPage mode="executive" />} />
+                </Route>
                 <Route element={<RoleRoute allowedRoles={["accountant", "reviewer", "general_manager", "execution_manager", "procurement_manager", "admin"]} />}>
                     <Route path="/quotes" element={<PurchaseQuotesDecisionPage mode="recommend" />} />
                 </Route>

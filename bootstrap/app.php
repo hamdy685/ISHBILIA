@@ -24,8 +24,8 @@ return Application::configure(basePath: dirname(__DIR__))
                 | Request::HEADER_X_FORWARDED_PROTO
         );
 
-        // API clients must receive JSON 401 responses, never a web login redirect.
-        $middleware->redirectGuestsTo(static fn (Request $request) => $request->segment(1) === 'api' ? null : '/login');
+        // API clients and protected media routes must receive JSON 401 responses, never a web login redirect.
+        $middleware->redirectGuestsTo(static fn (Request $request) => ($request->segment(1) === 'api' || $request->is('storage/*') || $request->is('purchase-quotes/*')) ? null : '/login');
 
         // Allow streaming PDF and photo files opened in browser with ?token=...
         $middleware->prepend(\App\Http\Middleware\AuthenticateFromQueryToken::class);
@@ -41,9 +41,9 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withExceptions(function (Exceptions $exceptions): void {
         \Sentry\Laravel\Integration::handles($exceptions);
 
-        // Treat every /api/* request as JSON even when a caller omits the Accept header.
+        // Treat every /api/* and protected media request as JSON even when a caller omits the Accept header.
         // This prevents unauthenticated API calls from falling through to a web login redirect.
-        $isApiRequest = static fn (Request $request): bool => $request->is('api/*') || $request->segment(1) === 'api';
+        $isApiRequest = static fn (Request $request): bool => $request->is('api/*') || $request->segment(1) === 'api' || $request->is('storage/*') || $request->is('purchase-quotes/*');
         $exceptions->shouldRenderJsonWhen($isApiRequest);
 
         $exceptions->render(function (\Illuminate\Auth\AuthenticationException $exception, Request $request) use ($isApiRequest) {
