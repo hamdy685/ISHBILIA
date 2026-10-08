@@ -3,9 +3,34 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { AuthProvider } from '../context/AuthContext';
-import { ActionRequiredInbox, PendingActions, ActionInboxItem } from '../components/dashboard/ActionRequiredInbox';
+import { ActionRequiredInbox, PendingActions, ActionInboxItem, resolveActionItemUrl } from '../components/dashboard/ActionRequiredInbox';
 import * as authStorage from '../utils/authStorage';
 import * as authApi from '../api/auth';
+
+vi.mock('../api/purchaseReceipts', () => ({
+  getPurchaseReceiptByIdApi: vi.fn().mockResolvedValue({
+    id: 505,
+    receipt_number: 'REC-505',
+    status: 'WAREHOUSE_RECEIPT_SUBMITTED',
+    items: [
+      {
+        id: 1,
+        received_quantity: 15,
+        ordered_quantity: 15,
+        purchase_order_item: {
+          item_description: 'سيراميك أرضيات فرز أول',
+          quantity: 15,
+          uom: 'متر مربع',
+        },
+      },
+    ],
+  }),
+  approvePurchaseReceiptApi: vi.fn().mockResolvedValue({
+    id: 505,
+    status: 'SITE_ENGINEER_APPROVED',
+  }),
+  getReceiptPhotoUrl: vi.fn().mockReturnValue(''),
+}));
 
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async () => {
@@ -101,7 +126,7 @@ describe('Unified Pending Actions Frontend Widget', () => {
     expect(screen.getByText('إذن استلام مواد')).toBeInTheDocument();
   });
 
-  it('navigates to site engineer inspection screen when clicking receipt card', () => {
+  it('opens quick inspection modal when clicking receipt card without leaving page', async () => {
     render(
       <MemoryRouter>
         <AuthProvider>
@@ -116,7 +141,8 @@ describe('Unified Pending Actions Frontend Widget', () => {
     expect(receiptCard).not.toBeNull();
 
     fireEvent.click(receiptCard!);
-    expect(mockNavigate).toHaveBeenCalledWith('/site-engineer?receipt_id=202');
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(await screen.findByText(/فحص واعتماد إذن الاستلام: REC-202/i)).toBeInTheDocument();
   });
 
   it('navigates to request edit screen when clicking draft PR card', () => {
@@ -220,7 +246,7 @@ describe('Unified Pending Actions Frontend Widget', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/reviewer/purchase-quotes?open=404');
   });
 
-  it('navigates to /receipts/:id/inspect using actual receipt_id when clicking button', () => {
+  it('opens quick inspection modal instead of navigating away when clicking button or card', async () => {
     const receiptItem: ActionInboxItem[] = [
       {
         id: 'receipt-505',
@@ -249,40 +275,33 @@ describe('Unified Pending Actions Frontend Widget', () => {
 
     const actionButton = screen.getByRole('button', { name: /فحص واعتماد إذن الاستلام/i });
     fireEvent.click(actionButton);
-    expect(mockNavigate).toHaveBeenCalledWith('/receipts/505/inspect');
+
+    // Stays on page, does not navigate away
+    expect(mockNavigate).not.toHaveBeenCalled();
+
+    // Modal is opened
+    expect(await screen.findByText(/فحص واعتماد إذن الاستلام: REC-505/i)).toBeInTheDocument();
   });
 
-  it('purges wrong po_id/pr_id from actionUrl and routes to /receipts/:id/inspect with genuine receipt_id', () => {
-    const contaminatedItem: ActionInboxItem[] = [
-      {
-        id: 'receipt-606',
-        rawId: 606,
-        receipt_id: 606,
-        po_id: 99,
-        type: 'RECEIPT',
-        code: 'REC-606',
-        title: 'إذن استلام مواد رمل صب',
-        subtitle: 'لأمر الشراء PO-99',
-        department: 'المكتب الفني',
-        urgency: 'CRITICAL',
-        reason: 'تم استلام المواد وبانتظار معاينتك وفحصك الميداني/الهندسي واعتماد الاستلام بالموقع',
-        // Deliberately contaminated actionUrl passing po_id instead of receipt_id
-        actionUrl: '/site-engineer?po_id=99',
-        actionLabel: 'فحص واعتماد إذن الاستلام',
-      },
-    ];
+  it('purges wrong po_id/pr_id from actionUrl and resolves canonical fallback URL /receipts/:id/inspect', () => {
+    const contaminatedItem: ActionInboxItem = {
+      id: 'receipt-606',
+      rawId: 606,
+      receipt_id: 606,
+      po_id: 99,
+      type: 'RECEIPT',
+      code: 'REC-606',
+      title: 'إذن استلام مواد رمل صب',
+      subtitle: 'لأمر الشراء PO-99',
+      department: 'المكتب الفني',
+      urgency: 'CRITICAL',
+      reason: 'تم استلام المواد وبانتظار معاينتك وفحصك الميداني/الهندسي واعتماد الاستلام بالموقع',
+      // Deliberately contaminated actionUrl passing po_id instead of receipt_id
+      actionUrl: '/site-engineer?po_id=99',
+      actionLabel: 'فحص واعتماد إذن الاستلام',
+    };
 
-    render(
-      <MemoryRouter>
-        <AuthProvider>
-          <ActionRequiredInbox items={contaminatedItem} />
-        </AuthProvider>
-      </MemoryRouter>
-    );
-
-    const actionButton = screen.getByRole('button', { name: /فحص واعتماد إذن الاستلام/i });
-    fireEvent.click(actionButton);
     // Verified that po_id=99 was stripped and genuine receipt_id=606 is used
-    expect(mockNavigate).toHaveBeenCalledWith('/receipts/606/inspect');
+    expect(resolveActionItemUrl(contaminatedItem)).toBe('/receipts/606/inspect');
   });
 });

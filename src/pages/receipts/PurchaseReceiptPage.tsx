@@ -338,6 +338,7 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
         id: `receipt-${r.id}`,
         rawId: r.id,
         receipt_id: r.id,
+        rawReceipt: r,
         po_id: r.purchase_order_id || r.purchase_order?.id,
         type: 'RECEIPT' as const,
         code: r.receipt_number,

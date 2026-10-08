@@ -4,6 +4,9 @@ import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
 import QuickPeekDrawer, { PeekType } from '../ui/QuickPeekDrawer';
 import { getSiteEngineerReceiverOptionsApi } from '../../api/purchaseRequests';
+import { ReceiptRecord } from '../../api/purchaseReceipts';
+import { QuickReceiptInspectionModal } from '../receipts/QuickReceiptInspectionModal';
+import { getUnreadNotificationCountApi } from '../../api/notifications';
 import { useAuth } from '../../context/AuthContext';
 import { getUnitLabel } from '../../utils/units';
 import { toast } from '../../utils/toast';
@@ -45,6 +48,7 @@ export interface ActionInboxItem {
   // --- ID Disambiguation Fields ---
   receipt_id?: number | string;
   purchase_receipt_id?: number | string;
+  rawReceipt?: ReceiptRecord;
   po_id?: number | string;
   purchase_order_id?: number | string;
   pr_id?: number | string;
@@ -224,9 +228,49 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
 
   const safeItems = Array.isArray(items) ? items : [];
 
-  // Sort items newest to oldest (الأحدث للأقدم)
+  // Track optimistically dismissed items after fast modal action
+  const [dismissedItemIds, setDismissedItemIds] = useState<Set<string | number>>(new Set());
+
+  // Quick Receipt Inspection Modal State
+  const [receiptInspectionModal, setReceiptInspectionModal] = useState<{
+    isOpen: boolean;
+    item: ActionInboxItem | null;
+  }>({
+    isOpen: false,
+    item: null,
+  });
+
+  const isReceiptItem = (item: ActionInboxItem): boolean => {
+    return (
+      item.type === 'RECEIPT' ||
+      Boolean(resolveReceiptId(item)) ||
+      Boolean(item.actionLabel?.includes('إذن الاستلام')) ||
+      Boolean(item.actionLabel?.includes('فحص واعتماد')) ||
+      (typeof item.id === 'string' && item.id.startsWith('receipt-'))
+    );
+  };
+
+  const visibleItems = React.useMemo(() => {
+    return safeItems.filter((item) => {
+      if (!item) return false;
+      if (dismissedItemIds.has(item.id)) return false;
+      if (item.rawId != null && dismissedItemIds.has(item.rawId)) return false;
+      const rcptId = resolveReceiptId(item);
+      if (
+        rcptId != null &&
+        (dismissedItemIds.has(rcptId) ||
+          dismissedItemIds.has(Number(rcptId)) ||
+          dismissedItemIds.has(String(rcptId)))
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [safeItems, dismissedItemIds]);
+
+  // Sort visible items newest to oldest (الأحدث للأقدم)
   const sortedItems = React.useMemo(() => {
-    return [...safeItems].sort((a, b) => {
+    return [...visibleItems].sort((a, b) => {
       if (!a || !b) return 0;
       const rawDateA = a.created_at || (a.timeAgo && /^\d{4}-\d{2}-\d{2}/.test(a.timeAgo) ? a.timeAgo : null);
       const rawDateB = b.created_at || (b.timeAgo && /^\d{4}-\d{2}-\d{2}/.test(b.timeAgo) ? b.timeAgo : null);
@@ -245,7 +289,7 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
 
       return (Number(b.rawId) || 0) - (Number(a.rawId) || 0);
     });
-  }, [safeItems]);
+  }, [visibleItems]);
 
   // Drawer Peek State
   const [peekState, setPeekState] = useState<{ isOpen: boolean; type: PeekType; id: number | null }>({
@@ -426,6 +470,25 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
     }
   };
 
+  const handleReceiptInspectionSuccess = (receiptId: number, receiptCode?: string) => {
+    setDismissedItemIds((prev) => {
+      const next = new Set(prev);
+      next.add(receiptId);
+      next.add(Number(receiptId));
+      next.add(String(receiptId));
+      if (receiptInspectionModal.item?.id != null) next.add(receiptInspectionModal.item.id);
+      if (receiptInspectionModal.item?.rawId != null) next.add(receiptInspectionModal.item.rawId);
+      return next;
+    });
+
+    onItemActionComplete?.();
+    getUnreadNotificationCountApi().catch(() => {});
+
+    const msg = `تم فحص واعتماد إذن الاستلام ${receiptCode || receiptId} بنجاح وإرساله للحسابات ✅`;
+    showToast(msg, 'success');
+    setReceiptInspectionModal({ isOpen: false, item: null });
+  };
+
   if (loading) {
     return (
       <div className="rounded-2xl border border-cyan-800/40 bg-slate-900/90 p-5 shadow-xl animate-pulse" dir="rtl">
@@ -440,7 +503,7 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
     );
   }
 
-  const hasItems = safeItems.length > 0;
+  const hasItems = visibleItems.length > 0;
 
   return (
     <>
@@ -469,7 +532,7 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                 <h2 className="text-lg font-black text-slate-100">{title}</h2>
                 {hasItems ? (
                   <span className="rounded-full bg-rose-500 text-white px-3 py-0.5 text-xs font-black shadow-md shadow-rose-600/40 animate-bounce">
-                    {safeItems.length} {safeItems.length === 1 ? 'مهمة تنتظر قرارك' : 'مهام تنتظر قرارك'}
+                    {visibleItems.length} {visibleItems.length === 1 ? 'مهمة تنتظر قرارك' : 'مهام تنتظر قرارك'}
                   </span>
                 ) : (
                   <span className="rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2.5 py-0.5 text-xs font-bold">
@@ -539,13 +602,17 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                 <CardErrorBoundary key={`${item.type || 'TASK'}-${item.id || item.rawId || Math.random()}`} fallbackCode={item.code}>
                   <div
                     onClick={() => {
-                    if (item.onAction) {
-                      item.onAction(item);
-                    } else {
-                      const targetUrl = resolveActionItemUrl(item);
-                      if (targetUrl) navigate(targetUrl);
-                    }
-                  }}
+                      if (isReceiptItem(item)) {
+                        setReceiptInspectionModal({ isOpen: true, item });
+                        return;
+                      }
+                      if (item.onAction) {
+                        item.onAction(item);
+                      } else {
+                        const targetUrl = resolveActionItemUrl(item);
+                        if (targetUrl) navigate(targetUrl);
+                      }
+                    }}
                   className={`rounded-2xl border p-4 flex flex-col justify-between gap-3.5 transition-all hover:shadow-2xl cursor-pointer ${
                     isUrgent
                       ? 'border-amber-500/70 bg-slate-950/95 shadow-amber-950/20 ring-1 ring-amber-500/30'
@@ -881,6 +948,10 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
+                          if (isReceiptItem(item)) {
+                            setReceiptInspectionModal({ isOpen: true, item });
+                            return;
+                          }
                           if (item.onAction) {
                             item.onAction(item);
                           } else {
@@ -1163,6 +1234,14 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
           </button>
         </div>
       )}
+
+      {/* Quick Receipt Inspection Modal */}
+      <QuickReceiptInspectionModal
+        isOpen={receiptInspectionModal.isOpen}
+        item={receiptInspectionModal.item}
+        onClose={() => setReceiptInspectionModal({ isOpen: false, item: null })}
+        onSuccess={handleReceiptInspectionSuccess}
+      />
     </>
   );
 };
