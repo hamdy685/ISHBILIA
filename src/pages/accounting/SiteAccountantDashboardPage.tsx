@@ -29,6 +29,7 @@ import { InvoiceRegistrationModal } from '../../components/accounting/InvoiceReg
 import { shareReceiptOnWhatsApp } from '../../utils/whatsapp';
 import { getSummaryParcels, getSummaryRegions, getSummaryQuantities, getItemsSummaryDisplay } from '../../utils/formatRequestSummary';
 import { formatDateTime24h } from '../../utils/dateTime';
+import { getActualPoLineItems, calculateActualPoGrandTotal } from '../../utils/actualPo';
 
 const cleanDate = (d?: string | null) => (d ? String(d).slice(0, 10) : '—');
 const money = (value: string | number | null | undefined) =>
@@ -36,28 +37,21 @@ const money = (value: string | number | null | undefined) =>
 
 const receiptValue = (receipt: ApprovedReceipt) => {
   const po = receipt.purchase_order;
-  if (po?.grand_total && Number(po.grand_total) > 0) {
-    return Number(po.grand_total);
+  if (po) {
+    const total = calculateActualPoGrandTotal(po);
+    if (total > 0) return total;
   }
-  if (po?.items && po.items.length > 0) {
-    return po.items.reduce((sum: number, it: any) => {
-      const q = Number(it.quantity || 0);
-      const p = Number(it.unit_price || 0);
-      const lt = it.line_total !== undefined && it.line_total !== null && Number(it.line_total) > 0
-        ? Number(it.line_total)
-        : Math.round(q * p * 100) / 100;
-      return sum + lt;
+  return (receipt.items || [])
+    .filter((it) => Number(it.received_quantity ?? 0) > 0)
+    .reduce((sum, item) => {
+      const poItem = item.purchase_order_item;
+      const poQty = Number(item.received_quantity ?? poItem?.quantity ?? 0);
+      const unitPrice = Number(poItem?.unit_price || 0);
+      const lineTotal = poItem?.line_total !== undefined && poItem?.line_total !== null && Number(poItem.line_total) > 0
+        ? Number(poItem.line_total)
+        : Math.round(poQty * unitPrice * 100) / 100;
+      return sum + lineTotal;
     }, 0);
-  }
-  return (receipt.items || []).reduce((sum, item) => {
-    const poItem = item.purchase_order_item;
-    const poQty = Number(poItem?.quantity ?? poItem?.actual_quantity ?? item.ordered_quantity ?? item.received_quantity ?? 0);
-    const unitPrice = Number(poItem?.unit_price || 0);
-    const lineTotal = poItem?.line_total !== undefined && poItem?.line_total !== null && Number(poItem.line_total) > 0
-      ? Number(poItem.line_total)
-      : Math.round(poQty * unitPrice * 100) / 100;
-    return sum + lineTotal;
-  }, 0);
 };
 
 export const SiteAccountantDashboardPage: React.FC = () => {
@@ -179,44 +173,49 @@ export const SiteAccountantDashboardPage: React.FC = () => {
   // Helper to build items list for a receipt strictly relying on Actual PO
   const buildReceiptItemsList = (receipt: ApprovedReceipt) => {
     const po = receipt.purchase_order;
-    if (po?.items && po.items.length > 0) {
-      return po.items.map((poi: any) => {
-        const poQty = Number(poi.quantity ?? poi.actual_quantity ?? 0);
-        const unitPrice = Number(poi.unit_price || 0);
-        const lineTotal = poi.line_total !== undefined && poi.line_total !== null && Number(poi.line_total) > 0
-          ? Number(poi.line_total)
+    if (po) {
+      const actualItems = getActualPoLineItems(po);
+      if (actualItems.length > 0) {
+        return actualItems.map((poi: any) => {
+          const poQty = Number(poi.quantity ?? poi.actual_quantity ?? 0);
+          const unitPrice = Number(poi.unit_price || 0);
+          const lineTotal = poi.line_total !== undefined && poi.line_total !== null && Number(poi.line_total) > 0
+            ? Number(poi.line_total)
+            : Math.round(poQty * unitPrice * 100) / 100;
+          return {
+            description: poi.item_name || poi.item_description || 'صنف',
+            quantity: poQty,
+            uom: poi.uom,
+            specifications: poi.specifications,
+            parcel: poi.item_reference,
+            region: poi.region,
+            unit_price: unitPrice,
+            line_total: lineTotal,
+          };
+        });
+      }
+    }
+
+    return (receipt.items || [])
+      .filter((it) => Number(it.received_quantity ?? 0) > 0)
+      .map((it) => {
+        const poItem = it.purchase_order_item;
+        const poQty = Number(it.received_quantity ?? poItem?.quantity ?? poItem?.actual_quantity ?? 0);
+        const unitPrice = Number(poItem?.unit_price || 0);
+        const lineTotal = poItem?.line_total !== undefined && poItem?.line_total !== null && Number(poItem.line_total) > 0
+          ? Number(poItem.line_total)
           : Math.round(poQty * unitPrice * 100) / 100;
         return {
-          description: poi.item_name || poi.item_description || 'صنف',
+          description: poItem?.item_name || poItem?.item_description || 'صنف',
           quantity: poQty,
-          uom: poi.uom,
-          specifications: poi.specifications,
-          parcel: poi.item_reference,
-          region: poi.region,
+          uom: poItem?.uom,
+          specifications: poItem?.specifications,
+          parcel: poItem?.item_reference,
+          region: poItem?.region,
           unit_price: unitPrice,
           line_total: lineTotal,
         };
       });
-    }
-
-    return (receipt.items || []).map((it) => {
-      const poItem = it.purchase_order_item;
-      const poQty = Number(poItem?.quantity ?? poItem?.actual_quantity ?? it.ordered_quantity ?? it.received_quantity ?? 0);
-      const unitPrice = Number(poItem?.unit_price || 0);
-      const lineTotal = poItem?.line_total !== undefined && poItem?.line_total !== null && Number(poItem.line_total) > 0
-        ? Number(poItem.line_total)
-        : Math.round(poQty * unitPrice * 100) / 100;
-      return {
-        description: poItem?.item_name || poItem?.item_description || 'صنف',
-        quantity: poQty,
-        uom: poItem?.uom,
-        specifications: poItem?.specifications,
-        parcel: poItem?.item_reference,
-        region: poItem?.region,
-        unit_price: unitPrice,
-        line_total: lineTotal,
-      };
-    });
   };
 
   // Build Action Required Inbox Items

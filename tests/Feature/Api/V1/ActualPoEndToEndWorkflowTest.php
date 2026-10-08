@@ -462,6 +462,151 @@ class ActualPoEndToEndWorkflowTest extends TestCase
         $this->assertNotContains('PO-UNRECEIVED', $poNumbers);
     }
 
+    /**
+     * Verify that Actual PO isolates only received items and completely excludes delayed/unreceived items.
+     */
+    public function test_actual_po_isolates_received_items_and_excludes_delayed_items_from_master_po(): void
+    {
+        $pr = PurchaseRequest::create([
+            'request_number' => 'PR-MULTI-ITEM-TEST',
+            'user_id' => $this->requester->id,
+            'department_id' => $this->deptExecution->id,
+            'priority' => 'NORMAL',
+            'status' => 'APPROVED_BY_PROCUREMENT',
+            'total_estimated_cost' => 2450,
+            'date_needed' => now()->toDateString(),
+        ]);
+
+        $po = PurchaseOrder::create([
+            'po_number' => 'PO-MULTI-ITEM-2026',
+            'purchase_request_id' => $pr->id,
+            'supplier_id' => $this->supplier->id,
+            'created_by_user_id' => $this->procurementOfficer->id,
+            'status' => 'ISSUED',
+            'subtotal' => 2450,
+            'grand_total' => 2450,
+        ]);
+
+        $itemA = $po->items()->create([
+            'item_description' => 'بند أ - تم استلامه بالكامل',
+            'item_reference' => 'PARCEL-01',
+            'region' => 'المنطقة 1',
+            'quantity' => 100,
+            'uom' => 'PCS',
+            'unit_price' => 10,
+            'line_total' => 1000,
+        ]);
+
+        $itemB = $po->items()->create([
+            'item_description' => 'بند ب - متأخر لم يستلم (كمية صفر)',
+            'item_reference' => 'PARCEL-02',
+            'region' => 'المنطقة 1',
+            'quantity' => 50,
+            'uom' => 'PCS',
+            'unit_price' => 20,
+            'line_total' => 1000,
+        ]);
+
+        $itemC = $po->items()->create([
+            'item_description' => 'بند ج - استلام جزئي',
+            'item_reference' => 'PARCEL-03',
+            'region' => 'المنطقة 1',
+            'quantity' => 30,
+            'uom' => 'PCS',
+            'unit_price' => 15,
+            'line_total' => 450,
+        ]);
+
+        $po = PurchaseOrder::with('items')->findOrFail($po->id);
+
+        // Warehouse records receipt: Item A = 100, Item B = 0 (unreceived), Item C = 10 (partial)
+        $itemsPayload = [
+            ['purchase_order_item_id' => $itemA->id, 'received_quantity' => 100],
+            ['purchase_order_item_id' => $itemB->id, 'received_quantity' => 0],
+            ['purchase_order_item_id' => $itemC->id, 'received_quantity' => 10],
+        ];
+
+        $receipt = app(PurchaseReceiptService::class)->createByWarehouse(
+            $this->warehouseKeeper,
+            $po,
+            $itemsPayload,
+            now()->toDateString(),
+            'استلام جزئي وتأخر بند ب'
+        );
+
+        // Site engineer approves receipt -> PO moves to PENDING_ACTUAL_PO
+        app(PurchaseReceiptService::class)->approveBySiteEngineer(
+            $this->siteEngineer,
+            $receipt,
+            'اعتماد المستلم الفعلي واستبعاد المتأخر'
+        );
+
+        $this->assertSame('PENDING_ACTUAL_PO', $po->fresh()->status);
+
+        // Procurement finalizes Actual PO: even if payload sent all items, unreceived item B MUST be stripped!
+        $finalizePayload = [
+            'items' => [
+                [
+                    'id' => $itemA->id,
+                    'item_description' => 'بند أ - تم استلامه بالكامل',
+                    'item_reference' => 'PARCEL-01',
+                    'region' => 'المنطقة 1',
+                    'quantity' => 100,
+                    'unit_price' => 10,
+                    'uom' => 'PCS',
+                ],
+                [
+                    'id' => $itemB->id,
+                    'item_description' => 'بند ب - متأخر لم يستلم (كمية صفر)',
+                    'item_reference' => 'PARCEL-02',
+                    'region' => 'المنطقة 1',
+                    'quantity' => 50, // attempted to send unreceived item
+                    'unit_price' => 20,
+                    'uom' => 'PCS',
+                ],
+                [
+                    'id' => $itemC->id,
+                    'item_description' => 'بند ج - استلام جزئي',
+                    'item_reference' => 'PARCEL-03',
+                    'region' => 'المنطقة 1',
+                    'quantity' => 10,
+                    'unit_price' => 15,
+                    'uom' => 'PCS',
+                ],
+            ],
+            'notes' => 'إصدار أمر الشراء الفعلي للبندين المستلمين فقط.',
+        ];
+
+        $response = $this->actingAs($this->procurementOfficer, 'sanctum')
+            ->postJson("/api/v1/procurement/purchase-orders/{$po->id}/finalize", $finalizePayload);
+
+        $response->assertStatus(200);
+
+        // Verify that in the database, item B was completely excluded and deleted from purchase_order_items!
+        $freshPo = $po->fresh();
+        $this->assertSame('ISSUED', $freshPo->status);
+        $this->assertNotNull($freshPo->finalized_at);
+        $this->assertTrue($freshPo->isActualPo());
+
+        // Grand total must reflect ONLY received items: 100*10 + 10*15 = 1000 + 150 = 1150
+        $this->assertEquals(1150.0, (float) $freshPo->grand_total);
+        $this->assertEquals(1150.0, (float) $freshPo->subtotal);
+
+        // Exactly 2 items remain in the Actual PO
+        $this->assertCount(2, $freshPo->items);
+        $this->assertDatabaseMissing('purchase_order_items', ['id' => $itemB->id]);
+        $this->assertDatabaseHas('purchase_order_items', ['id' => $itemA->id, 'quantity' => 100]);
+        $this->assertDatabaseHas('purchase_order_items', ['id' => $itemC->id, 'quantity' => 10]);
+
+        // API Resource check
+        $showResponse = $this->actingAs($this->procurementOfficer, 'sanctum')
+            ->getJson("/api/v1/procurement/purchase-orders/{$po->id}");
+        $showResponse->assertStatus(200);
+        $this->assertTrue($showResponse->json('data.is_actual_po'));
+        $this->assertEquals('1150.00', $showResponse->json('data.grand_total'));
+        $this->assertCount(2, $showResponse->json('data.items'));
+    }
+
     private function createUser(string $email, string $name, string $roleSlug, ?int $departmentId = null): User
     {
         $user = User::create([

@@ -13,6 +13,7 @@ import ThreeWayMatchPrintModal from '../../components/accounting/ThreeWayMatchPr
 import { UnifiedNotesCard } from '../../components/common/UnifiedNotesCard';
 import { formatCleanNumber, formatCleanQty } from '../../utils/numberFormat';
 import { formatRebarDisplay, extractRebarInfo } from '../../utils/rebar';
+import { isActualPurchaseOrder, getActualPoLineItems, calculateActualPoGrandTotal } from '../../utils/actualPo';
 
 export const GeneralManagerPurchaseOrderDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -51,6 +52,10 @@ export const GeneralManagerPurchaseOrderDetailsPage: React.FC = () => {
     downloadAnchor.remove();
   };
 
+  const isActual = isActualPurchaseOrder(po);
+  const displayedItems = getActualPoLineItems(po);
+  const displayedGrandTotal = calculateActualPoGrandTotal(po);
+
   return (
     <div className="space-y-6 pb-24 md:pb-0 animate-fade-in" dir="rtl">
       {/* Header */}
@@ -60,6 +65,11 @@ export const GeneralManagerPurchaseOrderDetailsPage: React.FC = () => {
             {po.po_number}
           </h1>
           <Badge status={po.status} />
+          {isActual && (
+            <span className="bg-cyan-950 text-cyan-400 border border-cyan-800/80 px-2.5 py-1 rounded text-xs font-bold flex items-center gap-1">
+              ✨ أمر شراء فعلي (معزول للبنود المستلمة فقط)
+            </span>
+          )}
           <span className="bg-emerald-950 text-emerald-400 border border-emerald-800/80 px-2.5 py-1 rounded text-xs font-bold">
             EGP / ج.م
           </span>
@@ -151,7 +161,7 @@ export const GeneralManagerPurchaseOrderDetailsPage: React.FC = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {po.items?.map((item, index) => (
+              {displayedItems?.map((item, index) => (
                 <TableRow key={item.id || index}>
                   <TableCell className="text-slate-400 font-bold">{index + 1}</TableCell>
                   <TableCell className="font-mono text-slate-300">{item.item_reference || '—'}</TableCell>
@@ -182,7 +192,7 @@ export const GeneralManagerPurchaseOrderDetailsPage: React.FC = () => {
         </div>
 
         <div className="space-y-3 md:hidden">
-          {po.items?.map((item, index) => (
+          {displayedItems?.map((item, index) => (
             <article key={`mobile-gm-po-item-${item.id || index}`} className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
               <div className="flex min-w-0 items-start justify-between gap-3">
                 <span className="shrink-0 rounded-md bg-slate-800 px-2 py-1 text-[11px] font-bold text-slate-300">
@@ -238,7 +248,7 @@ export const GeneralManagerPurchaseOrderDetailsPage: React.FC = () => {
         <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2 w-full max-w-xs text-xs">
           <div className="flex justify-between items-center text-slate-400">
             <span>إجمالي البنود:</span>
-            <span className="font-mono font-bold text-slate-200">{formatCleanNumber(po.grand_total)} ج.م</span>
+            <span className="font-mono font-bold text-slate-200">{formatCleanNumber(displayedGrandTotal)} ج.م</span>
           </div>
           <div className="flex justify-between items-center text-slate-400">
             
@@ -246,7 +256,7 @@ export const GeneralManagerPurchaseOrderDetailsPage: React.FC = () => {
           </div>
           <div className="border-t border-slate-800 pt-2 flex justify-between items-center font-bold text-sm">
             <span className="text-cyan-400">المبلغ الكلي المعتمد:</span>
-            <span className="font-mono text-emerald-400">{formatCleanNumber(po.grand_total)} ج.م</span>
+            <span className="font-mono text-emerald-400">{formatCleanNumber(displayedGrandTotal)} ج.م</span>
           </div>
         </div>
       </div>

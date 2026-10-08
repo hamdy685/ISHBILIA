@@ -164,6 +164,7 @@ export interface PurchaseOrder {
     email?: string;
   };
   status: PurchaseOrderStatus;
+  is_actual_po?: boolean;
   /** Always 'EGP' — Egyptian Pound */
   currency: string;
   subtotal: string;

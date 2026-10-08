@@ -92,10 +92,46 @@ export const EditPurchaseOrderPage: React.FC = () => {
         setNotes(poData.notes || '');
         setFinalizationNotes(poData.finalization_notes || '');
 
+        const isPendingActual = poData.status === 'PENDING_ACTUAL_PO';
+        const receipts = poData.receipts || [];
+        const hasApprovedOrPendingReceipt = receipts.some(
+          (r) => r.status === 'APPROVED' || r.status === 'PENDING_SITE_ENGINEER'
+        );
+
         // Map PO items to local editable state
-        const mappedItems: EditableItem[] = (poData.items || []).map((it) => {
-          const qty = Number(it.quantity || 0);
+        const rawItems = poData.items || [];
+        const mappedItems: EditableItem[] = [];
+
+        rawItems.forEach((it) => {
+          let qty = Number(it.quantity || 0);
           const price = Number(it.unit_price || 0);
+
+          // If in Actual PO workflow and receipts exist:
+          if (isPendingActual && hasApprovedOrPendingReceipt && it.id) {
+            let totalReceived = 0;
+            let foundInReceipt = false;
+            receipts.forEach((r) => {
+              if (r.status === 'APPROVED' || r.status === 'PENDING_SITE_ENGINEER') {
+                r.items?.forEach((ri) => {
+                  if (ri.purchase_order_item_id === it.id) {
+                    totalReceived += Number(ri.received_quantity || 0);
+                    foundInReceipt = true;
+                  }
+                });
+              }
+            });
+
+            if (foundInReceipt) {
+              // If received quantity is 0, strictly EXCLUDE this item from Actual PO!
+              if (totalReceived <= 0) {
+                return;
+              }
+              qty = totalReceived;
+            }
+          } else if (isPendingActual && qty <= 0) {
+            return;
+          }
+
           const isSupplementary = Boolean(
             it.is_supplementary ||
             (it.pr_item as any)?.is_supplementary ||
@@ -105,7 +141,7 @@ export const EditPurchaseOrderPage: React.FC = () => {
           );
           const supplementBatch = it.supplement_batch ?? (isSupplementary ? 1 : null);
 
-          return {
+          mappedItems.push({
             id: it.id,
             item_id: it.item_id ?? null,
             pr_item_id: it.pr_item_id ?? null,
@@ -120,8 +156,9 @@ export const EditPurchaseOrderPage: React.FC = () => {
             supplier_id: it.supplier_id ?? null,
             is_supplementary: isSupplementary,
             supplement_batch: supplementBatch,
-          };
+          });
         });
+
         setItems(mappedItems);
       }
     } catch (err) {

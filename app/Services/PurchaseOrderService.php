@@ -705,7 +705,49 @@ class PurchaseOrderService
                 throw new \RuntimeException('تغيرت حالة أمر الشراء أثناء المعالجة. أعد المحاولة.');
             }
 
-            // ── Full items sync ──────────────────────────────────────────────────
+            // ── Strict Actual PO Isolation ─────────────────────────────────────────
+            // Ensure ONLY actually received items are inserted/retained in purchase_order_items.
+            // Any items from the Master PO that were not received in this GRN (or received_quantity = 0)
+            // must be excluded from $items, ensuring they are cleanly removed from purchase_order_items.
+            $approvedReceipt = $lockedPo->receipts()->whereIn('status', ['APPROVED', 'PENDING_SITE_ENGINEER'])->latest('id')->first();
+            if ($approvedReceipt && $approvedReceipt->items()->exists()) {
+                $receiptItems = $approvedReceipt->items()->get();
+                $receivedMap = $receiptItems->pluck('received_quantity', 'purchase_order_item_id');
+
+                $items = collect($items)->filter(function ($item) use ($receivedMap) {
+                    $qty = (float) ($item['quantity'] ?? 0);
+                    if ($qty <= 0) {
+                        return false;
+                    }
+
+                    if (!empty($item['id']) && $receivedMap->has($item['id'])) {
+                        $rcvQty = (float) $receivedMap->get($item['id']);
+                        if ($rcvQty <= 0) {
+                            return false; // Exclude delayed/unreceived item from Master PO
+                        }
+                    }
+
+                    return true;
+                })->map(function ($item) use ($receivedMap) {
+                    if (!empty($item['id']) && $receivedMap->has($item['id'])) {
+                        $rcvQty = (float) $receivedMap->get($item['id']);
+                        if ($rcvQty > 0) {
+                            $item['quantity'] = $rcvQty;
+                        }
+                    }
+                    return $item;
+                })->values()->all();
+            } else {
+                $items = collect($items)->filter(fn ($item) => (float) ($item['quantity'] ?? 0) > 0)->values()->all();
+            }
+
+            if (empty($items)) {
+                throw ValidationException::withMessages([
+                    'items' => ['يجب توفير بند واحد على الأقل تم استلامه فعلياً في إذن الاستلام لإصدار أمر الشراء الفعلي.'],
+                ]);
+            }
+
+            // ── Full items sync (deletes omitted unreceived items) ──────────────────
             $grandTotal = $this->syncPoItems($user, $lockedPo, $items);
 
             // Update PO totals and transition to ISSUED so accounting can see it

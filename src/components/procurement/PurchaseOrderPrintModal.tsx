@@ -5,6 +5,7 @@ import { getUnitLabel } from '../../utils/units';
 import { printDocumentOnly } from '../../utils/print';
 import { formatCleanNumber, formatCleanQty } from '../../utils/numberFormat';
 import { extractRebarInfo } from '../../utils/rebar';
+import { isActualPurchaseOrder, getActualPoLineItems, calculateActualPoGrandTotal } from '../../utils/actualPo';
 
 interface PurchaseOrderPrintModalProps {
   po: PurchaseOrder;
@@ -38,11 +39,15 @@ export const PurchaseOrderPrintModal: React.FC<PurchaseOrderPrintModalProps> = (
     };
   }, [isOpen, onClose]);
 
+  const isActual = isActualPurchaseOrder(po);
+  const items = React.useMemo(() => getActualPoLineItems(po), [po]);
+  const grandTotal = React.useMemo(() => calculateActualPoGrandTotal(items, po?.grand_total), [items, po?.grand_total]);
+
   if (!isOpen || !po) return null;
 
   const handlePrint = () => {
     printDocumentOnly('.po-print-container .print-document', {
-      title: `أمر_شراء_${po.po_number}`,
+      title: `${isActual ? 'أمر_شراء_فعلي' : 'أمر_شراء'}_${po.po_number}`,
       orientation: 'portrait',
       pageMargin: '6mm',
     });
@@ -51,15 +56,14 @@ export const PurchaseOrderPrintModal: React.FC<PurchaseOrderPrintModalProps> = (
   const handleShare = () => {
     const text = [
       '🏢 شركة إشبيلية للتطوير العقاري والمقاولات',
-      '📑 أمر شراء رقم: ' + (po.manual_po_number ? `${po.po_number} (يدوي: ${po.manual_po_number})` : po.po_number),
+      '📑 ' + (isActual ? 'أمر شراء فعلي رقم: ' : 'أمر شراء رقم: ') + (po.manual_po_number ? `${po.po_number} (يدوي: ${po.manual_po_number})` : po.po_number),
       '🏬 المورد: ' + (po.supplier?.company_name || '—'),
-      '📍 المشروع: ' + (po.purchase_request?.region || po.items?.[0]?.region || '—'),
-      '💰 الإجمالي: ' + formatCleanNumber(po.grand_total) + ' ج.م',
+      '📍 المشروع: ' + (po.purchase_request?.region || items[0]?.region || '—'),
+      '💰 الإجمالي: ' + formatCleanNumber(grandTotal) + ' ج.م',
     ].join('\n');
     window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
   };
 
-  const items = po.items || [];
   const emptyRowsCount = Math.max(TOTAL_FIXED_ROWS - items.length, 0);
 
   const requestNumber = po.manual_po_number || po.purchase_request?.manual_request_number || po.po_number || po.purchase_request?.request_number || '—';
@@ -111,8 +115,13 @@ export const PurchaseOrderPrintModal: React.FC<PurchaseOrderPrintModalProps> = (
                 {/* 2. Big Title in Center */}
                 <div className="text-center self-center w-2/4">
                   <h1 className="text-3xl sm:text-4xl font-black text-black tracking-wide font-sans">
-                    أمر شراء
+                    {isActual ? 'أمر شراء فعلي' : 'أمر شراء'}
                   </h1>
+                  {isActual && (
+                    <div className="text-[11px] font-bold text-slate-800 tracking-wider mt-0.5">
+                      (Actual Purchase Order • توريد واستلام فعلي معتمد)
+                    </div>
+                  )}
                 </div>
 
                 {/* 3. Metadata on Top Right */}
@@ -219,7 +228,7 @@ export const PurchaseOrderPrintModal: React.FC<PurchaseOrderPrintModalProps> = (
                         className="border-2 border-black p-2 text-center font-mono font-black text-xl bg-[#FFFF00] bg-yellow-total text-black shadow-inner"
                         style={{ backgroundColor: '#FFFF00', border: '2px solid #000' }}
                       >
-                        {formatCleanNumber(po.grand_total)}
+                        {formatCleanNumber(grandTotal)}
                       </td>
                       <td className="border border-black p-2 bg-white"></td>
                     </tr>

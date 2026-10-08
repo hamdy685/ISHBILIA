@@ -15,6 +15,7 @@ import { UnifiedNotesCard } from '../../components/common/UnifiedNotesCard';
 import { Modal } from '../../components/ui/Modal';
 import { useAuth } from '../../context/AuthContext';
 import { SupplementItemBadge } from '../../components/common/SupplementItemBadge';
+import { isActualPurchaseOrder, getActualPoLineItems, calculateActualPoGrandTotal } from '../../utils/actualPo';
 
 export const AccountingPurchaseOrderDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -28,6 +29,10 @@ export const AccountingPurchaseOrderDetailsPage: React.FC = () => {
   const [previewPhoto, setPreviewPhoto] = useState<{ url: string; title: string } | null>(null);
   const { hasRole } = useAuth();
   const isManagerOrExecutive = hasRole('procurement_manager') || hasRole('general_manager') || hasRole('execution_manager');
+
+  const isActual = useMemo(() => isActualPurchaseOrder(po), [po]);
+  const displayedItems = useMemo(() => getActualPoLineItems(po), [po]);
+  const displayedGrandTotal = useMemo(() => calculateActualPoGrandTotal(displayedItems, po?.grand_total), [displayedItems, po?.grand_total]);
   const isDepartmentAccountant = !isManagerOrExecutive && (hasRole('site_accountant') || hasRole('licenses_accountant') || hasRole('buffet_accountant'));
   const isFinancialDirector = !isManagerOrExecutive && hasRole('accountant') && !isDepartmentAccountant && !hasRole('admin');
 
@@ -215,12 +220,21 @@ export const AccountingPurchaseOrderDetailsPage: React.FC = () => {
       {/* Items Section */}
       <Card className="space-y-4">
         <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2">
-          <h3 className="text-sm font-bold text-slate-200">📦 بنود أمر الشراء (المطلوبة من المورد)</h3>
-          {po.items && po.items.length > 0 && (
-            <span className="text-xs text-slate-400 font-mono">
-              إجمالي {po.items.length} بنود
-            </span>
-          )}
+          <h3 className="text-sm font-bold text-slate-200">
+            📦 {isActual ? 'بنود أمر الشراء الفعلي (المستلمة فعلياً بالموقع)' : 'بنود أمر الشراء (المطلوبة من المورد)'}
+          </h3>
+          <div className="flex items-center gap-2">
+            {isActual && (
+              <span className="text-[11px] font-bold text-emerald-400 bg-emerald-950/70 border border-emerald-500/40 px-2.5 py-0.5 rounded-full">
+                عزل بنود الاستلام الفعلي فقط للمطابقة
+              </span>
+            )}
+            {displayedItems.length > 0 && (
+              <span className="text-xs text-slate-400 font-mono">
+                إجمالي {displayedItems.length} بنود
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Desktop Table View */}
@@ -238,8 +252,8 @@ export const AccountingPurchaseOrderDetailsPage: React.FC = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {po.items && po.items.length > 0 ? (
-                po.items.map((item, index) => (
+              {displayedItems.length > 0 ? (
+                displayedItems.map((item, index) => (
                   <TableRow key={item.id || index}>
                     <TableCell className="font-mono text-cyan-400">{index + 1}</TableCell>
                     <TableCell className="font-bold text-slate-100">
@@ -279,8 +293,8 @@ export const AccountingPurchaseOrderDetailsPage: React.FC = () => {
 
         {/* Mobile Card View */}
         <div className="space-y-3 sm:hidden">
-          {po.items && po.items.length > 0 ? (
-            po.items.map((item, index) => (
+          {displayedItems && displayedItems.length > 0 ? (
+            displayedItems.map((item, index) => (
               <div key={`po-mob-${item.id || index}`} className="rounded-xl border border-slate-800 bg-slate-950/90 p-3.5 space-y-2.5 shadow-sm">
                 <div className="flex items-start justify-between gap-2 border-b border-slate-800/80 pb-2">
                     <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
@@ -343,13 +357,13 @@ export const AccountingPurchaseOrderDetailsPage: React.FC = () => {
             <div className="flex justify-between text-slate-400">
               <span>إجمالي البنود:</span>
               <span className="font-mono font-bold text-slate-200">
-                <CurrencyDisplay amount={po.subtotal || po.grand_total || 0} currency={po.currency || 'ج.م'} />
+                <CurrencyDisplay amount={displayedGrandTotal} currency={po.currency || 'ج.م'} />
               </span>
             </div>
             <div className="flex justify-between border-t border-slate-800 pt-1.5 text-sm font-bold text-cyan-300">
               <span>المبلغ الإجمالي الكلي:</span>
               <span className="font-mono font-black text-cyan-400">
-                <CurrencyDisplay amount={po.grand_total || po.subtotal || 0} currency={po.currency || 'ج.م'} />
+                <CurrencyDisplay amount={displayedGrandTotal} currency={po.currency || 'ج.م'} />
               </span>
             </div>
           </div>

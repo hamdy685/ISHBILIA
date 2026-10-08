@@ -2,6 +2,7 @@ import React from 'react';
 import { PurchaseOrder } from '../../types/purchaseOrder';
 import { getUnitLabel } from '../../utils/units';
 import { formatCleanNumber } from '../../utils/numberFormat';
+import { isActualPurchaseOrder, getActualPoLineItems } from '../../utils/actualPo';
 
 export interface CombinedPrintTemplateProps {
   po?: PurchaseOrder | null;
@@ -212,25 +213,32 @@ export const CombinedPrintTemplate = React.forwardRef<HTMLDivElement, CombinedPr
       'م. محمد عبدالكريم';
 
     // PO Line Items (Actual final quantities and prices approved by procurement)
-    const rawPoItems = props.poItems || props.items || po?.items || [];
-    const resolvedPoItems = rawPoItems.map((item: any) => {
-      const qty = Number(item.quantity || 0);
-      const price = Number(item.unit_price || 0);
-      const lineTotal = item.line_total !== undefined ? Number(item.line_total) : Math.round(qty * price * 100) / 100;
-      return {
-        description: item.item_description || item.item_name || '---',
-        supplier: item.supplier_name || props.supplierName || po?.supplier?.company_name || '---',
-        uom: item.uom || 'PCS',
-        quantity: item.quantity ?? 0,
-        unit_price: price,
-        line_total: lineTotal,
-      };
-    });
+    const isActual = isActualPurchaseOrder(po);
+    const rawPoItems = props.poItems || props.items || (isActual ? getActualPoLineItems(po) : (po?.items || []));
+    const resolvedPoItems = rawPoItems
+      .filter((item: any) => {
+        if (!isActual) return true;
+        const qty = Number(item.quantity ?? 0);
+        return qty > 0;
+      })
+      .map((item: any) => {
+        const qty = Number(item.quantity || 0);
+        const price = Number(item.unit_price || 0);
+        const lineTotal = item.line_total !== undefined ? Number(item.line_total) : Math.round(qty * price * 100) / 100;
+        return {
+          description: item.item_description || item.item_name || '---',
+          supplier: item.supplier_name || props.supplierName || po?.supplier?.company_name || '---',
+          uom: item.uom || 'PCS',
+          quantity: item.quantity ?? 0,
+          unit_price: price,
+          line_total: lineTotal,
+        };
+      });
 
     const grandTotal =
       props.grandTotal !== undefined
         ? Number(props.grandTotal)
-        : (po?.grand_total !== undefined ? Number(po.grand_total) : resolvedPoItems.reduce((acc, it) => acc + it.line_total, 0));
+        : (isActual ? resolvedPoItems.reduce((acc, it) => acc + it.line_total, 0) : (po?.grand_total !== undefined ? Number(po.grand_total) : resolvedPoItems.reduce((acc, it) => acc + it.line_total, 0)));
 
     // ── 3. Section 3: Goods Receipt Note (إذن الاستلام) ──────────────────────
     const displayGrnNumber =

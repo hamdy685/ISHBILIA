@@ -17,6 +17,7 @@ import { getUnitLabel } from '../../utils/units';
 import SystemEventTimeline from '../../components/ui/SystemEventTimeline';
 import { UnifiedNotesCard } from '../../components/common/UnifiedNotesCard';
 import { SupplementItemBadge } from '../../components/common/SupplementItemBadge';
+import { isActualPurchaseOrder, getActualPoLineItems, calculateActualPoGrandTotal } from '../../utils/actualPo';
 
 export const PurchaseOrderDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -32,6 +33,10 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const { hasPermission } = useAuth();
+
+  const isActual = React.useMemo(() => isActualPurchaseOrder(po), [po]);
+  const displayedItems = React.useMemo(() => getActualPoLineItems(po), [po]);
+  const displayedGrandTotal = React.useMemo(() => calculateActualPoGrandTotal(displayedItems, po?.grand_total), [displayedItems, po?.grand_total]);
 
   const loadPo = async (): Promise<PurchaseOrder | null> => {
     if (!id) return null;
@@ -285,7 +290,16 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
 
       {/* البنود Commercial Table */}
       <Card className="space-y-4">
-        <h3 className="text-xs font-bold text-slate-200 uppercase tracking-wider">بنود أمر الشراء المعتمدة والتكاليف التفصيلية</h3>
+        <div className="flex items-center justify-between pb-1">
+          <h3 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+            {isActual ? 'بنود أمر الشراء الفعلي المستلمة بالموقع' : 'بنود أمر الشراء المعتمدة والتكاليف التفصيلية'}
+          </h3>
+          {isActual && (
+            <span className="text-[11px] font-bold text-emerald-400 bg-emerald-950/70 border border-emerald-500/40 px-2.5 py-0.5 rounded-full">
+              عزل بنود الاستلام الفعلي فقط
+            </span>
+          )}
+        </div>
 
         <div className="hidden min-w-0 md:block">
           <Table>
@@ -301,7 +315,7 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {po.items?.map((item, idx) => (
+              {displayedItems.map((item, idx) => (
                 <TableRow key={item.id || idx}>
                   <TableCell className="font-mono text-slate-400">{idx + 1}</TableCell>
                   <TableCell className="font-mono text-slate-300">{item.item_reference || '—'}</TableCell>
@@ -330,7 +344,7 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
         </div>
 
         <div className="space-y-3 md:hidden">
-          {po.items?.map((item, idx) => (
+          {displayedItems.map((item, idx) => (
             <article key={`mobile-po-item-${item.id || idx}`} className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
               <div className="flex min-w-0 items-start justify-between gap-3">
                 <span className="shrink-0 rounded-md bg-slate-800 px-2 py-1 text-[11px] font-bold text-slate-300">

@@ -295,8 +295,8 @@ class PurchasesReportController extends Controller
                     // كميات وأسعار أمر الشراء الفعلي هي المصدر الحصري للتقارير المالية
                     $poQty = (float) ($poItem->quantity ?? 0);
                     $unitPrice = (float) ($poItem->unit_price ?? $poItem->estimated_unit_price ?? 0);
-                    $effectiveQty = $poQty;
-                    $lineTotal = (float) ($poItem->line_total !== null && (float) $poItem->line_total > 0
+                    $effectiveQty = ($receivedQty !== null && $receivedQty > 0) ? $receivedQty : $poQty;
+                    $lineTotal = (float) ($poItem->line_total !== null && (float) $poItem->line_total > 0 && $effectiveQty === $poQty
                         ? $poItem->line_total
                         : round($effectiveQty * $unitPrice, 2));
 
