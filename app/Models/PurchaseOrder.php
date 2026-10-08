@@ -55,6 +55,80 @@ class PurchaseOrder extends Model
         'finalization_notes',
     ];
 
+    protected $appends = [
+        'warehouse_approval',
+        'site_engineer_approval',
+    ];
+
+    public function getWarehouseApprovalAttribute(): array
+    {
+        $requiresWarehouse = $this->requiresWarehouseReceipt();
+        $latestReceipt = $this->relationLoaded('receipts')
+            ? $this->receipts->sortByDesc('id')->first()
+            : $this->receipts()->latest('id')->first();
+
+        if (! $requiresWarehouse) {
+            return [
+                'status' => 'AUTO_APPROVED',
+                'is_bypassed' => true,
+                'approved' => true,
+                'label' => 'تم التخطي التلقائي (لا يوجد مخزن)',
+                'notes' => 'تم التخطي التلقائي / لا يتطلب استلام مخزني',
+            ];
+        }
+
+        if ($latestReceipt && $latestReceipt->warehouse_submitted_at) {
+            return [
+                'status' => 'APPROVED',
+                'is_bypassed' => false,
+                'approved' => true,
+                'label' => 'تم الاستلام بالمخزن',
+                'notes' => $latestReceipt->warehouse_notes,
+                'receipt_number' => $latestReceipt->receipt_number,
+            ];
+        }
+
+        return [
+            'status' => 'PENDING',
+            'is_bypassed' => false,
+            'approved' => false,
+            'label' => 'بانتظار استلام المخزن',
+            'notes' => null,
+        ];
+    }
+
+    public function getSiteEngineerApprovalAttribute(): array
+    {
+        $latestReceipt = $this->relationLoaded('receipts')
+            ? $this->receipts->sortByDesc('id')->first()
+            : $this->receipts()->latest('id')->first();
+
+        if ($latestReceipt && ($latestReceipt->status === 'APPROVED' || $latestReceipt->site_engineer_approved_at)) {
+            return [
+                'status' => 'APPROVED',
+                'approved' => true,
+                'label' => 'معتمد ومطابق هندسيًا',
+                'notes' => $latestReceipt->site_engineer_notes,
+            ];
+        }
+
+        if ($latestReceipt && $latestReceipt->status === 'PENDING_SITE_ENGINEER') {
+            return [
+                'status' => 'PENDING',
+                'approved' => false,
+                'label' => 'بانتظار فحص واعتماد مهندس الموقع',
+                'notes' => null,
+            ];
+        }
+
+        return [
+            'status' => 'WAITING_WAREHOUSE',
+            'approved' => false,
+            'label' => 'بانتظار استلام المخزن أولاً',
+            'notes' => null,
+        ];
+    }
+
     protected function casts(): array
     {
         return [

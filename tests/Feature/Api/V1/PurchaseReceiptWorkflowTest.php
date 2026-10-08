@@ -252,6 +252,62 @@ class PurchaseReceiptWorkflowTest extends TestCase
         $this->assertNull($directReceipt->warehouse_keeper_user_id);
     }
 
+    public function test_warehouse_approval_and_site_engineer_approval_separation_and_auto_bypass(): void
+    {
+        $licensesDept = Department::create(['name' => 'التراخيص', 'code' => 'LICENSES', 'is_active' => true]);
+        $licensesEngineer = $this->makeUser('licenses-eng@test', 'مهندس التراخيص', 'site_engineer', $licensesDept->id);
+        $procurementUser = $this->makeUser('procurement-lic@test', 'مشتريات التراخيص', 'procurement_manager', $licensesDept->id);
+
+        $pr = PurchaseRequest::create([
+            'request_number' => 'PR-LIC-001',
+            'user_id' => $licensesEngineer->id,
+            'department_id' => $licensesDept->id,
+            'site_engineer_user_id' => $licensesEngineer->id,
+            'priority' => 'NORMAL',
+            'status' => 'APPROVED_BY_ACCOUNTING',
+            'total_estimated_cost' => 1200,
+            'date_needed' => now()->toDateString(),
+            'requires_warehouse_receipt' => false,
+        ]);
+
+        $po = PurchaseOrder::create([
+            'po_number' => 'PO-LIC-001',
+            'purchase_request_id' => $pr->id,
+            'supplier_id' => $this->purchaseOrder->supplier_id,
+            'created_by_user_id' => $procurementUser->id,
+            'status' => 'PO_DRAFT',
+            'subtotal' => 1200,
+            'grand_total' => 1200,
+            'delivery_status' => 'NOT_STARTED',
+        ]);
+        $po->items()->create([
+            'item_description' => 'كابلات',
+            'quantity' => 10,
+            'uom' => 'METER',
+            'unit_price' => 120,
+            'line_total' => 1200,
+        ]);
+
+        $issuedPo = app(\App\Services\PurchaseOrderService::class)->submitToAccounting($procurementUser, $po);
+
+        $this->assertTrue($issuedPo->warehouse_approval['is_bypassed']);
+        $this->assertSame('AUTO_APPROVED', $issuedPo->warehouse_approval['status']);
+        $this->assertTrue($issuedPo->warehouse_approval['approved']);
+        $this->assertSame('PENDING', $issuedPo->site_engineer_approval['status']);
+        $this->assertFalse($issuedPo->site_engineer_approval['approved']);
+
+        $receipt = PurchaseReceipt::where('purchase_order_id', $issuedPo->id)->firstOrFail();
+        $this->assertTrue($receipt->warehouse_approval['is_bypassed']);
+        $this->assertSame('AUTO_APPROVED', $receipt->warehouse_approval['status']);
+        $this->assertSame('PENDING', $receipt->site_engineer_approval['status']);
+
+        // When site engineer approves
+        $approvedReceipt = app(PurchaseReceiptService::class)->approveBySiteEngineer($licensesEngineer, $receipt, 'تم الفحص الهندسي بنجاح');
+        $this->assertSame('APPROVED', $approvedReceipt->site_engineer_approval['status']);
+        $this->assertTrue($approvedReceipt->site_engineer_approval['approved']);
+        $this->assertSame('APPROVED', $approvedReceipt->status);
+    }
+
     private function makeUser(string $email, string $name, string $roleSlug, int $departmentId): User
     {
         $user = User::create([

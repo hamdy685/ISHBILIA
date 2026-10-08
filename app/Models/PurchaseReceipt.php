@@ -54,7 +54,94 @@ class PurchaseReceipt extends Model
         'supplier_name',
         'is_internal_warehouse',
         'is_accountant_recorded',
+        'warehouse_approval',
+        'site_engineer_approval',
     ];
+
+    public function getWarehouseApprovalAttribute(): array
+    {
+        $requiresWarehouse = $this->purchaseOrder?->requiresWarehouseReceipt()
+            ?? $this->purchaseRequest?->requiresWarehouseReceipt()
+            ?? (! is_null($this->warehouse_keeper_user_id));
+
+        $isBypassed = (! $requiresWarehouse) || in_array($this->receipt_type, ['SITE_DIRECT', 'REQUESTER_OFFICE'], true);
+
+        if ($isBypassed) {
+            return [
+                'status' => 'AUTO_APPROVED',
+                'is_bypassed' => true,
+                'approved' => true,
+                'approved_at' => $this->warehouse_submitted_at?->toIso8601String() ?: $this->created_at?->toIso8601String(),
+                'notes' => 'تم التخطي التلقائي / لا يوجد مخزن',
+                'actor' => null,
+            ];
+        }
+
+        if ($this->warehouse_submitted_at) {
+            return [
+                'status' => 'APPROVED',
+                'is_bypassed' => false,
+                'approved' => true,
+                'approved_at' => $this->warehouse_submitted_at?->toIso8601String(),
+                'notes' => $this->warehouse_notes,
+                'actor' => $this->warehouseKeeper ? [
+                    'id' => $this->warehouseKeeper->id,
+                    'name' => $this->warehouseKeeper->name,
+                    'email' => $this->warehouseKeeper->email,
+                ] : null,
+            ];
+        }
+
+        return [
+            'status' => 'PENDING',
+            'is_bypassed' => false,
+            'approved' => false,
+            'approved_at' => null,
+            'notes' => null,
+            'actor' => null,
+        ];
+    }
+
+    public function getSiteEngineerApprovalAttribute(): array
+    {
+        $isApproved = ($this->status === 'APPROVED') || ! is_null($this->site_engineer_approved_at);
+
+        if ($isApproved) {
+            return [
+                'status' => 'APPROVED',
+                'approved' => true,
+                'approved_at' => $this->site_engineer_approved_at?->toIso8601String(),
+                'notes' => $this->site_engineer_notes,
+                'actor' => $this->siteEngineer ? [
+                    'id' => $this->siteEngineer->id,
+                    'name' => $this->siteEngineer->name,
+                    'email' => $this->siteEngineer->email,
+                ] : null,
+            ];
+        }
+
+        if ($this->status === 'PENDING_SITE_ENGINEER') {
+            return [
+                'status' => 'PENDING',
+                'approved' => false,
+                'approved_at' => null,
+                'notes' => null,
+                'actor' => $this->siteEngineer ? [
+                    'id' => $this->siteEngineer->id,
+                    'name' => $this->siteEngineer->name,
+                    'email' => $this->siteEngineer->email,
+                ] : null,
+            ];
+        }
+
+        return [
+            'status' => 'WAITING_WAREHOUSE',
+            'approved' => false,
+            'approved_at' => null,
+            'notes' => null,
+            'actor' => null,
+        ];
+    }
 
     public function getPhotoUrlAttribute(): ?string
     {

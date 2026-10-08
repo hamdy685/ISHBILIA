@@ -1020,7 +1020,7 @@ class PurchaseOrderService
             } else {
                 // If this purchase order bypasses the warehouse, route directly to site engineer
                 if (! $lockedPo->purchaseRequest?->isOfficeRequest()) {
-                    app(PurchaseReceiptService::class)->createDirectSiteReceiptForBuildings($lockedPo);
+                    app(PurchaseReceiptService::class)->createDirectSiteReceipt($lockedPo);
                 }
             }
 

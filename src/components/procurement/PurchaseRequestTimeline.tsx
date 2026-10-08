@@ -9,6 +9,14 @@ export interface PurchaseRequestTimelineProps {
 
 export type TimelineCardState = 'COMPLETED' | 'ACTIVE' | 'PENDING' | 'REJECTED';
 
+export interface TimelineChecklistItem {
+  label: string;
+  role: string;
+  isCompleted: boolean;
+  isBypassed?: boolean;
+  statusText: string;
+}
+
 export interface TimelineCardItem {
   id: string;
   stepNumber: number | string;
@@ -21,6 +29,7 @@ export interface TimelineCardItem {
   actionNote?: string;
   badgeText: string;
   icon: string;
+  checklists?: TimelineChecklistItem[];
 }
 
 /**
@@ -460,14 +469,64 @@ export const generateTimelineCards = (request: PurchaseRequest): TimelineCardIte
     actionNote: cardPoState === 'ACTIVE' ? 'تمت كافة الاعتمادات بنجاح، بانتظار قيام مدير المشتريات بإصدار أمر الشراء.' : undefined,
   });
 
+  // فحص شرط الاستلام المخزني والتخطي التلقائي (Auto-Bypass)
+  const requiresWarehouse = request.request_type !== 'OFFICE_SUPPLIES' && (request.requires_warehouse_receipt ?? true);
+  const isWarehouseBypassed =
+    !requiresWarehouse ||
+    pos.some((po: any) => po.warehouse_approval?.is_bypassed || (po.receipts || []).some((r: any) => r.receipt_type === 'SITE_DIRECT'));
+
+  const warehouseStepCompleted = isWarehouseBypassed || hasWarehouseReceipt || hasApprovedReceipt || hasActualPoFinalized;
+  const siteEngineerStepCompleted = hasApprovedReceipt || hasActualPoFinalized;
+
   // البطاقة 8: استلام المخزن والفحص الهندسي
   let cardReceiptState: TimelineCardState = 'PENDING';
-  if (hasApprovedReceipt || hasActualPoFinalized) {
+  if (siteEngineerStepCompleted) {
     cardReceiptState = 'COMPLETED';
-  } else if (hasWarehouseReceipt || hasIssuedPo || status === 'PENDING_SITE_ENGINEER') {
+  } else if (hasWarehouseReceipt || isWarehouseBypassed || hasIssuedPo || status === 'PENDING_SITE_ENGINEER') {
     cardReceiptState = isRejected ? 'REJECTED' : 'ACTIVE';
   } else {
     cardReceiptState = 'PENDING';
+  }
+
+  const checklists: TimelineChecklistItem[] = [
+    {
+      label: 'استلام المخزن',
+      role: 'أمين المخزن',
+      isCompleted: warehouseStepCompleted,
+      isBypassed: isWarehouseBypassed,
+      statusText: isWarehouseBypassed
+        ? 'تم التخطي التلقائي / لا يوجد مخزن'
+        : (hasWarehouseReceipt || siteEngineerStepCompleted)
+        ? 'تم الاستلام بالمخزن'
+        : hasIssuedPo
+        ? 'بانتظار استلام أمين المخزن'
+        : 'بانتظار التوريد',
+    },
+    {
+      label: 'الفحص الهندسي',
+      role: 'مهندس الموقع',
+      isCompleted: siteEngineerStepCompleted,
+      statusText: siteEngineerStepCompleted
+        ? 'تم الفحص والاعتماد الهندسي'
+        : (hasWarehouseReceipt || isWarehouseBypassed) && (hasIssuedPo || status === 'PENDING_SITE_ENGINEER')
+        ? 'بانتظار فحص واعتماد مهندس الموقع'
+        : isWarehouseBypassed
+        ? 'بانتظار التوريد للموقع'
+        : 'بانتظار استلام المخزن أولاً',
+    },
+  ];
+
+  let card8BadgeText = 'بانتظار التوريد ⚪';
+  if (cardReceiptState === 'COMPLETED') {
+    card8BadgeText = 'تم الاستلام والفحص ✅';
+  } else if (cardReceiptState === 'ACTIVE') {
+    if (isWarehouseBypassed) {
+      card8BadgeText = 'بانتظار الفحص الهندسي 🔵';
+    } else if (hasWarehouseReceipt) {
+      card8BadgeText = 'بانتظار الفحص الهندسي 🔵';
+    } else {
+      card8BadgeText = 'قيد التوريد والفحص 🔵';
+    }
   }
 
   cards.push({
@@ -475,17 +534,22 @@ export const generateTimelineCards = (request: PurchaseRequest): TimelineCardIte
     stepNumber: 8,
     stepLabel: '8',
     title: 'استلام المخزن والفحص الهندسي',
-    role: 'أمين المخزن ومهندس الموقع',
+    role: isWarehouseBypassed ? 'مهندس الموقع (تخطي المخزن)' : 'أمين المخزن ومهندس الموقع',
     assignee: request.site_engineer?.name || 'مسؤول الاستلام الميداني',
     state: cardReceiptState,
-    description: 'تحرير إذن الاستلام المخزني ومطابقة واعتماد الفحص الهندسي الميداني بالموقع.',
-    badgeText: cardReceiptState === 'COMPLETED' ? 'تم الاستلام والفحص ✅' : cardReceiptState === 'ACTIVE' ? 'قيد التوريد والفحص 🔵' : 'بانتظار التوريد ⚪',
+    description: isWarehouseBypassed
+      ? 'تم التخطي التلقائي للاستلام المخزني لعدم اشتراط المخزن لهذا الطلب. يتطلب فقط الفحص الهندسي الميداني بالموقع.'
+      : 'تحرير إذن الاستلام المخزني ومطابقة واعتماد الفحص الهندسي الميداني بالموقع.',
+    badgeText: card8BadgeText,
     icon: '🏗️',
     actionNote: cardReceiptState === 'ACTIVE'
-      ? hasWarehouseReceipt
+      ? isWarehouseBypassed
+        ? 'تم التخطي التلقائي للاستلام المخزني (لا يوجد مخزن)، وبانتظار اعتماد وفحص مهندس الموقع في الميدان.'
+        : hasWarehouseReceipt
         ? 'تم تحرير إذن الاستلام بالمخزن، وبانتظار اعتماد ومطابقة مهندس الموقع في الميدان.'
         : 'أمر الشراء صادر، وبانتظار وصول وتوريد المواد للموقع/المخزن.'
       : undefined,
+    checklists,
   });
 
   // البطاقة 9: إصدار أمر الشراء الفعلي (Actual PO) - المحطة النهائية والمكتملة (100%)
@@ -597,6 +661,18 @@ export const getActionGuidance = (request: PurchaseRequest): { text: string; bg:
     };
   }
   if (hasIssuedPo) {
+    const isWarehouseBypassed =
+      request.request_type !== 'OFFICE_SUPPLIES' &&
+      request.requires_warehouse_receipt === false;
+
+    if (isWarehouseBypassed) {
+      return {
+        icon: '🏗️',
+        text: 'تم إصدار أمر الشراء (PO) للمورد مع تخطي المخزن تلقائياً. بانتظار توريد الشحنة وفحصها واعتمادها ميدانياً من مهندس الموقع.',
+        bg: 'border-cyan-700/50 bg-cyan-950/40 text-cyan-200',
+      };
+    }
+
     return {
       icon: '🚚',
       text: 'تم إصدار أمر الشراء (PO) للمورد. بانتظار توريد الشحنة وتأكيد استلامها بالمخزن والموقع.',
@@ -846,6 +922,62 @@ export const PurchaseRequestTimeline: React.FC<PurchaseRequestTimelineProps> = (
                   <p className="text-[11px] leading-5 text-slate-400 pt-1 line-clamp-2">
                     {card.description}
                   </p>
+                )}
+
+                {/* Visual Checklists for Separated Steps (e.g. Warehouse & Site Inspection) */}
+                {!compact && card.checklists && card.checklists.length > 0 && (
+                  <div className="mt-2.5 space-y-1.5 pt-2 border-t border-slate-800/80">
+                    <div className="text-[10px] font-bold text-slate-400 flex items-center justify-between">
+                      <span className="flex items-center gap-1">
+                        <span>📋</span>
+                        <span>مراحل الاستلام والفحص:</span>
+                      </span>
+                      {card.checklists.some((c) => c.isBypassed) && (
+                        <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-bold">
+                          تخطي تلقائي للمخزن
+                        </span>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      {card.checklists.map((chk, cIdx) => (
+                        <div
+                          key={cIdx}
+                          className={`flex items-center justify-between gap-2 px-2 py-1 rounded-lg text-[10px] font-semibold border transition-all ${
+                            chk.isCompleted
+                              ? chk.isBypassed
+                                ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-200'
+                                : 'bg-emerald-950/20 border-emerald-500/30 text-emerald-200'
+                              : isActive
+                              ? 'bg-cyan-950/20 border-cyan-500/30 text-cyan-200'
+                              : 'bg-slate-900/40 border-slate-800 text-slate-400'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={`font-mono text-xs font-black ${
+                                chk.isCompleted ? 'text-emerald-400' : 'text-slate-500'
+                              }`}
+                            >
+                              {chk.isCompleted ? '✔' : '⏳'}
+                            </span>
+                            <span className="font-bold">{chk.label}</span>
+                            <span className="text-[9px] text-slate-400">({chk.role})</span>
+                          </div>
+                          <span
+                            className={`text-[9px] font-mono ${
+                              chk.isBypassed
+                                ? 'text-emerald-300 font-bold'
+                                : chk.isCompleted
+                                ? 'text-emerald-300'
+                                : 'text-slate-400'
+                            }`}
+                          >
+                            {chk.statusText}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
 

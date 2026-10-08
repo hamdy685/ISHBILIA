@@ -299,5 +299,38 @@ describe('PurchaseRequestTimeline Component & Business Logic', () => {
       const alertElements = screen.getAllByText('💡 تم الفحص الهندسي بنجاح، وتم إصدار أمر الشراء الفعلي (Actual PO) وبكده تكون خلصت وتمت بنجاح.');
       expect(alertElements.length).toBeGreaterThan(0);
     });
+
+    it('renders Card 8 with separated checklists and shows auto-bypass when warehouse is not required', () => {
+      const reqBypassed = createBaseRequest({
+        status: 'APPROVED_BY_ACCOUNTING',
+        procurement_route: 'DIRECT',
+        requires_warehouse_receipt: false,
+        issued_purchase_orders_count: 1,
+        purchase_order_issued: true,
+      });
+
+      render(<PurchaseRequestTimeline request={reqBypassed} />);
+
+      expect(screen.getByText('مراحل الاستلام والفحص:')).toBeInTheDocument();
+      expect(screen.getByText('تخطي تلقائي للمخزن')).toBeInTheDocument();
+      expect(screen.getByText('تم التخطي التلقائي / لا يوجد مخزن')).toBeInTheDocument();
+      expect(screen.getByText('بانتظار فحص واعتماد مهندس الموقع')).toBeInTheDocument();
+    });
+
+    it('renders Card 8 checklists correctly when warehouse is required', () => {
+      const reqWithWarehouse = createBaseRequest({
+        status: 'APPROVED_BY_ACCOUNTING',
+        procurement_route: 'DIRECT',
+        requires_warehouse_receipt: true,
+        issued_purchase_orders_count: 1,
+        purchase_order_issued: true,
+      });
+
+      render(<PurchaseRequestTimeline request={reqWithWarehouse} />);
+
+      expect(screen.getByText('مراحل الاستلام والفحص:')).toBeInTheDocument();
+      expect(screen.getByText('بانتظار استلام أمين المخزن')).toBeInTheDocument();
+      expect(screen.getByText('بانتظار استلام المخزن أولاً')).toBeInTheDocument();
+    });
   });
 });
