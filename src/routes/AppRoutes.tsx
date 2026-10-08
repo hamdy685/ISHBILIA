@@ -151,7 +151,10 @@ export const AppRoutes: React.FC = () => {
                 {/* ── Material Receipt / Site Engineer Routes ──────────────────────── */}
                 <Route element={<RoleRoute allowedRoles={["employee", "reviewer", "warehouse_keeper", "site_engineer", "procurement_manager", "accountant", "general_manager", "admin"]} />}>
                     <Route path="/site-engineer" element={<PurchaseReceiptPage mode="site" />} />
+                    <Route path="/site-engineer/:id" element={<PurchaseReceiptPage mode="site" />} />
                     <Route path="/receipts" element={<PurchaseReceiptPage mode="site" />} />
+                    <Route path="/receipts/:id" element={<PurchaseReceiptPage mode="site" />} />
+                    <Route path="/receipts/:id/inspect" element={<PurchaseReceiptPage mode="site" />} />
                 </Route>
 
                 {/* ── Procurement Manager Routes ────────────────────────────── */}

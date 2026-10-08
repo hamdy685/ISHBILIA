@@ -223,6 +223,8 @@ export const ReviewerDashboardPage: React.FC = () => {
       .map((r) => ({
         id: `receipt-${r.id}`,
         rawId: r.id,
+        receipt_id: r.id,
+        po_id: r.purchase_order_id || r.purchase_order?.id,
         type: 'RECEIPT' as const,
         code: r.receipt_number || `REC-${r.id}`,
         title: r.purchase_order?.items?.[0]?.item_description || `إذن استلام ${r.receipt_number || r.id}`,
@@ -231,7 +233,7 @@ export const ReviewerDashboardPage: React.FC = () => {
         supplier: r.purchase_order?.supplier?.company_name,
         urgency: 'CRITICAL' as const,
         reason: 'تم استلام المواد بالمخزن وبانتظار معاينتك ومطابقتك الهندسية بالموقع',
-        actionUrl: `/site-engineer?receipt_id=${r.id}`,
+        actionUrl: `/receipts/${r.id}/inspect`,
         actionLabel: 'فحص واعتماد إذن الاستلام',
         stageBadge: {
           text: 'إذن استلام مواد',

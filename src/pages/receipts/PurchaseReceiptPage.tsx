@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { TableSkeleton } from '../../components/ui/StateFeedback';
@@ -105,7 +105,10 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
 
   const today = getTodayInputDate();
   const defaultDateFrom = getDefaultDateFrom();
+  const { id: paramReceiptId } = useParams<{ id?: string }>();
   const [searchParams] = useSearchParams();
+  const targetReceiptId = paramReceiptId || searchParams.get('receipt_id') || searchParams.get('purchase_receipt_id');
+  const targetPoId = searchParams.get('po_id') || searchParams.get('purchase_order_id');
   const [searchTerm, setSearchTerm] = useState('');
   const [dateFrom, setDateFrom] = useState(defaultDateFrom);
   const [dateTo, setDateTo] = useState(today);
@@ -144,30 +147,79 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
     void load(true);
   });
 
-  // Auto-focus on receipt_id or po_id from deep-link
+  // Auto-focus on receipt_id or po_id from route param or deep-link
   useEffect(() => {
-    const targetReceiptId = searchParams.get('receipt_id');
-    const targetPoId = searchParams.get('po_id');
     if (targetReceiptId) {
-      const match = [...receipts, ...archiveReceipts].find((r) => String(r.id) === targetReceiptId);
-      if (match?.receipt_number) {
-        setSearchTerm(match.receipt_number);
-      } else {
-        setSearchTerm(String(targetReceiptId));
+      const match = [...receipts, ...archiveReceipts].find((r) => String(r.id) === String(targetReceiptId));
+      if (match) {
+        if (match.receipt_number) {
+          setSearchTerm(match.receipt_number);
+        }
+        const isArchived = archiveReceipts.some((r) => String(r.id) === String(targetReceiptId));
+        if (isArchived) {
+          setActiveTab('ARCHIVE');
+          setExpandedArchiveId(match.id);
+        } else {
+          setActiveTab('QUEUE');
+        }
+
+        setTimeout(() => {
+          const el = document.getElementById(`receipt-card-${match.id}`);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 120);
       }
     } else if (targetPoId) {
-      const orderMatch = orders.find((o) => String(o.id) === targetPoId);
-      if (orderMatch?.po_number) {
-        setSearchTerm(orderMatch.po_number);
+      if (mode === 'warehouse') {
+        const orderMatch = orders.find((o) => String(o.id) === String(targetPoId));
+        if (orderMatch?.po_number) {
+          setSearchTerm(orderMatch.po_number);
+        }
       } else {
-        setSearchTerm(String(targetPoId));
+        const receiptMatch = [...receipts, ...archiveReceipts].find(
+          (r) => String(r.purchase_order_id) === String(targetPoId) || String(r.purchase_order?.id) === String(targetPoId)
+        );
+        if (receiptMatch) {
+          if (receiptMatch.receipt_number) {
+            setSearchTerm(receiptMatch.receipt_number);
+          }
+          const isArchived = archiveReceipts.some((r) => String(r.id) === String(receiptMatch.id));
+          if (isArchived) {
+            setActiveTab('ARCHIVE');
+            setExpandedArchiveId(receiptMatch.id);
+          } else {
+            setActiveTab('QUEUE');
+          }
+
+          setTimeout(() => {
+            const el = document.getElementById(`receipt-card-${receiptMatch.id}`);
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          }, 120);
+        }
       }
     }
-  }, [searchParams, receipts, archiveReceipts, orders]);
+  }, [targetReceiptId, targetPoId, receipts, archiveReceipts, orders, mode]);
 
   const normalizedSearch = searchTerm.trim().toLocaleLowerCase('ar-EG');
   const ignoreDefaultDateForSearch = Boolean(normalizedSearch) && isDefaultTodayRange(dateFrom, dateTo);
-  const matchesFilter = (text: string, value: string, isQueueItem = false) => {
+  const matchesFilter = (
+    text: string,
+    value: string,
+    isQueueItem = false,
+    itemId?: number | string,
+    itemPoId?: number | string
+  ) => {
+    // 1. Direct match for targetReceiptId: ALWAYS keep targeted receipt visible regardless of filters
+    if (targetReceiptId && itemId && String(itemId) === String(targetReceiptId)) {
+      return true;
+    }
+    // 2. Direct match for targetPoId fallback
+    if (targetPoId && itemPoId && String(itemPoId) === String(targetPoId)) {
+      return true;
+    }
     const textMatches = !normalizedSearch || text.toLocaleLowerCase('ar-EG').includes(normalizedSearch);
     if (!textMatches) return false;
     if (isQueueItem && isDefaultTodayRange(dateFrom, dateTo)) {
@@ -179,6 +231,7 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
   const visibleOrders = orders.filter((order) =>
     matchesFilter(
       [
+        String(order.id),
         order.po_number,
         order.purchase_request?.request_number,
         order.supplier?.company_name,
@@ -190,14 +243,18 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
         .join(' '),
       String(order.created_at || order.purchase_request?.created_at || '').slice(0, 10),
       true,
+      undefined,
+      order.id,
     ),
   );
 
   const visibleReceipts = receipts.filter((receipt) =>
     matchesFilter(
       [
+        String(receipt.id),
         receipt.receipt_number,
         receipt.purchase_order?.po_number,
+        receipt.purchase_order?.id ? String(receipt.purchase_order.id) : '',
         receipt.supplier?.company_name,
         receipt.supplier_name,
         receipt.purchase_order?.supplier?.company_name,
@@ -209,14 +266,18 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
         .join(' '),
       String(receipt.received_at || receipt.created_at || '').slice(0, 10),
       true,
+      receipt.id,
+      receipt.purchase_order_id || receipt.purchase_order?.id,
     ),
   );
 
   const visibleArchive = archiveReceipts.filter((receipt) =>
     matchesFilter(
       [
+        String(receipt.id),
         receipt.receipt_number,
         receipt.purchase_order?.po_number,
+        receipt.purchase_order?.id ? String(receipt.purchase_order.id) : '',
         receipt.supplier?.company_name,
         receipt.supplier_name,
         receipt.purchase_order?.supplier?.company_name,
@@ -230,6 +291,9 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
         .filter(Boolean)
         .join(' '),
       String(receipt.received_at || receipt.created_at || '').slice(0, 10),
+      false,
+      receipt.id,
+      receipt.purchase_order_id || receipt.purchase_order?.id,
     ),
   );
 
@@ -247,6 +311,8 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
       return {
         id: `receipt-${r.id}`,
         rawId: r.id,
+        receipt_id: r.id,
+        po_id: r.purchase_order_id || r.purchase_order?.id,
         type: 'RECEIPT' as const,
         code: r.receipt_number,
         title: r.purchase_order?.items?.[0]?.item_description || `إذن استلام ${r.receipt_number}`,
@@ -255,7 +321,7 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
         supplier: r.purchase_order?.supplier?.company_name || r.supplier?.company_name,
         urgency: 'CRITICAL' as const,
         reason: 'تم استلام المواد بالمخزن وبانتظار معاينتك ومطابقتك الهندسية بالموقع',
-        actionUrl: `/site-engineer?receipt_id=${r.id}`,
+        actionUrl: `/receipts/${r.id}/inspect`,
         actionLabel: 'فحص واعتماد إذن الاستلام',
         created_at: r.created_at || undefined,
         timeAgo: r.created_at ? formatDateTime24h(r.created_at) : undefined,
@@ -995,8 +1061,18 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                 {visibleReceipts.map((receipt) => {
                   const isSavingThis = saving === receipt.id;
 
+                  const isTargeted = Boolean(targetReceiptId && String(receipt.id) === String(targetReceiptId));
+
                   return (
-                    <Card key={receipt.id} className="p-4 sm:p-6 space-y-5 border-2 border-emerald-500/50 bg-slate-900/95 shadow-2xl rounded-2xl">
+                    <Card
+                      id={`receipt-card-${receipt.id}`}
+                      key={receipt.id}
+                      className={`p-4 sm:p-6 space-y-5 border-2 ${
+                        isTargeted
+                          ? 'border-cyan-400 ring-4 ring-cyan-500/30 bg-slate-900 shadow-cyan-950/60'
+                          : 'border-emerald-500/50 bg-slate-900/95'
+                      } shadow-2xl rounded-2xl transition-all`}
+                    >
                       {/* Header */}
                       <div className="space-y-3 border-b border-slate-800 pb-4">
                         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1321,11 +1397,16 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
               const isApproved = receipt.status === 'APPROVED';
               const isPendingSite = receipt.status === 'PENDING_SITE_ENGINEER';
 
+              const isTargeted = Boolean(targetReceiptId && String(receipt.id) === String(targetReceiptId));
+
               return (
                 <Card
+                  id={`receipt-card-${receipt.id}`}
                   key={`archive-${receipt.id}`}
                   className={`p-4 sm:p-6 space-y-4 border rounded-2xl transition-all ${
-                    isApproved
+                    isTargeted
+                      ? 'border-cyan-400 ring-4 ring-cyan-500/30 bg-slate-900 shadow-cyan-950/60'
+                      : isApproved
                       ? 'border-emerald-800/70 bg-slate-900/90'
                       : 'border-slate-800 bg-slate-900/80'
                   }`}

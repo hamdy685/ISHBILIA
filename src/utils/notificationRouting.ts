@@ -22,7 +22,7 @@ export const extractDocumentInfo = (notification: Notification & { data?: any })
 
   const prId = data.purchase_request_id || data.pr_id || (notifiableType.includes('PurchaseRequest') ? notification.notifiable_id : null);
   const poId = data.purchase_order_id || data.po_id || (notifiableType.includes('PurchaseOrder') ? notification.notifiable_id : null);
-  const receiptId = data.purchase_receipt_id || data.receipt_id || (notifiableType.includes('PurchaseReceipt') ? notification.notifiable_id : null);
+  const receiptId = data.purchase_receipt_id || data.receipt_id || notification.purchase_receipt_id || (notifiableType.includes('PurchaseReceipt') ? notification.notifiable_id : null);
   const invoiceId = data.invoice_id || (notifiableType.includes('SupplierInvoice') ? notification.notifiable_id : null);
   const supplierId = data.supplier_id;
   const quoteId = data.quote_id || data.purchase_request_quote_id;
@@ -392,7 +392,7 @@ export const resolveNotificationAction = (
     }
     // Site Engineer / Reviewer / Others handling receipts
     return {
-      url: receiptParam ? `/site-engineer?${receiptParam}` : '/site-engineer',
+      url: info.receiptId ? `/receipts/${info.receiptId}/inspect` : (receiptParam ? `/site-engineer?${receiptParam}` : '/receipts'),
       actionLabel: 'فحص واعتماد إذن الاستلام',
       icon: '🚚',
       badgeLabel: 'استلام موقع',

@@ -41,6 +41,14 @@ export interface ActionInboxItem {
   timeAgo?: string;
   created_at?: string | null;
   
+  // --- ID Disambiguation Fields ---
+  receipt_id?: number | string;
+  purchase_receipt_id?: number | string;
+  po_id?: number | string;
+  purchase_order_id?: number | string;
+  pr_id?: number | string;
+  purchase_request_id?: number | string;
+
   // --- Rich Details Fields ---
   request_type?: 'PROJECT' | 'OFFICE_SUPPLIES';
   date_needed?: string;
@@ -75,6 +83,83 @@ export interface ActionInboxItem {
     className?: string;
   };
 }
+
+/**
+ * Safely resolves the actual Material Receipt ID.
+ * Guarantees that only the genuine receipt primary key is extracted,
+ * and strictly prevents leaking purchase order (po_id) or request (pr_id) IDs.
+ */
+export const resolveReceiptId = (item: ActionInboxItem): number | string | null => {
+  if (item.receipt_id != null && item.receipt_id !== '') {
+    return item.receipt_id;
+  }
+  if (item.purchase_receipt_id != null && item.purchase_receipt_id !== '') {
+    return item.purchase_receipt_id;
+  }
+  if (item.type === 'RECEIPT' && item.rawId != null && Number(item.rawId) > 0) {
+    return item.rawId;
+  }
+  if (typeof item.id === 'string') {
+    const idMatch = item.id.match(/^receipt-(?:[a-zA-Z]+-)?(\d+)$/);
+    if (idMatch) {
+      return idMatch[1];
+    }
+  }
+  if (item.actionUrl) {
+    const queryMatch = item.actionUrl.match(/[?&](?:receipt_id|purchase_receipt_id)=(\d+)/);
+    if (queryMatch) {
+      return queryMatch[1];
+    }
+    const pathInspectMatch = item.actionUrl.match(/\/receipts\/(\d+)(?:\/inspect)?/);
+    if (pathInspectMatch) {
+      return pathInspectMatch[1];
+    }
+  }
+  return null;
+};
+
+/**
+ * Resolves the destination URL for an action item.
+ * For Receipt inspection items, ensures the target URL points to the dedicated
+ * inspection route (/receipts/{receipt_id}/inspect) using the actual receipt_id.
+ */
+export const resolveActionItemUrl = (item: ActionInboxItem): string => {
+  const isReceipt =
+    item.type === 'RECEIPT' ||
+    item.actionLabel?.includes('إذن الاستلام') ||
+    item.actionLabel?.includes('فحص واعتماد') ||
+    (typeof item.id === 'string' && item.id.startsWith('receipt-'));
+
+  if (isReceipt) {
+    const receiptId = resolveReceiptId(item);
+    if (receiptId) {
+      // If actionUrl was poisoned with po_id or pr_id, or is missing / empty:
+      const hasPoOrPrIdCorruption =
+        !item.actionUrl ||
+        item.actionUrl.includes('po_id=') ||
+        item.actionUrl.includes('purchase_order_id=') ||
+        item.actionUrl.includes('pr_id=') ||
+        item.actionUrl.includes('/purchase-orders/');
+
+      if (hasPoOrPrIdCorruption) {
+        return `/receipts/${receiptId}/inspect`;
+      }
+
+      // If actionUrl already specifies the valid receipt inspection route or query with the real receiptId:
+      if (
+        item.actionUrl.includes(`/receipts/${receiptId}/inspect`) ||
+        item.actionUrl.includes(`receipt_id=${receiptId}`)
+      ) {
+        return item.actionUrl;
+      }
+
+      // Default canonical inspection route
+      return `/receipts/${receiptId}/inspect`;
+    }
+  }
+
+  return item.actionUrl;
+};
 
 export interface ActionRequiredInboxProps {
   title?: string;
@@ -455,8 +540,9 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                     onClick={() => {
                     if (item.onAction) {
                       item.onAction(item);
-                    } else if (item.actionUrl) {
-                      navigate(item.actionUrl);
+                    } else {
+                      const targetUrl = resolveActionItemUrl(item);
+                      if (targetUrl) navigate(targetUrl);
                     }
                   }}
                   className={`rounded-2xl border p-4 flex flex-col justify-between gap-3.5 transition-all hover:shadow-2xl cursor-pointer ${
@@ -797,7 +883,8 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                           if (item.onAction) {
                             item.onAction(item);
                           } else {
-                            navigate(item.actionUrl);
+                            const targetUrl = resolveActionItemUrl(item);
+                            if (targetUrl) navigate(targetUrl);
                           }
                         }}
                         className={`flex-1 text-xs font-bold ${

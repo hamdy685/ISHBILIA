@@ -219,4 +219,70 @@ describe('Unified Pending Actions Frontend Widget', () => {
     fireEvent.click(quoteCard!);
     expect(mockNavigate).toHaveBeenCalledWith('/reviewer/purchase-quotes?open=404');
   });
+
+  it('navigates to /receipts/:id/inspect using actual receipt_id when clicking button', () => {
+    const receiptItem: ActionInboxItem[] = [
+      {
+        id: 'receipt-505',
+        rawId: 505,
+        receipt_id: 505,
+        po_id: 88,
+        type: 'RECEIPT',
+        code: 'REC-505',
+        title: 'إذن استلام مواد سيراميك',
+        subtitle: 'لأمر الشراء PO-88',
+        department: 'المكتب الفني',
+        urgency: 'CRITICAL',
+        reason: 'تم استلام المواد وبانتظار معاينتك وفحصك الميداني/الهندسي واعتماد الاستلام بالموقع',
+        actionUrl: '/receipts/505/inspect',
+        actionLabel: 'فحص واعتماد إذن الاستلام',
+      },
+    ];
+
+    render(
+      <MemoryRouter>
+        <AuthProvider>
+          <PendingActions items={receiptItem} />
+        </AuthProvider>
+      </MemoryRouter>
+    );
+
+    const actionButton = screen.getByRole('button', { name: /فحص واعتماد إذن الاستلام/i });
+    fireEvent.click(actionButton);
+    expect(mockNavigate).toHaveBeenCalledWith('/receipts/505/inspect');
+  });
+
+  it('purges wrong po_id/pr_id from actionUrl and routes to /receipts/:id/inspect with genuine receipt_id', () => {
+    const contaminatedItem: ActionInboxItem[] = [
+      {
+        id: 'receipt-606',
+        rawId: 606,
+        receipt_id: 606,
+        po_id: 99,
+        type: 'RECEIPT',
+        code: 'REC-606',
+        title: 'إذن استلام مواد رمل صب',
+        subtitle: 'لأمر الشراء PO-99',
+        department: 'المكتب الفني',
+        urgency: 'CRITICAL',
+        reason: 'تم استلام المواد وبانتظار معاينتك وفحصك الميداني/الهندسي واعتماد الاستلام بالموقع',
+        // Deliberately contaminated actionUrl passing po_id instead of receipt_id
+        actionUrl: '/site-engineer?po_id=99',
+        actionLabel: 'فحص واعتماد إذن الاستلام',
+      },
+    ];
+
+    render(
+      <MemoryRouter>
+        <AuthProvider>
+          <ActionRequiredInbox items={contaminatedItem} />
+        </AuthProvider>
+      </MemoryRouter>
+    );
+
+    const actionButton = screen.getByRole('button', { name: /فحص واعتماد إذن الاستلام/i });
+    fireEvent.click(actionButton);
+    // Verified that po_id=99 was stripped and genuine receipt_id=606 is used
+    expect(mockNavigate).toHaveBeenCalledWith('/receipts/606/inspect');
+  });
 });

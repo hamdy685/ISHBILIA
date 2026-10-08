@@ -71,6 +71,7 @@ export interface ReceiptRecord {
   is_internal_warehouse?: boolean;
   warehouse_keeper?: { id: number; name: string } | null;
   site_engineer?: { id: number; name: string } | null;
+  purchase_order_id?: number | null;
   purchase_order?: ReceiptPurchaseOrder | null;
   purchase_request?: ReceiptPurchaseOrder['purchase_request'];
   items?: Array<{

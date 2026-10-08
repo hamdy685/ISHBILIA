@@ -249,6 +249,8 @@ export const EmployeeDashboardPage: React.FC = () => {
               taskMap.set(receiptTaskId, {
                 id: receiptTaskId,
                 rawId: rc.id,
+                receipt_id: rc.id,
+                po_id: rc.purchase_order_id || rc.purchase_order?.id,
                 type: 'RECEIPT' as const,
                 code: rc.receipt_number,
                 title: rc.purchase_order?.items?.[0]?.item_description || `إذن استلام ${rc.receipt_number}`,
@@ -257,7 +259,7 @@ export const EmployeeDashboardPage: React.FC = () => {
                 supplier: rc.purchase_order?.supplier?.company_name || rc.supplier?.company_name,
                 urgency: 'CRITICAL' as const,
                 reason: 'تم استلام المواد وبانتظار معاينتك وفحصك الميداني/الهندسي واعتماد الاستلام بالموقع',
-                actionUrl: `/site-engineer?receipt_id=${rc.id}`,
+                actionUrl: `/receipts/${rc.id}/inspect`,
                 actionLabel: 'فحص واعتماد إذن الاستلام',
                 stageBadge: {
                   text: 'إذن استلام مواد',

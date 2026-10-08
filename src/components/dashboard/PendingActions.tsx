@@ -3,6 +3,8 @@ import ActionRequiredInbox, {
   ActionInboxItem,
   ActionInboxItemDetail,
   ActionRequiredInboxProps,
+  resolveReceiptId,
+  resolveActionItemUrl,
 } from './ActionRequiredInbox';
 
 export type PendingActionsProps = ActionRequiredInboxProps;
@@ -16,5 +18,5 @@ export const PendingActions: React.FC<PendingActionsProps> = (props) => {
 };
 
 export default PendingActions;
-export { ActionRequiredInbox };
+export { ActionRequiredInbox, resolveReceiptId, resolveActionItemUrl };
 export type { ActionInboxItem, ActionInboxItemDetail, ActionRequiredInboxProps };
