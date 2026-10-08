@@ -11,6 +11,7 @@ import {
 } from '../../api/reviewer';
 import { getAssignedReceiptsApi, ReceiptRecord } from '../../api/purchaseReceipts';
 import { getPendingQuoteRequestsApi } from '../../api/purchaseQuotes';
+import { getDashboardPendingTasksApi } from '../../api/dashboard';
 import { ApiError } from '../../types/api';
 import { PurchaseRequest } from '../../types/purchaseRequest';
 import { parseApiError } from '../../utils/apiError';
@@ -40,6 +41,7 @@ export const ReviewerDashboardPage: React.FC = () => {
   const [requests, setRequests] = useState<PurchaseRequest[]>([]);
   const [assignedReceipts, setAssignedReceipts] = useState<ReceiptRecord[]>([]);
   const [quoteRequests, setQuoteRequests] = useState<PurchaseRequest[]>([]);
+  const [backendPendingTasks, setBackendPendingTasks] = useState<ActionInboxItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -47,14 +49,16 @@ export const ReviewerDashboardPage: React.FC = () => {
     if (!silent) setIsLoading(true);
     setError(null);
     try {
-      const [data, receipts, quotes] = await Promise.all([
+      const [data, receipts, quotes, tasks] = await Promise.all([
         getReviewableRequestsApi(),
         getAssignedReceiptsApi().catch(() => []),
         getPendingQuoteRequestsApi().catch(() => []),
+        getDashboardPendingTasksApi().catch(() => []),
       ]);
       setRequests(data || []);
       setAssignedReceipts(receipts || []);
       setQuoteRequests(quotes || []);
+      setBackendPendingTasks(tasks || []);
     } catch (err) {
       if (!silent) setError(parseApiError(err));
     } finally {
@@ -223,6 +227,29 @@ export const ReviewerDashboardPage: React.FC = () => {
       })),
   ];
 
+  // Merge with backend pending tasks ensuring deduplication
+  const unifiedReviewerItems = React.useMemo(() => {
+    const taskMap = new Map<string, ActionInboxItem>();
+
+    // Seed with local reviewer items (which have direct approve/reject handler callbacks)
+    reviewerActionItems.forEach((item) => {
+      taskMap.set(String(item.id), item);
+    });
+
+    // Merge any other tasks from backend (e.g. additional receipts or requests)
+    backendPendingTasks.forEach((t) => {
+      if (!taskMap.has(String(t.id))) {
+        taskMap.set(String(t.id), t);
+      }
+    });
+
+    return Array.from(taskMap.values()).sort((a, b) => {
+      const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return timeB - timeA;
+    });
+  }, [reviewerActionItems, backendPendingTasks]);
+
   return (
     <div className="min-w-0 space-y-6 animate-fade-in" dir="rtl">
       <div className="flex min-w-0 flex-col justify-between gap-4 border-b border-slate-800 pb-4 sm:flex-row sm:items-center">
@@ -253,10 +280,10 @@ export const ReviewerDashboardPage: React.FC = () => {
       {/* ── صندوق المهام والإجراءات المطلوبة منك الآن (Action Inbox) ── */}
       <ActionRequiredInbox
         title="المهام والإجراءات المطلوبة منك الآن"
-        description="الطلبات، عروض الأسعار، وأذونات الاستلام التي تتطلب مراجعتك واعتمادك الفني والميداني."
+        description="جميع المعاملات والطلبات التي تتطلب تدخلك أو قرارك الفوري."
         roleName={`المراجع الفني / رئيس القسم (${user?.department?.name || 'عام'})`}
         onItemActionComplete={() => fetchRequests(true)}
-        items={reviewerActionItems}
+        items={unifiedReviewerItems}
       />
 
       {/* Slim Horizontal KPI Pills */}

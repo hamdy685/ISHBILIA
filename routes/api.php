@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\GeneralManagerPurchaseOrderController;
 use App\Http\Controllers\Api\V1\GeneralManagerPurchaseRequestController;
 use App\Http\Controllers\Api\V1\HealthController;
+use App\Http\Controllers\Api\V1\DashboardPendingTasksController;
 use App\Http\Controllers\Api\V1\LandParcelController;
 use App\Http\Controllers\Api\V1\ProcurementAnalyticsController;
 use App\Http\Controllers\Api\V1\PurchaseQuoteController;
@@ -62,6 +63,10 @@ Route::prefix('auth')->group(function () {
 // Catalog Items Route
 Route::middleware('auth:sanctum')->get('/catalog-items', [\App\Http\Controllers\Api\V1\CatalogItemController::class, 'index']);
 Route::middleware('auth:sanctum')->get('/items/suggestions', [\App\Http\Controllers\Api\V1\CatalogItemController::class, 'suggestions']);
+
+// Unified Dashboard Pending Tasks (Aggregated tasks across all entities)
+Route::middleware('auth:sanctum')->get('/dashboard/pending-tasks', [DashboardPendingTasksController::class, 'index']);
+Route::middleware('auth:sanctum')->get('/pending-tasks', [DashboardPendingTasksController::class, 'index']);
 Route::middleware('auth:sanctum')->get('/reports/purchases', [PurchasesReportController::class, 'index'])
     ->middleware('permission:purchase_order.view|purchase_order.view_gm|purchase_order.view_accounting');
 Route::middleware('auth:sanctum')->get('/supplier-invoices/pending', [SupplierInvoiceController::class, 'approvedReceipts'])
@@ -420,19 +425,19 @@ Route::middleware('auth:sanctum')->prefix('purchase-receipts')->group(function (
     Route::get('/pending-warehouse-tasks', [PurchaseReceiptController::class, 'pendingWarehouseTasks'])
         ->middleware('permission:purchase_receipt.view_assigned');
     Route::get('/assigned', [PurchaseReceiptController::class, 'indexAssigned'])
-        ->middleware('permission:purchase_receipt.view_assigned');
+        ->middleware('permission:purchase_receipt.view_assigned|purchase_request.view_own');
     Route::get('/archive', [PurchaseReceiptController::class, 'archive'])
-        ->middleware('permission:purchase_receipt.view_assigned');
+        ->middleware('permission:purchase_receipt.view_assigned|purchase_request.view_own');
     Route::get('/{id}', [PurchaseReceiptController::class, 'show'])
-        ->middleware('permission:purchase_receipt.view_assigned');
+        ->middleware('permission:purchase_receipt.view_assigned|purchase_request.view_own');
     Route::post('/purchase-orders/{purchaseOrderId}', [PurchaseReceiptController::class, 'store'])
         ->middleware('permission:purchase_receipt.edit');
     Route::post('/purchase-orders/{purchaseOrderId}/confirm-office', [PurchaseReceiptController::class, 'confirmOfficeReceipt'])
         ->middleware('permission:purchase_receipt.edit|purchase_request.view_own');
     Route::put('/{id}', [PurchaseReceiptController::class, 'update'])
-        ->middleware('permission:purchase_receipt.edit');
+        ->middleware('permission:purchase_receipt.edit|purchase_request.view_own');
     Route::post('/{id}/approve', [PurchaseReceiptController::class, 'approve'])
-        ->middleware('permission:purchase_receipt.approve');
+        ->middleware('permission:purchase_receipt.approve|purchase_request.view_own');
 });
 
 // Receipt direct photo stream (authenticated & permission-checked)

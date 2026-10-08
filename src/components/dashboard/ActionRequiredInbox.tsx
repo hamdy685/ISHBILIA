@@ -87,7 +87,7 @@ export interface ActionRequiredInboxProps {
 
 export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
   title = 'المهام والإجراءات المطلوبة منك الآن',
-  description = 'هذه المعاملات تقف حالياً على خطوتك وقرارك، يمكنك اتخاذ الإجراء بضغطة زر واحدة.',
+  description = 'جميع المعاملات والطلبات التي تتطلب تدخلك أو قرارك الفوري.',
   items,
   loading = false,
   roleName,
@@ -413,7 +413,14 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
               return (
                 <div
                   key={`${item.type}-${item.id}`}
-                  className={`rounded-2xl border p-4 flex flex-col justify-between gap-3.5 transition-all hover:shadow-2xl ${
+                  onClick={() => {
+                    if (item.onAction) {
+                      item.onAction(item);
+                    } else if (item.actionUrl) {
+                      navigate(item.actionUrl);
+                    }
+                  }}
+                  className={`rounded-2xl border p-4 flex flex-col justify-between gap-3.5 transition-all hover:shadow-2xl cursor-pointer ${
                     isUrgent
                       ? 'border-amber-500/70 bg-slate-950/95 shadow-amber-950/20 ring-1 ring-amber-500/30'
                       : 'border-slate-800 bg-slate-950/85 hover:border-cyan-500/60'
@@ -427,7 +434,7 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                           {item.code}
                         </span>
 
-                        {item.stageBadge && (
+                        {item.stageBadge ? (
                           <span
                             className={`text-[11px] font-black px-2.5 py-0.5 rounded-lg border flex items-center gap-1 shadow-xs ${
                               item.stageBadge.className || 'bg-slate-800 text-slate-200 border-slate-700'
@@ -436,7 +443,12 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                             {item.stageBadge.icon && <span>{item.stageBadge.icon}</span>}
                             <span>{item.stageBadge.text}</span>
                           </span>
-                        )}
+                        ) : item.type === 'RECEIPT' ? (
+                          <span className="text-[11px] font-black px-2.5 py-0.5 rounded-lg border flex items-center gap-1 bg-emerald-950/80 text-emerald-300 border-emerald-800/60 shadow-xs">
+                            <span>📦</span>
+                            <span>إذن استلام مواد</span>
+                          </span>
+                        ) : null}
 
                         {isOffice ? (
                           <span className="text-[11px] font-bold bg-indigo-950/90 text-indigo-300 border border-indigo-800/70 px-2.5 py-1 rounded-xl flex items-center gap-1">
@@ -694,7 +706,10 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                             variant="primary"
                             size="sm"
                             disabled={isSubmitting}
-                            onClick={() => handleDirectSubmit(item)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDirectSubmit(item);
+                            }}
                             className="flex-1 text-xs font-black shadow-md shadow-cyan-950/40"
                           >
                             <span>{isSubmitting ? 'جاري الإرسال...' : '🚀 إرسال للاعتماد'}</span>
@@ -705,7 +720,10 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                           <Button
                             variant="danger"
                             size="sm"
-                            onClick={() => setRejectModal({ isOpen: true, item, reason: '', isSubmitting: false, error: undefined })}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setRejectModal({ isOpen: true, item, reason: '', isSubmitting: false, error: undefined });
+                            }}
                             className={`text-xs font-bold px-3 transition-all ${
                               item.directRejectClassName || 'bg-rose-950/80 text-rose-300 border-rose-800/60 hover:bg-rose-900/80'
                             }`}
@@ -744,7 +762,10 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                       {canPeek && (
                         <button
                           type="button"
-                          onClick={() => handleOpenPeek(item)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenPeek(item);
+                          }}
                           className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-bold text-slate-300 hover:border-cyan-500/60 hover:bg-slate-800 hover:text-cyan-300 transition-colors cursor-pointer shrink-0"
                           title="معاينة سريعة لكافة التفاصيل"
                         >
@@ -1007,3 +1028,4 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
 };
 
 export default ActionRequiredInbox;
+export const PendingActions = ActionRequiredInbox;

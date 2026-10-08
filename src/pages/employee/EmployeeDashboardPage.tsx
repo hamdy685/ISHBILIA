@@ -11,6 +11,8 @@ import {
   getOwnPurchaseRequestsApi,
   submitPurchaseRequestApi,
 } from '../../api/purchaseRequests';
+import { getDashboardPendingTasksApi } from '../../api/dashboard';
+import { getAssignedReceiptsApi, ReceiptRecord } from '../../api/purchaseReceipts';
 import { ApiError } from '../../types/api';
 import { PurchaseRequest } from '../../types/purchaseRequest';
 import { parseApiError } from '../../utils/apiError';
@@ -36,6 +38,8 @@ const EMPLOYEE_APPROVED_STATUSES = new Set([
 export const EmployeeDashboardPage: React.FC = () => {
   const { user, hasPermission } = useAuth();
   const [requests, setRequests] = useState<PurchaseRequest[]>([]);
+  const [assignedReceipts, setAssignedReceipts] = useState<ReceiptRecord[]>([]);
+  const [backendPendingTasks, setBackendPendingTasks] = useState<ActionInboxItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -49,8 +53,14 @@ export const EmployeeDashboardPage: React.FC = () => {
     if (!silent) setIsLoading(true);
     setError(null);
     try {
-      const data = await getOwnPurchaseRequestsApi();
-      setRequests(data);
+      const [data, tasks, receipts] = await Promise.all([
+        getOwnPurchaseRequestsApi(),
+        getDashboardPendingTasksApi().catch(() => []),
+        getAssignedReceiptsApi().catch(() => []),
+      ]);
+      setRequests(data || []);
+      setBackendPendingTasks(tasks || []);
+      setAssignedReceipts(receipts || []);
     } catch (err) {
       if (!silent) setError(parseApiError(err));
     } finally {
@@ -163,46 +173,122 @@ export const EmployeeDashboardPage: React.FC = () => {
 
       {/* ── صندوق الإجراءات المطلوبة منك (Employee Action Inbox) ── */}
       {(() => {
-        const employeeActionItems: ActionInboxItem[] = [
-          ...requests
-            .filter((r) => r.status === 'DRAFT' || r.status === 'RETURNED')
-            .map((r) => ({
-              id: `req-${r.status.toLowerCase()}-${r.id}`,
-              rawId: r.id,
-              type: 'PR' as const,
-              code: r.request_number,
-              title: r.justification || (r.request_type === 'OFFICE_SUPPLIES' ? 'طلب مستلزمات مكتبية' : 'طلب مواد مشروعات'),
-              subtitle: r.status === 'RETURNED' ? 'طلب مُعاد إليك للتعديل' : (r.justification ? (r.request_type === 'OFFICE_SUPPLIES' ? 'مستلزمات مكتبية' : 'مشتريات مواقع') : undefined),
-              department: r.department?.name,
-              amount: undefined,
-              urgency: 'HIGH' as const,
-              reason: r.status === 'RETURNED' ? 'تمت إعادة الطلب إليك للمراجعة والتعديل قبل إعادة الإرسال' : 'مسودة لم تُرسل بعد للمراجعة والاعتماد',
-              actionUrl: `/employee/requests/${r.id}/edit`,
-              actionLabel: r.status === 'RETURNED' ? 'تعديل وإعادة الإرسال' : 'فتح وتعديل المسودة',
-              created_at: r.created_at,
-              timeAgo: r.created_at ? formatDateTime24h(r.created_at) : undefined,
-              request_type: r.request_type,
-              date_needed: r.date_needed || undefined,
-              priority: r.priority,
-              parcel_number: r.items?.[0]?.item_reference || undefined,
-              region: r.items?.[0]?.region || undefined,
-              items_count: r.items?.length || 0,
-              items_list: r.items?.map((it) => ({
-                description: it.item_description || it.item?.name || 'صنف',
-                quantity: it.quantity,
-                uom: it.uom,
-              })),
-              onDirectSubmit: async (_item: any) => {
-                await submitPurchaseRequestApi(r.id);
-                await fetchRequests(true);
-              },
-            })),
-        ];
+        // Build unified action items dictionary by id to ensure deduplication
+        const taskMap = new Map<string, ActionInboxItem>();
+
+        // 1. Seed from backend unified pending tasks
+        backendPendingTasks.forEach((t) => {
+          const item: ActionInboxItem = {
+            ...t,
+            onDirectSubmit: t.type === 'PR' && (t.code || t.rawId) ? async () => {
+              await submitPurchaseRequestApi(t.rawId);
+              await fetchRequests(true);
+            } : undefined,
+          };
+          taskMap.set(String(t.id), item);
+        });
+
+        // 2. Merge local purchase requests (Drafts, Returned, Rejected)
+        requests
+          .filter((r) => r.status === 'DRAFT' || r.status === 'RETURNED' || r.status === 'REJECTED')
+          .forEach((r) => {
+            const taskId = `pr-${r.status}-${r.id}`;
+            const legacyId = `req-${r.status.toLowerCase()}-${r.id}`;
+            if (!taskMap.has(taskId) && !taskMap.has(legacyId)) {
+              const isReturned = r.status === 'RETURNED';
+              const isRejected = r.status === 'REJECTED';
+              taskMap.set(taskId, {
+                id: taskId,
+                rawId: r.id,
+                type: 'PR' as const,
+                code: r.request_number,
+                title: r.justification || (r.request_type === 'OFFICE_SUPPLIES' ? 'طلب مستلزمات مكتبية' : 'طلب مواد مشروعات'),
+                subtitle: isReturned ? 'طلب مُعاد إليك للتعديل' : (isRejected ? 'طلب مرفوض يحتاج مراجعة أو تعديل' : 'مسودة لم تُرسل بعد للمراجعة'),
+                department: r.department?.name,
+                amount: r.total_estimated_cost ? Number(r.total_estimated_cost) : undefined,
+                urgency: (isReturned || isRejected) ? 'HIGH' : 'NORMAL',
+                reason: isReturned
+                  ? 'تمت إعادة الطلب إليك للمراجعة والتعديل قبل إعادة الإرسال'
+                  : (isRejected ? (r.rejection_reason || 'تم رفض الطلب ويحتاج التعديل أو المراجعة') : 'مسودة لم تُرسل بعد للمراجعة والاعتماد'),
+                actionUrl: `/employee/requests/${r.id}/edit`,
+                actionLabel: (isReturned || isRejected) ? 'تعديل وإعادة الإرسال' : 'فتح وتعديل المسودة',
+                stageBadge: {
+                  text: isReturned ? 'طلب مُعاد' : (isRejected ? 'طلب مرفوض' : 'مسودة طلب'),
+                  icon: isReturned ? '↩️' : (isRejected ? '❌' : '✏️'),
+                  className: isReturned
+                    ? 'bg-amber-950/80 text-amber-300 border-amber-800/60'
+                    : (isRejected ? 'bg-rose-950/80 text-rose-300 border-rose-800/60' : 'bg-slate-800 text-slate-300 border-slate-700'),
+                },
+                created_at: r.created_at,
+                timeAgo: r.created_at ? formatDateTime24h(r.created_at) : undefined,
+                request_type: r.request_type,
+                date_needed: r.date_needed || undefined,
+                priority: r.priority,
+                parcel_number: r.items?.[0]?.item_reference || undefined,
+                region: r.items?.[0]?.region || undefined,
+                items_count: r.items?.length || 0,
+                items_list: r.items?.map((it) => ({
+                  description: it.item_description || it.item?.name || 'صنف',
+                  quantity: it.quantity,
+                  uom: it.uom,
+                })),
+                onDirectSubmit: async () => {
+                  await submitPurchaseRequestApi(r.id);
+                  await fetchRequests(true);
+                },
+              });
+            }
+          });
+
+        // 3. Merge assigned material receipts awaiting field / site inspection
+        assignedReceipts
+          .filter((rc) => rc.status === 'PENDING_SITE_ENGINEER' || rc.status === 'WAREHOUSE_RECEIPT_SUBMITTED')
+          .forEach((rc) => {
+            const receiptTaskId = `receipt-${rc.id}`;
+            if (!taskMap.has(receiptTaskId)) {
+              taskMap.set(receiptTaskId, {
+                id: receiptTaskId,
+                rawId: rc.id,
+                type: 'RECEIPT' as const,
+                code: rc.receipt_number,
+                title: rc.purchase_order?.items?.[0]?.item_description || `إذن استلام ${rc.receipt_number}`,
+                subtitle: rc.purchase_order ? `لأمر الشراء ${rc.purchase_order.po_number}` : undefined,
+                department: rc.purchase_request?.department?.name || rc.purchase_order?.purchase_request?.department?.name,
+                supplier: rc.purchase_order?.supplier?.company_name || rc.supplier?.company_name,
+                urgency: 'CRITICAL' as const,
+                reason: 'تم استلام المواد وبانتظار معاينتك وفحصك الميداني/الهندسي واعتماد الاستلام بالموقع',
+                actionUrl: `/site-engineer?receipt_id=${rc.id}`,
+                actionLabel: 'فحص واعتماد إذن الاستلام',
+                stageBadge: {
+                  text: 'إذن استلام مواد',
+                  icon: '📦',
+                  className: 'bg-emerald-950/80 text-emerald-300 border-emerald-800/60',
+                },
+                created_at: rc.created_at || undefined,
+                timeAgo: rc.created_at ? formatDateTime24h(rc.created_at) : undefined,
+                items_count: rc.items?.length || 0,
+                items_list: rc.items?.map((it) => ({
+                  description: it.purchase_order_item?.item_description || 'بند استلام',
+                  quantity: it.received_quantity,
+                  uom: it.purchase_order_item?.uom,
+                  parcel: it.purchase_order_item?.item_reference,
+                  region: it.purchase_order_item?.region,
+                })),
+              });
+            }
+          });
+
+        // Sort unified collection: newest first
+        const employeeActionItems = Array.from(taskMap.values()).sort((a, b) => {
+          const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+          return timeB - timeA;
+        });
 
         return (
           <ActionRequiredInbox
             title="المهام والإجراءات المطلوبة منك الآن"
-            description="الطلبات المسودة والمُعادة المطلوب اتخاذ إجراء عليها وإرسالها للمراجعة والاعتماد."
+            description="جميع المعاملات والطلبات التي تتطلب تدخلك أو قرارك الفوري."
             roleName="لوحة الموظف"
             onItemActionComplete={() => fetchRequests(true)}
             items={employeeActionItems}

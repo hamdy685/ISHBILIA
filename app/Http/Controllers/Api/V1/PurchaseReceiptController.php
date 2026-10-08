@@ -94,8 +94,12 @@ class PurchaseReceiptController extends Controller
             'items.purchaseOrderItem.item',
             'items.purchaseOrderItem.prItem',
         ])
-            ->where('site_engineer_user_id', $request->user()->id)
-            ->where('status', 'PENDING_SITE_ENGINEER')
+            ->where(function ($q) use ($request) {
+                $q->where('site_engineer_user_id', $request->user()->id)
+                  ->orWhereHas('purchaseOrder.purchaseRequest', fn ($prQ) => $prQ->where('site_engineer_user_id', $request->user()->id))
+                  ->orWhereHas('purchaseRequest', fn ($prQ) => $prQ->where('site_engineer_user_id', $request->user()->id));
+            })
+            ->whereIn('status', ['PENDING_SITE_ENGINEER', 'WAREHOUSE_RECEIPT_SUBMITTED'])
             ->orderByDesc('created_at')
             ->paginate(min((int) $request->query('per_page', 15), 100));
 
