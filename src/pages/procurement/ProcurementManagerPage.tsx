@@ -28,6 +28,8 @@ import SupplierModal from '../../components/procurement/SupplierModal';
 import DirectPoModal from '../../components/procurement/DirectPoModal';
 import DirectAccountingReviewModal from '../../components/procurement/DirectAccountingReviewModal';
 import PurchaseQuotesModal from '../../components/procurement/PurchaseQuotesModal';
+import FinalizeActualPoModal from '../../components/procurement/FinalizeActualPoModal';
+import { toast } from '../../utils/toast';
 import ThreeWayMatchPrintModal from '../../components/accounting/ThreeWayMatchPrintModal';
 import { PrDetailsModal } from '../../components/procurement/PrDetailsModal';
 import ProcurementCharts from '../../components/procurement/ProcurementCharts';
@@ -172,10 +174,14 @@ export const ProcurementManagerPage: React.FC = () => {
   const [supplementModalPr, setSupplementModalPr] = useState<PurchaseRequest | null>(null);
   const [supplementModalData, setSupplementModalData] = useState<PurchaseRequestSupplement | null>(null);
   const [supplementLoading, setSupplementLoading] = useState(false);
+  const [finalizePoId, setFinalizePoId] = useState<number | null>(null);
 
   useEffect(() => {
-    if (location.state && (location.state as { successMessage?: string }).successMessage) {
-      setSuccessBanner((location.state as { successMessage?: string }).successMessage || null);
+    const stateObj = location.state as { successMessage?: string; successMsg?: string } | null;
+    const msg = stateObj?.successMessage || stateObj?.successMsg;
+    if (msg) {
+      setSuccessBanner(msg);
+      toast.success(msg);
       window.history.replaceState({}, document.title);
     }
   }, [location.state]);
@@ -645,6 +651,9 @@ export const ProcurementManagerPage: React.FC = () => {
         reason: 'تم استلام البضاعة واعتماد إذن الاستلام بالموقع — أمر الشراء بانتظار إصدار الأمر الفعلي من المشتريات لإرساله للإدارة المالية.',
         actionUrl: `/procurement/purchase-orders/${po.id}/edit`,
         actionLabel: '⚡ إصدار أمر الشراء الفعلي',
+        onAction: () => {
+          setFinalizePoId(po.id);
+        },
         created_at: po.purchase_request?.created_at || po.created_at || undefined,
         timeAgo: (po.purchase_request?.created_at || po.created_at || po.updated_at) ? formatDateTime24h(po.purchase_request?.created_at || po.created_at || po.updated_at) : undefined,
         items_count: itemsList.length,
@@ -1877,7 +1886,7 @@ export const ProcurementManagerPage: React.FC = () => {
                             <Button
                               variant="primary"
                               size="sm"
-                              onClick={() => navigate(`/procurement/purchase-orders/${po.id}/edit`)}
+                              onClick={() => setFinalizePoId(po.id)}
                               className="font-black text-xs bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 text-white shadow-lg shadow-emerald-950/50 flex items-center gap-1.5 px-4 py-2 cursor-pointer"
                             >
                               <span>⚡</span> مراجعة وإصدار الأمر الفعلي ←
@@ -2044,6 +2053,17 @@ export const ProcurementManagerPage: React.FC = () => {
           onClose={() => setCyclePrintPo(null)}
         />
       )}
+
+      {/* Fast Finalize Actual PO Modal */}
+      <FinalizeActualPoModal
+        isOpen={Boolean(finalizePoId)}
+        poId={finalizePoId}
+        onClose={() => setFinalizePoId(null)}
+        onSuccess={() => {
+          setFinalizePoId(null);
+          void loadData();
+        }}
+      />
     </div>
   );
 };

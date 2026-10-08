@@ -6,6 +6,7 @@ import QuickPeekDrawer, { PeekType } from '../ui/QuickPeekDrawer';
 import { getSiteEngineerReceiverOptionsApi } from '../../api/purchaseRequests';
 import { ReceiptRecord } from '../../api/purchaseReceipts';
 import { QuickReceiptInspectionModal } from '../receipts/QuickReceiptInspectionModal';
+import { FinalizeActualPoModal } from '../procurement/FinalizeActualPoModal';
 import { getUnreadNotificationCountApi } from '../../api/notifications';
 import { useAuth } from '../../context/AuthContext';
 import { getUnitLabel } from '../../utils/units';
@@ -250,6 +251,26 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
     );
   };
 
+  // Finalize Actual PO Modal State
+  const [actualPoModal, setActualPoModal] = useState<{
+    isOpen: boolean;
+    poId: number | null;
+    item: ActionInboxItem | null;
+  }>({
+    isOpen: false,
+    poId: null,
+    item: null,
+  });
+
+  const isActualPoItem = (item: ActionInboxItem): boolean => {
+    return (
+      item.type === 'PO' &&
+      (String(item.id).startsWith('po-actual-') ||
+        Boolean(item.actionLabel?.includes('أمر الشراء الفعلي')) ||
+        Boolean(item.title?.includes('أمر الشراء الفعلي')))
+    );
+  };
+
   const visibleItems = React.useMemo(() => {
     return safeItems.filter((item) => {
       if (!item) return false;
@@ -491,6 +512,27 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
     const msg = `تم فحص واعتماد إذن الاستلام ${receiptCode || receiptId} بنجاح وإرساله للحسابات ✅`;
     showToast(msg, 'success');
     setReceiptInspectionModal({ isOpen: false, item: null });
+  };
+
+  const handleActualPoSuccess = (poNumber?: string) => {
+    if (actualPoModal.item) {
+      setDismissedItemIds((prev) => {
+        const next = new Set(prev);
+        if (actualPoModal.item?.id != null) next.add(actualPoModal.item.id);
+        if (actualPoModal.item?.rawId != null) next.add(actualPoModal.item.rawId);
+        if (actualPoModal.poId != null) {
+          next.add(actualPoModal.poId);
+          next.add(`po-actual-${actualPoModal.poId}`);
+        }
+        return next;
+      });
+      onItemActionComplete?.();
+      getUnreadNotificationCountApi().catch(() => {});
+    }
+
+    const msg = `تم إصدار أمر الشراء الفعلي ${poNumber ? `(${poNumber}) ` : ''}بنجاح واعتماده وإرساله للإدارة المالية ✅`;
+    showToast(msg, 'success');
+    setActualPoModal({ isOpen: false, poId: null, item: null });
   };
 
   if (loading) {
@@ -952,16 +994,23 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
+                          if (item.onAction) {
+                            item.onAction(item);
+                            return;
+                          }
                           if (isReceiptItem(item)) {
                             setReceiptInspectionModal({ isOpen: true, item });
                             return;
                           }
-                          if (item.onAction) {
-                            item.onAction(item);
-                          } else {
-                            const targetUrl = resolveActionItemUrl(item);
-                            if (targetUrl) navigate(targetUrl);
+                          if (isActualPoItem(item)) {
+                            const poId = Number(item.rawId || item.po_id || item.purchase_order_id || 0);
+                            if (poId > 0) {
+                              setActualPoModal({ isOpen: true, poId, item });
+                              return;
+                            }
                           }
+                          const targetUrl = resolveActionItemUrl(item);
+                          if (targetUrl) navigate(targetUrl);
                         }}
                         className={`flex-1 text-xs font-bold ${
                           (!item.onDirectApprove && !item.onDirectSubmit)
@@ -1246,6 +1295,16 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
         onClose={() => setReceiptInspectionModal({ isOpen: false, item: null })}
         onSuccess={handleReceiptInspectionSuccess}
       />
+
+      {/* Fast Finalize Actual PO Modal */}
+      {actualPoModal.isOpen && (
+        <FinalizeActualPoModal
+          isOpen={actualPoModal.isOpen}
+          poId={actualPoModal.poId}
+          onClose={() => setActualPoModal({ isOpen: false, poId: null, item: null })}
+          onSuccess={handleActualPoSuccess}
+        />
+      )}
     </>
   );
 };

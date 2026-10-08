@@ -18,6 +18,8 @@ import { getUnitLabel, getUnitOptions, DEFAULT_PR_UNIT_CODES } from '../../utils
 import { SupplementItemBadge } from '../../components/common/SupplementItemBadge';
 import { getReceiptPhotoUrl } from '../../api/purchaseReceipts';
 import { getSummaryParcels, getSummaryRegions } from '../../utils/formatRequestSummary';
+import { toast } from '../../utils/toast';
+
 
 const UNIT_OPTIONS = getUnitOptions(DEFAULT_PR_UNIT_CODES);
 
@@ -415,9 +417,11 @@ export const EditPurchaseOrderPage: React.FC = () => {
         notes: finalizationNotes.trim() || undefined,
       });
 
-      setSuccessMsg(`✅ تم إصدار أمر الشراء الفعلي (${po.po_number}) بنجاح واعتماده وإرساله للإدارة المالية.`);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      await loadData();
+      toast.success(`✅ تم إصدار أمر الشراء الفعلي (${po.po_number}) بنجاح واعتماده وإرساله للإدارة المالية.`);
+      navigate('/procurement', {
+        replace: true,
+        state: { successMsg: `✅ تم إصدار أمر الشراء الفعلي (${po.po_number}) بنجاح واعتماده وإرساله للإدارة المالية.` },
+      });
     } catch (err) {
       const parsed = parseApiError(err);
       setError(parsed.message);
