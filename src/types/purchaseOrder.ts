@@ -165,6 +165,7 @@ export interface PurchaseOrder {
   };
   status: PurchaseOrderStatus;
   is_actual_po?: boolean;
+  is_supplementary?: boolean;
   /** Always 'EGP' — Egyptian Pound */
   currency: string;
   subtotal: string;
@@ -251,6 +252,7 @@ export interface LinkedReceiptSummary {
   warehouse_keeper?: { id: number; name: string } | null;
   site_engineer?: { id: number; name: string } | null;
   receiver?: { id: number; name: string } | null;
+  is_supplementary?: boolean;
   items?: LinkedReceiptItem[];
 }
 

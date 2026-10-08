@@ -29,6 +29,7 @@ export interface ReceiptOrderItem {
 export interface ReceiptPurchaseOrder {
   id: number;
   po_number: string;
+  is_supplementary?: boolean;
   created_at?: string | null;
   notes?: string | null;
   supplier?: { id: number; company_name: string; contact_person?: string | null; phone?: string | null } | null;
@@ -55,6 +56,7 @@ export interface ReceiptPurchaseOrder {
 export interface ReceiptRecord {
   id: number;
   receipt_number: string;
+  is_supplementary?: boolean;
   receipt_type?: string | null;
   status: string;
   created_at?: string | null;

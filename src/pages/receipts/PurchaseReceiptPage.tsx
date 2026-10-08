@@ -587,10 +587,10 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                 طلب توريد #{order.purchase_request.request_number}
                               </span>
                             )}
-                            {order.items?.some((i) => i.is_supplementary) && (
+                            {Boolean(order.is_supplementary || order.items?.some((i) => i.is_supplementary) || order.notes?.includes('كمالة')) && (
                               <span className="text-xs sm:text-sm font-black text-amber-300 bg-amber-950/90 border border-amber-500/80 px-3 py-1 rounded-xl flex items-center gap-1.5 shadow-md">
                                 <span>⚡</span>
-                                <span>ملحق كمالة معتمد</span>
+                                <span>طلب كمالة معتمد</span>
                               </span>
                             )}
                           </div>
@@ -1083,10 +1083,16 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                             <span className="text-xs sm:text-sm font-bold text-slate-300 bg-slate-800 border border-slate-700 px-3 py-1 rounded-lg">
                               أمر شراء: <span className="font-mono text-cyan-300">{receipt.purchase_order?.po_number}</span>
                             </span>
-                            {(receipt.items?.some((i) => i.purchase_order_item?.is_supplementary) || receipt.purchase_order?.items?.some((i) => i.is_supplementary)) && (
+                            {Boolean(
+                              (receipt as any).is_supplementary ||
+                              (receipt.purchase_order as any)?.is_supplementary ||
+                              receipt.items?.some((i) => i.purchase_order_item?.is_supplementary) ||
+                              receipt.purchase_order?.items?.some((i) => i.is_supplementary) ||
+                              receipt.purchase_order?.notes?.includes('كمالة')
+                            ) && (
                               <span className="text-xs sm:text-sm font-black text-amber-300 bg-amber-950/90 border border-amber-500/80 px-3 py-1 rounded-xl flex items-center gap-1.5 shadow-md">
                                 <span>⚡</span>
-                                <span>يتضمن بنود ملحق كمالة</span>
+                                <span>طلب كمالة معتمد</span>
                               </span>
                             )}
                             {receipt.receipt_type === 'SITE_DIRECT' && (

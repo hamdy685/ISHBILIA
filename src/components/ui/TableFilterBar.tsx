@@ -31,6 +31,7 @@ interface TableFilterBarProps {
   resultLabel?: string;
   className?: string;
   defaultExpanded?: boolean;
+  buttonsFirst?: boolean;
 }
 
 export const TableFilterBar: React.FC<TableFilterBarProps> = ({
@@ -49,6 +50,7 @@ export const TableFilterBar: React.FC<TableFilterBarProps> = ({
   resultLabel = 'سجل',
   className = '',
   defaultExpanded = false,
+  buttonsFirst = false,
 }) => {
   const [isExpanded, setIsExpanded] = useState<boolean>(defaultExpanded || hasActiveFilters);
   const hasDateFilter = onDateFromChange || onDateToChange;
@@ -65,7 +67,7 @@ export const TableFilterBar: React.FC<TableFilterBarProps> = ({
   return (
     <Card className={`space-y-3.5 border-slate-800 bg-slate-900/90 ${className}`}>
       {/* Top Search & Toggle Bar */}
-      <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+      <div className={`flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between ${buttonsFirst ? 'sm:flex-row-reverse' : ''}`}>
         {onSearchChange ? (
           <div className="relative flex-1 min-w-0">
             <Input

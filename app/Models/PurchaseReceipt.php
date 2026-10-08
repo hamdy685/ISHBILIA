@@ -56,7 +56,21 @@ class PurchaseReceipt extends Model
         'is_accountant_recorded',
         'warehouse_approval',
         'site_engineer_approval',
+        'is_supplementary',
     ];
+
+    public function getIsSupplementaryAttribute(): bool
+    {
+        if ($this->relationLoaded('purchaseOrder') && $this->purchaseOrder) {
+            return (bool) ($this->purchaseOrder->is_supplementary ?? false);
+        }
+        if ($this->relationLoaded('items')) {
+            return $this->items->contains(function ($item) {
+                return (bool) ($item->purchaseOrderItem?->is_supplementary ?? false);
+            });
+        }
+        return false;
+    }
 
     public function getWarehouseApprovalAttribute(): array
     {

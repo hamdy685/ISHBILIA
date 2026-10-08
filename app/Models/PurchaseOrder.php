@@ -58,7 +58,16 @@ class PurchaseOrder extends Model
     protected $appends = [
         'warehouse_approval',
         'site_engineer_approval',
+        'is_supplementary',
     ];
+
+    public function getIsSupplementaryAttribute(): bool
+    {
+        if ($this->relationLoaded('items')) {
+            return $this->items->contains('is_supplementary', true);
+        }
+        return $this->items()->where('is_supplementary', true)->exists();
+    }
 
     public function getWarehouseApprovalAttribute(): array
     {

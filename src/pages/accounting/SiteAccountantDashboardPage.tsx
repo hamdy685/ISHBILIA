@@ -226,6 +226,15 @@ export const SiteAccountantDashboardPage: React.FC = () => {
     for (const receipt of receipts) {
       const po = receipt.purchase_order;
       const isActualPo = Boolean(po?.finalized_at);
+      const isSupplement = Boolean(
+        (po as any)?.is_supplementary ||
+        (receipt as any)?.is_supplementary ||
+        po?.items?.some((i: any) => i.is_supplementary) ||
+        receipt.items?.some((i: any) => (i.purchase_order_item as any)?.is_supplementary) ||
+        (po as any)?.notes?.includes('كمالة') ||
+        (po?.purchase_request as any)?.has_pending_supplement ||
+        ((po?.purchase_request as any)?.supplements && (po?.purchase_request as any)?.supplements.length > 0)
+      );
       const itemsList = buildReceiptItemsList(receipt);
 
       items.push({
@@ -233,15 +242,24 @@ export const SiteAccountantDashboardPage: React.FC = () => {
         rawId: receipt.id,
         type: 'RECEIPT',
         code: receipt.receipt_number,
-        title: isActualPo ? 'أمر شراء فعلي معتمد بانتظار التسجيل' : 'إذن استلام معتمد بانتظار التسجيل',
-        subtitle: receipt.purchase_order?.supplier?.company_name || 'مورد غير محدد',
+        title: isSupplement
+          ? (isActualPo ? '⚡ أمر شراء فعلي (طلب كمالة) بانتظار التسجيل' : '⚡ إذن استلام (طلب كمالة) بانتظار التسجيل')
+          : (isActualPo ? 'أمر شراء فعلي معتمد بانتظار التسجيل' : 'إذن استلام معتمد بانتظار التسجيل'),
+        subtitle: (isSupplement ? '⚡ طلب كمالة • ' : '') + (receipt.purchase_order?.supplier?.company_name || 'مورد غير محدد'),
+        stageBadge: isSupplement ? {
+          text: 'طلب كمالة',
+          icon: '⚡',
+          className: 'bg-amber-500/20 text-amber-300 border-amber-500/50',
+        } : undefined,
         department: receipt.purchase_order?.purchase_request?.department?.name || accountantScope.defaultDeptName,
         supplier: receipt.purchase_order?.supplier?.company_name,
         amount: Number(po?.grand_total || 0) > 0
           ? Number(po?.grand_total)
           : receiptValue(receipt),
         urgency: 'HIGH',
-        reason: 'تم اعتماد إذن الاستلام في الموقع وينتظر تأكيد تسجيله في شيت الإكسيل الخارجي بواسطة المحاسب.',
+        reason: isSupplement
+          ? 'تم اعتماد استلام طلب كمالة في الموقع وينتظر تأكيد تسجيله في شيت الإكسيل الخارجي بواسطة المحاسب.'
+          : 'تم اعتماد إذن الاستلام في الموقع وينتظر تأكيد تسجيله في شيت الإكسيل الخارجي بواسطة المحاسب.',
         actionUrl: `/accounting/supplier-finance?tab=payments&purchase_receipt_id=${receipt.id}`,
         actionLabel: 'تسجيل الفاتورة',
         onAction: () => {
@@ -524,10 +542,24 @@ export const SiteAccountantDashboardPage: React.FC = () => {
                         uom: it.purchase_order_item?.uom,
                         item_description: it.purchase_order_item?.item_description,
                       })));
+                      const isSupplement = Boolean(
+                        (receipt as any).is_supplementary ||
+                        (receipt.purchase_order as any)?.is_supplementary ||
+                        receipt.items?.some((it) => (it.purchase_order_item as any)?.is_supplementary) ||
+                        receipt.purchase_order?.notes?.includes('كمالة') ||
+                        (receipt.purchase_order?.purchase_request as any)?.has_pending_supplement
+                      );
                       return (
                         <TableRow key={receipt.id} className={isRecorded ? 'opacity-80' : ''}>
                           <TableCell className="font-mono font-bold text-cyan-300 whitespace-nowrap">
-                            {receipt.receipt_number}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span>{receipt.receipt_number}</span>
+                              {isSupplement && (
+                                <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-black text-amber-300 border border-amber-500/50">
+                                  ⚡ طلب كمالة
+                                </span>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell className="font-mono whitespace-nowrap">
                             {receipt.purchase_order?.po_number || '—'}
@@ -786,10 +818,24 @@ export const SiteAccountantDashboardPage: React.FC = () => {
                     const quantitiesInfo = getSummaryQuantities(po.items);
                     const itemNames = (po.items || []).map((it) => it.item_description || it.item_name || (it as any).item?.name).filter(Boolean);
 
+                    const isSupplement = Boolean(
+                      po.is_supplementary ||
+                      po.items?.some((i) => i.is_supplementary) ||
+                      po.notes?.includes('كمالة') ||
+                      (po.purchase_request as any)?.has_pending_supplement
+                    );
+
                     return (
                       <TableRow key={po.id}>
                         <TableCell className="font-mono font-bold text-cyan-300 whitespace-nowrap">
-                          {po.po_number}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span>{po.po_number}</span>
+                            {isSupplement && (
+                              <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-black text-amber-300 border border-amber-500/50">
+                                ⚡ طلب كمالة
+                              </span>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="font-bold text-slate-200">
                           {po.supplier?.company_name || '—'}

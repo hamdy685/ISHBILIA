@@ -130,11 +130,11 @@ export const ProcurementSupplementProcessModal: React.FC<ProcurementSupplementPr
                 ⚡
               </span>
               <h3 className="text-lg sm:text-xl font-black text-amber-100">
-                إصدار ملحق توريد سريع — دفعة #{supplement.batch_number}
+                إنشاء أمر شراء مباشر (طلب كمالة) — دفعة #{supplement.batch_number}
               </h3>
             </div>
             <p className="mt-1 text-xs sm:text-sm text-slate-400 leading-relaxed">
-              تحديد المورد المنفذ وتسعير بنود الكمالة التكميلية لإصدار أمر شراء سريع مرتبط بالطلب الأصلي.
+              تحديد المورد المنفذ وتسعير بنود طلب الكمالة لإصدار أمر شراء مباشر فوراً دون المرور بالاعتماد المالي أو التنفيذي.
             </p>
           </div>
           <button
@@ -348,7 +348,7 @@ export const ProcurementSupplementProcessModal: React.FC<ProcurementSupplementPr
                     <span>جارٍ المعالجة...</span>
                   </>
                 ) : (
-                  <span>⚡ تأكيد وإصدار</span>
+                  <span>⚡ إنشاء وتعميد أمر الشراء المباشر للكمالة</span>
                 )}
               </button>
             </div>

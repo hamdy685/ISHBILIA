@@ -71,6 +71,7 @@ class PurchaseOrderResource extends JsonResource
             }),
             'status'       => $this->status,
             'is_actual_po' => $this->isActualPo(),
+            'is_supplementary' => (bool) ($this->is_supplementary ?? false),
             'currency'     => 'EGP',
             'subtotal'     => number_format((float) $this->subtotal,    2, '.', ''),
             'grand_total'  => number_format((float) $this->grand_total, 2, '.', ''),
