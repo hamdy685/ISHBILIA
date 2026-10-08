@@ -22,23 +22,7 @@ class TestLicensesPurchaseRequestsSeeder extends Seeder
     {
         $this->command?->info('🚀 بدء إنشاء 5 طلبات شراء تجريبية لقسم التراخيص...');
 
-        // 1. استخراج الموظف صاحب الحساب (emp)
-        $employee = User::where(function ($q) {
-            $q->where('email', 'like', '%emp%')
-              ->orWhere('name', 'like', '%emp%');
-        })->first();
-
-        if (! $employee) {
-            $employee = User::whereHas('roles', fn ($q) => $q->where('slug', 'employee'))->first()
-                ?? User::first();
-        }
-
-        if (! $employee) {
-            $this->command?->error('❌ لم يتم العثور على أي حساب موظف في النظام.');
-            return;
-        }
-
-        // 2. استخراج قسم التراخيص (Licenses) ومراجع القسم
+        // 1. استخراج قسم التراخيص (Licenses)
         $department = Department::where(function ($q) {
             $q->where('name', 'like', '%تراخيص%')
               ->orWhere('code', 'LICENSES');
@@ -49,6 +33,40 @@ class TestLicensesPurchaseRequestsSeeder extends Seeder
                 ['code' => 'LICENSES'],
                 ['name' => 'التراخيص']
             );
+        }
+
+        // تحقق من عدم التكرار (Idempotency)
+        $existingCount = PurchaseRequest::where('department_id', $department->id)
+            ->where('notes', 'like', '%طلب توريد مهمات إشغال ترخيص%')
+            ->count();
+
+        if ($existingCount >= 1) {
+            $this->command?->info("ℹ️ طلبات اختبار التراخيص موجودة بالفعل ({$existingCount} طلبات). تخطي التكرار.");
+            return;
+        }
+
+        // 2. استخراج الموظف صاحب الحساب (emp)
+        $employee = User::where(function ($q) {
+            $q->where('email', 'like', '%emp%')
+              ->orWhere('name', 'like', '%emp%');
+        })->first();
+
+        if (! $employee) {
+            $employee = User::whereHas('roles', fn ($q) => $q->where('slug', 'employee'))->first();
+        }
+
+        if (! $employee) {
+            $employeeRole = \App\Models\Role::firstOrCreate(['slug' => 'employee'], ['name' => 'موظف']);
+            $employee = User::firstOrCreate(
+                ['email' => 'emp@ishbilia.dev'],
+                [
+                    'name' => 'موظف تجريبي 1',
+                    'password' => \Illuminate\Support\Facades\Hash::make('123456'),
+                    'department_id' => $department->id,
+                    'is_active' => true,
+                ]
+            );
+            $employee->roles()->syncWithoutDetaching([$employeeRole->id]);
         }
 
         $reviewer = User::whereHas('roles', fn ($q) => $q->where('slug', 'reviewer'))
