@@ -16,7 +16,15 @@ class PurchaseReceiptController extends Controller
 
     public function warehouseQueue(Request $request)
     {
-        return response()->json($this->service->warehouseQueue(min((int) $request->query('per_page', 15), 100)));
+        return response()->json($this->service->warehouseQueue(
+            $request->user(),
+            min((int) $request->query('per_page', 15), 100)
+        ));
+    }
+
+    public function pendingWarehouseTasks(Request $request)
+    {
+        return $this->warehouseQueue($request);
     }
 
     public function archive(Request $request)

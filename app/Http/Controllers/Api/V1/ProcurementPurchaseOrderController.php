@@ -747,4 +747,12 @@ class ProcurementPurchaseOrderController extends Controller
             'data'    => new PurchaseOrderResource($finalizedPo),
         ]);
     }
+
+    public function pendingWarehouseTasks(Request $request)
+    {
+        return response()->json(app(\App\Services\PurchaseReceiptService::class)->warehouseQueue(
+            $request->user(),
+            min((int) $request->query('per_page', 15), 100)
+        ));
+    }
 }

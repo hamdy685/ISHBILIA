@@ -263,6 +263,9 @@ Route::middleware('auth:sanctum')->prefix('procurement')->group(function () {
     Route::put('/purchase-orders/{id}/delivery', [ProcurementPurchaseOrderController::class, 'updateDeliveryStatus'])
         ->middleware('permission:purchase_order.edit');
 
+    Route::get('/purchase-orders/pending-warehouse-tasks', [ProcurementPurchaseOrderController::class, 'pendingWarehouseTasks'])
+        ->middleware('permission:purchase_receipt.view_assigned');
+
     // ── Actual PO Workflow (after GRN approval) ──
     Route::get('/pending-actual-pos', [ProcurementPurchaseOrderController::class, 'indexPendingActualPos'])
         ->middleware('permission:purchase_order.view');
@@ -413,6 +416,8 @@ Route::middleware('auth:sanctum')->prefix('general-manager/purchase-orders')->gr
 // Purchase receipt routes: warehouse first, then assigned site engineer
 Route::middleware('auth:sanctum')->prefix('purchase-receipts')->group(function () {
     Route::get('/warehouse-queue', [PurchaseReceiptController::class, 'warehouseQueue'])
+        ->middleware('permission:purchase_receipt.view_assigned');
+    Route::get('/pending-warehouse-tasks', [PurchaseReceiptController::class, 'pendingWarehouseTasks'])
         ->middleware('permission:purchase_receipt.view_assigned');
     Route::get('/assigned', [PurchaseReceiptController::class, 'indexAssigned'])
         ->middleware('permission:purchase_receipt.view_assigned');

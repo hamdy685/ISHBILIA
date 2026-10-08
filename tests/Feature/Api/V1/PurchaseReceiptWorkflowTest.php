@@ -308,6 +308,88 @@ class PurchaseReceiptWorkflowTest extends TestCase
         $this->assertSame('APPROVED', $approvedReceipt->status);
     }
 
+    public function test_warehouse_queue_returns_pending_orders_across_departments_for_warehouse_keeper(): void
+    {
+        $licensesDept = Department::create(['name' => 'التراخيص', 'code' => 'LICENSES_Q', 'is_active' => true]);
+        $licensesEmployee = $this->makeUser('licenses-emp-q@test', 'موظف التراخيص', 'employee', $licensesDept->id);
+
+        // 1. Pending PO in another department requiring warehouse receipt
+        $prPending = PurchaseRequest::create([
+            'request_number' => 'PR-LIC-Q-001',
+            'user_id' => $licensesEmployee->id,
+            'department_id' => $licensesDept->id,
+            'priority' => 'NORMAL',
+            'status' => 'APPROVED_BY_ACCOUNTING',
+            'total_estimated_cost' => 5000,
+            'date_needed' => now()->toDateString(),
+            'requires_warehouse_receipt' => true,
+            'request_type' => 'PROJECT',
+        ]);
+        $poPending = PurchaseOrder::create([
+            'po_number' => 'PO-LIC-Q-001',
+            'purchase_request_id' => $prPending->id,
+            'supplier_id' => $this->purchaseOrder->supplier_id,
+            'created_by_user_id' => $licensesEmployee->id,
+            'status' => 'ISSUED',
+            'subtotal' => 5000,
+            'grand_total' => 5000,
+            'delivery_status' => 'NOT_STARTED',
+        ]);
+
+        // 2. Completed PO (delivered) - should NOT appear in queue
+        $poDelivered = PurchaseOrder::create([
+            'po_number' => 'PO-LIC-Q-DELIVERED',
+            'purchase_request_id' => $prPending->id,
+            'supplier_id' => $this->purchaseOrder->supplier_id,
+            'created_by_user_id' => $licensesEmployee->id,
+            'status' => 'ISSUED',
+            'subtotal' => 1000,
+            'grand_total' => 1000,
+            'delivery_status' => 'DELIVERED',
+        ]);
+
+        // 3. PO that does not require warehouse receipt - should NOT appear in queue
+        $prNoWarehouse = PurchaseRequest::create([
+            'request_number' => 'PR-LIC-Q-NOWH',
+            'user_id' => $licensesEmployee->id,
+            'department_id' => $licensesDept->id,
+            'priority' => 'NORMAL',
+            'status' => 'APPROVED_BY_ACCOUNTING',
+            'total_estimated_cost' => 1000,
+            'date_needed' => now()->toDateString(),
+            'requires_warehouse_receipt' => false,
+            'request_type' => 'PROJECT',
+        ]);
+        $poNoWarehouse = PurchaseOrder::create([
+            'po_number' => 'PO-LIC-Q-NOWH',
+            'purchase_request_id' => $prNoWarehouse->id,
+            'supplier_id' => $this->purchaseOrder->supplier_id,
+            'created_by_user_id' => $licensesEmployee->id,
+            'status' => 'ISSUED',
+            'subtotal' => 1000,
+            'grand_total' => 1000,
+            'delivery_status' => 'NOT_STARTED',
+        ]);
+
+        // Call warehouse-queue endpoint as Warehouse Keeper (who is in EXECUTION department)
+        $response = $this->actingAs($this->warehouse, 'sanctum')
+            ->getJson('/api/v1/purchase-receipts/warehouse-queue');
+
+        $response->assertOk();
+        $poNumbers = collect($response->json('data'))->pluck('po_number')->all();
+
+        $this->assertContains('PO-LIC-Q-001', $poNumbers, 'Pending PO from Licenses must be visible to warehouse keeper.');
+        $this->assertNotContains('PO-LIC-Q-DELIVERED', $poNumbers, 'Delivered PO must not be in pending warehouse queue.');
+        $this->assertNotContains('PO-LIC-Q-NOWH', $poNumbers, 'PO without warehouse receipt requirement must not be in warehouse queue.');
+
+        // Verify alias endpoint works identically
+        $aliasResponse = $this->actingAs($this->warehouse, 'sanctum')
+            ->getJson('/api/v1/purchase-receipts/pending-warehouse-tasks');
+        $aliasResponse->assertOk();
+        $aliasPoNumbers = collect($aliasResponse->json('data'))->pluck('po_number')->all();
+        $this->assertContains('PO-LIC-Q-001', $aliasPoNumbers);
+    }
+
     private function makeUser(string $email, string $name, string $roleSlug, int $departmentId): User
     {
         $user = User::create([

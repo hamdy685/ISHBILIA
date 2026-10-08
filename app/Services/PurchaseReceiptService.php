@@ -55,27 +55,114 @@ class PurchaseReceiptService
 
         return "{$prefix}{$nextNumber}";
     }
-    public function warehouseQueue(int $perPage = 15)
+    public function warehouseQueue(User|int|null $userOrPerPage = null, int $perPage = 15)
     {
-        return PurchaseOrder::with([
-            'supplier',
-            'purchaseRequest.requester',
-            'purchaseRequest.department',
-            'purchaseRequest.targetDepartment',
-            'purchaseRequest.assignedReviewer.department',
-            'purchaseRequest.siteEngineer',
-            'purchaseRequest.supplements',
-            'items.item',
-            'items.prItem',
-        ])
-            ->where('status', 'ISSUED')
-            ->whereDoesntHave('receipts', fn ($query) => $query->whereIn('status', ['PENDING_SITE_ENGINEER', 'APPROVED']))
-            ->whereHas('purchaseRequest', function ($prQuery) {
-                $prQuery->where('requires_warehouse_receipt', true)
-                    ->where('request_type', '!=', 'OFFICE_SUPPLIES');
+        $user = null;
+        if ($userOrPerPage instanceof User) {
+            $user = $userOrPerPage;
+        } elseif (is_int($userOrPerPage)) {
+            $perPage = $userOrPerPage;
+        }
+
+        $query = PurchaseOrder::withoutGlobalScope(\App\Scopes\DataIsolationScope::class)
+            ->with([
+                'supplier',
+                'purchaseRequest' => fn ($prQ) => $prQ->withoutGlobalScope(\App\Scopes\DataIsolationScope::class),
+                'purchaseRequest.requester',
+                'purchaseRequest.department',
+                'purchaseRequest.targetDepartment',
+                'purchaseRequest.assignedReviewer.department',
+                'purchaseRequest.siteEngineer',
+                'purchaseRequest.supplements',
+                'items.item',
+                'items.prItem',
+                'receipts.warehouseKeeper',
+            ])
+            // 1. Status allows receiving (issued or approved)
+            ->where(function ($q) {
+                $q->whereIn('status', [
+                    'ISSUED',
+                    'PO_ISSUED',
+                    'APPROVED',
+                    'approved',
+                    'issued',
+                    'APPROVED_BY_ACCOUNTING',
+                    'PENDING_ACCOUNTING_REVIEW',
+                    'FINAL_APPROVED',
+                ])
+                ->orWhere('status', 'like', '%ISSUED%')
+                ->orWhere('status', 'like', '%APPROVED%');
             })
-            ->orderByDesc('updated_at')
-            ->paginate($perPage);
+            ->whereNotIn('status', ['PO_DRAFT', 'REJECTED', 'CANCELLED', 'VOIDED', 'PENDING_ACTUAL_PO'])
+            // 2. Delivery status means delivery is not completed (pending, partial, not_started, null, not delivered/completed)
+            ->where(function ($q) {
+                $q->whereNull('delivery_status')
+                  ->orWhereIn('delivery_status', [
+                      'NOT_STARTED',
+                      'not_started',
+                      'PENDING',
+                      'pending',
+                      'IN_RECEIPT',
+                      'in_receipt',
+                      'PARTIAL',
+                      'partial',
+                      'LATE',
+                      'late',
+                  ])
+                  ->orWhereNotIn('delivery_status', [
+                      'DELIVERED',
+                      'delivered',
+                      'COMPLETE',
+                      'complete',
+                      'COMPLETED',
+                      'completed',
+                  ]);
+            })
+            // 3. Receipt status: allows receipt if no approved/submitted receipt yet, or if partial delivery
+            ->where(function ($q) {
+                $q->whereDoesntHave('receipts', fn ($rq) => $rq->whereIn('status', ['PENDING_SITE_ENGINEER', 'APPROVED']))
+                  ->orWhere(function ($partialQ) {
+                      $partialQ->whereIn('delivery_status', ['PARTIAL', 'partial', 'IN_RECEIPT', 'in_receipt'])
+                               ->whereDoesntHave('receipts', fn ($rq) => $rq->where('status', 'PENDING_SITE_ENGINEER'));
+                  });
+            })
+            // 4. Warehouse keeper assignment check:
+            // Never exclude orders where warehouse_keeper_user_id is null!
+            ->where(function ($q) use ($user) {
+                $q->whereDoesntHave('receipts')
+                  ->orWhereHas('receipts', function ($rq) use ($user) {
+                      $rq->whereNull('warehouse_keeper_user_id');
+                      if ($user) {
+                          $rq->orWhere('warehouse_keeper_user_id', $user->id);
+                      }
+                  });
+            })
+            // 5. Conditions matching notifications:
+            // requires_warehouse_receipt is true (or null/default) and not office supplies
+            ->whereHas('purchaseRequest', function ($prQuery) use ($user) {
+                $prQuery->withoutGlobalScope(\App\Scopes\DataIsolationScope::class)
+                    ->where('request_type', '!=', 'OFFICE_SUPPLIES')
+                    ->where(function ($sub) {
+                        $sub->where('requires_warehouse_receipt', true)
+                            ->orWhereNull('requires_warehouse_receipt');
+                    });
+
+                // Department scoping only if user is constrained to department and not a warehouse keeper / global manager
+                if ($user && $user->department_id && ! $user->hasRole('warehouse_keeper') && ! $user->hasAnyRole(['admin', 'general_manager', 'procurement_manager'])) {
+                    $prQuery->where(function ($deptQ) use ($user) {
+                        $deptQ->where('department_id', $user->department_id)
+                              ->orWhere('target_department_id', $user->department_id);
+                    });
+                }
+            })
+            ->orderByDesc('updated_at');
+
+        return $query->paginate($perPage);
+    }
+
+    public function pendingWarehouseTasks(User|int|null $userOrPerPage = null, int $perPage = 15)
+    {
+        return $this->warehouseQueue($userOrPerPage, $perPage);
     }
 
     public function receiptArchive(User $user, int $perPage = 25)
@@ -99,7 +186,10 @@ class PurchaseReceiptService
 
         if (! $user->hasAnyRole(['admin', 'general_manager', 'accountant', 'procurement_manager'])) {
             if ($user->hasRole('warehouse_keeper')) {
-                $query->where('warehouse_keeper_user_id', $user->id);
+                $query->where(function ($q) use ($user) {
+                    $q->where('warehouse_keeper_user_id', $user->id)
+                      ->orWhereNull('warehouse_keeper_user_id');
+                });
             } else {
                 $query->where('site_engineer_user_id', $user->id);
             }

@@ -137,6 +137,24 @@ class DataIsolationScope implements Scope
             return;
         }
 
+        if ($user->hasRole('warehouse_keeper') || $user->email === 'salam@gmail.com') {
+            $builder->where(function (Builder $q) use ($user) {
+                $q->where('user_id', $user->id)
+                  ->orWhere(function ($sub) {
+                      $sub->where(function ($whQ) {
+                          $whQ->where('requires_warehouse_receipt', true)
+                              ->orWhereNull('requires_warehouse_receipt');
+                      })->where('request_type', '!=', 'OFFICE_SUPPLIES');
+                  });
+
+                if ($user->department_id) {
+                    $q->orWhere('department_id', $user->department_id)
+                      ->orWhere('target_department_id', $user->department_id);
+                }
+            });
+            return;
+        }
+
         // Standard employee or fallback: own requests only
         $builder->where('user_id', $user->id);
     }
@@ -204,6 +222,28 @@ class DataIsolationScope implements Scope
             return;
         }
 
+        if ($user->hasRole('warehouse_keeper') || $user->email === 'salam@gmail.com') {
+            $builder->where(function (Builder $q) use ($user) {
+                $q->whereHas('purchaseRequest', function ($prQ) use ($user) {
+                    $prQ->where(function ($sub) {
+                        $sub->where('requires_warehouse_receipt', true)
+                            ->orWhereNull('requires_warehouse_receipt');
+                    })->where('request_type', '!=', 'OFFICE_SUPPLIES');
+
+                    if ($user->department_id) {
+                        $prQ->orWhere('department_id', $user->department_id)
+                            ->orWhere('target_department_id', $user->department_id);
+                    }
+                })
+                ->orWhereHas('receipts', function ($rcQ) use ($user) {
+                    $rcQ->where('warehouse_keeper_user_id', $user->id)
+                        ->orWhereNull('warehouse_keeper_user_id');
+                })
+                ->orWhere('created_by_user_id', $user->id);
+            });
+            return;
+        }
+
         // Default: linked to own PR or created by user
         $builder->where(function (Builder $q) use ($user) {
             $q->whereHas('purchaseRequest', function ($prQ) use ($user) {
@@ -222,7 +262,7 @@ class DataIsolationScope implements Scope
      * - site_engineer: assigned receipts, receiver receipts, or linked to their PR.
      * - execution_manager: receipts for their department or team.
      * - site_accountant / accountants: receipts for their scoped departments.
-     * - warehouse_keeper: assigned receipts or unassigned receipts.
+     * - warehouse_keeper: assigned receipts, unassigned receipts, or orders requiring warehouse receipt.
      * - others: linked to own PR.
      */
     protected function applyPurchaseReceiptIsolation(Builder $builder, User $user): void
@@ -266,10 +306,21 @@ class DataIsolationScope implements Scope
             return;
         }
 
-        if ($user->hasRole('warehouse_keeper')) {
+        if ($user->hasRole('warehouse_keeper') || $user->email === 'salam@gmail.com') {
             $builder->where(function (Builder $q) use ($user) {
                 $q->where('warehouse_keeper_user_id', $user->id)
-                  ->orWhereNull('warehouse_keeper_user_id');
+                  ->orWhereNull('warehouse_keeper_user_id')
+                  ->orWhereHas('purchaseRequest', function ($prQ) use ($user) {
+                      $prQ->where(function ($sub) {
+                          $sub->where('requires_warehouse_receipt', true)
+                              ->orWhereNull('requires_warehouse_receipt');
+                      })->where('request_type', '!=', 'OFFICE_SUPPLIES');
+
+                      if ($user->department_id) {
+                          $prQ->orWhere('department_id', $user->department_id)
+                              ->orWhere('target_department_id', $user->department_id);
+                      }
+                  });
             });
             return;
         }

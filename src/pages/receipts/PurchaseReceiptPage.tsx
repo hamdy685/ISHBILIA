@@ -165,9 +165,14 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
 
   const normalizedSearch = searchTerm.trim().toLocaleLowerCase('ar-EG');
   const ignoreDefaultDateForSearch = Boolean(normalizedSearch) && isDefaultTodayRange(dateFrom, dateTo);
-  const matchesFilter = (text: string, value: string) =>
-    (!normalizedSearch || text.toLocaleLowerCase('ar-EG').includes(normalizedSearch)) &&
-    (ignoreDefaultDateForSearch || ((!dateFrom || value >= dateFrom) && (!dateTo || value <= dateTo)));
+  const matchesFilter = (text: string, value: string, isQueueItem = false) => {
+    const textMatches = !normalizedSearch || text.toLocaleLowerCase('ar-EG').includes(normalizedSearch);
+    if (!textMatches) return false;
+    if (isQueueItem && isDefaultTodayRange(dateFrom, dateTo)) {
+      return true;
+    }
+    return ignoreDefaultDateForSearch || ((!dateFrom || value >= dateFrom) && (!dateTo || value <= dateTo));
+  };
 
   const visibleOrders = orders.filter((order) =>
     matchesFilter(
@@ -182,6 +187,7 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
         .filter(Boolean)
         .join(' '),
       String(order.created_at || order.purchase_request?.created_at || '').slice(0, 10),
+      true,
     ),
   );
 
@@ -200,6 +206,7 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
         .filter(Boolean)
         .join(' '),
       String(receipt.received_at || receipt.created_at || '').slice(0, 10),
+      true,
     ),
   );
 
