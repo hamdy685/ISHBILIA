@@ -390,6 +390,76 @@ class PurchaseReceiptWorkflowTest extends TestCase
         $this->assertContains('PO-LIC-Q-001', $aliasPoNumbers);
     }
 
+    public function test_department_reviewer_can_view_and_approve_assigned_receipt(): void
+    {
+        $licDept = Department::create(['name' => 'التراخيص', 'code' => 'LICENSES', 'is_active' => true]);
+        $reviewer = $this->makeUser('reviewer-lic@test', 'م. مصطفى التراخيص', 'reviewer', $licDept->id);
+        $emp = $this->makeUser('emp-lic@test', 'موظف التراخيص', 'employee', $licDept->id);
+        $supplier = Supplier::create(['code' => 'SUP-LIC', 'company_name' => 'مورد التراخيص', 'is_active' => true]);
+
+        $pr = PurchaseRequest::create([
+            'request_number' => 'PR-LIC-REV-001',
+            'user_id' => $emp->id,
+            'department_id' => $licDept->id,
+            'reviewer_user_id' => $reviewer->id,
+            'priority' => 'NORMAL',
+            'status' => 'APPROVED_BY_PROCUREMENT',
+            'total_estimated_cost' => 500,
+            'date_needed' => now()->toDateString(),
+        ]);
+
+        $po = PurchaseOrder::create([
+            'po_number' => 'PO-LIC-REV-001',
+            'purchase_request_id' => $pr->id,
+            'supplier_id' => $supplier->id,
+            'created_by_user_id' => $emp->id,
+            'status' => 'ISSUED',
+            'subtotal' => 500,
+            'total_amount' => 500,
+        ]);
+        $poItem = $po->items()->create([
+            'item_description' => 'كشافات طوارئ',
+            'quantity' => 10,
+            'unit_price' => 50,
+            'total_price' => 500,
+        ]);
+
+        // Warehouse keeper creates receipt
+        $receipt = app(PurchaseReceiptService::class)->createByWarehouse(
+            $this->warehouse,
+            $po,
+            [['purchase_order_item_id' => $poItem->id, 'received_quantity' => 10]],
+            now()->toDateString(),
+            'ملاحظات المخزن'
+        );
+
+        // 1. Reviewer can view the receipt in /assigned
+        $assignedRes = $this->actingAs($reviewer, 'sanctum')
+            ->getJson('/api/v1/purchase-receipts/assigned');
+        $assignedRes->assertOk();
+        $assignedIds = collect($assignedRes->json('data'))->pluck('id')->all();
+        $this->assertContains($receipt->id, $assignedIds, 'Assigned receipts must be visible to the department reviewer.');
+
+        // 2. Reviewer can inspect and approve the receipt in /approve
+        $approveRes = $this->actingAs($reviewer, 'sanctum')
+            ->postJson("/api/v1/purchase-receipts/{$receipt->id}/approve", [
+                'site_engineer_notes' => 'تم فحص ومطابقة كشافات الطوارئ بمعرفة رئيس قسم التراخيص.',
+                'items' => [
+                    ['id' => $receipt->items->first()->id, 'received_quantity' => 10],
+                ],
+            ]);
+        $approveRes->assertOk();
+        $this->assertEquals('APPROVED', $receipt->fresh()->status);
+        $this->assertEquals('PENDING_ACTUAL_PO', $po->fresh()->status);
+
+        // 3. Reviewer can view the approved receipt in /archive
+        $archiveRes = $this->actingAs($reviewer, 'sanctum')
+            ->getJson('/api/v1/purchase-receipts/archive');
+        $archiveRes->assertOk();
+        $archiveIds = collect($archiveRes->json('data'))->pluck('id')->all();
+        $this->assertContains($receipt->id, $archiveIds, 'Archived receipts must be visible to the department reviewer.');
+    }
+
     private function makeUser(string $email, string $name, string $roleSlug, int $departmentId): User
     {
         $user = User::create([

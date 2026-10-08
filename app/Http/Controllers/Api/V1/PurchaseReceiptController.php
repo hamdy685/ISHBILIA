@@ -77,8 +77,9 @@ class PurchaseReceiptController extends Controller
     public function indexAssigned(Request $request)
     {
         $this->service->syncPendingDirectSiteReceiptsForEngineer($request->user());
+        $user = $request->user();
 
-        $receipts = PurchaseReceipt::with([
+        $query = PurchaseReceipt::with([
             'supplier',
             'purchaseOrder.supplier',
             'purchaseOrder.purchaseRequest.department',
@@ -93,13 +94,28 @@ class PurchaseReceiptController extends Controller
             'siteEngineer',
             'items.purchaseOrderItem.item',
             'items.purchaseOrderItem.prItem',
-        ])
-            ->where(function ($q) use ($request) {
-                $q->where('site_engineer_user_id', $request->user()->id)
-                  ->orWhereHas('purchaseOrder.purchaseRequest', fn ($prQ) => $prQ->where('site_engineer_user_id', $request->user()->id))
-                  ->orWhereHas('purchaseRequest', fn ($prQ) => $prQ->where('site_engineer_user_id', $request->user()->id));
-            })
-            ->whereIn('status', ['PENDING_SITE_ENGINEER', 'WAREHOUSE_RECEIPT_SUBMITTED'])
+        ]);
+
+        if (! $user->hasAnyRole(['admin', 'general_manager'])) {
+            $query->where(function ($q) use ($user) {
+                $q->where('site_engineer_user_id', $user->id)
+                  ->orWhere('receiver_user_id', $user->id)
+                  ->orWhereHas('purchaseOrder.purchaseRequest', fn ($prQ) => $prQ->where('site_engineer_user_id', $user->id))
+                  ->orWhereHas('purchaseRequest', fn ($prQ) => $prQ->where('site_engineer_user_id', $user->id));
+
+                if ($user->hasRole('reviewer') || $user->hasPermission('purchase_request.review')) {
+                    $q->orWhereHas('purchaseOrder.purchaseRequest', function ($prQ) use ($user) {
+                        $prQ->where('reviewer_user_id', $user->id)
+                            ->when($user->department_id, fn ($sub) => $sub->orWhere('department_id', $user->department_id)->orWhere('target_department_id', $user->department_id));
+                    })->orWhereHas('purchaseRequest', function ($prQ) use ($user) {
+                        $prQ->where('reviewer_user_id', $user->id)
+                            ->when($user->department_id, fn ($sub) => $sub->orWhere('department_id', $user->department_id)->orWhere('target_department_id', $user->department_id));
+                    });
+                }
+            });
+        }
+
+        $receipts = $query->whereIn('status', ['PENDING_SITE_ENGINEER', 'WAREHOUSE_RECEIPT_SUBMITTED'])
             ->orderByDesc('created_at')
             ->paginate(min((int) $request->query('per_page', 15), 100));
 

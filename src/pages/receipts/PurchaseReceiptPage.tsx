@@ -13,12 +13,14 @@ import {
   createPurchaseReceiptApi,
   getAssignedReceiptsApi,
   getPurchaseReceiptArchiveApi,
+  getPurchaseReceiptByIdApi,
   getWarehouseReceiptQueueApi,
   updatePurchaseReceiptApi,
   ReceiptPurchaseOrder,
   ReceiptRecord,
   getReceiptPhotoUrl,
 } from '../../api/purchaseReceipts';
+import { useAuth } from '../../context/AuthContext';
 import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh';
 import { SupplementItemBadge } from '../../components/common/SupplementItemBadge';
 import ActionRequiredInbox, { ActionInboxItem } from '../../components/dashboard/ActionRequiredInbox';
@@ -75,6 +77,8 @@ type ReceiptMode = 'warehouse' | 'site';
 type ActiveTab = 'QUEUE' | 'ARCHIVE';
 
 export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) => {
+  const { hasRole } = useAuth();
+  const isReviewer = hasRole('reviewer');
   const [activeTab, setActiveTab] = useState<ActiveTab>('QUEUE');
   const [orders, setOrders] = useState<ReceiptPurchaseOrder[]>([]);
   const [receipts, setReceipts] = useState<ReceiptRecord[]>([]);
@@ -129,8 +133,30 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
           getAssignedReceiptsApi(),
           getPurchaseReceiptArchiveApi().catch(() => []),
         ]);
-        setReceipts(assignedData || []);
-        setArchiveReceipts(archiveData || []);
+        let finalReceipts = Array.isArray(assignedData) ? [...assignedData] : [];
+        let finalArchive = Array.isArray(archiveData) ? [...archiveData] : [];
+
+        // If targetReceiptId is specified, ensure it is loaded even if pagination or initial filters missed it
+        if (targetReceiptId) {
+          const numId = Number(targetReceiptId);
+          if (!isNaN(numId) && !finalReceipts.some((r) => r.id === numId) && !finalArchive.some((r) => r.id === numId)) {
+            try {
+              const targetedReceipt = await getPurchaseReceiptByIdApi(numId);
+              if (targetedReceipt) {
+                if (['PENDING_SITE_ENGINEER', 'WAREHOUSE_RECEIPT_SUBMITTED'].includes(targetedReceipt.status)) {
+                  finalReceipts = [targetedReceipt, ...finalReceipts];
+                } else {
+                  finalArchive = [targetedReceipt, ...finalArchive];
+                }
+              }
+            } catch {
+              // ignore fetch failure for individual receipt
+            }
+          }
+        }
+
+        setReceipts(finalReceipts);
+        setArchiveReceipts(finalArchive);
       }
     } catch (err) {
       if (!silent) setError(parseApiError(err).message);
@@ -327,10 +353,10 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
         timeAgo: r.created_at ? formatDateTime24h(r.created_at) : undefined,
         items_count: itemsList.length,
         items_list: itemsList,
-        directApproveLabel: 'اعتماد الاستلام الهندسي',
+        directApproveLabel: isReviewer ? 'اعتماد الاستلام الفني' : 'اعتماد الاستلام الهندسي',
       };
     });
-  }, [mode, receipts]);
+  }, [mode, receipts, isReviewer]);
 
   const submitWarehouseReceipt = async (order: ReceiptPurchaseOrder) => {
     const hasUnentered = (order.items || []).some((item) => {
@@ -427,7 +453,11 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
             </span>
             <div>
               <h1 className="text-lg sm:text-xl font-black text-slate-100 flex items-center gap-2.5 flex-wrap">
-                {mode === 'warehouse' ? 'مهام وأرشيف استلام المواد بالمخزن' : 'إذن استلام المواد — فحص واعتماد الاستلام'}
+                {mode === 'warehouse'
+                  ? 'مهام وأرشيف استلام المواد بالمخزن'
+                  : isReviewer
+                  ? 'إذن استلام المواد — فحص واعتماد الاستلام الميداني'
+                  : 'إذن استلام المواد — فحص واعتماد الاستلام'}
                 {(mode === 'warehouse' ? orders.length : receipts.length) > 0 && (
                   <span
                     className={`rounded-full px-3 py-0.5 text-xs font-black ${
@@ -441,6 +471,8 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
               <p className="text-xs sm:text-sm text-slate-400 mt-1">
                 {mode === 'warehouse'
                   ? 'قم بفحص بضاعة الموردين ومطابقة الأصناف والمواصفات، وسجل الكميات المستلمة أو راجع أرشيف الاستلامات المعتمدة.'
+                  : isReviewer
+                  ? 'راجع استلام المخزن وافحص المواد فنياً وهندسياً للتأكد من مطابقتها قبل الاعتماد النهائي وإرسالها للمشتريات لإصدار أمر الشراء الفعلي.'
                   : 'راجع استلام المخزن وافحص المواد هندسياً وفنياً في الموقع للتأكد من مطابقتها قبل الاعتماد النهائي وإرسالها للمشتريات لإصدار أمر الشراء الفعلي.'}
               </p>
             </div>
@@ -466,12 +498,16 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
 
       {error && <ErrorMessage error={error} onDismiss={() => setError(null)} />}
 
-      {/* ── مهام وإجراءات مهندس الموقع المطلوبة (Site Engineer Action Inbox) ── */}
+      {/* ── مهام وإجراءات فحص الاستلام المطلوبة (Action Inbox) ── */}
       {mode === 'site' && (
         <ActionRequiredInbox
           title="المهام والإجراءات المطلوبة منك الآن"
-          description="أذونات الاستلام الواردة من المخزن والتي تقف على فحصك واعتمادك الفني والهندسي في الموقع."
-          roleName="مهندس الموقع / مسؤول الاستلام الفني"
+          description={
+            isReviewer
+              ? 'أذونات استلام المواد الواردة من المخزن لأقسامك والتي تقف على فحصك ومطابقتك واعتمادك الفني.'
+              : 'أذونات الاستلام الواردة من المخزن والتي تقف على فحصك واعتمادك الفني والهندسي في الموقع.'
+          }
+          roleName={isReviewer ? 'المراجع الفني / فحص الاستلام' : 'مهندس الموقع / مسؤول الاستلام الفني'}
           onItemActionComplete={() => void load(true)}
           items={siteEngineerActionItems}
         />
@@ -1341,7 +1377,7 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                 <div className="space-y-1 pt-1">
                                   <input
                                     type="text"
-                                    placeholder="ملاحظات مهندس الموقع على هذا الصنف..."
+                                    placeholder={isReviewer ? "ملاحظات المراجع الفني على هذا الصنف..." : "ملاحظات مهندس الموقع على هذا الصنف..."}
                                     value={itemNotes[key] ?? (item.notes || '')}
                                     onChange={(e) => setItemNotes({ ...itemNotes, [key]: e.target.value })}
                                     className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs sm:text-sm text-slate-200 focus:border-cyan-400 focus:outline-none"
@@ -1354,12 +1390,14 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
 
                         {/* General Site Notes */}
                         <div className="space-y-1.5 pt-2">
-                          <label className="text-xs sm:text-sm font-bold text-slate-300">ملاحظات واعتماد مهندس الموقع (اختياري):</label>
+                          <label className="text-xs sm:text-sm font-bold text-slate-300">
+                            {isReviewer ? 'ملاحظات واعتماد المراجع الفني / رئيس القسم (اختياري):' : 'ملاحظات واعتماد مهندس الموقع (اختياري):'}
+                          </label>
                           <textarea
                             rows={2}
                             value={notes[receipt.id] || ''}
                             onChange={(e) => setNotes({ ...notes, [receipt.id]: e.target.value })}
-                            placeholder="ملاحظات مهندس الموقع على استلام وفحص المواد بالموقع..."
+                            placeholder={isReviewer ? 'ملاحظات المراجع الفني على استلام وفحص ومطابقة المواد...' : 'ملاحظات مهندس الموقع على استلام وفحص المواد بالموقع...'}
                             className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-xs sm:text-sm text-slate-100 focus:border-cyan-400 focus:outline-none"
                           />
                         </div>
@@ -1373,7 +1411,7 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                             onClick={() => approveReceipt(receipt)}
                             className="w-full font-black text-base sm:text-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 py-3.5 rounded-2xl shadow-xl shadow-emerald-950/60 flex items-center justify-center gap-2"
                           >
-                            <span>✓</span> اعتماد مطابق للموقع وإرسال للمشتريات لإصدار أمر الشراء الفعلي
+                            <span>✓</span> {isReviewer ? 'اعتماد ومطابقة إذن الاستلام وإرساله للمشتريات لإصدار أمر الشراء الفعلي' : 'اعتماد مطابق للموقع وإرسال للمشتريات لإصدار أمر الشراء الفعلي'}
                           </Button>
                         </div>
                       </div>

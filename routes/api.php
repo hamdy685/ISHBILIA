@@ -427,19 +427,19 @@ Route::middleware('auth:sanctum')->prefix('purchase-receipts')->group(function (
     Route::get('/pending-warehouse-tasks', [PurchaseReceiptController::class, 'pendingWarehouseTasks'])
         ->middleware('permission:purchase_receipt.view_assigned');
     Route::get('/assigned', [PurchaseReceiptController::class, 'indexAssigned'])
-        ->middleware('permission:purchase_receipt.view_assigned|purchase_request.view_own');
+        ->middleware('permission:purchase_receipt.view_assigned|purchase_request.view_own|purchase_request.review');
     Route::get('/archive', [PurchaseReceiptController::class, 'archive'])
-        ->middleware('permission:purchase_receipt.view_assigned|purchase_request.view_own');
+        ->middleware('permission:purchase_receipt.view_assigned|purchase_request.view_own|purchase_request.review');
     Route::get('/{id}', [PurchaseReceiptController::class, 'show'])
-        ->middleware('permission:purchase_receipt.view_assigned|purchase_request.view_own');
+        ->middleware('permission:purchase_receipt.view_assigned|purchase_request.view_own|purchase_request.review');
     Route::post('/purchase-orders/{purchaseOrderId}', [PurchaseReceiptController::class, 'store'])
         ->middleware('permission:purchase_receipt.edit');
     Route::post('/purchase-orders/{purchaseOrderId}/confirm-office', [PurchaseReceiptController::class, 'confirmOfficeReceipt'])
         ->middleware('permission:purchase_receipt.edit|purchase_request.view_own');
     Route::put('/{id}', [PurchaseReceiptController::class, 'update'])
-        ->middleware('permission:purchase_receipt.edit|purchase_request.view_own');
+        ->middleware('permission:purchase_receipt.edit|purchase_request.view_own|purchase_request.review');
     Route::post('/{id}/approve', [PurchaseReceiptController::class, 'approve'])
-        ->middleware('permission:purchase_receipt.approve|purchase_request.view_own');
+        ->middleware('permission:purchase_receipt.approve|purchase_request.view_own|purchase_request.review');
 });
 
 // Receipt direct photo stream (authenticated & permission-checked)

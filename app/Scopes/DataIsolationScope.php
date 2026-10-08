@@ -296,6 +296,30 @@ class DataIsolationScope implements Scope
             return;
         }
 
+        if ($user->hasRole('reviewer') || $user->hasPermission('purchase_request.review')) {
+            $builder->where(function (Builder $q) use ($user) {
+                $q->where('site_engineer_user_id', $user->id)
+                  ->orWhere('receiver_user_id', $user->id)
+                  ->orWhereHas('purchaseRequest', function ($prQ) use ($user) {
+                      $prQ->where('reviewer_user_id', $user->id)
+                          ->orWhere('user_id', $user->id);
+                      if ($user->department_id) {
+                          $prQ->orWhere('department_id', $user->department_id)
+                              ->orWhere('target_department_id', $user->department_id);
+                      }
+                  })
+                  ->orWhereHas('purchaseOrder.purchaseRequest', function ($prQ) use ($user) {
+                      $prQ->where('reviewer_user_id', $user->id)
+                          ->orWhere('user_id', $user->id);
+                      if ($user->department_id) {
+                          $prQ->orWhere('department_id', $user->department_id)
+                              ->orWhere('target_department_id', $user->department_id);
+                      }
+                  });
+            });
+            return;
+        }
+
         if ($user->hasRole('site_accountant') || $user->hasAnyRole(['licenses_accountant', 'buffet_accountant', 'accountant', 'general_accountant']) || $user->isGeneralAccountant()) {
             $allowedCodes = app(SupplierInvoiceService::class)->getAllowedDepartmentCodesForAccountant($user);
             if ($allowedCodes !== null) {

@@ -35,6 +35,7 @@ const PAGE_TITLES: Array<{ prefix: string; title: string }> = [
   { prefix: '/general-manager', title: 'لوحة المدير العام' },
   { prefix: '/warehouse', title: 'استلام المواد' },
   { prefix: '/site-engineer', title: 'اعتماد استلام الموقع' },
+  { prefix: '/receipts', title: 'فحص واعتماد استلام المواد' },
   { prefix: '/employee', title: 'لوحة الموظف' },
 ];
 

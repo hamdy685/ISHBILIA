@@ -193,6 +193,7 @@ class PurchaseReceiptService
             } else {
                 $query->where(function ($q) use ($user) {
                     $q->where('site_engineer_user_id', $user->id)
+                      ->orWhere('receiver_user_id', $user->id)
                       ->orWhereHas('purchaseOrder.purchaseRequest', function ($prQ) use ($user) {
                           $prQ->where('site_engineer_user_id', $user->id);
                           $parcelId = $user->parcel_id ?? $user->land_parcel_id ?? null;
@@ -200,6 +201,16 @@ class PurchaseReceiptService
                               $prQ->orWhere('land_parcel_id', $parcelId);
                           }
                       });
+
+                    if ($user->hasRole('reviewer') || $user->hasPermission('purchase_request.review')) {
+                        $q->orWhereHas('purchaseOrder.purchaseRequest', function ($prQ) use ($user) {
+                            $prQ->where('reviewer_user_id', $user->id)
+                                ->when($user->department_id, fn ($sub) => $sub->orWhere('department_id', $user->department_id)->orWhere('target_department_id', $user->department_id));
+                        })->orWhereHas('purchaseRequest', function ($prQ) use ($user) {
+                            $prQ->where('reviewer_user_id', $user->id)
+                                ->when($user->department_id, fn ($sub) => $sub->orWhere('department_id', $user->department_id)->orWhere('target_department_id', $user->department_id));
+                        });
+                    }
                 });
             }
         }
@@ -360,10 +371,21 @@ class PurchaseReceiptService
 
     public function updateBySiteEngineer(User $siteEngineer, PurchaseReceipt $receipt, array $items, ?string $notes = null): PurchaseReceipt
     {
-        $receipt->loadMissing(['items.purchaseOrderItem.prItem', 'purchaseOrder.purchaseRequest']);
-        $assignedSiteId = (int) ($receipt->site_engineer_user_id ?: $receipt->purchaseOrder?->purchaseRequest?->site_engineer_user_id);
-        if (! $siteEngineer->hasRole('admin') && $assignedSiteId !== (int) $siteEngineer->id) {
-            throw new \RuntimeException('هذا الإذن غير مخصص لمهندس الموقع الحالي.');
+        $receipt->loadMissing(['items.purchaseOrderItem.prItem', 'purchaseOrder.purchaseRequest.department', 'purchaseRequest.department']);
+        $assignedSiteId = (int) ($receipt->site_engineer_user_id ?: $receipt->purchaseOrder?->purchaseRequest?->site_engineer_user_id ?: $receipt->purchaseRequest?->site_engineer_user_id);
+        $pr = $receipt->purchaseOrder?->purchaseRequest ?: $receipt->purchaseRequest;
+        $isReviewerAuthorized = ($siteEngineer->hasRole('reviewer') || $siteEngineer->hasPermission('purchase_request.review')) && (
+            ($pr && (int) $pr->reviewer_user_id === (int) $siteEngineer->id) ||
+            ($pr && $siteEngineer->department_id && ((int) $pr->department_id === (int) $siteEngineer->department_id || (int) $pr->target_department_id === (int) $siteEngineer->department_id))
+        );
+
+        $isAuthorized = $siteEngineer->hasAnyRole(['admin', 'general_manager'])
+            || $assignedSiteId === (int) $siteEngineer->id
+            || (int) $receipt->receiver_user_id === (int) $siteEngineer->id
+            || $isReviewerAuthorized;
+
+        if (! $isAuthorized) {
+            throw new \RuntimeException('هذا الإذن غير مخصص لمهندس الموقع أو المراجع الحالي.');
         }
         if ($receipt->status !== 'PENDING_SITE_ENGINEER') {
             throw new \RuntimeException('لا يمكن تعديل إذن الاستلام بعد اعتماده أو إرساله للحسابات.');
@@ -424,13 +446,24 @@ class PurchaseReceiptService
 
     public function approveBySiteEngineer(User $siteEngineer, PurchaseReceipt $receipt, ?string $notes = null): PurchaseReceipt
     {
-        $receipt->loadMissing(['purchaseOrder.purchaseRequest', 'items']);
+        $receipt->loadMissing(['purchaseOrder.purchaseRequest.department', 'purchaseRequest.department', 'items']);
         if ($receipt->status === 'APPROVED') {
             return $receipt;
         }
-        $assignedSiteId = (int) ($receipt->site_engineer_user_id ?: $receipt->purchaseOrder?->purchaseRequest?->site_engineer_user_id);
-        if (! $siteEngineer->hasRole('admin') && $assignedSiteId !== (int) $siteEngineer->id) {
-            throw new \RuntimeException('هذا الإذن غير مخصص لمهندس الموقع الحالي.');
+        $assignedSiteId = (int) ($receipt->site_engineer_user_id ?: $receipt->purchaseOrder?->purchaseRequest?->site_engineer_user_id ?: $receipt->purchaseRequest?->site_engineer_user_id);
+        $pr = $receipt->purchaseOrder?->purchaseRequest ?: $receipt->purchaseRequest;
+        $isReviewerAuthorized = ($siteEngineer->hasRole('reviewer') || $siteEngineer->hasPermission('purchase_request.review')) && (
+            ($pr && (int) $pr->reviewer_user_id === (int) $siteEngineer->id) ||
+            ($pr && $siteEngineer->department_id && ((int) $pr->department_id === (int) $siteEngineer->department_id || (int) $pr->target_department_id === (int) $siteEngineer->department_id))
+        );
+
+        $isAuthorized = $siteEngineer->hasAnyRole(['admin', 'general_manager'])
+            || $assignedSiteId === (int) $siteEngineer->id
+            || (int) $receipt->receiver_user_id === (int) $siteEngineer->id
+            || $isReviewerAuthorized;
+
+        if (! $isAuthorized) {
+            throw new \RuntimeException('هذا الإذن غير مخصص لمهندس الموقع أو المراجع الحالي.');
         }
         if ($receipt->status !== 'PENDING_SITE_ENGINEER') {
             throw new \RuntimeException('إذن الاستلام ليس بانتظار اعتماد مهندس الموقع.');
@@ -448,6 +481,7 @@ class PurchaseReceiptService
                 'status' => 'APPROVED',
                 'site_engineer_approved_at' => now(),
                 'site_engineer_notes' => $notes,
+                'site_engineer_user_id' => $receipt->site_engineer_user_id ?: $siteEngineer->id,
             ]);
 
             // Regardless of whether it is an internal warehouse order or an external supplier,
@@ -466,6 +500,7 @@ class PurchaseReceiptService
             })->filter()->unique()->values()->all();
             $itemsSummary = !empty($itemDescriptions) ? ' [البنود: ' . implode('، ', array_slice($itemDescriptions, 0, 3)) . (count($itemDescriptions) > 3 ? '...' : '') . ']' : '';
 
+            $actorRoleLabel = $siteEngineer->hasRole('reviewer') ? 'المراجع الفني/رئيس القسم' : 'مهندس الموقع';
             ApprovalHistory::create([
                 'target_type' => PurchaseReceipt::class,
                 'target_id' => $receipt->id,
@@ -474,8 +509,8 @@ class PurchaseReceiptService
                 'from_state' => 'PENDING_SITE_ENGINEER',
                 'to_state' => 'APPROVED',
                 'comments' => $isInternalWarehouse
-                    ? ($notes ? "{$notes} — استلام وتفريغ{$itemsSummary} من المخزن الداخلي، بانتظار إصدار أمر الشراء الفعلي." : "اعتمد مهندس الموقع استلام المواد{$itemsSummary} المنصرفة من المخزن الداخلي، وبانتظار مراجعة وإصدار أمر الشراء الفعلي.")
-                    : ($notes ? "{$notes} — البنود المستلمة{$itemsSummary}" : "اعتمد مهندس الموقع فحص واستلام البنود{$itemsSummary} وأُعيد الملف لإدارة المشتريات لإصدار أمر الشراء الفعلي المستقل الخاص بها."),
+                    ? ($notes ? "{$notes} — استلام وتفريغ{$itemsSummary} من المخزن الداخلي، بانتظار إصدار أمر الشراء الفعلي." : "اعتمد {$actorRoleLabel} استلام المواد{$itemsSummary} المنصرفة من المخزن الداخلي، وبانتظار مراجعة وإصدار أمر الشراء الفعلي.")
+                    : ($notes ? "{$notes} — البنود المستلمة{$itemsSummary}" : "اعتمد {$actorRoleLabel} فحص واستلام البنود{$itemsSummary} وأُعيد الملف لإدارة المشتريات لإصدار أمر الشراء الفعلي المستقل الخاص بها."),
             ]);
 
             $notificationService = app(NotificationService::class);
