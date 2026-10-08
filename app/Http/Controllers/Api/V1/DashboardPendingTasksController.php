@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseReceipt;
 use App\Models\PurchaseRequest;
+use App\Models\PurchaseRequestSupplement;
 use App\Services\ProcurementPurchaseRequestService;
 use App\Services\PurchaseReceiptService;
 use App\Services\ReviewerPurchaseRequestService;
@@ -90,13 +91,25 @@ class DashboardPendingTasksController extends Controller
                 'supplier',
                 'purchaseOrder.supplier',
                 'purchaseOrder.purchaseRequest.department',
+                'purchaseOrder.purchaseRequest.targetDepartment',
                 'purchaseRequest.department',
+                'purchaseRequest.targetDepartment',
                 'items.purchaseOrderItem.item',
             ])
             ->where(function ($q) use ($user) {
                 $q->where('site_engineer_user_id', $user->id)
                   ->orWhereHas('purchaseOrder.purchaseRequest', fn ($prQ) => $prQ->where('site_engineer_user_id', $user->id))
                   ->orWhereHas('purchaseRequest', fn ($prQ) => $prQ->where('site_engineer_user_id', $user->id));
+
+                if ($user->hasRole('reviewer') || $user->hasPermission('purchase_request.review')) {
+                    $q->orWhereHas('purchaseOrder.purchaseRequest', function ($prQ) use ($user) {
+                        $prQ->where('reviewer_user_id', $user->id)
+                            ->when($user->department_id, fn ($sub) => $sub->orWhere('department_id', $user->department_id)->orWhere('target_department_id', $user->department_id));
+                    })->orWhereHas('purchaseRequest', function ($prQ) use ($user) {
+                        $prQ->where('reviewer_user_id', $user->id)
+                            ->when($user->department_id, fn ($sub) => $sub->orWhere('department_id', $user->department_id)->orWhere('target_department_id', $user->department_id));
+                    });
+                }
             })
             ->whereIn('status', ['PENDING_SITE_ENGINEER', 'WAREHOUSE_RECEIPT_SUBMITTED'])
             ->orderByDesc('created_at')
@@ -133,7 +146,7 @@ class DashboardPendingTasksController extends Controller
             ]);
         }
 
-        // 3. Reviewer: Pending Purchase Requests & Quote Recommendations
+        // 3. Reviewer: Pending Purchase Requests, Quotes & Complementary Requests
         if ($user->hasRole('reviewer') || $user->hasPermission('purchase_request.review')) {
             $reviewablePrs = $this->reviewerService->getReviewableRequests($user);
             foreach ($reviewablePrs as $pr) {
@@ -172,6 +185,77 @@ class DashboardPendingTasksController extends Controller
                 }
             }
 
+            // Reviewer: Complementary Requests (طلبات الكمالة بانتظار المراجعة الفنية وتحديد الاستلام)
+            $supplementQuery = PurchaseRequestSupplement::withoutGlobalScope(\App\Scopes\DataIsolationScope::class)
+                ->with([
+                    'purchaseRequest.department',
+                    'purchaseRequest.targetDepartment',
+                    'purchaseRequest.requester',
+                    'requester',
+                    'items.item',
+                ])
+                ->where('status', 'SUBMITTED');
+
+            if (! $user->hasRole('admin')) {
+                $supplementQuery->whereHas('purchaseRequest', function ($prQ) use ($user) {
+                    $prQ->where(function ($scopeQuery) use ($user) {
+                        $scopeQuery->where('reviewer_user_id', $user->id)
+                            ->orWhereHas('requester', fn ($rq) => $rq->where('manager_id', $user->id));
+
+                        if (! $user->hasRole('execution_manager')) {
+                            $scopeQuery->orWhereHas('targetDepartment', fn ($dq) => $dq->where('manager_user_id', $user->id))
+                                ->orWhere(function ($deptQ) use ($user) {
+                                    $deptQ->whereNull('target_department_id')
+                                          ->whereHas('department', fn ($dq) => $dq->where('manager_user_id', $user->id));
+                                });
+
+                            if ($user->hasRole('reviewer') && $user->department_id) {
+                                $scopeQuery->orWhere('target_department_id', $user->department_id)
+                                           ->orWhere(function ($fallbackDept) use ($user) {
+                                               $fallbackDept->whereNull('target_department_id')
+                                                            ->where('department_id', $user->department_id);
+                                           });
+                            }
+                        }
+                    });
+                });
+            }
+
+            $pendingSupplements = $supplementQuery->orderByDesc('created_at')->get();
+
+            foreach ($pendingSupplements as $sup) {
+                $pr = $sup->purchaseRequest;
+                $tasks->push([
+                    'id' => "supplement-{$sup->id}",
+                    'rawId' => $sup->id,
+                    'type' => 'SUPPLEMENT',
+                    'code' => ($pr?->request_number ?: "PR-{$sup->purchase_request_id}") . " (كمالة #{$sup->batch_number})",
+                    'title' => "طلب كمالة جديد (دفعة #{$sup->batch_number}) — " . ($pr?->request_number ?: 'طلب شراء'),
+                    'subtitle' => $sup->notes ?: 'بنود إضافية ملحقة بطلب الشراء تنتظر مراجعتك واعتمادك الفني',
+                    'department' => $pr?->department?->name ?: $pr?->targetDepartment?->name,
+                    'requester' => $sup->requester?->name ?: $pr?->requester?->name,
+                    'urgency' => 'CRITICAL',
+                    'reason' => 'طلب كمالة جديد (دفعة إضافية) مقدم بانتظار مراجعتك واعتمادك الفني وتحديد مسؤول الاستلام',
+                    'actionUrl' => "/requests/supplements?expand_pr={$sup->purchase_request_id}&supplement_id={$sup->id}",
+                    'actionLabel' => 'مراجعة واعتماد الكمالة',
+                    'stageBadge' => [
+                        'text' => 'كمالة عاجلة',
+                        'icon' => '➕',
+                        'className' => 'bg-purple-950/80 text-purple-300 border-purple-800/60',
+                    ],
+                    'created_at' => $sup->created_at?->toISOString(),
+                    'timeAgo' => $sup->created_at?->format('Y-m-d H:i'),
+                    'items_count' => $sup->items->count(),
+                    'items_list' => $sup->items->map(fn ($it) => [
+                        'description' => $it->item_description ?: ($it->item?->name ?: 'صنف كمالة'),
+                        'quantity' => (float) $it->quantity,
+                        'uom' => $it->uom,
+                        'parcel' => $it->item_reference,
+                        'region' => $it->region,
+                    ])->values()->all(),
+                ]);
+            }
+
             // Quotes pending recommendations
             try {
                 $quotePrs = $this->procurementService->getPendingQuoteRequests(50, $user);
@@ -194,9 +278,21 @@ class DashboardPendingTasksController extends Controller
                         'reason' => 'عروض أسعار مسجلة بانتظار التوصية الفنية لاختيار العرض الأنسب',
                         'actionUrl' => "/reviewer/purchase-quotes?open={$q->id}",
                         'actionLabel' => 'البت وترشيح عروض الأسعار',
+                        'stageBadge' => [
+                            'text' => 'ترشيح أسعار',
+                            'icon' => '⚖️',
+                            'className' => 'bg-amber-950/80 text-amber-300 border-amber-800/60',
+                        ],
                         'created_at' => $q->created_at?->toISOString(),
                         'timeAgo' => $q->created_at?->format('Y-m-d H:i'),
                         'items_count' => $q->items->count(),
+                        'items_list' => $q->items->map(fn ($it) => [
+                            'description' => $it->item_description ?: ($it->item?->name ?: 'صنف'),
+                            'quantity' => (float) $it->quantity,
+                            'uom' => $it->uom,
+                            'parcel' => $it->item_reference,
+                            'region' => $it->region,
+                        ])->values()->all(),
                     ]);
                 }
             }

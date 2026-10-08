@@ -150,4 +150,73 @@ describe('Unified Pending Actions Frontend Widget', () => {
     expect(screen.getByText('PR-101')).toBeInTheDocument();
     expect(screen.getByText('REC-202')).toBeInTheDocument();
   });
+
+  it('renders SUPPLEMENT and QUOTE cards with proper stage badges and navigates on click', () => {
+    const reviewerItems: ActionInboxItem[] = [
+      {
+        id: 'supplement-303',
+        rawId: 303,
+        type: 'SUPPLEMENT',
+        code: 'PR-101 (كمالة #1)',
+        title: 'طلب كمالة جديد (دفعة #1) — PR-101',
+        subtitle: 'بنود إضافية ملحقة بطلب الشراء تنتظر مراجعتك واعتمادك الفني',
+        department: 'المكتب الفني',
+        urgency: 'CRITICAL',
+        reason: 'طلب كمالة جديد (دفعة إضافية) مقدم بانتظار مراجعتك واعتمادك الفني',
+        actionUrl: '/requests/supplements?expand_pr=101&supplement_id=303',
+        actionLabel: 'مراجعة واعتماد الكمالة',
+        stageBadge: {
+          text: 'كمالة عاجلة',
+          icon: '➕',
+          className: 'bg-purple-950/80 text-purple-300 border-purple-800/60',
+        },
+        items_count: 1,
+        items_list: [{ description: 'حديد تسليح إضافي', quantity: 5, uom: 'طن' }],
+      },
+      {
+        id: 'quote-404',
+        rawId: 404,
+        type: 'QUOTE',
+        code: 'PR-404',
+        title: 'عروض أسعار بانتظار الترشيح',
+        subtitle: 'عروض أسعار مسجلة من الموردين',
+        department: 'المكتب الفني',
+        urgency: 'HIGH',
+        reason: 'عروض أسعار مسجلة بانتظار التوصية الفنية لاختيار العرض الأنسب',
+        actionUrl: '/reviewer/purchase-quotes?open=404',
+        actionLabel: 'البت وترشيح عروض الأسعار',
+        stageBadge: {
+          text: 'ترشيح أسعار',
+          icon: '⚖️',
+          className: 'bg-amber-950/80 text-amber-300 border-amber-800/60',
+        },
+        items_count: 1,
+        items_list: [{ description: 'خرسانة جاهزة', quantity: 100, uom: 'م3' }],
+      },
+    ];
+
+    render(
+      <MemoryRouter>
+        <AuthProvider>
+          <PendingActions items={reviewerItems} />
+        </AuthProvider>
+      </MemoryRouter>
+    );
+
+    // Badges
+    expect(screen.getByText('كمالة عاجلة')).toBeInTheDocument();
+    expect(screen.getByText('ترشيح أسعار')).toBeInTheDocument();
+
+    // Clicking Supplement card navigates to supplements page with query params
+    const supplementCard = screen.getByText('PR-101 (كمالة #1)').closest('div.cursor-pointer');
+    expect(supplementCard).not.toBeNull();
+    fireEvent.click(supplementCard!);
+    expect(mockNavigate).toHaveBeenCalledWith('/requests/supplements?expand_pr=101&supplement_id=303');
+
+    // Clicking Quote card navigates to quotes decision page
+    const quoteCard = screen.getByText('PR-404').closest('div.cursor-pointer');
+    expect(quoteCard).not.toBeNull();
+    fireEvent.click(quoteCard!);
+    expect(mockNavigate).toHaveBeenCalledWith('/reviewer/purchase-quotes?open=404');
+  });
 });

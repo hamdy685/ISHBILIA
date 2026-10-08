@@ -170,9 +170,77 @@ class UnifiedDashboardPendingTasksTest extends TestCase
             'user_id' => $this->employee->id,
             'requester_user_id' => $this->employee->id,
             'department_id' => $this->dept->id,
+            'reviewer_user_id' => $this->reviewer->id,
             'request_type' => 'PROJECT',
             'status' => 'SUBMITTED',
             'justification' => 'طلب حديد تسليح',
+        ]);
+
+        // 2. Complementary Request (PurchaseRequestSupplement) waiting for reviewer
+        $supplement = \App\Models\PurchaseRequestSupplement::create([
+            'purchase_request_id' => $submittedPr->id,
+            'batch_number' => 1,
+            'requested_by_user_id' => $this->employee->id,
+            'status' => 'SUBMITTED',
+            'notes' => 'كمالة عاجلة إضافية لحديد التسليح',
+        ]);
+
+        // 3. PR with quotes waiting for recommendation
+        $quotePr = PurchaseRequest::create([
+            'request_number' => 'PR-QUOTE-001',
+            'user_id' => $this->employee->id,
+            'requester_user_id' => $this->employee->id,
+            'department_id' => $this->dept->id,
+            'reviewer_user_id' => $this->reviewer->id,
+            'request_type' => 'PROJECT',
+            'status' => 'PENDING_QUOTE_RECOMMENDATIONS',
+            'justification' => 'عروض أسعار خرسانة جاهزة',
+            'total_estimated_cost' => 120000,
+        ]);
+
+        $quote = \App\Models\PurchaseRequestQuote::create([
+            'purchase_request_id' => $quotePr->id,
+            'supplier_id' => $this->supplier->id,
+            'created_by_user_id' => $this->employee->id,
+            'total_amount' => 120000,
+        ]);
+
+        \App\Models\PurchaseRequestQuoteRecommendation::create([
+            'purchase_request_quote_id' => $quote->id,
+            'user_id' => $this->employee->id,
+            'role_type' => 'ACCOUNTING',
+            'decision' => 'RECOMMEND',
+            'comments' => 'مناسب مالياً',
+        ]);
+
+        // 4. Receipt for reviewer's department waiting for inspection
+        $approvedPr = PurchaseRequest::create([
+            'request_number' => 'PR-REC-001',
+            'user_id' => $this->employee->id,
+            'requester_user_id' => $this->employee->id,
+            'department_id' => $this->dept->id,
+            'reviewer_user_id' => $this->reviewer->id,
+            'request_type' => 'PROJECT',
+            'status' => 'APPROVED_BY_REVIEWER',
+            'justification' => 'بويات وعوازل',
+        ]);
+
+        $po = PurchaseOrder::create([
+            'po_number' => 'PO-REV-001',
+            'purchase_request_id' => $approvedPr->id,
+            'supplier_id' => $this->supplier->id,
+            'created_by_user_id' => $this->reviewer->id,
+            'status' => 'ISSUED',
+            'grand_total' => 30000,
+        ]);
+
+        $receipt = PurchaseReceipt::create([
+            'purchase_order_id' => $po->id,
+            'purchase_request_id' => $approvedPr->id,
+            'supplier_id' => $this->supplier->id,
+            'receipt_number' => 'REC-REV-001',
+            'status' => 'PENDING_SITE_ENGINEER',
+            'received_at' => now()->toDateString(),
         ]);
 
         Sanctum::actingAs($this->reviewer);
@@ -181,10 +249,38 @@ class UnifiedDashboardPendingTasksTest extends TestCase
         $response->assertOk();
 
         $data = $response->json('data');
-        $prTask = collect($data)->firstWhere('rawId', $submittedPr->id);
+        $types = collect($data)->pluck('type')->unique()->all();
 
-        $this->assertNotNull($prTask);
-        $this->assertEquals('PR', $prTask['type']);
-        $this->assertEquals("/reviewer/requests/{$submittedPr->id}/review", $prTask['actionUrl']);
+        // Must contain PR, SUPPLEMENT, QUOTE, and RECEIPT
+        $this->assertContains('PR', $types);
+        $this->assertContains('SUPPLEMENT', $types);
+        $this->assertContains('QUOTE', $types);
+        $this->assertContains('RECEIPT', $types);
+
+        // Verify supplement task details
+        $supplementTask = collect($data)->firstWhere('type', 'SUPPLEMENT');
+        $this->assertNotNull($supplementTask);
+        $this->assertEquals("supplement-{$supplement->id}", $supplementTask['id']);
+        $this->assertEquals($supplement->id, $supplementTask['rawId']);
+        $this->assertEquals("/requests/supplements?expand_pr={$submittedPr->id}&supplement_id={$supplement->id}", $supplementTask['actionUrl']);
+        $this->assertEquals('كمالة عاجلة', $supplementTask['stageBadge']['text']);
+
+        // Verify quote task details
+        $quoteTask = collect($data)->firstWhere('type', 'QUOTE');
+        $this->assertNotNull($quoteTask);
+        $this->assertEquals($quotePr->id, $quoteTask['rawId']);
+        $this->assertEquals("/reviewer/purchase-quotes?open={$quotePr->id}", $quoteTask['actionUrl']);
+        $this->assertEquals('ترشيح أسعار', $quoteTask['stageBadge']['text']);
+
+        // Verify receipt task details
+        $receiptTask = collect($data)->firstWhere('type', 'RECEIPT');
+        $this->assertNotNull($receiptTask);
+        $this->assertEquals("/site-engineer?receipt_id={$receipt->id}", $receiptTask['actionUrl']);
+        $this->assertEquals('إذن استلام مواد', $receiptTask['stageBadge']['text']);
+
+        // Verify dedicated reviewer endpoint returns equivalent payload
+        $reviewerResponse = $this->getJson('/api/v1/reviewer/pending-tasks');
+        $reviewerResponse->assertOk();
+        $this->assertCount(count($data), $reviewerResponse->json('data'));
     }
 }

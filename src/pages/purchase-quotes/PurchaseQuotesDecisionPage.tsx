@@ -170,6 +170,17 @@ export const PurchaseQuotesDecisionPage: React.FC<PurchaseQuotesDecisionPageProp
 
   useEffect(() => { void load(); }, []);
 
+  useEffect(() => {
+    if (openRequestId && !loading) {
+      setTimeout(() => {
+        const el = document.getElementById(`pr-card-${openRequestId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 200);
+    }
+  }, [openRequestId, loading]);
+
   const act = async (request: PurchaseRequest, quote: PurchaseRequestQuote, decision: 'RECOMMEND' | 'REJECT' | 'SELECT') => {
     setSavingId(quote.id);
     setError(null);
@@ -230,7 +241,11 @@ export const PurchaseQuotesDecisionPage: React.FC<PurchaseQuotesDecisionPageProp
         const totalItems = request.items?.length || 0;
 
         return (
-          <Card key={request.id} className={`space-y-5 border-2 ${request.id === openRequestId ? 'border-cyan-400/90 ring-4 ring-cyan-400/20 shadow-cyan-950/50' : 'border-slate-700/80'} shadow-2xl bg-slate-900/95 rounded-2xl p-4 sm:p-6 mb-8`}>
+          <Card
+            key={request.id}
+            id={`pr-card-${request.id}`}
+            className={`space-y-5 border-2 ${request.id === openRequestId ? 'border-cyan-400/90 ring-4 ring-cyan-400/20 shadow-cyan-950/50' : 'border-slate-700/80'} shadow-2xl bg-slate-900/95 rounded-2xl p-4 sm:p-6 mb-8`}
+          >
             {/* Request Master Header */}
             <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-4 space-y-3">
               <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between border-b border-slate-800 pb-3">

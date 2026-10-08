@@ -25,7 +25,7 @@ export interface ActionInboxItemDetail {
 export interface ActionInboxItem {
   id: string | number;
   rawId: number;
-  type: 'PR' | 'PO' | 'QUOTE' | 'INVOICE' | 'RECEIPT';
+  type: 'PR' | 'PO' | 'QUOTE' | 'INVOICE' | 'RECEIPT' | 'SUPPLEMENT';
   code: string;
   title: string;
   subtitle?: string;
@@ -487,6 +487,16 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                             <span>📦</span>
                             <span>إذن استلام مواد</span>
                           </span>
+                        ) : item.type === 'SUPPLEMENT' ? (
+                          <span className="text-[11px] font-black px-2.5 py-0.5 rounded-lg border flex items-center gap-1 bg-purple-950/80 text-purple-300 border-purple-800/60 shadow-xs">
+                            <span>➕</span>
+                            <span>كمالة عاجلة</span>
+                          </span>
+                        ) : item.type === 'QUOTE' ? (
+                          <span className="text-[11px] font-black px-2.5 py-0.5 rounded-lg border flex items-center gap-1 bg-amber-950/80 text-amber-300 border-amber-800/60 shadow-xs">
+                            <span>⚖️</span>
+                            <span>ترشيح أسعار</span>
+                          </span>
                         ) : null}
 
                         {isOffice ? (
@@ -544,7 +554,7 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                       <div className="rounded-xl border border-slate-800/90 bg-slate-900/60 p-2.5 space-y-1.5 text-xs">
                         <div className="text-[11px] font-bold text-slate-300 flex items-center justify-between pb-1 border-b border-slate-800/60">
                           <span className="flex items-center gap-1.5 text-cyan-400 font-bold">
-                            <span>📦</span> {item.type === 'RECEIPT' ? 'بنود الاستلام الفعلي' : (item.type === 'PO' ? 'بنود أمر الشراء الفعلي' : (item.type === 'INVOICE' ? 'بنود الفاتورة' : 'بنود الطلب'))} ({item.items_list.length}):
+                            <span>📦</span> {item.type === 'RECEIPT' ? 'بنود الاستلام الفعلي' : (item.type === 'PO' ? 'بنود أمر الشراء الفعلي' : (item.type === 'INVOICE' ? 'بنود الفاتورة' : (item.type === 'SUPPLEMENT' ? 'بنود طلب الكمالة' : 'بنود الطلب')))} ({item.items_list.length}):
                           </span>
                           {item.items_count && item.items_count > item.items_list.length && (
                             <span className="text-[10px] text-slate-500">+{item.items_count - item.items_list.length} أصناف أخرى</span>
@@ -691,6 +701,7 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                       const isOverdue = Boolean(item.date_needed && item.date_needed < new Date().toISOString().slice(0, 10));
                       const defaultNextActor = item.next_actor || (
                         item.type === 'PR' ? (isReviewer ? 'المدير العام للاعتماد النهائي' : 'إدارة المشتريات') :
+                        item.type === 'SUPPLEMENT' ? 'إدارة المشتريات للتسعير وإصدار أمر التوريد' :
                         item.type === 'QUOTE' ? 'المدير العام لاعتماد الترسية' :
                         item.type === 'PO' ? 'المستودع والموقع للاستلام' :
                         item.type === 'RECEIPT' ? 'إدارة الحسابات لتسجيل الفاتورة' : undefined

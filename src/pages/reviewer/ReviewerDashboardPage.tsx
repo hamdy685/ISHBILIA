@@ -158,6 +158,11 @@ export const ReviewerDashboardPage: React.FC = () => {
           specifications: it?.specifications,
         })),
         requires_warehouse_receipt: req.requires_warehouse_receipt ?? true,
+        stageBadge: {
+          text: 'مراجعة فنية',
+          icon: '📋',
+          className: 'bg-cyan-950/80 text-cyan-300 border-cyan-800/60',
+        },
         onDirectApprove: hasPermission('purchase_request.review')
           ? async (
               _item: any,
@@ -196,6 +201,11 @@ export const ReviewerDashboardPage: React.FC = () => {
         reason: 'عروض أسعار مسجلة بانتظار التوصية الفنية لاختيار العرض الأنسب',
         actionUrl: `/reviewer/purchase-quotes?open=${q.id}`,
         actionLabel: 'البت وترشيح عروض الأسعار',
+        stageBadge: {
+          text: 'ترشيح أسعار',
+          icon: '⚖️',
+          className: 'bg-amber-950/80 text-amber-300 border-amber-800/60',
+        },
         timeAgo: q.created_at ? q.created_at.slice(0, 10) : undefined,
         created_at: q.created_at || undefined,
         items_count: q.items?.length || 0,
@@ -223,6 +233,11 @@ export const ReviewerDashboardPage: React.FC = () => {
         reason: 'تم استلام المواد بالمخزن وبانتظار معاينتك ومطابقتك الهندسية بالموقع',
         actionUrl: `/site-engineer?receipt_id=${r.id}`,
         actionLabel: 'فحص واعتماد إذن الاستلام',
+        stageBadge: {
+          text: 'إذن استلام مواد',
+          icon: '📦',
+          className: 'bg-emerald-950/80 text-emerald-300 border-emerald-800/60',
+        },
         timeAgo: r.created_at ? r.created_at.slice(0, 10) : undefined,
         created_at: r.created_at || undefined,
         items_count: r.items?.length || 0,
@@ -246,8 +261,13 @@ export const ReviewerDashboardPage: React.FC = () => {
   });
 
   safeBackendPendingTasks.forEach((t) => {
-    if (t && t.id != null && !taskMap.has(String(t.id))) {
-      taskMap.set(String(t.id), t);
+    if (t && t.id != null) {
+      const existing = taskMap.get(String(t.id));
+      if (existing) {
+        taskMap.set(String(t.id), { ...t, ...existing, stageBadge: existing.stageBadge || t.stageBadge });
+      } else {
+        taskMap.set(String(t.id), t);
+      }
     }
   });
 

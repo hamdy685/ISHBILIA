@@ -67,6 +67,8 @@ Route::middleware('auth:sanctum')->get('/items/suggestions', [\App\Http\Controll
 // Unified Dashboard Pending Tasks (Aggregated tasks across all entities)
 Route::middleware('auth:sanctum')->get('/dashboard/pending-tasks', [DashboardPendingTasksController::class, 'index']);
 Route::middleware('auth:sanctum')->get('/pending-tasks', [DashboardPendingTasksController::class, 'index']);
+Route::middleware('auth:sanctum')->get('/reviewer/pending-tasks', [\App\Http\Controllers\Api\V1\ReviewerDashboardController::class, 'index']);
+Route::middleware('auth:sanctum')->get('/reviewer/dashboard/pending-tasks', [\App\Http\Controllers\Api\V1\ReviewerDashboardController::class, 'index']);
 Route::middleware('auth:sanctum')->get('/reports/purchases', [PurchasesReportController::class, 'index'])
     ->middleware('permission:purchase_order.view|purchase_order.view_gm|purchase_order.view_accounting');
 Route::middleware('auth:sanctum')->get('/supplier-invoices/pending', [SupplierInvoiceController::class, 'approvedReceipts'])

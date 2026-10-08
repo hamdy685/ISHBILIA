@@ -15,6 +15,8 @@ import { ApproveSupplementDialog } from '../components/supplements/ApproveSupple
 import { PrDetailsModal } from '../components/procurement/PrDetailsModal';
 import { getUnitLabel } from '../utils/units';
 
+import apiClient from '../api/client';
+
 export const SupplementaryRequestsPage: React.FC = () => {
   const { user } = useAuth();
   const [requests, setRequests] = useState<PurchaseRequest[]>([]);
@@ -88,6 +90,64 @@ export const SupplementaryRequestsPage: React.FC = () => {
       }
     }
   }, [searchParams, requests, selectedPrForCreate]);
+
+  // فتح وتوسيع طلب الكمالة تلقائياً في حال تمرير ?expand_pr=...
+  useEffect(() => {
+    const expandPrParam = searchParams.get('expand_pr');
+    if (!expandPrParam) return;
+    const prIdNum = Number(expandPrParam);
+    if (!prIdNum || isNaN(prIdNum)) return;
+
+    if (expandedPrId !== prIdNum) {
+      setExpandedPrId(prIdNum);
+    }
+
+    if (!prSupplements[prIdNum]) {
+      void loadSupplementsForPr(prIdNum);
+    }
+
+    // Scroll to the targeted PR card smoothly
+    setTimeout(() => {
+      const el = document.getElementById(`pr-row-${prIdNum}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 200);
+
+    // If request not in current paginated list, load single PR and prepend
+    if (requests.length > 0 && !requests.some((r) => r.id === prIdNum)) {
+      apiClient.get<{ data: PurchaseRequest }>(`/purchase-requests/${prIdNum}`)
+        .then((res) => {
+          if (res.data?.data) {
+            setRequests((prev) => (prev.some((r) => r.id === prIdNum) ? prev : [res.data.data, ...prev]));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [searchParams, requests, expandedPrId, prSupplements]);
+
+  // فتح نافذة اعتماد الكمالة للمراجع تلقائياً عند تمرير ?supplement_id=...
+  useEffect(() => {
+    const supplementIdParam = searchParams.get('supplement_id');
+    const expandPrParam = searchParams.get('expand_pr');
+    if (!supplementIdParam || !expandPrParam || approvingSupplement) return;
+
+    const supId = Number(supplementIdParam);
+    const prId = Number(expandPrParam);
+    if (!prId || !supId || !prSupplements[prId]) return;
+
+    const targetSup = prSupplements[prId].find((s) => s.id === supId);
+    let targetPr = requests.find((r) => r.id === prId);
+
+    if (targetSup && targetSup.status === 'SUBMITTED') {
+      if (!targetPr && targetSup.purchase_request) {
+        targetPr = targetSup.purchase_request as unknown as PurchaseRequest;
+      }
+      if (targetPr) {
+        setApprovingSupplement({ request: targetPr, supplement: targetSup });
+      }
+    }
+  }, [searchParams, prSupplements, requests, approvingSupplement]);
 
   const loadSupplementsForPr = async (prId: number) => {
     try {
@@ -285,6 +345,7 @@ export const SupplementaryRequestsPage: React.FC = () => {
             return (
               <div
                 key={pr.id}
+                id={`pr-row-${pr.id}`}
                 className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all hover:border-amber-300 dark:border-slate-800 dark:bg-slate-900"
               >
                 {/* Request Header Card */}

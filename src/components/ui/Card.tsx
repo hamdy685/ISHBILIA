@@ -7,9 +7,10 @@ export interface CardProps {
   onClick?: () => void;
   to?: string;
   isActive?: boolean;
+  id?: string;
 }
 
-export const Card: React.FC<CardProps> = ({ children, className = '', onClick, to, isActive }) => {
+export const Card: React.FC<CardProps> = ({ children, className = '', onClick, to, isActive, id }) => {
   const isClickable = Boolean(onClick || to);
   const activeClasses = isActive
     ? 'ring-2 ring-gold-400/80 border-gold-400/80 bg-slate-850/90 shadow-gold-950/40'
@@ -20,6 +21,7 @@ export const Card: React.FC<CardProps> = ({ children, className = '', onClick, t
 
   const content = (
     <div
+      id={id}
       onClick={onClick}
       className={`bg-slate-900/75 border border-white/10 rounded-2xl p-4 sm:p-5 shadow-xl shadow-black/50 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl transition-all duration-300 ${clickableClasses} ${activeClasses} ${className}`}
     >
