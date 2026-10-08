@@ -478,8 +478,15 @@ class ReviewerPurchaseRequestService
                 }
             }
 
+            $isComplementary = $pr->isComplementaryRequest();
+            $targetStatus = $isComplementary ? 'PENDING_PROCUREMENT_APPROVAL' : 'PENDING_EXECUTIVE_APPROVAL';
+            $actionName = $isComplementary ? 'APPROVED_BY_REVIEWER_FAST_TRACK' : 'APPROVED_BY_REVIEWER';
+            $defaultComment = $isComplementary
+                ? 'اعتمد رئيس القسم طلب الكمالة المستقل وأرسله مباشرة إلى إدارة المشتريات (تخطي المسار التنفيذي والمالي).'
+                : 'اعتمد المراجع الطلب وأرسله إلى المدير التنفيذي للقرار.';
+
             $updateData = [
-                'status' => 'PENDING_EXECUTIVE_APPROVAL',
+                'status' => $targetStatus,
                 'reviewer_user_id' => $pr->reviewer_user_id ?: $reviewer->id,
                 'site_engineer_user_id' => $engineerUser?->id,
             ];
@@ -494,17 +501,19 @@ class ReviewerPurchaseRequestService
                 'target_type' => PurchaseRequest::class,
                 'target_id' => $pr->id,
                 'actor_user_id' => $reviewer->id,
-                'action' => 'APPROVED_BY_REVIEWER',
+                'action' => $actionName,
                 'from_state' => $fromState,
-                'to_state' => 'PENDING_EXECUTIVE_APPROVAL',
-                'comments' => $comment ?? 'اعتمد المراجع الطلب وأرسله إلى المدير التنفيذي للقرار.',
+                'to_state' => $targetStatus,
+                'comments' => $comment ?? $defaultComment,
             ]);
 
             app(SystemEventService::class)->recordAction(
                 $pr,
-                'APPROVED_BY_REVIEWER',
-                'اعتمد رئيس القسم طلب الشراء وأرسله إلى المدير التنفيذي.',
-                ['event_type' => 'purchase_request.approved_by_reviewer', 'from_state' => $fromState, 'to_state' => 'PENDING_EXECUTIVE_APPROVAL', 'actor_user_id' => $reviewer->id, 'metadata' => ['comment' => $comment]]
+                $actionName,
+                $isComplementary
+                    ? 'اعتمد رئيس القسم طلب الكمالة وأرسله مباشرة إلى إدارة المشتريات (مسار سريع).'
+                    : 'اعتمد رئيس القسم طلب الشراء وأرسله إلى المدير التنفيذي.',
+                ['event_type' => 'purchase_request.approved_by_reviewer', 'from_state' => $fromState, 'to_state' => $targetStatus, 'actor_user_id' => $reviewer->id, 'metadata' => ['comment' => $comment, 'is_complementary' => $isComplementary]]
             );
 
             // Notify Requester Employee
@@ -513,34 +522,48 @@ class ReviewerPurchaseRequestService
             $notificationService->queueNotification(
                 $pr->user_id,
                 'purchase_request_approved',
-                'تم اعتماد طلب الشراء',
-                "تم اعتماد طلب الشراء {$pr->request_number} وإرساله إلى المدير التنفيذي.",
+                $isComplementary ? 'تم اعتماد طلب الكمالة' : 'تم اعتماد طلب الشراء',
+                $isComplementary
+                    ? "تم اعتماد طلب الكمالة المستقل {$pr->request_number} من رئيس القسم وإحالته مباشرة إلى إدارة المشتريات لإصدار أمر الشراء."
+                    : "تم اعتماد طلب الشراء {$pr->request_number} وإرساله إلى المدير التنفيذي.",
                 $pr
             );
 
-            // Notify the Executive / General Manager or Direct Manager
-            $requester = $pr->requester;
-            $directManager = ($requester && $requester->manager_id)
-                ? User::where('id', $requester->manager_id)->where('is_active', true)->first()
-                : null;
-
-            if ($directManager) {
-                $notificationService->queueNotification(
-                    $directManager->id,
-                    'purchase_request_pending_executive',
-                    'طلب شراء بانتظار قرار المدير',
-                    "طلب الشراء {$pr->request_number} لموظفك ({$requester->name}) اعتمده المراجع وبانتظار قرارك.",
+            if ($isComplementary) {
+                // Fast-Track: notify Procurement Manager(s) directly
+                $procurementManagers = User::whereHas('roles', fn ($q) => $q->where('slug', 'procurement_manager'))->where('is_active', true)->get();
+                $notificationService->queueUsers(
+                    $procurementManagers,
+                    'purchase_request_pending_procurement',
+                    'طلب كمالة جديد بانتظار أمر الشراء',
+                    "تم اعتماد طلب الكمالة المستقل {$pr->request_number} وهو جاهز الآن لدى إدارة المشتريات لإصدار أمر الشراء مباشرة.",
                     $pr
                 );
             } else {
-                $executives = User::whereHas('roles', fn ($q) => $q->where('slug', 'general_manager'))->where('is_active', true)->get();
-                $notificationService->queueUsers(
-                    $executives,
-                    'purchase_request_pending_executive',
-                    'طلب شراء بانتظار قرار المدير التنفيذي',
-                    "طلب الشراء {$pr->request_number} اعتمده المراجع وبانتظار قرار المدير التنفيذي.",
-                    $pr
-                );
+                // Normal route: Notify the Executive / General Manager or Direct Manager
+                $requester = $pr->requester;
+                $directManager = ($requester && $requester->manager_id)
+                    ? User::where('id', $requester->manager_id)->where('is_active', true)->first()
+                    : null;
+
+                if ($directManager) {
+                    $notificationService->queueNotification(
+                        $directManager->id,
+                        'purchase_request_pending_executive',
+                        'طلب شراء بانتظار قرار المدير',
+                        "طلب الشراء {$pr->request_number} لموظفك ({$requester->name}) اعتمده المراجع وبانتظار قرارك.",
+                        $pr
+                    );
+                } else {
+                    $executives = User::whereHas('roles', fn ($q) => $q->where('slug', 'general_manager'))->where('is_active', true)->get();
+                    $notificationService->queueUsers(
+                        $executives,
+                        'purchase_request_pending_executive',
+                        'طلب شراء بانتظار قرار المدير التنفيذي',
+                        "طلب الشراء {$pr->request_number} اعتمده المراجع وبانتظار قرار المدير التنفيذي.",
+                        $pr
+                    );
+                }
             }
 
             return $pr->fresh(['requester', 'department', 'assignedReviewer', 'siteEngineer', 'items.item', 'approvalHistory']);

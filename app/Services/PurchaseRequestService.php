@@ -159,8 +159,10 @@ class PurchaseRequestService
         for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
             try {
                 return DB::transaction(function () use ($user, $data) {
-                    $requestType = ($data['request_type'] ?? 'PROJECT') === 'OFFICE_SUPPLIES' ? 'OFFICE_SUPPLIES' : 'PROJECT';
+                    $incomingType = $data['request_type'] ?? 'PROJECT';
+                    $requestType = in_array($incomingType, ['OFFICE_SUPPLIES', 'COMPLEMENTARY'], true) ? $incomingType : 'PROJECT';
                     $isOffice = $requestType === 'OFFICE_SUPPLIES';
+                    $isComplementary = $requestType === 'COMPLEMENTARY';
 
                     $parcelReference = trim((string) ($data['parcel_reference'] ?? $data['parcel'] ?? $data['parcel_name'] ?? ''));
                     $region = trim((string) ($data['region'] ?? ''));
@@ -180,6 +182,19 @@ class PurchaseRequestService
                         }
                         if ($region === '') {
                             $region = 'إداري / المقر الرئيسي';
+                        }
+                    } elseif ($isComplementary) {
+                        if ($parcelReference === '' && !empty($data['items'][0]['item_reference'])) {
+                            $parcelReference = trim((string) $data['items'][0]['item_reference']);
+                        }
+                        if ($region === '' && !empty($data['items'][0]['region'])) {
+                            $region = trim((string) $data['items'][0]['region']);
+                        }
+                        if ($parcelReference === '') {
+                            $parcelReference = 'طلب كمالة مستقل';
+                        }
+                        if ($region === '') {
+                            $region = 'موقع العمل / المستودع';
                         }
                     } else {
                         if ($parcelReference === '' && !empty($data['items'][0]['item_reference'])) {
@@ -280,6 +295,7 @@ class PurchaseRequestService
                             'uom' => $itemData['uom'],
                             'specifications' => $itemData['specifications'] ?? null,
                             'notes' => $itemData['notes'] ?? null,
+                            'is_supplementary' => $isComplementary,
                         ]);
                     }
 

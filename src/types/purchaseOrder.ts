@@ -1,3 +1,5 @@
+import { PurchaseRequestType } from './purchaseRequest';
+
 export type PurchaseOrderStatus =
   | 'PO_DRAFT'
   | 'ISSUED'
@@ -95,7 +97,7 @@ export interface PurchaseOrder {
     id: number;
     request_number: string;
     manual_request_number?: string | null;
-    request_type?: 'PROJECT' | 'OFFICE_SUPPLIES';
+    request_type?: PurchaseRequestType;
     status: string;
     created_at?: string | null;
     project_name?: string | null;

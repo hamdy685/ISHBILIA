@@ -102,6 +102,7 @@ export const AppRoutes: React.FC = () => {
                 <Route element={<RoleRoute allowedRoles={["employee", "reviewer", "warehouse_keeper", "site_engineer", "procurement_manager", "accountant", "site_accountant", "licenses_accountant", "buffet_accountant", "general_manager", "admin"]} />}>
                     <Route path="/requests" element={<PurchaseRequestsPage />} />
                     <Route path="/requests/create" element={<CreatePurchaseRequestPage />} />
+                    <Route path="/requests/create-complementary" element={<CreatePurchaseRequestPage initialRequestType="COMPLEMENTARY" />} />
                     <Route path="/requests/favorites" element={<FavoriteRequestsPage />} />
                     <Route path="/requests/supplements" element={<SupplementaryRequestsPage />} />
                     <Route path="/requests/:id" element={<PurchaseRequestDetailsPage />} />
@@ -129,6 +130,7 @@ export const AppRoutes: React.FC = () => {
                     <Route path="/employee" element={<EmployeeDashboardPage />} />
                     <Route path="/employee/requests" element={<PurchaseRequestsPage />} />
                     <Route path="/employee/requests/create" element={<CreatePurchaseRequestPage />} />
+                    <Route path="/employee/requests/create-complementary" element={<CreatePurchaseRequestPage initialRequestType="COMPLEMENTARY" />} />
                     <Route path="/employee/requests/favorites" element={<FavoriteRequestsPage />} />
                     <Route path="/employee/requests/:id" element={<PurchaseRequestDetailsPage />} />
                     <Route path="/employee/requests/:id/edit" element={<EditPurchaseRequestPage />} />

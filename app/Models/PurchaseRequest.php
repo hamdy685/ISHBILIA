@@ -99,6 +99,11 @@ class PurchaseRequest extends Model
         return $this->request_type === 'OFFICE_SUPPLIES';
     }
 
+    public function isComplementaryRequest(): bool
+    {
+        return $this->request_type === 'COMPLEMENTARY';
+    }
+
     public function isProjectRequest(): bool
     {
         return ! $this->isOfficeRequest();

@@ -87,7 +87,7 @@ class UpdatePurchaseRequestRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'request_type' => ['nullable', 'string', 'in:PROJECT,OFFICE_SUPPLIES'],
+            'request_type' => ['nullable', 'string', 'in:PROJECT,OFFICE_SUPPLIES,COMPLEMENTARY'],
             'parcel_reference' => ['nullable', 'string', 'max:100'],
             'parcel' => ['nullable', 'string', 'max:100'],
             'region' => ['nullable', 'string', 'max:150'],

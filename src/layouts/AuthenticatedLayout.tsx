@@ -50,8 +50,9 @@ export const AuthenticatedLayout: React.FC = () => {
                     <>
                         <Link to="/requests" className={linkClassName("/requests")}><span className="ml-2.5 text-sm" aria-hidden="true">📋</span> طلبات الشراء الخاصة بي</Link>
                         <Link to="/requests/create" className={linkClassName("/requests/create")}><span className="ml-2.5 text-sm" aria-hidden="true">✍️</span> إنشاء طلب شراء</Link>
+                        <Link to="/requests/create-complementary" className={linkClassName("/requests/create-complementary")}><span className="ml-2.5 text-sm text-amber-400" aria-hidden="true">⚡</span> إنشاء طلب كمالة</Link>
                         <Link to="/requests/favorites" className={linkClassName("/requests/favorites")}><span className="ml-2.5 text-sm" aria-hidden="true">⭐</span> الطلبات المفضلة</Link>
-                        <Link to="/requests/supplements" className={linkClassName("/requests/supplements")}><span className="ml-2.5 text-sm" aria-hidden="true">➕</span> طلب كمالة</Link>
+                        <Link to="/requests/supplements" className={linkClassName("/requests/supplements")}><span className="ml-2.5 text-sm" aria-hidden="true">➕</span> أرشيف طلبات الكمالة</Link>
                         <Link
                             to="/reviewer"
                             className={linkClassName("/reviewer")}
@@ -83,6 +84,7 @@ export const AuthenticatedLayout: React.FC = () => {
                     <>
                         <Link to="/requests" className={linkClassName("/requests")}><span className="ml-2.5 text-sm" aria-hidden="true">📋</span> طلبات الشراء الخاصة بي</Link>
                         <Link to="/requests/create" className={linkClassName("/requests/create")}><span className="ml-2.5 text-sm" aria-hidden="true">✍️</span> إنشاء طلب شراء</Link>
+                        <Link to="/requests/create-complementary" className={linkClassName("/requests/create-complementary")}><span className="ml-2.5 text-sm text-amber-400" aria-hidden="true">⚡</span> إنشاء طلب كمالة</Link>
                         <Link to="/requests/favorites" className={linkClassName("/requests/favorites")}><span className="ml-2.5 text-sm" aria-hidden="true">⭐</span> الطلبات المفضلة</Link>
                         <Link to="/warehouse" className={linkClassName("/warehouse")}><span className="ml-2.5 text-sm" aria-hidden="true">📦</span> استلام المواد (المستودع)</Link>
                         <Link to="/site-engineer" className={linkClassName("/site-engineer")}><span className="ml-2.5 text-sm" aria-hidden="true">📋</span> إذن استلام المواد</Link>
@@ -93,8 +95,9 @@ export const AuthenticatedLayout: React.FC = () => {
                     <>
                         <Link to="/requests" className={linkClassName("/requests")}><span className="ml-2.5 text-sm" aria-hidden="true">📋</span> طلبات الشراء الخاصة بي</Link>
                         <Link to="/requests/create" className={linkClassName("/requests/create")}><span className="ml-2.5 text-sm" aria-hidden="true">✍️</span> إنشاء طلب شراء</Link>
+                        <Link to="/requests/create-complementary" className={linkClassName("/requests/create-complementary")}><span className="ml-2.5 text-sm text-amber-400" aria-hidden="true">⚡</span> إنشاء طلب كمالة</Link>
                         <Link to="/requests/favorites" className={linkClassName("/requests/favorites")}><span className="ml-2.5 text-sm" aria-hidden="true">⭐</span> الطلبات المفضلة</Link>
-                        <Link to="/requests/supplements" className={linkClassName("/requests/supplements")}><span className="ml-2.5 text-sm" aria-hidden="true">➕</span> طلب كمالة</Link>
+                        <Link to="/requests/supplements" className={linkClassName("/requests/supplements")}><span className="ml-2.5 text-sm" aria-hidden="true">➕</span> أرشيف طلبات الكمالة</Link>
                         <Link to="/site-engineer" className={linkClassName("/site-engineer")}><span className="ml-2.5 text-sm" aria-hidden="true">📦</span> إذن استلام المواد</Link>
                     </>
                 );
@@ -103,8 +106,9 @@ export const AuthenticatedLayout: React.FC = () => {
                     <>
                         <Link to="/requests" className={linkClassName("/requests")}><span className="ml-2.5 text-sm" aria-hidden="true">📋</span> طلبات الشراء الخاصة بي</Link>
                         <Link to="/requests/create" className={linkClassName("/requests/create")}><span className="ml-2.5 text-sm" aria-hidden="true">✍️</span> إنشاء طلب شراء</Link>
+                        <Link to="/requests/create-complementary" className={linkClassName("/requests/create-complementary")}><span className="ml-2.5 text-sm text-amber-400" aria-hidden="true">⚡</span> إنشاء طلب كمالة</Link>
                         <Link to="/requests/favorites" className={linkClassName("/requests/favorites")}><span className="ml-2.5 text-sm" aria-hidden="true">⭐</span> الطلبات المفضلة</Link>
-                        <Link to="/requests/supplements" className={linkClassName("/requests/supplements")}><span className="ml-2.5 text-sm" aria-hidden="true">➕</span> طلب كمالة</Link>
+                        <Link to="/requests/supplements" className={linkClassName("/requests/supplements")}><span className="ml-2.5 text-sm" aria-hidden="true">➕</span> أرشيف طلبات الكمالة</Link>
                         <Link
                             to="/procurement"
                             className={linkClassName("/procurement")}
@@ -148,6 +152,7 @@ export const AuthenticatedLayout: React.FC = () => {
                     <>
                         <Link to="/requests" className={linkClassName("/requests")}><span className="ml-2.5 text-sm" aria-hidden="true">📋</span> طلبات الشراء الخاصة بي</Link>
                         <Link to="/requests/create" className={linkClassName("/requests/create")}><span className="ml-2.5 text-sm" aria-hidden="true">✍️</span> إنشاء طلب شراء</Link>
+                        <Link to="/requests/create-complementary" className={linkClassName("/requests/create-complementary")}><span className="ml-2.5 text-sm text-amber-400" aria-hidden="true">⚡</span> إنشاء طلب كمالة</Link>
                         <Link to="/requests/favorites" className={linkClassName("/requests/favorites")}><span className="ml-2.5 text-sm" aria-hidden="true">⭐</span> الطلبات المفضلة</Link>
                         <Link
                             to="/accounting"
@@ -247,6 +252,12 @@ export const AuthenticatedLayout: React.FC = () => {
                             <span className="ml-2.5 text-sm" aria-hidden="true">✍️</span> إنشاء طلب شراء
                         </Link>
                         <Link
+                            to="/requests/create-complementary"
+                            className={linkClassName("/requests/create-complementary")}
+                        >
+                            <span className="ml-2.5 text-sm text-amber-400" aria-hidden="true">⚡</span> إنشاء طلب كمالة
+                        </Link>
+                        <Link
                             to="/requests/favorites"
                             className={linkClassName("/requests/favorites")}
                         >
@@ -266,8 +277,9 @@ export const AuthenticatedLayout: React.FC = () => {
                     <>
                         <Link to="/requests" className={linkClassName("/requests")}><span className="ml-2.5 text-sm" aria-hidden="true">📋</span> طلبات الشراء الخاصة بي</Link>
                         <Link to="/requests/create" className={linkClassName("/requests/create")}><span className="ml-2.5 text-sm" aria-hidden="true">✍️</span> إنشاء طلب شراء</Link>
+                        <Link to="/requests/create-complementary" className={linkClassName("/requests/create-complementary")}><span className="ml-2.5 text-sm text-amber-400" aria-hidden="true">⚡</span> إنشاء طلب كمالة</Link>
                         <Link to="/requests/favorites" className={linkClassName("/requests/favorites")}><span className="ml-2.5 text-sm" aria-hidden="true">⭐</span> الطلبات المفضلة</Link>
-                        <Link to="/requests/supplements" className={linkClassName("/requests/supplements")}><span className="ml-2.5 text-sm" aria-hidden="true">➕</span> طلب كمالة</Link>
+                        <Link to="/requests/supplements" className={linkClassName("/requests/supplements")}><span className="ml-2.5 text-sm" aria-hidden="true">➕</span> أرشيف طلبات الكمالة</Link>
                         <Link
                             to="/general-manager"
                             className={linkClassName("/general-manager")}
@@ -325,7 +337,8 @@ export const AuthenticatedLayout: React.FC = () => {
                         <Link to="/admin/departments" className={linkClassName("/admin/departments")}><span className="ml-2.5 text-sm" aria-hidden="true">🏢</span> الأقسام</Link>
                         <Link to="/admin/items" className={linkClassName("/admin/items")}><span className="ml-2.5 text-sm" aria-hidden="true">📦</span> الأصناف</Link>
                         <Link to="/admin/suppliers" className={linkClassName("/admin/suppliers")}><span className="ml-2.5 text-sm" aria-hidden="true">🏢</span> الموردين</Link>
-                        <Link to="/requests/supplements" className={linkClassName("/requests/supplements")}><span className="ml-2.5 text-sm" aria-hidden="true">➕</span> طلب كمالة</Link>
+                        <Link to="/requests/create-complementary" className={linkClassName("/requests/create-complementary")}><span className="ml-2.5 text-sm text-amber-400" aria-hidden="true">⚡</span> إنشاء طلب كمالة</Link>
+                        <Link to="/requests/supplements" className={linkClassName("/requests/supplements")}><span className="ml-2.5 text-sm" aria-hidden="true">➕</span> أرشيف طلبات الكمالة</Link>
                         <Link to="/site-engineer" className={linkClassName("/site-engineer")}><span className="ml-2.5 text-sm" aria-hidden="true">📦</span> إذن استلام المواد</Link>
                     </>
                 );
@@ -352,6 +365,12 @@ export const AuthenticatedLayout: React.FC = () => {
                             <span className="ml-2.5 text-sm" aria-hidden="true">✍️</span> إنشاء طلب شراء
                         </Link>
                         <Link
+                            to="/requests/create-complementary"
+                            className={linkClassName("/requests/create-complementary")}
+                        >
+                            <span className="ml-2.5 text-sm text-amber-400" aria-hidden="true">⚡</span> إنشاء طلب كمالة
+                        </Link>
+                        <Link
                             to="/requests/favorites"
                             className={linkClassName("/requests/favorites")}
                         >
@@ -361,7 +380,7 @@ export const AuthenticatedLayout: React.FC = () => {
                             to="/requests/supplements"
                             className={linkClassName("/requests/supplements")}
                         >
-                            <span className="ml-2.5 text-sm" aria-hidden="true">➕</span> طلب كمالة
+                            <span className="ml-2.5 text-sm" aria-hidden="true">➕</span> أرشيف طلبات الكمالة
                         </Link>
                         <Link
                             to="/site-engineer"

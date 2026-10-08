@@ -98,7 +98,7 @@ class StorePurchaseRequestRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'request_type' => ['nullable', 'string', 'in:PROJECT,OFFICE_SUPPLIES'],
+            'request_type' => ['nullable', 'string', 'in:PROJECT,OFFICE_SUPPLIES,COMPLEMENTARY'],
             'parcel_reference' => [
                 \Illuminate\Validation\Rule::requiredIf(fn () => ($this->input('request_type') ?? 'PROJECT') === 'PROJECT'),
                 'nullable',

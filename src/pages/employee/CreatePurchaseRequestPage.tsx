@@ -56,8 +56,8 @@ const emptyItem = (): PurchaseRequestItemFormInput => ({
   notes: '',
 });
 
-const getInitialData = (): CreatePurchaseRequestPayload => ({
-  request_type: 'PROJECT',
+const getInitialData = (defaultType: PurchaseRequestType = 'PROJECT'): CreatePurchaseRequestPayload => ({
+  request_type: defaultType,
   parcel_reference: '',
   region: '',
   land_parcel_id: undefined,
@@ -93,6 +93,7 @@ const validateRequest = (
 ): ValidationResult => {
   const itemErrors: ItemErrors = {};
   const isOffice = (data.request_type || 'PROJECT') === 'OFFICE_SUPPLIES';
+  const isComplementary = data.request_type === 'COMPLEMENTARY';
   const safeItems = Array.isArray(data.items) ? data.items : [];
 
   safeItems.forEach((item, index) => {
@@ -127,10 +128,10 @@ const validateRequest = (
       : data.date_needed < today
         ? 'تاريخ الاحتياج لا يمكن أن يكون في الماضي. اختر اليوم أو تاريخًا قادمًا.'
         : undefined,
-    parcelReference: !isOffice && !data.parcel_reference?.trim()
+    parcelReference: !isOffice && !isComplementary && !data.parcel_reference?.trim()
       ? 'رقم قطعة الأرض مطلوب للطلب.'
       : undefined,
-    region: !isOffice && !data.region?.trim()
+    region: !isOffice && !isComplementary && !data.region?.trim()
       ? 'المنطقة مطلوبة للطلب.'
       : undefined,
     emptyItems: data.items.length === 0 ? 'يجب إضافة صنف واحد على الأقل لطلب الشراء.' : undefined,
@@ -152,8 +153,9 @@ const hasValidationErrors = (validation: ValidationResult): boolean =>
 
 const normalizeRequestData = (data: CreatePurchaseRequestPayload): CreatePurchaseRequestPayload => {
   const isOffice = (data.request_type || 'PROJECT') === 'OFFICE_SUPPLIES';
-  const defaultParcel = isOffice ? 'مقر الشركة' : (data.parcel_reference?.trim() || '');
-  const defaultRegion = isOffice ? 'إداري / المقر الرئيسي' : (data.region?.trim() || '');
+  const isComplementary = data.request_type === 'COMPLEMENTARY';
+  const defaultParcel = isOffice ? 'مقر الشركة' : (data.parcel_reference?.trim() || (isComplementary ? 'طلب كمالة مستقل' : ''));
+  const defaultRegion = isOffice ? 'إداري / المقر الرئيسي' : (data.region?.trim() || (isComplementary ? 'موقع العمل / المستودع' : ''));
 
   // Format clean YYYY-MM-DD date without timestamps or corrupted formatting
   const rawDate = (data.date_needed || data.required_date || getTodayDateInputValue()).trim();
@@ -201,15 +203,27 @@ const normalizeRequestData = (data: CreatePurchaseRequestPayload): CreatePurchas
   };
 };
 
-const CreatePurchaseRequestPage: React.FC = () => {
+interface CreatePurchaseRequestPageProps {
+  initialRequestType?: PurchaseRequestType;
+}
+
+export const CreatePurchaseRequestPage: React.FC<CreatePurchaseRequestPageProps> = ({ initialRequestType }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const isComplementaryRoute = initialRequestType === 'COMPLEMENTARY' ||
+    location.pathname.includes('complementary') ||
+    searchParams.get('type') === 'COMPLEMENTARY';
+
+  const effectiveInitialType: PurchaseRequestType = isComplementaryRoute ? 'COMPLEMENTARY' : 'PROJECT';
+  const draftStorageKey = isComplementaryRoute ? 'ashbiliya.purchase-request.draft.complementary.v1' : DRAFT_STORAGE_KEY;
+
   const { hasRole, user } = useAuth();
   const isGeneralManager = hasRole('general_manager');
   const isReviewer = hasRole('reviewer');
   const [isReviewerModalOpen, setIsReviewerModalOpen] = useState(false);
   const [pendingSaveToFavorites, setPendingSaveToFavorites] = useState(false);
-  const [data, setData] = useState<CreatePurchaseRequestPayload>(() => getInitialData());
+  const [data, setData] = useState<CreatePurchaseRequestPayload>(() => getInitialData(effectiveInitialType));
   const [landParcels, setLandParcels] = useState<LandParcel[]>([]);
   const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([]);
   const [departmentOptions, setDepartmentOptions] = useState<DepartmentOption[]>([]);
@@ -270,37 +284,40 @@ const CreatePurchaseRequestPage: React.FC = () => {
 
     try {
       const todayStr = getTodayDateInputValue();
-      const savedDraft = window.localStorage.getItem(DRAFT_STORAGE_KEY);
+      const savedDraft = window.localStorage.getItem(draftStorageKey);
       if (savedDraft) {
         const parsed = JSON.parse(savedDraft) as Partial<CreatePurchaseRequestPayload>;
         const validDateNeeded = !parsed.date_needed || parsed.date_needed < todayStr ? todayStr : parsed.date_needed;
         const validItems = Array.isArray(parsed.items) && parsed.items.length > 0 ? parsed.items : [emptyItem()];
         setData({
-          ...getInitialData(),
+          ...getInitialData(effectiveInitialType),
           ...parsed,
+          request_type: isComplementaryRoute ? 'COMPLEMENTARY' : (parsed.request_type || 'PROJECT'),
           date_needed: validDateNeeded,
           items: validItems,
         });
+      } else if (isComplementaryRoute) {
+        setData((prev) => ({ ...prev, request_type: 'COMPLEMENTARY' }));
       }
     } catch {
       // Ignore corrupted draft
     } finally {
       setDraftReady(true);
     }
-  }, [location.state]);
+  }, [location.state, draftStorageKey, isComplementaryRoute, effectiveInitialType]);
 
   // Auto-save local draft silently in the background
   useEffect(() => {
     if (!draftReady) return;
     const timer = window.setTimeout(() => {
       try {
-        window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(data));
+        window.localStorage.setItem(draftStorageKey, JSON.stringify(data));
       } catch {
         // Ignore storage errors
       }
     }, 900);
     return () => window.clearTimeout(timer);
-  }, [data, draftReady]);
+  }, [data, draftReady, draftStorageKey]);
 
   // Load department options & catalog items
   useEffect(() => {
@@ -518,15 +535,17 @@ const CreatePurchaseRequestPage: React.FC = () => {
         requires_warehouse_receipt: reviewerRequiresWhReceipt,
         comment: reviewerComment,
       });
-      window.localStorage.removeItem(DRAFT_STORAGE_KEY);
+      window.localStorage.removeItem(draftStorageKey);
       emitAppDataUpdated();
       const successMsg = saveToFavorites
         ? 'تم إرسال طلب الشراء وحفظه في الطلبات المفضلة بنجاح! ⭐'
-        : isReviewer
-          ? 'تم اعتماد طلب الشراء وتحديد مسار الاستلام وإرساله إلى المدير التنفيذي بنجاح.'
-          : isGeneralManager
-            ? 'تم إرسال طلب الشراء مباشرة إلى مدير المشتريات بنجاح بعد تحديد مسؤول الاستلام.'
-            : 'تم إرسال طلب الشراء للمراجعة بنجاح.';
+        : data.request_type === 'COMPLEMENTARY'
+          ? 'تم إرسال طلب الكمالة المستقل بنجاح! سيعتمده رئيس القسم وينتقل مباشرة إلى إدارة المشتريات (مسار سريع) ⚡'
+          : isReviewer
+            ? 'تم اعتماد طلب الشراء وتحديد مسار الاستلام وإرساله إلى المدير التنفيذي بنجاح.'
+            : isGeneralManager
+              ? 'تم إرسال طلب الشراء مباشرة إلى مدير المشتريات بنجاح بعد تحديد مسؤول الاستلام.'
+              : 'تم إرسال طلب الشراء للمراجعة بنجاح.';
       toast.success(successMsg);
       setIsReviewerModalOpen(false);
       navigate(`/requests/${draft.id}`, {
@@ -547,8 +566,8 @@ const CreatePurchaseRequestPage: React.FC = () => {
   };
 
   const handleClearDraft = () => {
-    window.localStorage.removeItem(DRAFT_STORAGE_KEY);
-    setData(getInitialData());
+    window.localStorage.removeItem(draftStorageKey);
+    setData(getInitialData(effectiveInitialType));
     setServerDraftId(null);
     setLoadedFavoriteInfo(null);
     setDraftMessage('تم مسح المسودة والبدء من جديد.');
@@ -567,11 +586,13 @@ const CreatePurchaseRequestPage: React.FC = () => {
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs sm:text-sm font-black text-slate-100 truncate">
-                  {isReviewer
-                    ? 'إنشاء واعتماد طلب شراء (كمراجع)'
-                    : isGeneralManager
-                      ? 'طلب شراء تنفيذي جديد'
-                      : 'إنشاء وإرسال طلب شراء'}
+                  {data.request_type === 'COMPLEMENTARY'
+                    ? '⚡ إنشاء طلب كمالة مستقل (مسار سريع)'
+                    : isReviewer
+                      ? 'إنشاء واعتماد طلب شراء (كمراجع)'
+                      : isGeneralManager
+                        ? 'طلب شراء تنفيذي جديد'
+                        : 'إنشاء وإرسال طلب شراء'}
                 </span>
                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold bg-slate-900 border border-slate-700 text-slate-300 shrink-0">
                   <span className={`h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${requestHasErrors ? 'bg-amber-400' : 'bg-emerald-400 animate-pulse'}`} />
@@ -582,8 +603,8 @@ const CreatePurchaseRequestPage: React.FC = () => {
                 <span>📦 البنود: <strong className="text-cyan-300">{data.items.length} صنف</strong></span>
                 <span className="text-slate-600">•</span>
                 <span>
-                  النوع: <strong className={isOffice ? 'text-indigo-300' : 'text-amber-300'}>
-                    {isOffice ? '🏢 مكتبي' : '🏗️ مشروع/موقع'}
+                  النوع: <strong className={data.request_type === 'COMPLEMENTARY' ? 'text-amber-400' : isOffice ? 'text-indigo-300' : 'text-amber-300'}>
+                    {data.request_type === 'COMPLEMENTARY' ? '⚡ كمالة (مسار سريع)' : isOffice ? '🏢 مكتبي' : '🏗️ مشروع/موقع'}
                   </strong>
                 </span>
               </div>
@@ -647,38 +668,69 @@ const CreatePurchaseRequestPage: React.FC = () => {
         <div className="flex items-center justify-between sm:justify-start gap-2">
           <span className="text-xs font-bold text-slate-300">نوع الطلب والغرض:</span>
           <span className="text-[10px] text-slate-400 sm:text-slate-500">
-            (الافتراضي: مواقع)
+            {data.request_type === 'COMPLEMENTARY' ? '⚡ كمالة مستقل (مسار سريع)' : isOffice ? '🏢 مشتريات إدارية' : '🏗️ مشروعات'}
           </span>
         </div>
 
-        <div className="grid grid-cols-2 gap-1 sm:flex sm:items-center sm:gap-2 bg-slate-950/80 p-1 rounded-xl border border-slate-800/80">
+        <div className="grid grid-cols-3 gap-1 sm:flex sm:items-center sm:gap-2 bg-slate-950/80 p-1 rounded-xl border border-slate-800/80">
           <button
             type="button"
             onClick={() => setData({ ...data, request_type: 'PROJECT' })}
             className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
-              !isOffice
+              data.request_type === 'PROJECT'
                 ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
             }`}
           >
             <span>🏗️</span>
-            <span className="truncate">مشروعات ومواقع</span>
+            <span className="truncate">مشروعات</span>
           </button>
 
           <button
             type="button"
             onClick={() => setData({ ...data, request_type: 'OFFICE_SUPPLIES' })}
             className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
-              isOffice
+              data.request_type === 'OFFICE_SUPPLIES'
                 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
             }`}
           >
             <span>🏢</span>
-            <span className="truncate">مستلزمات مكتبية</span>
+            <span className="truncate">مكتبية</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setData({ ...data, request_type: 'COMPLEMENTARY' })}
+            className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+              data.request_type === 'COMPLEMENTARY'
+                ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-md shadow-amber-500/30 ring-1 ring-amber-300'
+                : 'text-amber-400/80 hover:text-amber-300 hover:bg-slate-900'
+            }`}
+          >
+            <span>⚡</span>
+            <span className="truncate">طلب كمالة</span>
           </button>
         </div>
       </div>
+
+      {/* Banner for Standalone Complementary Request */}
+      {data.request_type === 'COMPLEMENTARY' && (
+        <div className="rounded-xl border border-amber-500/60 bg-gradient-to-r from-amber-950/80 via-slate-900 to-amber-950/50 p-3 sm:p-4 text-xs shadow-xl flex items-start sm:items-center gap-3">
+          <span className="text-2xl sm:text-3xl shrink-0">⚡</span>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-black text-amber-300 text-xs sm:text-sm">طلب كمالة مستقل بذاته (Standalone Entity) — مسار سريع</span>
+              <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-200 font-mono text-[10px] font-black border border-amber-500/40">
+                تخطي الاعتماد المالي والتنفيذي 🚀
+              </span>
+            </div>
+            <p className="text-[11px] text-amber-100/90 leading-5">
+              هذا الطلب منفرد تماماً ويبدأ من الصفر بدون أي ربط إجباري بطلب أو أمر شراء سابق. بعد مراجعة رئيس القسم، سيتخطى الطلب تلقائياً الاعتماد المالي وموافقة المدير التنفيذي، وينتقل مباشرة إلى إدارة المشتريات لإصدار أمر الشراء فوراً وإكمال دورته التشغيلية.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ── 3-Step Wizard Visual Progress Bar (Compact on Mobile) ── */}
       <div className="rounded-xl sm:rounded-2xl border border-slate-800/80 bg-slate-900/80 p-2 sm:p-4 shadow-lg">

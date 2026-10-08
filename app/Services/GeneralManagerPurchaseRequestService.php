@@ -31,7 +31,10 @@ class GeneralManagerPurchaseRequestService
                 'quotes.recommendations.user.roles',
                 'selectedQuote.supplier',
             ])
-            ->where('status', self::PENDING_STATUS);
+            ->where('status', self::PENDING_STATUS)
+            ->where(function ($q) {
+                $q->whereNull('request_type')->orWhere('request_type', '!=', 'COMPLEMENTARY');
+            });
 
         if ($user && $user->hasRole('execution_manager')) {
             $query->where(function ($q) use ($user) {

@@ -16,6 +16,7 @@ class PurchaseRequestResource extends JsonResource
             'request_number' => $this->request_number,
             'manual_request_number' => $this->manual_request_number,
             'request_type' => $this->request_type ?? 'PROJECT',
+            'is_complementary' => $this->isComplementaryRequest(),
             'parcel_reference' => $this->parcel_reference,
             'region' => $this->region,
             'land_parcel_id' => $this->land_parcel_id,

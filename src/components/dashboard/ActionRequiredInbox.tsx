@@ -10,6 +10,7 @@ import { toast } from '../../utils/toast';
 import { formatCleanNumber, formatCleanQty } from '../../utils/numberFormat';
 import { formatRebarDisplay } from '../../utils/rebar';
 import { formatDateTime24h } from '../../utils/dateTime';
+import { PurchaseRequestType } from '../../types/purchaseRequest';
 
 export interface ActionInboxItemDetail {
   description: string;
@@ -50,7 +51,7 @@ export interface ActionInboxItem {
   purchase_request_id?: number | string;
 
   // --- Rich Details Fields ---
-  request_type?: 'PROJECT' | 'OFFICE_SUPPLIES';
+  request_type?: PurchaseRequestType;
   date_needed?: string;
   priority?: 'NORMAL' | 'HIGH' | 'URGENT' | 'LOW' | string;
   parcel_number?: string;

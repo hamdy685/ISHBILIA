@@ -480,7 +480,7 @@ export const ProcurementManagerPage: React.FC = () => {
     // 3. Pending Route
     pendingPrs.forEach((request) => {
       if (!seenIds.has(request.id)) {
-        if (hasActiveSupplement(request)) {
+        if (hasActiveSupplement(request) || request.request_type === 'COMPLEMENTARY') {
           seenIds.add(request.id);
           rows.push({ request, stage: 'READY_FOR_PO' });
         } else {
@@ -518,19 +518,19 @@ export const ProcurementManagerPage: React.FC = () => {
       request.items?.some(item => containsText(item.item?.name || item.item_description, search) || containsText(item.item_reference, search) || containsText(item.region, search));
 
     const matchesDept = queueDepartment === 'ALL' || request.department?.id === Number(queueDepartment) || request.department?.name === queueDepartment;
-    const isDirect = request.procurement_route === 'DIRECT' || Boolean(pendingSupplement);
+    const isDirect = request.procurement_route === 'DIRECT' || Boolean(pendingSupplement) || request.request_type === 'COMPLEMENTARY';
 
     let matchesRoute = true;
     if (queueRoute === 'ALL') {
       matchesRoute = true;
     } else if (queueRoute === 'SUPPLEMENT') {
-      matchesRoute = Boolean(pendingSupplement);
+      matchesRoute = Boolean(pendingSupplement) || request.request_type === 'COMPLEMENTARY';
     } else if (queueRoute === 'DIRECT') {
       matchesRoute = isDirect;
     } else if (queueRoute === 'QUOTES') {
-      matchesRoute = request.procurement_route === 'QUOTES' && !pendingSupplement;
+      matchesRoute = request.procurement_route === 'QUOTES' && !pendingSupplement && request.request_type !== 'COMPLEMENTARY';
     } else if (queueRoute === 'UNDECIDED') {
-      matchesRoute = !request.procurement_route && !pendingSupplement;
+      matchesRoute = !request.procurement_route && !pendingSupplement && request.request_type !== 'COMPLEMENTARY';
     }
 
     const matchesStage = queueStage === 'ALL' || stage === queueStage;
@@ -1410,12 +1410,14 @@ export const ProcurementManagerPage: React.FC = () => {
                 const regionsDisplay = suppRegions.length > 0 ? Array.from(new Set(suppRegions)).join('، ') : getSummaryRegions(request);
                 const quantitiesInfo = getSummaryQuantities(suppItems.length > 0 ? suppItems : request.items);
                 const supplier = request.direct_supplier?.company_name || getSelectedQuote(request)?.supplier?.company_name;
+                const isComplementaryRequest = request.request_type === 'COMPLEMENTARY';
+                const isAnySupplement = Boolean(pendingSupplement) || isComplementaryRequest;
                 const stageClass = stage === 'PENDING_ROUTE' 
                   ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30' 
                   : stage === 'QUOTE_SETUP' 
                   ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' 
                   : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30';
-                const route = pendingSupplement
+                const route = isAnySupplement
                   ? '⚡ شراء مباشر (كمالة)'
                   : request.procurement_route === 'DIRECT' 
                   ? 'شراء مباشر' 
@@ -1427,7 +1429,7 @@ export const ProcurementManagerPage: React.FC = () => {
                   <article
                     key={`${stage}-${request.id}`}
                     className={`rounded-2xl border p-4 sm:p-5 shadow-lg transition-all space-y-4 ${
-                      pendingSupplement
+                      isAnySupplement
                         ? 'border-amber-500/60 bg-gradient-to-b from-slate-900 via-amber-950/20 to-slate-950 shadow-amber-950/30'
                         : 'border-slate-800/90 bg-gradient-to-b from-slate-900/90 to-slate-950/90 hover:border-slate-700'
                     }`}
@@ -1457,6 +1459,12 @@ export const ProcurementManagerPage: React.FC = () => {
                           <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-500/25 to-amber-600/25 border border-amber-500/50 px-3 py-1 text-xs font-black text-amber-300 animate-pulse shadow-sm shadow-amber-500/20">
                             <span>⚡</span>
                             <span>كمالة دفعة #{pendingSupplement.batch_number} معتمدة ({pendingSupplement.reviewer?.name || 'م. مصطفى رئيس قسم التراخيص'})</span>
+                          </span>
+                        )}
+                        {isComplementaryRequest && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-500/25 to-amber-600/25 border border-amber-500/50 px-3 py-1 text-xs font-black text-amber-300 shadow-sm shadow-amber-500/20">
+                            <span>⚡</span>
+                            <span>طلب كمالة مستقل معتمد (مسار سريع)</span>
                           </span>
                         )}
                       </div>
@@ -1549,6 +1557,24 @@ export const ProcurementManagerPage: React.FC = () => {
                                 setSupplementModalData(pendingSupplement as unknown as PurchaseRequestSupplement);
                                 setSupplementModalOpen(true);
                               }}
+                              className="font-black bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 hover:from-amber-400 hover:to-amber-600 text-slate-950 shadow-lg shadow-amber-800/30 border border-amber-400/30"
+                            >
+                              ⚡ إنشاء أمر شراء مباشر (كمالة)
+                            </Button>
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              onClick={() => void handleReject(request.id)}
+                            >
+                              رفض
+                            </Button>
+                          </>
+                        ) : isComplementaryRequest ? (
+                          <>
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={() => navigate(`/procurement/purchase-orders/create?pr=${request.id}&returnUrl=${encodeURIComponent('/procurement')}`, { state: { returnTo: '/procurement' } })}
                               className="font-black bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 hover:from-amber-400 hover:to-amber-600 text-slate-950 shadow-lg shadow-amber-800/30 border border-amber-400/30"
                             >
                               ⚡ إنشاء أمر شراء مباشر (كمالة)

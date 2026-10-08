@@ -202,7 +202,7 @@ export interface DepartmentOption {
   users_count?: number;
 }
 
-export type PurchaseRequestType = 'PROJECT' | 'OFFICE_SUPPLIES';
+export type PurchaseRequestType = 'PROJECT' | 'OFFICE_SUPPLIES' | 'COMPLEMENTARY';
 
 export const PR_TYPE_LABELS: Record<PurchaseRequestType, { label: string; icon: string; badgeClass: string; desc: string }> = {
   PROJECT: {
@@ -217,6 +217,12 @@ export const PR_TYPE_LABELS: Record<PurchaseRequestType, { label: string; icon: 
     badgeClass: 'bg-indigo-950/80 text-indigo-300 border-indigo-800/60',
     desc: 'مستلزمات المقر وأجهزة وأدوات الشركة، ويستلمها مقدم الطلب مباشرة بنفسه.',
   },
+  COMPLEMENTARY: {
+    label: 'طلب كمالة مستقل (مسار سريع)',
+    icon: '⚡',
+    badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/50',
+    desc: 'طلب كمالة مستقل بذاته تماماً، يتخطى تلقائياً الاعتماد المالي وموافقة المدير التنفيذي وينتقل مباشرة للمشتريات لإصدار أمر الشراء.',
+  },
 };
 
 export interface PurchaseRequest {
@@ -225,6 +231,7 @@ export interface PurchaseRequest {
   manual_request_number?: string | null;
   user_id?: number | null;
   request_type?: PurchaseRequestType;
+  is_complementary?: boolean;
   parcel_reference?: string | null;
   region?: string | null;
   land_parcel_id?: number | null;

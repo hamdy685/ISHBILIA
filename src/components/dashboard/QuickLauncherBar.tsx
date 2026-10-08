@@ -91,11 +91,19 @@ export const QuickLauncherBar: React.FC<QuickLauncherBarProps> = ({
           description: 'بدء طلب شراء مستلزمات أو مواد مشروع',
         });
         items.push({
+          id: 'emp-complementary',
+          label: 'إنشاء طلب كمالة مستقل',
+          icon: '⚡',
+          to: '/requests/create-complementary',
+          variant: 'amber',
+          description: 'مسار سريع مستقل بذاته يتخطى المراجعة المالية والتنفيذية',
+        });
+        items.push({
           id: 'emp-favorites',
           label: 'الطلبات المفضلة',
           icon: '⭐',
           to: '/requests/favorites',
-          variant: 'amber',
+          variant: 'indigo',
           description: 'استخدام القوالب والطلبات المحفوظة مسبقاً',
         });
       }

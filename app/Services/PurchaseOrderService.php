@@ -261,6 +261,8 @@ class PurchaseOrderService
                     $lineTotal = round($qty * $unitPrice, 2);
                     $itemSupplierId = $input['supplier_id'] ?? $prItem?->supplier_id ?? $supplier?->id;
 
+                    $isItemSupplementary = $pr->isComplementaryRequest() || !empty($input['is_supplementary']) || (bool)($prItem?->is_supplementary);
+
                     $poItem = $po->items()->create([
                         'pr_item_id'      => $prItem?->id,
                         'item_id'         => $input['item_id'] ?? $prItem?->item_id,
@@ -273,6 +275,7 @@ class PurchaseOrderService
                         'line_total'      => $lineTotal,
                         'specifications'  => $specs,
                         'supplier_id'     => $itemSupplierId,
+                        'is_supplementary'=> $isItemSupplementary,
                     ]);
 
                     if ($prItem && (float) $prItem->quantity !== $qty && $uom !== 'TON') {
@@ -320,6 +323,7 @@ class PurchaseOrderService
                         'line_total'      => round($qty * $unitPrice, 2),
                         'specifications'  => $specs,
                         'supplier_id'     => $prItem->supplier_id ?? $supplier?->id,
+                        'is_supplementary'=> $pr->isComplementaryRequest() || (bool)($prItem?->is_supplementary),
                     ]);
                 }
             }
