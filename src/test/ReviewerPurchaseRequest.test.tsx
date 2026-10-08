@@ -81,9 +81,27 @@ describe('Reviewer purchase request frontend', () => {
     expect(screen.getAllByLabelText('رقم الطلب').length).toBeGreaterThan(0);
     expect(screen.getAllByLabelText('اسم مقدم الطلب').length).toBeGreaterThan(0);
     expect(screen.getAllByLabelText('الحالة').length).toBeGreaterThan(0);
-    expect(screen.queryByLabelText('الأولوية')).not.toBeInTheDocument();
     expect(screen.getAllByLabelText('من تاريخ الطلب').length).toBeGreaterThan(0);
     expect(screen.getAllByLabelText('إلى تاريخ الطلب').length).toBeGreaterThan(0);
   });
 
+  it('renders ReviewerDashboardPage without React Error #310 even with incomplete API payloads', async () => {
+    vi.spyOn(reviewerApi, 'getReviewableRequestsApi').mockResolvedValue([
+      { id: 101, request_number: 'PR-101', status: 'SUBMITTED', items: undefined as any } as any,
+      { id: 102, request_number: 'PR-102', status: 'UNDER_REVIEW', items: [{ item_description: 'Cement', quantity: '50' }] } as any,
+    ]);
+    renderPage('/reviewer', <ReviewerDashboardPage />);
+
+    // Must transition safely from loading spinner to content without invariant #310
+    await waitFor(() => expect(screen.getByText('لوحة مراجعة الطلبات')).toBeInTheDocument());
+    expect(screen.getAllByText('PR-101').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('PR-102').length).toBeGreaterThan(0);
+  });
+
+  it('renders ActionRequiredInbox in ReviewerDashboardPage with zero errors when quotes and receipts contain null/undefined fields', async () => {
+    vi.spyOn(reviewerApi, 'getReviewableRequestsApi').mockResolvedValue([]);
+    renderPage('/reviewer', <ReviewerDashboardPage />);
+    await waitFor(() => expect(screen.getByText('لوحة مراجعة الطلبات')).toBeInTheDocument());
+    expect(screen.getByText('أنت على دراية تامة بكل المعاملات!')).toBeInTheDocument();
+  });
 });

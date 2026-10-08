@@ -39,7 +39,7 @@ export interface ActionInboxItem {
   actionUrl: string;
   actionLabel: string;
   timeAgo?: string;
-  created_at?: string;
+  created_at?: string | null;
   
   // --- Rich Details Fields ---
   request_type?: 'PROJECT' | 'OFFICE_SUPPLIES';
@@ -85,10 +85,45 @@ export interface ActionRequiredInboxProps {
   onItemActionComplete?: () => void;
 }
 
+class CardErrorBoundary extends React.Component<
+  { children: React.ReactNode; fallbackCode?: string },
+  { hasError: boolean }
+> {
+  constructor(props: { children: React.ReactNode; fallbackCode?: string }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('Error rendering ActionInbox card:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div
+          className="rounded-2xl border border-rose-900/50 bg-slate-950/80 p-4 text-xs text-rose-300 flex flex-col items-center justify-center gap-1 min-h-[140px]"
+          dir="rtl"
+        >
+          <span>⚠️ تعذر عرض تفاصيل هذه المهمة</span>
+          {this.props.fallbackCode && (
+            <span className="font-mono text-[11px] text-slate-400">{this.props.fallbackCode}</span>
+          )}
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
   title = 'المهام والإجراءات المطلوبة منك الآن',
   description = 'جميع المعاملات والطلبات التي تتطلب تدخلك أو قرارك الفوري.',
-  items,
+  items = [],
   loading = false,
   roleName,
   onItemActionComplete,
@@ -101,9 +136,12 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
     roleName?.includes('مراجع')
   );
 
+  const safeItems = Array.isArray(items) ? items : [];
+
   // Sort items newest to oldest (الأحدث للأقدم)
   const sortedItems = React.useMemo(() => {
-    return [...items].sort((a, b) => {
+    return [...safeItems].sort((a, b) => {
+      if (!a || !b) return 0;
       const rawDateA = a.created_at || (a.timeAgo && /^\d{4}-\d{2}-\d{2}/.test(a.timeAgo) ? a.timeAgo : null);
       const rawDateB = b.created_at || (b.timeAgo && /^\d{4}-\d{2}-\d{2}/.test(b.timeAgo) ? b.timeAgo : null);
 
@@ -121,7 +159,7 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
 
       return (Number(b.rawId) || 0) - (Number(a.rawId) || 0);
     });
-  }, [items]);
+  }, [safeItems]);
 
   // Drawer Peek State
   const [peekState, setPeekState] = useState<{ isOpen: boolean; type: PeekType; id: number | null }>({
@@ -316,7 +354,7 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
     );
   }
 
-  const hasItems = items && items.length > 0;
+  const hasItems = safeItems.length > 0;
 
   return (
     <>
@@ -345,7 +383,7 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                 <h2 className="text-lg font-black text-slate-100">{title}</h2>
                 {hasItems ? (
                   <span className="rounded-full bg-rose-500 text-white px-3 py-0.5 text-xs font-black shadow-md shadow-rose-600/40 animate-bounce">
-                    {items.length} {items.length === 1 ? 'مهمة تنتظر قرارك' : 'مهام تنتظر قرارك'}
+                    {safeItems.length} {safeItems.length === 1 ? 'مهمة تنتظر قرارك' : 'مهام تنتظر قرارك'}
                   </span>
                 ) : (
                   <span className="rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2.5 py-0.5 text-xs font-bold">
@@ -367,6 +405,7 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
         {hasItems ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-1">
             {sortedItems.map((item) => {
+              if (!item) return null;
               const isUrgent = item.urgency === 'CRITICAL' || item.urgency === 'HIGH' || item.priority === 'HIGH' || item.priority === 'URGENT';
               const canPeek = item.type === 'PR' || item.type === 'PO';
               const isOffice = item.request_type === 'OFFICE_SUPPLIES';
@@ -375,14 +414,14 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
               // Aggregate all unique parcels & regions for this transaction
               const allParcels = [
                 item.parcel_number,
-                ...(item.items_list || []).map((i) => i.parcel),
+                ...(Array.isArray(item.items_list) ? item.items_list : []).map((i) => i?.parcel),
               ].filter(Boolean) as string[];
               const uniqueParcels = Array.from(new Set(allParcels.map((p) => String(p).trim()).filter(Boolean)));
               const parcel = uniqueParcels.length > 0 ? uniqueParcels.join('، ') : '';
 
               const allRegions = [
                 item.region,
-                ...(item.items_list || []).map((i) => i.region),
+                ...(Array.isArray(item.items_list) ? item.items_list : []).map((i) => i?.region),
               ].filter(Boolean) as string[];
               const uniqueRegions = Array.from(new Set(allRegions.map((r) => String(r).trim()).filter(Boolean)));
               const region = isOffice ? 'مقر الشركة' : (uniqueRegions.length > 0 ? uniqueRegions.join('، ') : '');
@@ -411,9 +450,9 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                 : (item.timeAgo && /^\d{4}-\d{2}-\d{2}/.test(item.timeAgo) ? formatDateTime24h(item.timeAgo) : (item.timeAgo || null));
 
               return (
-                <div
-                  key={`${item.type}-${item.id}`}
-                  onClick={() => {
+                <CardErrorBoundary key={`${item.type || 'TASK'}-${item.id || item.rawId || Math.random()}`} fallbackCode={item.code}>
+                  <div
+                    onClick={() => {
                     if (item.onAction) {
                       item.onAction(item);
                     } else if (item.actionUrl) {
@@ -501,7 +540,7 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                     )}
 
                     {/* Line Items List (Mandatory 4 Fields: الصنف والكمية) */}
-                    {item.items_list && item.items_list.length > 0 ? (
+                    {Array.isArray(item.items_list) && item.items_list.length > 0 ? (
                       <div className="rounded-xl border border-slate-800/90 bg-slate-900/60 p-2.5 space-y-1.5 text-xs">
                         <div className="text-[11px] font-bold text-slate-300 flex items-center justify-between pb-1 border-b border-slate-800/60">
                           <span className="flex items-center gap-1.5 text-cyan-400 font-bold">
@@ -513,6 +552,7 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                         </div>
                         <div className="space-y-1.5 max-h-56 overflow-y-auto custom-select-scrollbar pr-0.5">
                           {item.items_list.map((it, idx) => {
+                            if (!it) return null;
                             const unitLabel = getUnitLabel(it.uom || '');
                             const hasPrice = it.unit_price !== undefined && it.unit_price !== null && Number(it.unit_price) > 0;
                             const unitPriceNum = hasPrice ? Number(it.unit_price) : 0;
@@ -776,8 +816,9 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                     </div>
                   </div>
                 </div>
-              );
-            })}
+              </CardErrorBoundary>
+            );
+          })}
           </div>
         ) : (
           <div className="p-8 text-center text-slate-400 space-y-2">

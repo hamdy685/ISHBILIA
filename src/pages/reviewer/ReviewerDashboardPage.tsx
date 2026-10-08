@@ -22,6 +22,7 @@ import ActionRequiredInbox, { ActionInboxItem } from '../../components/dashboard
 import QuickLauncherBar from '../../components/dashboard/QuickLauncherBar';
 import { getUnitLabel } from '../../utils/units';
 import { formatDateTime24h } from '../../utils/dateTime';
+import AppErrorBoundary from '../../components/AppErrorBoundary';
 
 import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh';
 
@@ -37,11 +38,13 @@ const REVIEWER_APPROVED_STATUSES = new Set([
 ]);
 
 export const ReviewerDashboardPage: React.FC = () => {
-  const { user, hasPermission, hasRole } = useAuth();
+  const { user, hasPermission } = useAuth();
   const [requests, setRequests] = useState<PurchaseRequest[]>([]);
   const [assignedReceipts, setAssignedReceipts] = useState<ReceiptRecord[]>([]);
   const [quoteRequests, setQuoteRequests] = useState<PurchaseRequest[]>([]);
   const [backendPendingTasks, setBackendPendingTasks] = useState<ActionInboxItem[]>([]);
+  const [activeFilter, setActiveFilter] = useState<'ALL' | 'SUBMITTED' | 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED'>('ALL');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -55,10 +58,10 @@ export const ReviewerDashboardPage: React.FC = () => {
         getPendingQuoteRequestsApi().catch(() => []),
         getDashboardPendingTasksApi().catch(() => []),
       ]);
-      setRequests(data || []);
-      setAssignedReceipts(receipts || []);
-      setQuoteRequests(quotes || []);
-      setBackendPendingTasks(tasks || []);
+      setRequests(Array.isArray(data) ? data : []);
+      setAssignedReceipts(Array.isArray(receipts) ? receipts : []);
+      setQuoteRequests(Array.isArray(quotes) ? quotes : []);
+      setBackendPendingTasks(Array.isArray(tasks) ? tasks : []);
     } catch (err) {
       if (!silent) setError(parseApiError(err));
     } finally {
@@ -72,20 +75,28 @@ export const ReviewerDashboardPage: React.FC = () => {
 
   useRealtimeRefresh(() => fetchRequests(true));
 
-  // Requests returned by the Reviewer API are already strictly scoped by backend authorization
-  const scopedRequests = requests;
+  if (isLoading) {
+    return <LoadingSpinner fullScreen message="تحميل لوحة مراجعة الطلبات..." />;
+  }
 
-  const submittedCount = scopedRequests.filter((r) => r.status === 'SUBMITTED').length;
-  const underReviewCount = scopedRequests.filter((r) => r.status === 'UNDER_REVIEW').length;
-  const approvedCount = scopedRequests.filter((r) => REVIEWER_APPROVED_STATUSES.has(r.status)).length;
-  const rejectedCount = scopedRequests.filter((r) => r.status === 'REJECTED').length;
-  const [activeFilter, setActiveFilter] = useState<'ALL' | 'SUBMITTED' | 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED'>('ALL');
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  // Requests returned by the Reviewer API are already strictly scoped by backend authorization
+  const safeRequests = Array.isArray(requests) ? requests : [];
+  const safeAssignedReceipts = Array.isArray(assignedReceipts) ? assignedReceipts : [];
+  const safeQuoteRequests = Array.isArray(quoteRequests) ? quoteRequests : [];
+  const safeBackendPendingTasks = Array.isArray(backendPendingTasks) ? backendPendingTasks : [];
+
+  const scopedRequests = safeRequests;
+
+  const submittedCount = scopedRequests.filter((r) => r?.status === 'SUBMITTED').length;
+  const underReviewCount = scopedRequests.filter((r) => r?.status === 'UNDER_REVIEW').length;
+  const approvedCount = scopedRequests.filter((r) => r?.status && REVIEWER_APPROVED_STATUSES.has(r.status)).length;
+  const rejectedCount = scopedRequests.filter((r) => r?.status === 'REJECTED').length;
 
   const filteredRequests = scopedRequests.filter((r) => {
+    if (!r) return false;
     if (activeFilter === 'SUBMITTED' && r.status !== 'SUBMITTED') return false;
     if (activeFilter === 'UNDER_REVIEW' && r.status !== 'UNDER_REVIEW') return false;
-    if (activeFilter === 'APPROVED' && !REVIEWER_APPROVED_STATUSES.has(r.status)) return false;
+    if (activeFilter === 'APPROVED' && (!r.status || !REVIEWER_APPROVED_STATUSES.has(r.status))) return false;
     if (activeFilter === 'REJECTED' && r.status !== 'REJECTED') return false;
 
     if (searchQuery.trim()) {
@@ -93,9 +104,9 @@ export const ReviewerDashboardPage: React.FC = () => {
       const numMatch = r.request_number?.toLowerCase().includes(q);
       const reqMatch = r.requester?.name?.toLowerCase().includes(q);
       const deptMatch = r.department?.name?.toLowerCase().includes(q);
-      const parcelMatch = r.items?.some((it) => it.item_reference?.toLowerCase().includes(q));
-      const itemMatch = r.items?.some((it) => (it.item_description || it.item?.name || '').toLowerCase().includes(q));
-      return numMatch || reqMatch || deptMatch || parcelMatch || itemMatch;
+      const parcelMatch = (r.items || []).some((it) => it?.item_reference?.toLowerCase().includes(q));
+      const itemMatch = (r.items || []).some((it) => (it?.item_description || it?.item?.name || '').toLowerCase().includes(q));
+      return Boolean(numMatch || reqMatch || deptMatch || parcelMatch || itemMatch);
     }
     return true;
   });
@@ -112,18 +123,14 @@ export const ReviewerDashboardPage: React.FC = () => {
 
   const visibleRequests = filteredRequests;
 
-  if (isLoading) {
-    return <LoadingSpinner fullScreen message="تحميل لوحة مراجعة الطلبات..." />;
-  }
-
   const reviewerActionItems: ActionInboxItem[] = [
     ...scopedRequests
-      .filter((r) => r.status === 'SUBMITTED' || r.status === 'UNDER_REVIEW')
+      .filter((r) => r && (r.status === 'SUBMITTED' || r.status === 'UNDER_REVIEW'))
       .map((req) => ({
         id: `pr-${req.id}`,
         rawId: req.id,
         type: 'PR' as const,
-        code: req.request_number,
+        code: req.request_number || `PR-${req.id}`,
         title: req.justification || (req.request_type === 'OFFICE_SUPPLIES' ? 'طلب مستلزمات مكتبية' : 'طلب مواد مشروعات'),
         subtitle: req.justification ? (req.request_type === 'OFFICE_SUPPLIES' ? 'مستلزمات مكتبية' : 'مشتريات مواقع') : undefined,
         department: req.department?.name,
@@ -142,13 +149,13 @@ export const ReviewerDashboardPage: React.FC = () => {
         parcel_number: req.items?.[0]?.item_reference || undefined,
         region: req.items?.[0]?.region || undefined,
         items_count: req.items?.length || 0,
-        items_list: req.items?.map((it) => ({
-          description: it.item_description || it.item?.name || 'صنف',
-          quantity: it.quantity,
-          uom: it.uom,
-          parcel: it.item_reference,
-          region: it.region,
-          specifications: it.specifications,
+        items_list: (req.items || []).map((it) => ({
+          description: it?.item_description || it?.item?.name || 'صنف',
+          quantity: it?.quantity ?? 0,
+          uom: it?.uom,
+          parcel: it?.item_reference,
+          region: it?.region,
+          specifications: it?.specifications,
         })),
         requires_warehouse_receipt: req.requires_warehouse_receipt ?? true,
         onDirectApprove: hasPermission('purchase_request.review')
@@ -173,13 +180,13 @@ export const ReviewerDashboardPage: React.FC = () => {
         requireApproveModal: true,
       })),
 
-    ...quoteRequests
-      .filter((q) => q.status === 'PENDING_QUOTE_RECOMMENDATIONS')
+    ...safeQuoteRequests
+      .filter((q) => q && q.status === 'PENDING_QUOTE_RECOMMENDATIONS')
       .map((q) => ({
         id: `quote-${q.id}`,
         rawId: q.id,
         type: 'QUOTE' as const,
-        code: q.request_number,
+        code: q.request_number || `QR-${q.id}`,
         title: q.justification || 'عروض أسعار بانتظار الترشيح',
         subtitle: `${q.quotes?.length || 'عدة'} عروض أسعار مسجلة من الموردين`,
         department: q.department?.name,
@@ -190,25 +197,26 @@ export const ReviewerDashboardPage: React.FC = () => {
         actionUrl: `/reviewer/purchase-quotes?open=${q.id}`,
         actionLabel: 'البت وترشيح عروض الأسعار',
         timeAgo: q.created_at ? q.created_at.slice(0, 10) : undefined,
+        created_at: q.created_at || undefined,
         items_count: q.items?.length || 0,
-        items_list: q.items?.map((it) => ({
-          description: it.item_description || it.item?.name || 'صنف',
-          quantity: it.quantity,
-          uom: it.uom,
-          parcel: it.item_reference,
-          region: it.region,
+        items_list: (q.items || []).map((it) => ({
+          description: it?.item_description || it?.item?.name || 'صنف',
+          quantity: it?.quantity ?? 0,
+          uom: it?.uom,
+          parcel: it?.item_reference,
+          region: it?.region,
         })),
       })),
 
-    ...assignedReceipts
-      .filter((r) => r.status === 'WAREHOUSE_RECEIPT_SUBMITTED' || r.status === 'PENDING_SITE_ENGINEER')
+    ...safeAssignedReceipts
+      .filter((r) => r && (r.status === 'WAREHOUSE_RECEIPT_SUBMITTED' || r.status === 'PENDING_SITE_ENGINEER'))
       .map((r) => ({
         id: `receipt-${r.id}`,
         rawId: r.id,
         type: 'RECEIPT' as const,
-        code: r.receipt_number,
-        title: r.purchase_order?.items?.[0]?.item_description || `إذن استلام ${r.receipt_number}`,
-        subtitle: r.purchase_order ? `لأمر الشراء ${r.purchase_order.po_number}` : undefined,
+        code: r.receipt_number || `REC-${r.id}`,
+        title: r.purchase_order?.items?.[0]?.item_description || `إذن استلام ${r.receipt_number || r.id}`,
+        subtitle: r.purchase_order?.po_number ? `لأمر الشراء ${r.purchase_order.po_number}` : undefined,
         department: r.purchase_request?.department?.name || r.purchase_order?.purchase_request?.department?.name,
         supplier: r.purchase_order?.supplier?.company_name,
         urgency: 'CRITICAL' as const,
@@ -216,39 +224,38 @@ export const ReviewerDashboardPage: React.FC = () => {
         actionUrl: `/site-engineer?receipt_id=${r.id}`,
         actionLabel: 'فحص واعتماد إذن الاستلام',
         timeAgo: r.created_at ? r.created_at.slice(0, 10) : undefined,
+        created_at: r.created_at || undefined,
         items_count: r.items?.length || 0,
-        items_list: r.items?.map((it) => ({
-          description: it.purchase_order_item?.item_description || 'بند استلام',
-          quantity: it.received_quantity,
-          uom: it.purchase_order_item?.uom,
-          parcel: it.purchase_order_item?.item_reference,
-          region: it.purchase_order_item?.region,
+        items_list: (r.items || []).map((it) => ({
+          description: it?.purchase_order_item?.item_description || 'بند استلام',
+          quantity: it?.received_quantity ?? 0,
+          uom: it?.purchase_order_item?.uom,
+          parcel: it?.purchase_order_item?.item_reference,
+          region: it?.purchase_order_item?.region,
         })),
       })),
   ];
 
-  // Merge with backend pending tasks ensuring deduplication
-  const unifiedReviewerItems = React.useMemo(() => {
-    const taskMap = new Map<string, ActionInboxItem>();
+  // Merge with backend pending tasks ensuring deduplication (pure computation, no hooks)
+  const taskMap = new Map<string, ActionInboxItem>();
 
-    // Seed with local reviewer items (which have direct approve/reject handler callbacks)
-    reviewerActionItems.forEach((item) => {
+  reviewerActionItems.forEach((item) => {
+    if (item && item.id != null) {
       taskMap.set(String(item.id), item);
-    });
+    }
+  });
 
-    // Merge any other tasks from backend (e.g. additional receipts or requests)
-    backendPendingTasks.forEach((t) => {
-      if (!taskMap.has(String(t.id))) {
-        taskMap.set(String(t.id), t);
-      }
-    });
+  safeBackendPendingTasks.forEach((t) => {
+    if (t && t.id != null && !taskMap.has(String(t.id))) {
+      taskMap.set(String(t.id), t);
+    }
+  });
 
-    return Array.from(taskMap.values()).sort((a, b) => {
-      const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
-      const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
-      return timeB - timeA;
-    });
-  }, [reviewerActionItems, backendPendingTasks]);
+  const unifiedReviewerItems = Array.from(taskMap.values()).sort((a, b) => {
+    const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+    return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+  });
 
   return (
     <div className="min-w-0 space-y-6 animate-fade-in" dir="rtl">
@@ -278,13 +285,25 @@ export const ReviewerDashboardPage: React.FC = () => {
       <QuickLauncherBar className="mb-2" />
 
       {/* ── صندوق المهام والإجراءات المطلوبة منك الآن (Action Inbox) ── */}
-      <ActionRequiredInbox
-        title="المهام والإجراءات المطلوبة منك الآن"
-        description="جميع المعاملات والطلبات التي تتطلب تدخلك أو قرارك الفوري."
-        roleName={`المراجع الفني / رئيس القسم (${user?.department?.name || 'عام'})`}
-        onItemActionComplete={() => fetchRequests(true)}
-        items={unifiedReviewerItems}
-      />
+      <AppErrorBoundary
+        fallback={(err, reset) => (
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 text-center text-xs text-slate-400" dir="rtl">
+            <p className="mb-2 text-rose-300 font-bold">⚠️ تعذر عرض صندوق المهام المعلقة مؤقتاً</p>
+            <p className="text-slate-500 text-[11px] mb-3">يمكنك متابعة وتصفية الطلبات من جدول المراجعة أدناه مباشرة دون أي تعطيل.</p>
+            <Button variant="secondary" size="sm" onClick={reset}>
+              إعادة محاولة التحميل
+            </Button>
+          </div>
+        )}
+      >
+        <ActionRequiredInbox
+          title="المهام والإجراءات المطلوبة منك الآن"
+          description="جميع المعاملات والطلبات التي تتطلب تدخلك أو قرارك الفوري."
+          roleName={`المراجع الفني / رئيس القسم (${user?.department?.name || 'عام'})`}
+          onItemActionComplete={() => fetchRequests(true)}
+          items={unifiedReviewerItems}
+        />
+      </AppErrorBoundary>
 
       {/* Slim Horizontal KPI Pills */}
       <KpiPillsBar className="my-2">
@@ -390,6 +409,7 @@ export const ReviewerDashboardPage: React.FC = () => {
                 </TableHeader>
                 <TableBody>
                   {visibleRequests.map((pr) => {
+                    if (!pr) return null;
                     const item = pr.items?.[0];
                     const itemName = item?.item_description || item?.item?.name || '—';
                     const parcelNumber = item?.item_reference || '—';
@@ -399,7 +419,7 @@ export const ReviewerDashboardPage: React.FC = () => {
                     return (
                       <TableRow key={pr.id}>
                         <TableCell className="whitespace-nowrap font-mono font-bold text-cyan-400">
-                          <Link to={`/reviewer/requests/${pr.id}`} className="hover:underline">{pr.request_number}</Link>
+                          <Link to={`/reviewer/requests/${pr.id}`} className="hover:underline">{pr.request_number || `PR-${pr.id}`}</Link>
                         </TableCell>
                         <TableCell className="max-w-[180px] font-bold text-slate-100">{pr.requester?.name || 'غير محدد'}</TableCell>
                         <TableCell className="max-w-[180px] text-slate-400">{pr.department?.name || 'غير محدد'}</TableCell>
@@ -435,6 +455,7 @@ export const ReviewerDashboardPage: React.FC = () => {
 
             <div className="space-y-3 md:hidden">
               {visibleRequests.map((pr) => {
+                if (!pr) return null;
                 const item = pr.items?.[0];
                 const itemName = item?.item_description || item?.item?.name || 'غير محدد';
                 const parcelNumber = item?.item_reference || '—';
@@ -445,7 +466,7 @@ export const ReviewerDashboardPage: React.FC = () => {
                   <article key={`mobile-${pr.id}`} className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
                     <div className="flex min-w-0 items-start justify-between gap-3">
                       <Link to={`/reviewer/requests/${pr.id}`} className="min-w-0 break-normal text-sm font-black text-cyan-300 hover:underline">
-                        {pr.request_number}
+                        {pr.request_number || `PR-${pr.id}`}
                       </Link>
                       <div className="shrink-0"><PurchaseRequestStatusBadge status={pr.status} /></div>
                     </div>
