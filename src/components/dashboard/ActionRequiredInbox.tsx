@@ -366,6 +366,10 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
   };
 
   const handleApproveClick = (item: ActionInboxItem) => {
+    if (isReceiptItem(item)) {
+      setReceiptInspectionModal({ isOpen: true, item });
+      return;
+    }
     const needsModal = item.requireApproveModal ?? (isReviewer && item.type === 'PR');
     if (needsModal) {
       setSelectedEngineerId('');
