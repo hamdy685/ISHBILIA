@@ -8,8 +8,6 @@ export const isActualPurchaseOrder = (po?: PurchaseOrder | null): boolean => {
   if (po.is_actual_po) return true;
   if (po.finalized_at) return true;
   if (po.status === 'APPROVED_BY_ACCOUNTING' || po.status === 'FINAL_APPROVED') return true;
-  if (po.status === 'PENDING_ACTUAL_PO') return true;
-  if (po.receipts && po.receipts.some((r) => r.status === 'APPROVED')) return true;
   return false;
 };
 
@@ -28,14 +26,14 @@ export const getActualPoLineItems = (po?: PurchaseOrder | null): PurchaseOrderIt
 
   // Look for linked receipts to know actual delivered quantities
   const receipts = po.receipts || [];
-  const approvedOrPendingReceipts = receipts.filter(
-    (r) => r.status === 'APPROVED' || r.status === 'PENDING_SITE_ENGINEER'
+  const approvedReceipts = receipts.filter(
+    (r) => r.status === 'APPROVED'
   );
 
   const receiptItemMap = new Map<number, number>();
   let hasReceiptData = false;
 
-  approvedOrPendingReceipts.forEach((r) => {
+  approvedReceipts.forEach((r) => {
     r.items?.forEach((ri) => {
       if (ri.purchase_order_item_id) {
         hasReceiptData = true;

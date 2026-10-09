@@ -463,6 +463,70 @@ class ActualPoEndToEndWorkflowTest extends TestCase
     }
 
     /**
+     * Verify that an unfinalized PO with a pending/unapproved receipt (PENDING_SITE_ENGINEER)
+     * NEVER appears in the Actual PO report.
+     */
+    public function test_unfinalized_po_with_pending_or_unapproved_receipt_never_appears_in_actual_po_report(): void
+    {
+        $pr = PurchaseRequest::create([
+            'request_number' => 'PR-PENDING-TEST-001',
+            'user_id' => $this->requester->id,
+            'department_id' => $this->deptExecution->id,
+            'priority' => 'HIGH',
+            'status' => 'APPROVED_BY_PROCUREMENT',
+            'total_estimated_cost' => 600,
+            'date_needed' => now()->toDateString(),
+        ]);
+
+        $po = PurchaseOrder::create([
+            'po_number' => 'PO-12-TEST',
+            'purchase_request_id' => $pr->id,
+            'supplier_id' => $this->supplier->id,
+            'created_by_user_id' => $this->procurementOfficer->id,
+            'status' => 'ISSUED',
+            'delivery_status' => 'IN_RECEIPT',
+            'subtotal' => 600,
+            'grand_total' => 600,
+            'finalized_at' => null,
+        ]);
+
+        $item = $po->items()->create([
+            'item_description' => 'فأس وجاروف',
+            'quantity' => 2,
+            'unit_price' => 300,
+            'line_total' => 600,
+            'supplier_id' => $this->supplier->id,
+        ]);
+
+        $receipt = $po->purchaseReceipts()->create([
+            'receipt_number' => 'REC-3-TEST',
+            'receipt_type' => 'EXTERNAL_SUPPLIER',
+            'purchase_request_id' => $pr->id,
+            'supplier_id' => $this->supplier->id,
+            'receiver_user_id' => $this->warehouseKeeper->id,
+            'site_engineer_user_id' => $this->siteEngineer->id,
+            'status' => 'PENDING_SITE_ENGINEER',
+            'received_at' => now(),
+        ]);
+
+        $receipt->items()->create([
+            'purchase_order_item_id' => $item->id,
+            'ordered_quantity' => 2,
+            'received_quantity' => 2,
+            'item_description' => 'فأس وجاروف',
+        ]);
+
+        $reportResponse = $this->actingAs($this->procurementOfficer, 'sanctum')
+            ->getJson('/api/v1/procurement/reports/purchases?accounting_filter=ALL&actual_only=1');
+
+        $reportResponse->assertStatus(200);
+        $rows = $reportResponse->json('rows');
+        $poNumbers = collect($rows)->pluck('po_number')->all();
+
+        $this->assertNotContains('PO-12-TEST', $poNumbers);
+    }
+
+    /**
      * Verify that Actual PO isolates only received items and completely excludes delayed/unreceived items.
      */
     public function test_actual_po_isolates_received_items_and_excludes_delayed_items_from_master_po(): void

@@ -124,7 +124,11 @@ class PurchasesReportController extends Controller
                 'supplierInvoices.purchaseReceipt.items.purchaseOrderItem.prItem',
                 'supplierInvoices.createdBy',
             ])
-            ->actualPo()
+            ->when($actualOnly, function ($q) {
+                $q->actualPo();
+            }, function ($q) {
+                $q->whereNotIn('status', ['PO_DRAFT', 'REJECTED', 'CANCELLED', 'VOIDED']);
+            })
             ->when($allowedDepartmentCodes !== null, function ($q) use ($allowedDepartmentCodes) {
                 $q->whereHas('purchaseRequest.department', function ($dq) use ($allowedDepartmentCodes) {
                     $dq->whereIn('code', $allowedDepartmentCodes);
@@ -254,8 +258,7 @@ class PurchasesReportController extends Controller
             }
 
             $primaryInvoice = $activeInvoices->first();
-            $approvedReceipt = $order->purchaseReceipts->where('status', 'APPROVED')->first()
-                ?? $order->purchaseReceipts->first();
+            $approvedReceipt = $order->purchaseReceipts->where('status', 'APPROVED')->first();
 
             // Order dates
             $poDate = $order->created_at?->format('Y-m-d');

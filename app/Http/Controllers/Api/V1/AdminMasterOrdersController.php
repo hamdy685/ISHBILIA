@@ -119,17 +119,7 @@ class AdminMasterOrdersController extends Controller
         }
 
         // 3. Actual PO Issued & Finalized
-        $isActualPo = false;
-        if ($po) {
-            if ($po->finalized_at !== null) {
-                $isActualPo = true;
-            } elseif ($po->relationLoaded('purchaseReceipts') && $po->relationLoaded('supplierInvoices')) {
-                $hasApprovedRcpt = $po->purchaseReceipts->contains(fn ($r) => $r->status === 'APPROVED');
-                $isActualPo = $hasApprovedRcpt || in_array($po->status, ['APPROVED_BY_ACCOUNTING', 'FINAL_APPROVED'], true);
-            } else {
-                $isActualPo = $po->isActualPo();
-            }
-        }
+        $isActualPo = $po ? $po->isActualPo() : false;
 
         if ($isActualPo) {
             return [
