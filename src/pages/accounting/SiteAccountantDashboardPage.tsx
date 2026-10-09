@@ -272,9 +272,13 @@ export const SiteAccountantDashboardPage: React.FC = () => {
         onDirectApprove: async (_item: any, comment?: string) => {
           await handleMarkRecorded(receipt.id, comment || undefined);
         },
-        directApproveLabel: 'تم التسجيل ✅',
+        directApproveLabel: 'تم التسجيل',
         directApproveClassName: 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-950/40',
-        directApproveIcon: <span>📝</span>,
+        directApproveIcon: <span>✓</span>,
+        requireApproveModal: false,
+        onPreviewReceipt: () => {
+          setSelectedCycleReceipt(receipt);
+        },
       });
     }
 
@@ -966,6 +970,19 @@ export const SiteAccountantDashboardPage: React.FC = () => {
         receipt={selectedCycleReceipt}
         isOpen={Boolean(selectedCycleReceipt)}
         onClose={() => setSelectedCycleReceipt(null)}
+        onMarkRecorded={async () => {
+          if (selectedCycleReceipt) {
+            await handleMarkRecorded(selectedCycleReceipt.id);
+            setSelectedCycleReceipt(null);
+          }
+        }}
+        onRegisterInvoice={() => {
+          if (selectedCycleReceipt) {
+            const r = selectedCycleReceipt;
+            setSelectedCycleReceipt(null);
+            setRegisterInvoiceReceipt(r);
+          }
+        }}
       />
 
       {/* ── مودال تسجيل فاتورة المورد في نفس الصفحة ── */}

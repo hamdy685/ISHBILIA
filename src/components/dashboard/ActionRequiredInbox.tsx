@@ -77,6 +77,7 @@ export interface ActionInboxItem {
   onDirectReject?: (item: ActionInboxItem, reason: string) => Promise<void> | void;
   onDirectSubmit?: (item: ActionInboxItem) => Promise<void> | void;
   onAction?: (item: ActionInboxItem) => void | Promise<void>;
+  onPreviewReceipt?: (item: ActionInboxItem) => void;
   directApproveLabel?: string;
   directApproveClassName?: string;
   directApproveIcon?: React.ReactNode;
@@ -251,6 +252,13 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
     );
   };
 
+  const isReceiptInspectionItem = (item: ActionInboxItem): boolean => {
+    if (item.onPreviewReceipt) return false;
+    if (item.directApproveLabel?.includes('تم التسجيل')) return false;
+    if (item.requireApproveModal === false) return false;
+    return isReceiptItem(item);
+  };
+
   // Finalize Actual PO Modal State
   const [actualPoModal, setActualPoModal] = useState<{
     isOpen: boolean;
@@ -387,7 +395,18 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
   };
 
   const handleApproveClick = (item: ActionInboxItem) => {
-    if (isReceiptItem(item)) {
+    // If it's a direct recording action (e.g. "تم التسجيل" by accountant) or explicitly does not require modal:
+    if (
+      item.onDirectApprove &&
+      (item.directApproveLabel?.includes('تم التسجيل') ||
+        item.requireApproveModal === false ||
+        Boolean(item.onPreviewReceipt))
+    ) {
+      handleDirectApprove(item);
+      return;
+    }
+
+    if (isReceiptInspectionItem(item)) {
       setReceiptInspectionModal({ isOpen: true, item });
       return;
     }
@@ -407,7 +426,20 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
     setDirectApprovingId(item.id);
     try {
       await item.onDirectApprove(item);
-      const msg = `تم اعتماد ${item.code} بنجاح ✅`;
+      setDismissedItemIds((prev) => {
+        const next = new Set(prev);
+        if (item.id != null) next.add(item.id);
+        if (item.rawId != null) next.add(item.rawId);
+        const rcptId = resolveReceiptId(item);
+        if (rcptId != null) {
+          next.add(rcptId);
+          next.add(Number(rcptId));
+          next.add(String(rcptId));
+        }
+        return next;
+      });
+      const isRecorded = item.directApproveLabel?.includes('تم التسجيل');
+      const msg = isRecorded ? 'تم التسجيل بنجاح ✅' : `تم اعتماد ${item.code} بنجاح ✅`;
       toast.success(msg);
       showToast(msg, 'success');
       onItemActionComplete?.();
@@ -648,16 +680,20 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                 <CardErrorBoundary key={`${item.type || 'TASK'}-${item.id || item.rawId || Math.random()}`} fallbackCode={item.code}>
                   <div
                     onClick={() => {
-                      if (isReceiptItem(item)) {
-                        setReceiptInspectionModal({ isOpen: true, item });
+                      if (item.onPreviewReceipt) {
+                        item.onPreviewReceipt(item);
                         return;
                       }
                       if (item.onAction) {
                         item.onAction(item);
-                      } else {
-                        const targetUrl = resolveActionItemUrl(item);
-                        if (targetUrl) navigate(targetUrl);
+                        return;
                       }
+                      if (isReceiptInspectionItem(item)) {
+                        setReceiptInspectionModal({ isOpen: true, item });
+                        return;
+                      }
+                      const targetUrl = resolveActionItemUrl(item);
+                      if (targetUrl) navigate(targetUrl);
                     }}
                   className={`rounded-2xl border p-4 flex flex-col justify-between gap-3.5 transition-all hover:shadow-2xl cursor-pointer ${
                     isUrgent
@@ -986,7 +1022,7 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                       </div>
                     )}
 
-                    {/* Bottom Action Row: Detailed Review + Quick Peek */}
+                    {/* Bottom Action Row: Detailed Review + Quick Peek / Preview Receipt */}
                     <div className="flex items-center gap-2">
                       <Button
                         variant={(!item.onDirectApprove && !item.onDirectSubmit) ? 'primary' : 'secondary'}
@@ -998,7 +1034,7 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                             item.onAction(item);
                             return;
                           }
-                          if (isReceiptItem(item)) {
+                          if (isReceiptInspectionItem(item)) {
                             setReceiptInspectionModal({ isOpen: true, item });
                             return;
                           }
@@ -1022,7 +1058,23 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                         <span className="mr-1">←</span>
                       </Button>
 
-                      {canPeek && (
+                      {item.onPreviewReceipt && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            item.onPreviewReceipt!(item);
+                          }}
+                          className="rounded-xl border border-cyan-700/60 bg-cyan-950/70 hover:bg-cyan-900/90 px-3.5 py-1.5 text-xs font-bold text-cyan-200 hover:text-white transition-all cursor-pointer shrink-0 flex items-center gap-1.5 shadow-sm"
+                          title="معاينة إذن الاستلام والدورة المستندية (طلب الشراء • أمر الشراء الفعلي • إذن الاستلام)"
+                        >
+                          <span>👁️</span>
+                          <span>معاينة الإذن</span>
+                        </button>
+                      )}
+
+                      {canPeek && !item.onPreviewReceipt && (
                         <button
                           type="button"
                           onClick={(e) => {
