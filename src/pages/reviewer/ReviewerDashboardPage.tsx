@@ -18,7 +18,7 @@ import { parseApiError } from '../../utils/apiError';
 import { KpiCard, KpiPill, KpiPillsBar } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/ui/Table';
-import ActionRequiredInbox, { ActionInboxItem } from '../../components/dashboard/ActionRequiredInbox';
+import ActionRequiredInbox, { ActionInboxItem, resolveReceiptId } from '../../components/dashboard/ActionRequiredInbox';
 import QuickLauncherBar from '../../components/dashboard/QuickLauncherBar';
 import { getUnitLabel } from '../../utils/units';
 import { formatDateTime24h } from '../../utils/dateTime';
@@ -126,64 +126,89 @@ export const ReviewerDashboardPage: React.FC = () => {
   const reviewerActionItems: ActionInboxItem[] = [
     ...scopedRequests
       .filter((r) => r && (r.status === 'SUBMITTED' || r.status === 'UNDER_REVIEW'))
-      .map((req) => ({
-        id: `pr-${req.id}`,
-        rawId: req.id,
-        type: 'PR' as const,
-        code: req.request_number || `PR-${req.id}`,
-        title: req.justification || (req.request_type === 'OFFICE_SUPPLIES' ? 'طلب مستلزمات مكتبية' : 'طلب مواد مشروعات'),
-        subtitle: req.justification ? (req.request_type === 'OFFICE_SUPPLIES' ? 'مستلزمات مكتبية' : 'مشتريات مواقع') : undefined,
-        department: req.department?.name,
-        target_department: req.target_department?.name,
-        requester: req.requester?.name,
-        amount: undefined, // Reviewers do not handle financial data on purchase requests
-        urgency: req.priority === 'HIGH' ? ('CRITICAL' as const) : ('NORMAL' as const),
-        reason: req.status === 'SUBMITTED' ? 'طلب جديد مقدم بانتظار مراجعتك واعتمادك الفني' : 'طلب قيد المراجعة الفنية',
-        actionUrl: hasPermission('purchase_request.review') ? `/reviewer/requests/${req.id}/review` : `/reviewer/requests/${req.id}`,
-        actionLabel: req.status === 'SUBMITTED' ? 'مراجعة وتعديل الطلب' : 'استكمال المراجعة',
-        created_at: req.created_at,
-        timeAgo: req.created_at ? formatDateTime24h(req.created_at) : undefined,
-        request_type: req.request_type,
-        date_needed: req.date_needed || undefined,
-        priority: req.priority,
-        parcel_number: req.items?.[0]?.item_reference || undefined,
-        region: req.items?.[0]?.region || undefined,
-        items_count: req.items?.length || 0,
-        items_list: (req.items || []).map((it) => ({
-          description: it?.item_description || it?.item?.name || 'صنف',
-          quantity: it?.quantity ?? 0,
-          uom: it?.uom,
-          parcel: it?.item_reference,
-          region: it?.region,
-          specifications: it?.specifications,
-        })),
-        requires_warehouse_receipt: req.requires_warehouse_receipt ?? true,
-        stageBadge: {
-          text: 'مراجعة فنية',
-          icon: '📋',
-          className: 'bg-cyan-950/80 text-cyan-300 border-cyan-800/60',
-        },
-        onDirectApprove: hasPermission('purchase_request.review')
-          ? async (
-              _item: any,
-              comment?: string,
-              siteEngineerUserId?: number | null,
-              requiresWarehouseReceipt?: boolean
-            ) => {
-              await approvePurchaseRequestApi(req.id, comment, siteEngineerUserId, requiresWarehouseReceipt);
-              await fetchRequests(true);
-            }
-          : undefined,
-        onDirectReject: hasPermission('purchase_request.review')
-          ? async (_item: any, reason: string) => {
-              await rejectPurchaseRequestApi(req.id, reason);
-              await fetchRequests(true);
-            }
-          : undefined,
-        directApproveLabel: 'اعتماد ونقل للمدير التنفيذي',
-        directRejectLabel: 'رفض الطلب',
-        requireApproveModal: true,
-      })),
+      .map((req) => {
+        const isSupplement = Boolean(
+          req.request_type === 'COMPLEMENTARY' ||
+          (req as any).is_supplementary ||
+          (req as any).has_pending_supplement ||
+          ((req as any).supplements && (req as any).supplements.length > 0) ||
+          req.items?.some((it: any) => it.is_supplementary || it.supplement_id) ||
+          req.justification?.includes('كمالة') ||
+          req.request_number?.includes('كمالة')
+        );
+
+        return {
+          id: `pr-${req.id}`,
+          rawId: req.id,
+          type: 'PR' as const,
+          code: req.request_number || `PR-${req.id}`,
+          title: isSupplement
+            ? (req.justification ? `⚡ طلب كمالة: ${req.justification}` : '⚡ طلب كمالة عاجل')
+            : (req.justification || (req.request_type === 'OFFICE_SUPPLIES' ? 'طلب مستلزمات مكتبية' : 'طلب مواد مشروعات')),
+          subtitle: isSupplement
+            ? 'طلب كمالة ينتقل مباشرة لمدير المشتريات فور اعتمادك الفني (تخطي المسار المالي والتنفيذي)'
+            : (req.justification ? (req.request_type === 'OFFICE_SUPPLIES' ? 'مستلزمات مكتبية' : 'مشتريات مواقع') : undefined),
+          department: req.department?.name,
+          target_department: req.target_department?.name,
+          requester: req.requester?.name,
+          amount: undefined, // Reviewers do not handle financial data on purchase requests
+          urgency: isSupplement || req.priority === 'HIGH' ? ('CRITICAL' as const) : ('NORMAL' as const),
+          reason: isSupplement
+            ? 'طلب كمالة عاجل بانتظار مراجعتك واعتمادك الفني للانتقال الفوري إلى مدير المشتريات ⚡'
+            : (req.status === 'SUBMITTED' ? 'طلب جديد مقدم بانتظار مراجعتك واعتمادك الفني' : 'طلب قيد المراجعة الفنية'),
+          next_actor: isSupplement
+            ? 'مدير المشتريات (تنفيذ فوري مباشر دون مالية أو تنفيذي)'
+            : 'المدير العام للاعتماد النهائي',
+          actionUrl: hasPermission('purchase_request.review') ? `/reviewer/requests/${req.id}/review` : `/reviewer/requests/${req.id}`,
+          actionLabel: req.status === 'SUBMITTED' ? 'مراجعة وتعديل الطلب' : 'استكمال المراجعة',
+          created_at: req.created_at,
+          timeAgo: req.created_at ? formatDateTime24h(req.created_at) : undefined,
+          request_type: req.request_type,
+          date_needed: req.date_needed || undefined,
+          priority: req.priority,
+          parcel_number: req.items?.[0]?.item_reference || undefined,
+          region: req.items?.[0]?.region || undefined,
+          items_count: req.items?.length || 0,
+          items_list: (req.items || []).map((it) => ({
+            description: it?.item_description || it?.item?.name || 'صنف',
+            quantity: it?.quantity ?? 0,
+            uom: it?.uom,
+            parcel: it?.item_reference,
+            region: it?.region,
+            specifications: it?.specifications,
+          })),
+          requires_warehouse_receipt: req.requires_warehouse_receipt ?? true,
+          stageBadge: isSupplement ? {
+            text: 'طلب كمالة عاجل',
+            icon: '⚡',
+            className: 'bg-purple-950/80 text-purple-300 border-purple-800/60 ring-1 ring-purple-500/50',
+          } : {
+            text: 'مراجعة فنية',
+            icon: '📋',
+            className: 'bg-cyan-950/80 text-cyan-300 border-cyan-800/60',
+          },
+          onDirectApprove: hasPermission('purchase_request.review')
+            ? async (
+                _item: any,
+                comment?: string,
+                siteEngineerUserId?: number | null,
+                requiresWarehouseReceipt?: boolean
+              ) => {
+                await approvePurchaseRequestApi(req.id, comment, siteEngineerUserId, requiresWarehouseReceipt);
+                await fetchRequests(true);
+              }
+            : undefined,
+          onDirectReject: hasPermission('purchase_request.review')
+            ? async (_item: any, reason: string) => {
+                await rejectPurchaseRequestApi(req.id, reason);
+                await fetchRequests(true);
+              }
+            : undefined,
+          directApproveLabel: isSupplement ? 'اعتماد ونقل لمدير المشتريات ⚡' : 'اعتماد ونقل للمدير التنفيذي',
+          directRejectLabel: 'رفض الطلب',
+          requireApproveModal: true,
+        };
+      }),
 
     ...safeQuoteRequests
       .filter((q) => q && q.status === 'PENDING_QUOTE_RECOMMENDATIONS')
@@ -257,19 +282,40 @@ export const ReviewerDashboardPage: React.FC = () => {
   // Merge with backend pending tasks ensuring deduplication (pure computation, no hooks)
   const taskMap = new Map<string, ActionInboxItem>();
 
+  const getCanonicalKey = (item: ActionInboxItem): string => {
+    if (item.type === 'PR' && item.rawId) return `pr-${item.rawId}`;
+    if (item.type === 'RECEIPT') {
+      const rcptId = resolveReceiptId(item);
+      if (rcptId) return `receipt-${rcptId}`;
+    }
+    if (item.type === 'QUOTE' && item.rawId) return `quote-${item.rawId}`;
+    if (item.type === 'SUPPLEMENT' && item.rawId) return `supplement-${item.rawId}`;
+    const idStr = String(item.id || '');
+    return idStr.replace(/^pr-rev-/, 'pr-');
+  };
+
   reviewerActionItems.forEach((item) => {
     if (item && item.id != null) {
-      taskMap.set(String(item.id), item);
+      taskMap.set(getCanonicalKey(item), item);
     }
   });
 
   safeBackendPendingTasks.forEach((t) => {
     if (t && t.id != null) {
-      const existing = taskMap.get(String(t.id));
+      const key = getCanonicalKey(t);
+      const existing = taskMap.get(key);
       if (existing) {
-        taskMap.set(String(t.id), { ...t, ...existing, stageBadge: existing.stageBadge || t.stageBadge });
+        taskMap.set(key, {
+          ...t,
+          ...existing,
+          stageBadge: existing.stageBadge || t.stageBadge,
+          onDirectApprove: existing.onDirectApprove,
+          onDirectReject: existing.onDirectReject,
+          directApproveLabel: existing.directApproveLabel || t.directApproveLabel,
+          next_actor: existing.next_actor || t.next_actor,
+        });
       } else {
-        taskMap.set(String(t.id), t);
+        taskMap.set(key, t);
       }
     }
   });

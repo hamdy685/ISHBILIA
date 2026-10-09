@@ -101,7 +101,33 @@ class PurchaseRequest extends Model
 
     public function isComplementaryRequest(): bool
     {
-        return $this->request_type === 'COMPLEMENTARY';
+        if ($this->request_type === 'COMPLEMENTARY') {
+            return true;
+        }
+
+        if ((bool) ($this->is_supplementary ?? false)) {
+            return true;
+        }
+
+        if ((bool) ($this->has_pending_supplement ?? false)) {
+            return true;
+        }
+
+        if ($this->relationLoaded('items') && $this->items->contains(fn ($it) => (bool) ($it->is_supplementary ?? false) || ! empty($it->supplement_id))) {
+            return true;
+        }
+
+        if ($this->relationLoaded('supplements') && $this->supplements->isNotEmpty()) {
+            return true;
+        }
+
+        $justification = (string) ($this->justification ?? '');
+        $reqNum = (string) ($this->request_number ?? '');
+        if (str_contains($justification, 'كمالة') || str_contains($reqNum, 'كمالة')) {
+            return true;
+        }
+
+        return false;
     }
 
     public function isProjectRequest(): bool

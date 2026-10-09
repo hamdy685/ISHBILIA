@@ -479,7 +479,15 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
         isReviewer && selectedEngineerId ? Number(selectedEngineerId) : undefined,
         isReviewer ? requiresWarehouseReceipt : undefined
       );
-      const msg = `تم اعتماد ${approveModal.item.code} وتحديد مسار الاستلام بنجاح ✅`;
+      const isSupplement = Boolean(
+        approveModal.item.request_type === 'COMPLEMENTARY' ||
+        approveModal.item.type === 'SUPPLEMENT' ||
+        approveModal.item.title?.includes('كمالة') ||
+        approveModal.item.stageBadge?.text?.includes('كمالة')
+      );
+      const msg = isSupplement
+        ? `تم اعتماد طلب الكمالة ${approveModal.item.code} وتوجيهه مباشرة لمدير المشتريات بنجاح ⚡`
+        : `تم اعتماد ${approveModal.item.code} وتحديد مسار الاستلام بنجاح ✅`;
       toast.success(msg);
       showToast(msg, 'success');
       setApproveModal({ isOpen: false, item: null, comment: '', isSubmitting: false });
@@ -935,7 +943,15 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                     {/* Next Actor & Overdue Status Bar */}
                     {(() => {
                       const isOverdue = Boolean(item.date_needed && item.date_needed < new Date().toISOString().slice(0, 10));
+                      const isComplementary = Boolean(
+                        item.request_type === 'COMPLEMENTARY' ||
+                        item.type === 'SUPPLEMENT' ||
+                        item.title?.includes('كمالة') ||
+                        item.stageBadge?.text?.includes('كمالة')
+                      );
+
                       const defaultNextActor = item.next_actor || (
+                        isComplementary ? 'مدير المشتريات (تنفيذ فوري مباشر دون مالية أو تنفيذي)' :
                         item.type === 'PR' ? (isReviewer ? 'المدير العام للاعتماد النهائي' : 'إدارة المشتريات') :
                         item.type === 'SUPPLEMENT' ? 'إدارة المشتريات للتسعير وإصدار أمر التوريد' :
                         item.type === 'QUOTE' ? 'المدير العام لاعتماد الترسية' :
@@ -1113,12 +1129,26 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
       >
         <div className="space-y-4" dir="rtl">
           <div className="rounded-xl border border-emerald-800/40 bg-emerald-950/30 p-3.5 text-xs text-emerald-200">
-            <p className="font-bold text-sm text-emerald-300 mb-1">
-              هل أنت متأكد من اعتماد هذا الطلب فوراً؟
-            </p>
-            <p className="text-slate-300">
-              سيتم تسجيل اعتمادك ونقل الطلب تلقائياً إلى المرحلة التالية في دورة العمل.
-            </p>
+            {(() => {
+              const isSupplement = Boolean(
+                approveModal.item?.request_type === 'COMPLEMENTARY' ||
+                approveModal.item?.type === 'SUPPLEMENT' ||
+                approveModal.item?.title?.includes('كمالة') ||
+                approveModal.item?.stageBadge?.text?.includes('كمالة')
+              );
+              return (
+                <>
+                  <p className="font-bold text-sm text-emerald-300 mb-1">
+                    {isSupplement ? '⚡ تأكيد اعتماد طلب الكمالة وتوجيهه الفوري للمشتريات' : 'هل أنت متأكد من اعتماد هذا الطلب فوراً؟'}
+                  </p>
+                  <p className="text-slate-300">
+                    {isSupplement
+                      ? 'سيتم اعتماد طلب الكمالة ونقله مباشرة إلى مدير المشتريات (مسار سريع دون المرور بالمالية أو التنفيذي) للتسعير وإصدار أمر الشراء فوراً ⚡'
+                      : 'سيتم تسجيل اعتمادك ونقل الطلب تلقائياً إلى المرحلة التالية في دورة العمل.'}
+                  </p>
+                </>
+              );
+            })()}
             {approveModal.item && (
               <div className="mt-2.5 pt-2 border-t border-emerald-800/40 text-slate-200 space-y-1 font-mono">
                 <div>• المعاملة: <strong>{approveModal.item.title}</strong></div>

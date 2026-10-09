@@ -169,7 +169,16 @@ export const ReviewPurchaseRequestPage: React.FC = () => {
       const updated = await approvePurchaseRequestApi(parseInt(id, 10), comments || '', siteEngineerUserId, requiresWarehouseReceipt);
       setIsApproveModalOpen(false);
       setRequestData(updated);
-      setSuccessMessage('✅ تم اعتماد طلب الشراء وتحديد مسار الاستلام وإرساله إلى المدير التنفيذي بنجاح.');
+      const isSupplement = Boolean(
+        requestData?.request_type === 'COMPLEMENTARY' ||
+        (requestData as any)?.is_supplementary ||
+        (requestData as any)?.has_pending_supplement ||
+        requestData?.justification?.includes('كمالة')
+      );
+      setSuccessMessage(isSupplement
+        ? '⚡ تم اعتماد طلب الكمالة وتحديد مسار الاستلام ونقله مباشرة إلى إدارة المشتريات بنجاح (تخطي المسار المالي والتنفيذي).'
+        : '✅ تم اعتماد طلب الشراء وتحديد مسار الاستلام وإرساله إلى المدير التنفيذي بنجاح.'
+      );
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
       setError(parseApiError(err));
@@ -237,6 +246,15 @@ export const ReviewPurchaseRequestPage: React.FC = () => {
   const canEdit = reviewerEditableStatuses.includes(requestData.status) && hasPermission('purchase_request.edit_during_review') && !isMutating;
   const isFinalized = !reviewerEditableStatuses.includes(requestData.status);
   const isConflictError = error?.status === 409;
+  const isSupplement = Boolean(
+    requestData.request_type === 'COMPLEMENTARY' ||
+    (requestData as any).is_supplementary ||
+    (requestData as any).has_pending_supplement ||
+    ((requestData as any).supplements && (requestData as any).supplements.length > 0) ||
+    requestData.items?.some((it: any) => it.is_supplementary || it.supplement_id) ||
+    requestData.justification?.includes('كمالة') ||
+    requestData.request_number?.includes('كمالة')
+  );
 
   return (
     <div className="space-y-3.5 pb-24 md:pb-6 animate-fade-in" dir="rtl">
@@ -278,7 +296,24 @@ export const ReviewPurchaseRequestPage: React.FC = () => {
               مساحة المراجعة — {requestData.request_number}
             </h1>
             <PurchaseRequestStatusBadge status={requestData.status} />
+            {isSupplement && (
+              <span className="rounded-full bg-purple-950/80 text-purple-300 border border-purple-800/60 px-3 py-0.5 text-xs font-black ring-1 ring-purple-500/50 flex items-center gap-1 shadow-md">
+                <span>⚡</span>
+                <span>طلب كمالة مستقل (مسار سريع للمشتريات)</span>
+              </span>
+            )}
           </div>
+          {isSupplement && (
+            <div className="mt-2 rounded-xl border border-purple-700/60 bg-gradient-to-r from-purple-950/60 via-slate-900 to-purple-950/40 p-2.5 text-xs text-purple-200 flex items-center gap-2 shadow-md">
+              <span className="text-base">⚡</span>
+              <div>
+                <strong className="text-purple-300">مسار سريع لطلب الكمالة:</strong>
+                <span className="mr-1 text-slate-300">
+                  فور اعتمادك الفني، سينتقل هذا الطلب مباشرة إلى مدير المشتريات للتسعير والربط، متخطياً الاعتماد المالي وموافقة المدير التنفيذي.
+                </span>
+              </div>
+            </div>
+          )}
           <p className="text-xs text-slate-400 mt-1">
             {requestData.department && `القسم: ${requestData.department.name}`}
             {requestData.requester && ` • مقدم الطلب: ${requestData.requester.name}`}
@@ -325,9 +360,9 @@ export const ReviewPurchaseRequestPage: React.FC = () => {
               onClick={handleDirectApprove}
               isLoading={isMutating}
               className="flex-1 md:flex-none min-h-10 text-xs font-black md:text-sm shadow-lg shadow-emerald-950/50"
-              title="اعتماد الطلب فوراً بخطوة واحدة"
+              title={isSupplement ? "اعتماد طلب الكمالة ونقله مباشرة للمشتريات" : "اعتماد الطلب فوراً بخطوة واحدة"}
             >
-              اعتماد الطلب
+              {isSupplement ? 'اعتماد ونقل للمشتريات ⚡' : 'اعتماد الطلب'}
             </Button>
           )}
 
@@ -602,6 +637,9 @@ export const ReviewPurchaseRequestPage: React.FC = () => {
         isApproving={isMutating}
         onConfirm={handleApprove}
         onCancel={() => setIsApproveModalOpen(false)}
+        title={isSupplement ? "⚡ اعتماد طلب الكمالة وتوجيهه لإدارة المشتريات" : undefined}
+        confirmButtonText={isSupplement ? "اعتماد ونقل للمشتريات ⚡" : undefined}
+        promptText={isSupplement ? `هل أنت متأكد من اعتماد طلب الكمالة ${requestData.request_number} ونقله مباشرة إلى مدير المشتريات (مسار سريع دون المرور بالمالية أو التنفيذي)؟` : undefined}
       />
       <RejectRequestDialog
         isOpen={isRejectModalOpen}

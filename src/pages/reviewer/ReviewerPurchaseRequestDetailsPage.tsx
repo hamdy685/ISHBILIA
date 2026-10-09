@@ -97,8 +97,20 @@ export const ReviewerPurchaseRequestDetailsPage: React.FC = () => {
         requiresWarehouseReceipt
       );
       setIsApproveModalOpen(false);
-      setSuccessMessage('تم اعتماد طلب الشراء بنجاح وإرساله للمدير العام.');
-      toast.success('تم اعتماد طلب الشراء بنجاح وإرساله للمدير العام.');
+      const isSuppl = Boolean(
+        requestData.request_type === 'COMPLEMENTARY' ||
+        (requestData as any).is_supplementary ||
+        (requestData as any).has_pending_supplement ||
+        ((requestData as any).supplements && (requestData as any).supplements.length > 0) ||
+        requestData.items?.some((it: any) => it.is_supplementary || it.supplement_id) ||
+        requestData.justification?.includes('كمالة') ||
+        requestData.request_number?.includes('كمالة')
+      );
+      const approveMsg = isSuppl
+        ? 'تم اعتماد طلب الكمالة بنجاح ونقله مباشرة إلى مدير المشتريات (تجاوز الإدارة المالية والمدير التنفيذي).'
+        : 'تم اعتماد طلب الشراء بنجاح وإرساله للمدير العام.';
+      setSuccessMessage(approveMsg);
+      toast.success(approveMsg);
       await fetchRequest();
     } catch (err) {
       const parsed = parseApiError(err);
@@ -156,6 +168,15 @@ export const ReviewerPurchaseRequestDetailsPage: React.FC = () => {
   const canReview = (isSubmitted || isUnderReview) && hasPermission('purchase_request.approve');
   const canEditBeforeApproval = isUnderReview && hasPermission('purchase_request.edit_during_review');
   const isLockedAfterApproval = !isSubmitted && !isUnderReview;
+  const isSupplement = Boolean(
+    requestData.request_type === 'COMPLEMENTARY' ||
+    (requestData as any).is_supplementary ||
+    (requestData as any).has_pending_supplement ||
+    ((requestData as any).supplements && (requestData as any).supplements.length > 0) ||
+    requestData.items?.some((it: any) => it.is_supplementary || it.supplement_id) ||
+    requestData.justification?.includes('كمالة') ||
+    requestData.request_number?.includes('كمالة')
+  );
 
   const itemNames = requestData.items?.map((item) => item.item_description || item.item?.name).filter(Boolean) || [];
   const itemsDisplay = itemNames.length === 0
@@ -191,6 +212,12 @@ export const ReviewerPurchaseRequestDetailsPage: React.FC = () => {
             {requestData.request_number}
           </h1>
           <PurchaseRequestStatusBadge status={requestData.status} />
+          {isSupplement && (
+            <span className="rounded-full bg-purple-950/80 text-purple-300 border border-purple-800/60 px-3 py-0.5 text-xs font-black ring-1 ring-purple-500/50 flex items-center gap-1 shadow-md">
+              <span>⚡</span>
+              <span>طلب كمالة مستقل (مسار سريع للمشتريات)</span>
+            </span>
+          )}
         </div>
 
         {/* Action Buttons: Direct Action without navigating or hunting */}
@@ -203,10 +230,10 @@ export const ReviewerPurchaseRequestDetailsPage: React.FC = () => {
               onClick={() => setIsApproveModalOpen(true)}
               disabled={isMutating}
               className="bg-emerald-600 hover:bg-emerald-500 text-white font-black shadow-md shadow-emerald-950/50 flex items-center gap-1 text-xs"
-              title="اعتماد الطلب فوراً من هنا"
+              title={isSupplement ? "اعتماد طلب الكمالة ونقله مباشرة للمشتريات" : "اعتماد الطلب فوراً من هنا"}
             >
-              <span>✓</span>
-              <span>اعتماد الطلب</span>
+              <span>{isSupplement ? '⚡' : '✓'}</span>
+              <span>{isSupplement ? 'اعتماد ونقل للمشتريات ⚡' : 'اعتماد الطلب'}</span>
             </Button>
           )}
 
@@ -412,7 +439,7 @@ export const ReviewerPurchaseRequestDetailsPage: React.FC = () => {
             disabled={isMutating}
             className="flex-1 min-h-10 text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg"
           >
-            ✓ اعتماد فوراً
+            {isSupplement ? '⚡ اعتماد ونقل للمشتريات' : '✓ اعتماد فوراً'}
           </Button>
 
           {hasPermission('purchase_request.reject') && (
@@ -447,6 +474,9 @@ export const ReviewerPurchaseRequestDetailsPage: React.FC = () => {
         isApproving={isMutating}
         onConfirm={handleConfirmApprove}
         onCancel={() => setIsApproveModalOpen(false)}
+        title={isSupplement ? "⚡ اعتماد طلب الكمالة وتوجيهه لإدارة المشتريات" : undefined}
+        confirmButtonText={isSupplement ? "اعتماد ونقل للمشتريات ⚡" : undefined}
+        promptText={isSupplement ? `هل أنت متأكد من اعتماد طلب الكمالة ${requestData.request_number} ونقله مباشرة إلى مدير المشتريات (مسار سريع دون المرور بالمالية أو التنفيذي)؟` : undefined}
       />
 
       <RejectRequestDialog

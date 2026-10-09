@@ -151,20 +151,35 @@ class DashboardPendingTasksController extends Controller
             $reviewablePrs = $this->reviewerService->getReviewableRequests($user);
             foreach ($reviewablePrs as $pr) {
                 if (in_array($pr->status, ['SUBMITTED', 'UNDER_REVIEW'], true)) {
+                    $isSupplement = $pr->isComplementaryRequest();
+
                     $tasks->push([
-                        'id' => "pr-rev-{$pr->id}",
+                        'id' => "pr-{$pr->id}",
                         'rawId' => $pr->id,
                         'type' => 'PR',
                         'code' => $pr->request_number,
-                        'title' => $pr->justification ?: ($pr->request_type === 'OFFICE_SUPPLIES' ? 'طلب مستلزمات مكتبية' : 'طلب مواد مشروعات'),
-                        'subtitle' => 'طلب شراء جديد بانتظار المراجعة الفنية',
+                        'title' => $isSupplement
+                            ? ($pr->justification ? "⚡ طلب كمالة: {$pr->justification}" : '⚡ طلب كمالة عاجل')
+                            : ($pr->justification ?: ($pr->request_type === 'OFFICE_SUPPLIES' ? 'طلب مستلزمات مكتبية' : 'طلب مواد مشروعات')),
+                        'subtitle' => $isSupplement
+                            ? 'طلب كمالة ينتقل مباشرة لمدير المشتريات فور الاعتماد الفني (تخطي المسار المالي والتنفيذي)'
+                            : 'طلب شراء جديد بانتظار المراجعة الفنية',
                         'department' => $pr->department?->name,
                         'requester' => $pr->requester?->name,
-                        'urgency' => $pr->priority === 'HIGH' || $pr->priority === 'URGENT' ? 'CRITICAL' : 'HIGH',
-                        'reason' => $pr->status === 'SUBMITTED' ? 'طلب جديد مقدم بانتظار مراجعتك واعتمادك الفني' : 'طلب قيد المراجعة الفنية',
+                        'urgency' => $isSupplement || $pr->priority === 'HIGH' || $pr->priority === 'URGENT' ? 'CRITICAL' : 'HIGH',
+                        'reason' => $isSupplement
+                            ? 'طلب كمالة عاجل بانتظار مراجعتك واعتمادك الفني للانتقال الفوري إلى مدير المشتريات ⚡'
+                            : ($pr->status === 'SUBMITTED' ? 'طلب جديد مقدم بانتظار مراجعتك واعتمادك الفني' : 'طلب قيد المراجعة الفنية'),
+                        'next_actor' => $isSupplement
+                            ? 'مدير المشتريات (تنفيذ فوري مباشر دون مالية أو تنفيذي)'
+                            : 'المدير العام للاعتماد النهائي',
                         'actionUrl' => "/reviewer/requests/{$pr->id}/review",
                         'actionLabel' => 'مراجعة وتعديل الطلب',
-                        'stageBadge' => [
+                        'stageBadge' => $isSupplement ? [
+                            'text' => 'طلب كمالة عاجل',
+                            'icon' => '⚡',
+                            'className' => 'bg-purple-950/80 text-purple-300 border-purple-800/60 ring-1 ring-purple-500/50',
+                        ] : [
                             'text' => 'مراجعة فنية',
                             'icon' => '📋',
                             'className' => 'bg-cyan-950/80 text-cyan-300 border-cyan-800/60',
