@@ -102,12 +102,12 @@ class GeneralManagerPurchaseRequestService
 
         if ($executive->hasRole('execution_manager')) {
             if (! $this->canManageExecutionRequest($executive, $request)) {
-                throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('غير مصرح لك بتعديل طلب شراء لا يقع ضمن أقسام أو مهندسي إدارة التنفيذ.');
+                throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('غير مصرح لك بتعديل طلب شراء لا يقع ضمن مهندسي إدارة التنفيذ (م. كامل).');
             }
         } elseif (! $executive->hasRole('admin')) {
             $hasExecutionManager = User::whereHas('roles', fn ($q) => $q->where('slug', 'execution_manager'))->where('is_active', true)->exists();
-            if ($hasExecutionManager && $this->canManageExecutionRequest($executive, $request) && (int) $request->requester?->manager_id !== (int) $executive->id) {
-                throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('هذا الطلب يتبع مدير مشروعات التنفيذ ولا يقرره المدير العام.');
+            if ($hasExecutionManager && $this->isExecutionRequest($request)) {
+                throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('هذا الطلب يتبع مدير مشروعات التنفيذ (م. كريم) ولا يقرره المدير العام (م. محمد).');
             }
         }
 
@@ -261,12 +261,12 @@ class GeneralManagerPurchaseRequestService
 
         if ($executive->hasRole('execution_manager')) {
             if (! $this->canManageExecutionRequest($executive, $request)) {
-                throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('غير مصرح لك باعتماد طلب شراء لا يقع ضمن أقسام أو مهندسي إدارة التنفيذ.');
+                throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('غير مصرح لك باعتماد طلب شراء لا يقع ضمن مهندسي إدارة التنفيذ (م. كامل).');
             }
         } elseif (! $executive->hasRole('admin')) {
             $hasExecutionManager = User::whereHas('roles', fn ($q) => $q->where('slug', 'execution_manager'))->where('is_active', true)->exists();
-            if ($hasExecutionManager && $this->canManageExecutionRequest($executive, $request) && (int) $request->requester?->manager_id !== (int) $executive->id) {
-                throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('هذا الطلب يتبع مدير مشروعات التنفيذ ولا يقرره المدير العام.');
+            if ($hasExecutionManager && $this->isExecutionRequest($request)) {
+                throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('هذا الطلب يتبع مدير مشروعات التنفيذ (م. كريم) ولا يقرره المدير العام (م. محمد).');
             }
         }
 
@@ -339,12 +339,12 @@ class GeneralManagerPurchaseRequestService
 
         if ($executive->hasRole('execution_manager')) {
             if (! $this->canManageExecutionRequest($executive, $request)) {
-                throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('غير مصرح لك برفض طلب شراء لا يقع ضمن أقسام أو مهندسي إدارة التنفيذ.');
+                throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('غير مصرح لك برفض طلب شراء لا يقع ضمن مهندسي إدارة التنفيذ (م. كامل).');
             }
         } elseif (! $executive->hasRole('admin')) {
             $hasExecutionManager = User::whereHas('roles', fn ($q) => $q->where('slug', 'execution_manager'))->where('is_active', true)->exists();
-            if ($hasExecutionManager && $this->canManageExecutionRequest($executive, $request) && (int) $request->requester?->manager_id !== (int) $executive->id) {
-                throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('هذا الطلب يتبع مدير مشروعات التنفيذ ولا يقرره المدير العام.');
+            if ($hasExecutionManager && $this->isExecutionRequest($request)) {
+                throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('هذا الطلب يتبع مدير مشروعات التنفيذ (م. كريم) ولا يقرره المدير العام (م. محمد).');
             }
         }
 
@@ -414,6 +414,16 @@ class GeneralManagerPurchaseRequestService
         );
     }
 
+    public function isExecutionRequest(PurchaseRequest $request): bool
+    {
+        $request->loadMissing(['requester.manager.roles', 'assignedReviewer.roles']);
+
+        return (bool) (
+            $request->requester?->manager?->hasRole('execution_manager') ||
+            $request->assignedReviewer?->hasRole('execution_manager')
+        );
+    }
+
     public function canManageExecutionRequest(User $user, PurchaseRequest $request): bool
     {
         if ($user->hasRole('admin')) {
@@ -433,3 +443,4 @@ class GeneralManagerPurchaseRequestService
         return false;
     }
 }
+

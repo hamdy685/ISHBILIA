@@ -372,11 +372,26 @@ class DashboardPendingTasksController extends Controller
 
         // 5. Executive / General Manager
         if ($user->hasRole('general_manager') || $user->hasRole('execution_manager')) {
-            $execPrs = PurchaseRequest::withoutGlobalScope(\App\Scopes\DataIsolationScope::class)
+            $execQuery = PurchaseRequest::withoutGlobalScope(\App\Scopes\DataIsolationScope::class)
                 ->with(['department', 'requester'])
                 ->where('status', 'PENDING_EXECUTIVE_APPROVAL')
-                ->orderByDesc('created_at')
-                ->get();
+                ->where(function ($q) {
+                    $q->whereNull('request_type')->orWhere('request_type', '!=', 'COMPLEMENTARY');
+                });
+
+            if ($user->hasRole('execution_manager')) {
+                $execQuery->where(function ($q) use ($user) {
+                    $q->where('reviewer_user_id', $user->id)
+                      ->orWhereHas('requester', fn ($rq) => $rq->where('manager_id', $user->id));
+                });
+            } elseif (! $user->hasRole('admin')) {
+                $execQuery->where(function ($q) {
+                    $q->whereDoesntHave('requester.manager.roles', fn ($mq) => $mq->where('slug', 'execution_manager'))
+                      ->whereDoesntHave('assignedReviewer.roles', fn ($rq) => $rq->where('slug', 'execution_manager'));
+                });
+            }
+
+            $execPrs = $execQuery->orderByDesc('created_at')->get();
 
             foreach ($execPrs as $pr) {
                 $tasks->push([
@@ -399,11 +414,23 @@ class DashboardPendingTasksController extends Controller
                 ]);
             }
 
-            $execQuotes = PurchaseRequest::withoutGlobalScope(\App\Scopes\DataIsolationScope::class)
+            $quoteQuery = PurchaseRequest::withoutGlobalScope(\App\Scopes\DataIsolationScope::class)
                 ->with(['department', 'requester'])
-                ->where('status', 'PENDING_EXECUTIVE_QUOTE_DECISION')
-                ->orderByDesc('created_at')
-                ->get();
+                ->where('status', 'PENDING_EXECUTIVE_QUOTE_DECISION');
+
+            if ($user->hasRole('execution_manager')) {
+                $quoteQuery->where(function ($q) use ($user) {
+                    $q->where('reviewer_user_id', $user->id)
+                      ->orWhereHas('requester', fn ($rq) => $rq->where('manager_id', $user->id));
+                });
+            } elseif (! $user->hasRole('admin')) {
+                $quoteQuery->where(function ($q) {
+                    $q->whereDoesntHave('requester.manager.roles', fn ($mq) => $mq->where('slug', 'execution_manager'))
+                      ->whereDoesntHave('assignedReviewer.roles', fn ($rq) => $rq->where('slug', 'execution_manager'));
+                });
+            }
+
+            $execQuotes = $quoteQuery->orderByDesc('created_at')->get();
 
             foreach ($execQuotes as $pr) {
                 $tasks->push([
