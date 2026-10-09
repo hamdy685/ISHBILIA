@@ -166,15 +166,19 @@ export const ReviewPurchaseRequestPage: React.FC = () => {
     setIsMutating(true);
     setError(null);
     try {
-      const updated = await approvePurchaseRequestApi(parseInt(id, 10), comments || '', siteEngineerUserId, requiresWarehouseReceipt);
-      setIsApproveModalOpen(false);
-      setRequestData(updated);
       const isSupplement = Boolean(
         requestData?.request_type === 'COMPLEMENTARY' ||
         (requestData as any)?.is_supplementary ||
         (requestData as any)?.has_pending_supplement ||
-        requestData?.justification?.includes('كمالة')
+        ((requestData as any)?.supplements && (requestData as any).supplements.length > 0) ||
+        requestData?.items?.some((it: any) => it.is_supplementary || it.supplement_id) ||
+        requestData?.justification?.includes('كمالة') ||
+        requestData?.notes?.includes('كمالة') ||
+        requestData?.request_number?.includes('كمالة')
       );
+      const updated = await approvePurchaseRequestApi(parseInt(id, 10), comments || '', siteEngineerUserId, requiresWarehouseReceipt, isSupplement);
+      setIsApproveModalOpen(false);
+      setRequestData(updated);
       setSuccessMessage(isSupplement
         ? '⚡ تم اعتماد طلب الكمالة وتحديد مسار الاستلام ونقله مباشرة إلى إدارة المشتريات بنجاح (تخطي المسار المالي والتنفيذي).'
         : '✅ تم اعتماد طلب الشراء وتحديد مسار الاستلام وإرساله إلى المدير التنفيذي بنجاح.'

@@ -602,11 +602,24 @@ class PurchaseRequestService
             $isTargetDeptManager = (int) $request->targetDepartment?->manager_user_id === (int) $user->id;
             $sameDepartment = (int) $request->department_id === (int) $request->target_department_id || (int) $user->department_id === (int) $request->target_department_id;
             $canSkipReviewer = $isDepartmentManagerRequester && ($sameDepartment || $isTargetDeptManager || ! $request->department_id);
-            $nextStatus = $isExecutiveRequester
-                ? 'PENDING_PROCUREMENT_APPROVAL'
-                : ($isProcurementOrAccounting || $canSkipReviewer || $isDepartmentManagerRequester
-                    ? 'PENDING_EXECUTIVE_APPROVAL'
-                    : 'SUBMITTED');
+            $isComplementary = $request->isComplementaryRequest();
+
+            if ($isComplementary) {
+                // في طلبات الكمالة:
+                // - إذا أنشأه المدير التنفيذي أو مراجع القسم أو إدارة المشتريات -> يذهب مباشرة للمشتريات (تجاوز التنفيذي والمالية)
+                // - إذا أنشأه مهندس الموقع أو موظف عادي -> يذهب للمراجع أولاً (SUBMITTED) لتدقيقه
+                if ($isExecutiveRequester || $isDepartmentManagerRequester || $isProcurementOrAccounting || $canSkipReviewer) {
+                    $nextStatus = 'PENDING_PROCUREMENT_APPROVAL';
+                } else {
+                    $nextStatus = 'SUBMITTED';
+                }
+            } else {
+                $nextStatus = $isExecutiveRequester
+                    ? 'PENDING_PROCUREMENT_APPROVAL'
+                    : ($isProcurementOrAccounting || $canSkipReviewer || $isDepartmentManagerRequester
+                        ? 'PENDING_EXECUTIVE_APPROVAL'
+                        : 'SUBMITTED');
+            }
 
             $assignedSiteEngineerId = $request->site_engineer_user_id;
             if ($siteEngineerUserId) {
@@ -614,7 +627,7 @@ class PurchaseRequestService
             }
 
             // إذا كان مقدم الطلب هو المدير التنفيذي أو مراجع القسم لطلب مشروعات/موقع، يجب تحديد مسؤول الاستلام
-            $requiresReceiverSelection = ($isExecutiveRequester || ($isDepartmentManagerRequester && $nextStatus === 'PENDING_EXECUTIVE_APPROVAL'))
+            $requiresReceiverSelection = ($isExecutiveRequester || ($isDepartmentManagerRequester && in_array($nextStatus, ['PENDING_EXECUTIVE_APPROVAL', 'PENDING_PROCUREMENT_APPROVAL'], true)))
                 && $request->request_type !== 'OFFICE_SUPPLIES';
 
             if ($requiresReceiverSelection) {
@@ -624,7 +637,7 @@ class PurchaseRequestService
                 if (!$assignedSiteEngineerId) {
                     $msg = $isExecutiveRequester
                         ? 'طالما أن طلب الشراء صادر من المدير التنفيذي ولا يمر على مراجع، يجب تحديد مهندس الموقع أو مسؤول الاستلام قبل إرسال الطلب إلى المشتريات.'
-                        : 'يجب تحديد مهندس الموقع أو مسؤول الاستلام (أو اختيار المراجع لنفسه) قبل اعتماد الطلب وإرساله إلى المدير التنفيذي.';
+                        : 'يجب تحديد مهندس الموقع أو مسؤول الاستلام (أو اختيار المراجع لنفسه) قبل اعتماد الطلب وإرساله للمشتريات.';
                     throw ValidationException::withMessages([
                         'site_engineer_user_id' => [$msg],
                     ]);
@@ -645,15 +658,20 @@ class PurchaseRequestService
 
             $request->update($updateData);
 
-            if ($isDepartmentManagerRequester && $nextStatus === 'PENDING_EXECUTIVE_APPROVAL') {
+            if ($isDepartmentManagerRequester && in_array($nextStatus, ['PENDING_EXECUTIVE_APPROVAL', 'PENDING_PROCUREMENT_APPROVAL'], true)) {
+                $actionName = $nextStatus === 'PENDING_PROCUREMENT_APPROVAL' ? 'APPROVED_BY_REVIEWER_FAST_TRACK' : 'APPROVED_BY_REVIEWER';
+                $commentText = $comment ?: ($nextStatus === 'PENDING_PROCUREMENT_APPROVAL'
+                    ? 'أنشأ واعتمد مراجع القسم طلب الكمالة المستقل وأرسله مباشرةً إلى إدارة المشتريات (مسار سريع دون تنفيذي أو مالية).'
+                    : 'أنشأ واعتمد مراجع القسم الطلب وحدد مسؤول الاستلام ومسار المخزن وأرسله إلى المدير التنفيذي.');
+
                 ApprovalHistory::create([
                     'target_type' => PurchaseRequest::class,
                     'target_id' => $request->id,
                     'actor_user_id' => $user->id,
-                    'action' => 'APPROVED_BY_REVIEWER',
+                    'action' => $actionName,
                     'from_state' => 'DRAFT',
-                    'to_state' => 'PENDING_EXECUTIVE_APPROVAL',
-                    'comments' => $comment ?: 'أنشأ واعتمد مراجع القسم الطلب وحدد مسؤول الاستلام ومسار المخزن وأرسله إلى المدير التنفيذي.',
+                    'to_state' => $nextStatus,
+                    'comments' => $commentText,
                 ]);
             }
 
@@ -668,17 +686,18 @@ class PurchaseRequestService
 
             try {
                 $eventMessage = match (true) {
+                    $nextStatus === 'PENDING_PROCUREMENT_APPROVAL' && $isComplementary => 'أنشأ واعتمد مراجع القسم/المدير طلب كمالة مستقل وأرسله مباشرة إلى إدارة المشتريات (مسار سريع دون تنفيذي أو مالية).',
                     $nextStatus === 'PENDING_PROCUREMENT_APPROVAL' => 'أنشأ المدير التنفيذي طلب شراء وأرسله مباشرة إلى مدير المشتريات.',
                     $nextStatus === 'PENDING_EXECUTIVE_APPROVAL' && $isProcurementOrAccounting => 'أنشأ مدير المشتريات / الحسابات طلب شراء وأرسله مباشرةً للمدير التنفيذي متجاوزاً مرحلة المراجع.',
                     $nextStatus === 'PENDING_EXECUTIVE_APPROVAL' && $isDepartmentManagerRequester => 'أنشأ واعتمد مراجع القسم الطلب وحدد مسؤول الاستلام ومسار المخزن وأرسله مباشرةً إلى المدير التنفيذي.',
                     $nextStatus === 'PENDING_EXECUTIVE_APPROVAL' => 'أرسل مراجع القسم الطلب إلى المدير التنفيذي مباشرة لأن القسم المستهدف هو نفس قسمه.',
-                    default => 'أرسل الطلب إلى مدير القسم المستهدف للمراجعة.',
+                    default => ($isComplementary ? 'أرسل طلب الكمالة إلى رئيس القسم للمراجعة والتدقيق.' : 'أرسل الطلب إلى مدير القسم المستهدف للمراجعة.'),
                 };
                 app(SystemEventService::class)->recordAction(
                     $request,
                     'PR_SUBMITTED',
                     $eventMessage,
-                    ['event_type' => 'purchase_request.submitted', 'from_state' => 'DRAFT', 'to_state' => $nextStatus, 'actor_user_id' => $user->id]
+                    ['event_type' => 'purchase_request.submitted', 'from_state' => 'DRAFT', 'to_state' => $nextStatus, 'actor_user_id' => $user->id, 'metadata' => ['is_complementary' => $isComplementary]]
                 );
 
                 $notificationService = app(NotificationService::class);
@@ -686,11 +705,15 @@ class PurchaseRequestService
                     $reviewers = $request->assignedReviewer
                         ? collect([$request->assignedReviewer])
                         : $notificationService->resolveUsersWithPermission('purchase_request.review', $request->target_department_id);
+                    $notifTitle = $isComplementary ? 'طلب كمالة جديد بانتظار المراجعة' : 'طلب شراء جديد للمراجعة';
+                    $notifBody = $isComplementary
+                        ? "طلب الكمالة {$request->request_number} تابع لقسمك ويحتاج مراجعة واعتماد رئيس القسم وتحديد جهة الاستلام."
+                        : "طلب الشراء {$request->request_number} تابع لقسمك ويحتاج اعتماد مدير القسم.";
                     $notificationService->queueUsers(
                         $reviewers,
                         'purchase_request_submitted',
-                        'طلب شراء جديد للمراجعة',
-                        "طلب الشراء {$request->request_number} تابع لقسمك ويحتاج اعتماد مدير القسم.",
+                        $notifTitle,
+                        $notifBody,
                         $request
                     );
                 } elseif ($nextStatus === 'PENDING_EXECUTIVE_APPROVAL') {
@@ -718,11 +741,20 @@ class PurchaseRequestService
                         );
                     }
                 } else {
+                    // PENDING_PROCUREMENT_APPROVAL: Notify procurement directly!
+                    $procurementUsers = User::whereHas('roles', fn ($q) => $q->where('slug', 'procurement_manager'))->where('is_active', true)->get();
+                    if ($procurementUsers->isEmpty()) {
+                        $procurementUsers = $notificationService->resolveUsersWithPermission('purchase_request.view_approved');
+                    }
+                    $notifTitle = $isComplementary ? 'طلب كمالة معتمد جاهز للمشتريات' : 'طلب شراء من المدير التنفيذي';
+                    $notifBody = $isComplementary
+                        ? "طلب الكمالة المستقل {$request->request_number} معتمد وجاهز لدى إدارة المشتريات لإصدار أمر الشراء فوراً دون تنفيذي أو مالية."
+                        : "طلب الشراء {$request->request_number} وصل مباشرة للمشتريات لبدء مساره.";
                     $notificationService->queueUsers(
-                        $notificationService->resolveUsersWithPermission('purchase_request.view_approved'),
+                        $procurementUsers,
                         'purchase_request_pending_procurement',
-                        'طلب شراء من المدير التنفيذي',
-                        "طلب الشراء {$request->request_number} وصل مباشرة للمشتريات لبدء مساره.",
+                        $notifTitle,
+                        $notifBody,
                         $request
                     );
                 }

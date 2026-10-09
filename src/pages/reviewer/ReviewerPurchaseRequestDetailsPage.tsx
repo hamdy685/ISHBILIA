@@ -89,23 +89,25 @@ export const ReviewerPurchaseRequestDetailsPage: React.FC = () => {
     if (!requestData || isMutating) return;
     setIsMutating(true);
     setError(null);
+    const isSuppl = Boolean(
+      requestData.request_type === 'COMPLEMENTARY' ||
+      (requestData as any).is_supplementary ||
+      (requestData as any).has_pending_supplement ||
+      ((requestData as any).supplements && (requestData as any).supplements.length > 0) ||
+      requestData.items?.some((it: any) => it.is_supplementary || it.supplement_id) ||
+      requestData.justification?.includes('كمالة') ||
+      requestData.notes?.includes('كمالة') ||
+      requestData.request_number?.includes('كمالة')
+    );
     try {
       await approvePurchaseRequestApi(
         requestData.id,
         comment,
         siteEngineerUserId,
-        requiresWarehouseReceipt
+        requiresWarehouseReceipt,
+        isSuppl
       );
       setIsApproveModalOpen(false);
-      const isSuppl = Boolean(
-        requestData.request_type === 'COMPLEMENTARY' ||
-        (requestData as any).is_supplementary ||
-        (requestData as any).has_pending_supplement ||
-        ((requestData as any).supplements && (requestData as any).supplements.length > 0) ||
-        requestData.items?.some((it: any) => it.is_supplementary || it.supplement_id) ||
-        requestData.justification?.includes('كمالة') ||
-        requestData.request_number?.includes('كمالة')
-      );
       const approveMsg = isSuppl
         ? 'تم اعتماد طلب الكمالة بنجاح ونقله مباشرة إلى مدير المشتريات (تجاوز الإدارة المالية والمدير التنفيذي).'
         : 'تم اعتماد طلب الشراء بنجاح وإرساله للمدير العام.';

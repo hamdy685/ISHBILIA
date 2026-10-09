@@ -113,18 +113,50 @@ class PurchaseRequest extends Model
             return true;
         }
 
-        if ($this->relationLoaded('items') && $this->items->contains(fn ($it) => (bool) ($it->is_supplementary ?? false) || ! empty($it->supplement_id))) {
-            return true;
-        }
-
-        if ($this->relationLoaded('supplements') && $this->supplements->isNotEmpty()) {
-            return true;
-        }
-
         $justification = (string) ($this->justification ?? '');
+        $notes = (string) ($this->notes ?? '');
         $reqNum = (string) ($this->request_number ?? '');
-        if (str_contains($justification, 'كمالة') || str_contains($reqNum, 'كمالة')) {
+
+        if (
+            str_contains($justification, 'كمالة') || str_contains($justification, 'تكملة') ||
+            str_contains($notes, 'كمالة') || str_contains($notes, 'تكملة') ||
+            str_contains($reqNum, 'كمالة') || str_contains($reqNum, 'تكملة')
+        ) {
             return true;
+        }
+
+        if ($this->relationLoaded('items')) {
+            if ($this->items->contains(fn ($it) =>
+                (bool) ($it->is_supplementary ?? false) ||
+                ! empty($it->supplement_id) ||
+                str_contains((string) ($it->item_description ?? ''), 'كمالة') ||
+                str_contains((string) ($it->notes ?? ''), 'كمالة')
+            )) {
+                return true;
+            }
+        }
+
+        if ($this->relationLoaded('supplements')) {
+            if ($this->supplements->isNotEmpty()) {
+                return true;
+            }
+        }
+
+        // Database checks when model is persisted but relations are not eager loaded
+        if ($this->exists) {
+            if ($this->supplements()->exists()) {
+                return true;
+            }
+
+            if ($this->items()->where(function ($q) {
+                $q->where('is_supplementary', true)
+                  ->orWhereNotNull('supplement_id')
+                  ->orWhere('item_description', 'like', '%كمالة%')
+                  ->orWhere('item_description', 'like', '%تكملة%')
+                  ->orWhere('notes', 'like', '%كمالة%');
+            })->exists()) {
+                return true;
+            }
         }
 
         return false;

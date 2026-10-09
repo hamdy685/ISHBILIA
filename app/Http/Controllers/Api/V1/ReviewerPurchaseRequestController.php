@@ -198,12 +198,17 @@ class ReviewerPurchaseRequestController extends Controller
             ? $request->boolean('requires_warehouse_receipt')
             : null;
 
+        $isComplementary = $request->has('is_complementary')
+            ? $request->boolean('is_complementary')
+            : ($request->has('direct_to_procurement') ? $request->boolean('direct_to_procurement') : null);
+
         $approvedPr = $this->reviewerService->approveRequest(
             $request->user(),
             $pr,
             $request->validated('comment'),
             $request->validated('site_engineer_user_id'),
-            $requiresWarehouseReceipt
+            $requiresWarehouseReceipt,
+            $isComplementary
         );
 
         return response()->json([

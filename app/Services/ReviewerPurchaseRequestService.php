@@ -428,7 +428,7 @@ class ReviewerPurchaseRequestService
     /**
      * Approve Purchase Request (UNDER_REVIEW -> PENDING_EXECUTIVE_APPROVAL).
      */
-    public function approveRequest(User $reviewer, PurchaseRequest $request, ?string $comment, ?int $siteEngineerUserId = null, ?bool $requiresWarehouseReceipt = null): PurchaseRequest
+    public function approveRequest(User $reviewer, PurchaseRequest $request, ?string $comment, ?int $siteEngineerUserId = null, ?bool $requiresWarehouseReceipt = null, ?bool $isComplementaryOverride = null): PurchaseRequest
     {
         if (! $this->canUserReviewRequest($reviewer, $request)) {
             throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('This action is unauthorized.');
@@ -444,7 +444,7 @@ class ReviewerPurchaseRequestService
             ]);
         }
 
-        return DB::transaction(function () use ($reviewer, $request, $comment, $siteEngineerUserId, $requiresWarehouseReceipt) {
+        return DB::transaction(function () use ($reviewer, $request, $comment, $siteEngineerUserId, $requiresWarehouseReceipt, $isComplementaryOverride) {
             $pr = PurchaseRequest::where('id', $request->id)->lockForUpdate()->firstOrFail();
             if (! in_array($pr->status, ['UNDER_REVIEW', 'SUBMITTED'], true)) {
                 throw new \RuntimeException('تم اعتماد طلب الشراء بالفعل أو لم يعد في حالة انتظار اعتماد المراجع.');
@@ -478,7 +478,7 @@ class ReviewerPurchaseRequestService
                 }
             }
 
-            $isComplementary = $pr->isComplementaryRequest();
+            $isComplementary = $isComplementaryOverride !== null ? (bool) $isComplementaryOverride : $pr->isComplementaryRequest();
             $targetStatus = $isComplementary ? 'PENDING_PROCUREMENT_APPROVAL' : 'PENDING_EXECUTIVE_APPROVAL';
             $actionName = $isComplementary ? 'APPROVED_BY_REVIEWER_FAST_TRACK' : 'APPROVED_BY_REVIEWER';
             $defaultComment = $isComplementary

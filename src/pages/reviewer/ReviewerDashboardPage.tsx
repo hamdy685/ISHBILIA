@@ -194,7 +194,7 @@ export const ReviewerDashboardPage: React.FC = () => {
                 siteEngineerUserId?: number | null,
                 requiresWarehouseReceipt?: boolean
               ) => {
-                await approvePurchaseRequestApi(req.id, comment, siteEngineerUserId, requiresWarehouseReceipt);
+                await approvePurchaseRequestApi(req.id, comment, siteEngineerUserId, requiresWarehouseReceipt, isSupplement);
                 await fetchRequests(true);
               }
             : undefined,

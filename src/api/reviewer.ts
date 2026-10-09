@@ -91,7 +91,8 @@ export const approvePurchaseRequestApi = async (
   id: number,
   comment?: string,
   siteEngineerUserId?: number | null,
-  requiresWarehouseReceipt?: boolean | null
+  requiresWarehouseReceipt?: boolean | null,
+  isComplementary?: boolean | null
 ): Promise<PurchaseRequest> => {
   const response = await apiClient.post<{ message: string; data: PurchaseRequest }>(
     `/reviewer/purchase-requests/${id}/approve`,
@@ -99,6 +100,7 @@ export const approvePurchaseRequestApi = async (
       comment,
       site_engineer_user_id: siteEngineerUserId,
       requires_warehouse_receipt: requiresWarehouseReceipt,
+      is_complementary: isComplementary,
     }
   );
   return response.data.data;
