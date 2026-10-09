@@ -108,9 +108,17 @@ export const CreatePurchaseOrderPage: React.FC = () => {
           let initialSupplierId = '';
           if (prData?.selected_quote?.supplier_id) {
             initialSupplierId = String(prData.selected_quote.supplier_id);
-          } else if (prData?.procurement_route === 'DIRECT') {
-            const firstItemSupplier = prData.items?.find((i) => i.supplier_id)?.supplier_id;
-            initialSupplierId = String(firstItemSupplier || prData.direct_supplier_id || '');
+          } else if (prData?.direct_supplier_id) {
+            initialSupplierId = String(prData.direct_supplier_id);
+          }
+          if (!initialSupplierId) {
+            const firstItemSupplier = prData?.items?.find((i) => i.supplier_id)?.supplier_id;
+            if (firstItemSupplier) {
+              initialSupplierId = String(firstItemSupplier);
+            }
+          }
+          if (!initialSupplierId && pendingSupp?.supplier_id) {
+            initialSupplierId = String(pendingSupp.supplier_id);
           }
           if (!initialSupplierId && prData?.purchase_orders?.[0]?.supplier_id) {
             initialSupplierId = String(prData.purchase_orders[0].supplier_id);
@@ -207,6 +215,9 @@ export const CreatePurchaseOrderPage: React.FC = () => {
       updated[index] = { ...updated[index], supplier_id: val };
       return updated;
     });
+    if (val && !supplierId) {
+      setSupplierId(String(val));
+    }
   };
 
 
@@ -398,13 +409,30 @@ export const CreatePurchaseOrderPage: React.FC = () => {
     setError(null);
   };
 
+  const effectiveSupplierId = useMemo(() => {
+    if (supplierId) return String(supplierId);
+    const itemSup = poItems.find((i) => i.supplier_id && !i.is_already_ordered)?.supplier_id || poItems.find((i) => i.supplier_id)?.supplier_id;
+    if (itemSup) return String(itemSup);
+    if ((pendingSupplement as any)?.supplier_id) return String((pendingSupplement as any).supplier_id);
+    if (pr?.direct_supplier_id) return String(pr.direct_supplier_id);
+    if (pr?.purchase_orders?.[0]?.supplier_id) return String(pr.purchase_orders[0].supplier_id);
+    return '';
+  }, [supplierId, poItems, pendingSupplement, pr]);
+
+  const hasSupplier = Boolean(
+    supplierId ||
+    effectiveSupplierId ||
+    oneTimeSupplierName.trim()
+  );
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!prId) {
       setError('لا يوجد طلب شراء معتمد محدد. يمكنك اختيار أمر شراء مباشر.');
       return;
     }
-    if (!supplierId && !oneTimeSupplierName.trim()) {
+    const finalSupplierId = supplierId || effectiveSupplierId;
+    if (!finalSupplierId && !oneTimeSupplierName.trim()) {
       setError('يرجى اختيار المورد من القائمة أو إدخال اسم مورد لعملية واحدة');
       return;
     }
@@ -432,7 +460,7 @@ export const CreatePurchaseOrderPage: React.FC = () => {
       if (finalGroups.length === 1 && orderMode === 'COMBINED_SINGLE') {
         const po = await createPurchaseOrderApi({
           purchase_request_id: prId,
-          supplier_id: supplierId ? Number(supplierId) : undefined,
+          supplier_id: finalSupplierId ? Number(finalSupplierId) : undefined,
           one_time_supplier_name: oneTimeSupplierName.trim() || undefined,
           payment_terms: paymentTerms || undefined,
           delivery_date: deliveryDate || undefined,
@@ -450,7 +478,7 @@ export const CreatePurchaseOrderPage: React.FC = () => {
             uom: item.uom,
             unit_price: Number(item.unit_price) || 0,
             specifications: item.specifications,
-            supplier_id: item.supplier_id || (supplierId ? Number(supplierId) : undefined),
+            supplier_id: item.supplier_id || (finalSupplierId ? Number(finalSupplierId) : undefined),
           })),
         });
 
@@ -467,7 +495,7 @@ export const CreatePurchaseOrderPage: React.FC = () => {
       } else {
         const groupsPayload = finalGroups.map((g) => ({
           group_name: g.name,
-          supplier_id: g.items[0]?.supplier_id || (supplierId ? Number(supplierId) : undefined),
+          supplier_id: g.items[0]?.supplier_id || (finalSupplierId ? Number(finalSupplierId) : undefined),
           payment_terms: paymentTerms || undefined,
           delivery_date: deliveryDate || undefined,
           notes: notes || undefined,
@@ -481,13 +509,13 @@ export const CreatePurchaseOrderPage: React.FC = () => {
             uom: item.uom,
             unit_price: Number(item.unit_price) || 0,
             specifications: item.specifications,
-            supplier_id: item.supplier_id || (supplierId ? Number(supplierId) : undefined),
+            supplier_id: item.supplier_id || (finalSupplierId ? Number(finalSupplierId) : undefined),
           })),
         }));
 
         await createBatchPurchaseOrdersApi({
           purchase_request_id: prId,
-          supplier_id: supplierId ? Number(supplierId) : undefined,
+          supplier_id: finalSupplierId ? Number(finalSupplierId) : undefined,
           one_time_supplier_name: oneTimeSupplierName.trim() || undefined,
           delivery_date: deliveryDate || undefined,
           notes: notes || undefined,
@@ -510,8 +538,9 @@ export const CreatePurchaseOrderPage: React.FC = () => {
   };
 
   const selectedSupplier = useMemo(() => {
-    return suppliers.find((s) => String(s.id) === String(supplierId));
-  }, [suppliers, supplierId]);
+    const sId = supplierId || effectiveSupplierId;
+    return suppliers.find((s) => String(s.id) === String(sId));
+  }, [suppliers, supplierId, effectiveSupplierId]);
 
   const supplierDisplayName = useMemo(() => {
     return selectedSupplier?.company_name || oneTimeSupplierName.trim() || 'مورد غير محدد';
@@ -843,7 +872,7 @@ export const CreatePurchaseOrderPage: React.FC = () => {
             <div>
               <SupplierSelectWithQuickAdd
                 suppliers={suppliers}
-                selectedSupplierId={supplierId}
+                selectedSupplierId={supplierId || effectiveSupplierId}
                 onSelectSupplierId={handleSupplierSelect}
                 oneTimeSupplierName={oneTimeSupplierName}
                 onChangeOneTimeSupplierName={(name) => setOneTimeSupplierName(name)}
@@ -1138,7 +1167,7 @@ export const CreatePurchaseOrderPage: React.FC = () => {
                             onChange={(e) => handleItemSupplierChange(index, e.target.value ? Number(e.target.value) : null)}
                             className="w-40 bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-100 focus:border-cyan-500 focus:outline-none"
                           >
-                            <option value="">{supplierId ? '(المورد الرئيسي)' : 'اختر المورد'}</option>
+                            <option value="">{(supplierId || effectiveSupplierId) ? '(المورد الرئيسي)' : 'اختر المورد'}</option>
                             {suppliers.map((s) => (
                               <option key={s.id} value={s.id}>
                                 {s.company_name}
@@ -1277,7 +1306,7 @@ export const CreatePurchaseOrderPage: React.FC = () => {
                         onChange={(e) => handleItemSupplierChange(index, e.target.value ? Number(e.target.value) : null)}
                         className="h-10 w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 text-xs text-slate-100 focus:border-cyan-500 focus:outline-none"
                       >
-                        <option value="">{supplierId ? '(المورد الرئيسي لأمر الشراء)' : 'اختر المورد'}</option>
+                        <option value="">{(supplierId || effectiveSupplierId) ? '(المورد الرئيسي لأمر الشراء)' : 'اختر المورد'}</option>
                         {suppliers.map((s) => (
                           <option key={s.id} value={s.id}>
                             {s.company_name}
@@ -1486,8 +1515,9 @@ export const CreatePurchaseOrderPage: React.FC = () => {
               </button>
               <button
                 type="submit"
-                disabled={loading || !supplierId || !prId}
-                className="bg-cyan-600 hover:bg-cyan-500 text-white text-xs px-6 py-2.5 rounded-lg font-bold shadow-lg shadow-cyan-600/20 disabled:opacity-50 cursor-pointer"
+                disabled={loading || !hasSupplier || !prId}
+                className="bg-cyan-600 hover:bg-cyan-500 text-white text-xs px-6 py-2.5 rounded-lg font-bold shadow-lg shadow-cyan-600/20 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-all"
+                title={!hasSupplier ? 'يرجى تحديد المورد المعتمد لتفعيل زر الإصدار' : undefined}
               >
                 {loading ? 'جاري إصدار وإرسال أوامر الشراء...' : resolvedGroups.length > 1 ? `إصدار وإرسال (${resolvedGroups.length}) أمر شراء للاستلام ←` : 'إصدار وإرسال أمر الشراء للاستلام ←'}
               </button>
