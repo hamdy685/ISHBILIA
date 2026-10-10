@@ -29,6 +29,8 @@ export interface CombinedPrintData {
   procurementReviewerName?: string;
   executiveApproverName?: string;
   accountantName?: string;
+  projectName?: string;
+  parcelReference?: string;
   projectOrParcel?: string;
   region?: string;
   dateNeeded?: string;
@@ -115,7 +117,10 @@ export const CombinedPoPrPrintModal: React.FC<CombinedPoPrPrintModalProps> = ({
   const prDateFormatted = formatDate(data.prDate);
   const requestNumber = data.manualPrNumber ? `${data.prNumber} (${data.manualPrNumber})` : data.prNumber;
   const orderNumber = data.manualPoNumber ? `${data.poNumber} (${data.manualPoNumber})` : data.poNumber;
-  const projectOrRegion = data.region || data.projectOrParcel || 'مجاورة عامة';
+  const displayProject = data.projectName?.trim() || 'غير مسجل';
+  const displayRegion = data.region?.trim() || 'غير مسجلة';
+  const displayParcel = (data.parcelReference || data.projectOrParcel)?.trim() || 'غير مسجل';
+  const projectOrRegion = displayRegion;
   const purpose = data.departmentName || data.poNotes || data.prNotes || 'اعتماد وتوريد للمشروع';
 
   return createPortal(
@@ -228,6 +233,8 @@ export const CombinedPoPrPrintModal: React.FC<CombinedPoPrPrintModalProps> = ({
                 manualPrNumber={data.manualPrNumber}
                 prDate={data.prDate}
                 departmentName={data.departmentName}
+                projectName={data.projectName}
+                parcelReference={data.parcelReference || data.projectOrParcel}
                 projectOrParcel={data.projectOrParcel}
                 region={data.region}
                 purpose={purpose}
@@ -268,11 +275,20 @@ export const CombinedPoPrPrintModal: React.FC<CombinedPoPrPrintModalProps> = ({
                     </div>
                     <div className="text-center self-center w-2/4">
                       <h1 className="text-3xl sm:text-4xl font-black text-black">أمر شراء</h1>
+                      <div className="text-[11px] font-semibold text-slate-700 mt-1 flex items-center justify-center gap-1.5 flex-wrap">
+                        <span>المشروع: <strong className="text-black">{displayProject}</strong></span>
+                        <span className="text-slate-400">|</span>
+                        <span>المنطقة: <strong className="text-black">{displayRegion}</strong></span>
+                        <span className="text-slate-400">|</span>
+                        <span>قطعة الأرض: <strong className="font-mono text-black">{displayParcel}</strong></span>
+                      </div>
                     </div>
                     <div className="text-right text-xs font-bold text-black space-y-1 w-1/4 shrink-0" dir="rtl">
                       <div className="flex items-center justify-end gap-1"><span className="font-mono font-black text-sm">{poDateFormatted}</span><span>/التاريخ</span></div>
                       <div className="flex items-center justify-end gap-1"><span className="font-mono font-black text-sm">{orderNumber}</span><span>/رقم الطلب</span></div>
-                      <div className="flex items-center justify-end gap-1"><span className="font-normal truncate">{projectOrRegion}</span><span>/المشروع</span></div>
+                      <div className="flex items-center justify-end gap-1"><span className="font-normal truncate">{displayProject}</span><span>/المشروع</span></div>
+                      <div className="flex items-center justify-end gap-1"><span className="font-normal truncate">{displayRegion}</span><span>/المنطقة</span></div>
+                      <div className="flex items-center justify-end gap-1"><span className="font-mono font-bold truncate">{displayParcel}</span><span>/قطعة الأرض</span></div>
                       <div className="flex items-center justify-end gap-1"><span className="font-normal truncate">{purpose}</span><span>/غرض الشراء</span></div>
                     </div>
                   </div>
@@ -366,11 +382,20 @@ export const CombinedPoPrPrintModal: React.FC<CombinedPoPrPrintModalProps> = ({
                     </div>
                     <div className="text-center self-center w-2/4">
                       <h1 className="text-3xl sm:text-4xl font-black text-black">طلب شراء</h1>
+                      <div className="text-[11px] font-semibold text-slate-700 mt-1 flex items-center justify-center gap-1.5 flex-wrap">
+                        <span>المشروع: <strong className="text-black">{displayProject}</strong></span>
+                        <span className="text-slate-400">|</span>
+                        <span>المنطقة: <strong className="text-black">{displayRegion}</strong></span>
+                        <span className="text-slate-400">|</span>
+                        <span>قطعة الأرض: <strong className="font-mono text-black">{displayParcel}</strong></span>
+                      </div>
                     </div>
                     <div className="text-right text-xs font-bold text-black space-y-1 w-1/4 shrink-0" dir="rtl">
                       <div className="flex items-center justify-end gap-1"><span className="font-mono font-black text-sm">{prDateFormatted}</span><span>/التاريخ</span></div>
                       <div className="flex items-center justify-end gap-1"><span className="font-mono font-black text-sm">{requestNumber}</span><span>/رقم الطلب</span></div>
-                      <div className="flex items-center justify-end gap-1"><span className="font-normal truncate">{projectOrRegion}</span><span>/المشروع</span></div>
+                      <div className="flex items-center justify-end gap-1"><span className="font-normal truncate">{displayProject}</span><span>/المشروع</span></div>
+                      <div className="flex items-center justify-end gap-1"><span className="font-normal truncate">{displayRegion}</span><span>/المنطقة</span></div>
+                      <div className="flex items-center justify-end gap-1"><span className="font-mono font-bold truncate">{displayParcel}</span><span>/قطعة الأرض</span></div>
                       <div className="flex items-center justify-end gap-1"><span className="font-normal truncate">{purpose}</span><span>/غرض الشراء</span></div>
                     </div>
                   </div>

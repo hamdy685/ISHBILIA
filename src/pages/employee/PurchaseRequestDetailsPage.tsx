@@ -29,7 +29,7 @@ import PurchaseRequestTimeline from '../../components/procurement/PurchaseReques
 import OfficeReceiptModal from '../../components/purchase-requests/OfficeReceiptModal';
 import { CreateSupplementModal } from '../../components/supplements/CreateSupplementModal';
 import { getUnitLabel } from '../../utils/units';
-import { getSummaryParcels, getSummaryRegions, getSummaryQuantities, getItemsSummaryDisplay } from '../../utils/formatRequestSummary';
+import { getSummaryParcels, getSummaryRegions, getSummaryQuantities, getItemsSummaryDisplay, getSummaryProject } from '../../utils/formatRequestSummary';
 import { UnifiedNotesCard } from '../../components/common/UnifiedNotesCard';
 import { formatCleanQty } from '../../utils/numberFormat';
 import { formatRebarDisplay, extractRebarInfo } from '../../utils/rebar';
@@ -150,8 +150,9 @@ export const PurchaseRequestDetailsPage: React.FC = () => {
 
   const itemNames = requestData.items?.map((item) => item.item_description || item.item?.name).filter(Boolean) || [];
   const itemsDisplay = getItemsSummaryDisplay(requestData.items);
-  const parcelsDisplay = getSummaryParcels(requestData);
-  const regionsDisplay = getSummaryRegions(requestData);
+  const parcelsDisplay = getSummaryParcels(requestData, 'غير مسجل');
+  const regionsDisplay = getSummaryRegions(requestData, 'غير مسجلة');
+  const projectDisplay = getSummaryProject(requestData, 'غير مسجل');
   const quantitiesInfo = getSummaryQuantities(requestData.items);
 
   return (
@@ -299,10 +300,18 @@ export const PurchaseRequestDetailsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* ── شريط البيانات الأساسية الأربعة الإلزامي (المنطقة، رقم القطعة، الأصناف، والكمية) ── */}
+      {/* ── شريط البيانات الأساسية (المشروع، المنطقة، رقم القطعة، الأصناف، والكمية) ── */}
       <div className="rounded-2xl border-2 border-amber-500/40 bg-gradient-to-r from-slate-900 via-amber-950/20 to-slate-900 p-3.5 sm:p-4 shadow-xl">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-          {/* 1. رقم قطعة الأرض */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 text-xs">
+          {/* 1. المشروع */}
+          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5">
+            <span className="text-[10px] font-bold text-slate-400 block">المشروع:</span>
+            <span className="text-sm sm:text-base font-black text-slate-100 block mt-0.5">
+              {projectDisplay}
+            </span>
+          </div>
+
+          {/* 2. رقم قطعة الأرض */}
           <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5">
             <span className="text-[10px] font-bold text-slate-400 block">رقم قطعة الأرض:</span>
             <span className="text-sm sm:text-base font-black font-mono text-cyan-300 block mt-0.5">
@@ -310,7 +319,7 @@ export const PurchaseRequestDetailsPage: React.FC = () => {
             </span>
           </div>
 
-          {/* 2. المنطقة */}
+          {/* 3. المنطقة */}
           <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5">
             <span className="text-[10px] font-bold text-slate-400 block">المنطقة الجغرافية:</span>
             <span className="text-sm sm:text-base font-black text-amber-300 block mt-0.5">
@@ -318,7 +327,7 @@ export const PurchaseRequestDetailsPage: React.FC = () => {
             </span>
           </div>
 
-          {/* 3. الأصناف المطلوبة */}
+          {/* 4. الأصناف المطلوبة */}
           <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5">
             <span className="text-[10px] font-bold text-slate-400 block">الأصناف المطلوبة ({requestData.items?.length || 0}):</span>
             <span className="text-xs sm:text-sm font-black text-slate-100 block mt-0.5 truncate" title={itemNames.join('، ')}>
@@ -326,8 +335,8 @@ export const PurchaseRequestDetailsPage: React.FC = () => {
             </span>
           </div>
 
-          {/* 4. الكمية الإجمالية */}
-          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5">
+          {/* 5. الكمية الإجمالية */}
+          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5 col-span-2 sm:col-span-1">
             <span className="text-[10px] font-bold text-slate-400 block">الكمية الإجمالية:</span>
             <span className="text-sm sm:text-base font-black font-mono text-amber-300 block mt-0.5" title={quantitiesInfo.tooltip}>
               {quantitiesInfo.display}

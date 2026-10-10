@@ -20,6 +20,7 @@ class NotificationResource extends JsonResource
             $pr = $this->relationLoaded('notifiable') ? $this->notifiable : PurchaseRequest::find($this->notifiable_id);
             if ($pr) {
                 $firstItem = $pr->relationLoaded('items') ? $pr->items->first() : $pr->items()->first();
+                $data['project_name'] = $pr->project_name ?? ($pr->request_type === 'OFFICE_SUPPLIES' ? 'المقر الرئيسي / إداري' : null);
                 $data['parcel_reference'] = $pr->parcel_reference ?: ($firstItem?->item_reference ?: null);
                 $data['region'] = $pr->region ?: ($firstItem?->region ?: null);
                 $data['item_description'] = $firstItem?->item_description ?: ($firstItem?->item?->name ?: null);
@@ -31,6 +32,7 @@ class NotificationResource extends JsonResource
             if ($po) {
                 $pr = $po->purchaseRequest;
                 $firstItem = $po->relationLoaded('items') ? $po->items->first() : $po->items()->first();
+                $data['project_name'] = $pr?->project_name ?? ($pr?->request_type === 'OFFICE_SUPPLIES' ? 'المقر الرئيسي / إداري' : null);
                 $data['parcel_reference'] = $pr?->parcel_reference ?: ($firstItem?->item_reference ?: null);
                 $data['region'] = $pr?->region ?: ($firstItem?->region ?: null);
                 $data['item_description'] = $firstItem?->item_description ?: ($firstItem?->item?->name ?: null);

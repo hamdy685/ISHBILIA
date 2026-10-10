@@ -20,6 +20,8 @@ export interface CombinedPrintTemplateProps {
   departmentName?: string;
   projectOrParcel?: string;
   projectName?: string;
+  parcelReference?: string;
+  plotNumber?: string;
   region?: string;
   purpose?: string;
   prItems?: Array<{
@@ -124,13 +126,47 @@ export const CombinedPrintTemplate = React.forwardRef<HTMLDivElement, CombinedPr
 
     const prDate = formatDate(props.prDate || resolvedPr?.created_at);
 
-    const projectName =
+    // Resolve Project, Region, and Parcel Number without cross-pollution
+    const isOfficeRequest = resolvedPr?.request_type === 'OFFICE_SUPPLIES';
+
+    const rawProject =
       props.projectName ||
-      props.projectOrParcel ||
       resolvedPr?.project_name ||
-      resolvedPr?.parcel_reference ||
       (po as any)?.project_name ||
-      '---';
+      resolvedReceipt?.project_name ||
+      (isOfficeRequest ? 'المقر الرئيسي / إداري' : '');
+    const displayProject = rawProject && String(rawProject).trim() ? String(rawProject).trim() : (isOfficeRequest ? 'المقر الرئيسي / إداري' : 'غير مسجل');
+
+    const rawRegion =
+      props.region ||
+      resolvedPr?.region ||
+      po?.purchase_request?.region ||
+      (po as any)?.region ||
+      resolvedReceipt?.purchase_request?.region ||
+      resolvedReceipt?.purchase_order?.purchase_request?.region ||
+      resolvedPr?.items?.find((i: any) => i.region)?.region ||
+      po?.items?.find((i: any) => i.region)?.region ||
+      props.items?.find((i: any) => i.region)?.region ||
+      '';
+    const displayRegion = rawRegion && String(rawRegion).trim() ? String(rawRegion).trim() : 'غير مسجلة';
+
+    const rawParcel =
+      props.parcelReference ||
+      props.plotNumber ||
+      resolvedPr?.parcel_reference ||
+      po?.purchase_request?.parcel_reference ||
+      (po as any)?.parcel_reference ||
+      resolvedReceipt?.purchase_request?.parcel_reference ||
+      resolvedReceipt?.purchase_order?.purchase_request?.parcel_reference ||
+      resolvedPr?.items?.find((i: any) => i.item_reference)?.item_reference ||
+      po?.items?.find((i: any) => i.item_reference)?.item_reference ||
+      props.items?.find((i: any) => i.item_reference)?.item_reference ||
+      props.projectOrParcel ||
+      '';
+    const displayParcel = rawParcel && String(rawParcel).trim() ? String(rawParcel).trim() : 'غير مسجل';
+
+    // Keep legacy projectName alias for any downstream references
+    const projectName = displayProject;
 
     const requesterName =
       props.requesterName ||
@@ -325,11 +361,19 @@ export const CombinedPrintTemplate = React.forwardRef<HTMLDivElement, CombinedPr
         <section className="print:break-inside-avoid">
           {/* الترويسة: grid grid-cols-3 items-center mb-4 */}
           <div className="grid grid-cols-3 items-center mb-4">
-            {/* يمين: بيانات المشروع والتاريخ */}
-            <div className="text-right text-xs leading-normal space-y-1">
+            {/* يمين: بيانات المشروع والمنطقة وقطعة الأرض والتاريخ */}
+            <div className="text-right text-xs leading-normal space-y-0.5">
               <div>
                 <span className="font-bold text-gray-700">المشروع: </span>
-                <span className="font-semibold text-gray-900">{projectName}</span>
+                <span className="font-semibold text-gray-900">{displayProject}</span>
+              </div>
+              <div>
+                <span className="font-bold text-gray-700">المنطقة: </span>
+                <span className="font-semibold text-gray-900">{displayRegion}</span>
+              </div>
+              <div>
+                <span className="font-bold text-gray-700">رقم قطعة الأرض: </span>
+                <span className="font-mono font-semibold text-gray-900">{displayParcel}</span>
               </div>
               <div>
                 <span className="font-bold text-gray-700">التاريخ: </span>
@@ -337,11 +381,18 @@ export const CombinedPrintTemplate = React.forwardRef<HTMLDivElement, CombinedPr
               </div>
             </div>
 
-            {/* وسط: 'طلب شراء رقم: PR-XXX' بخط عريض */}
+            {/* وسط: 'طلب شراء رقم: PR-XXX' بخط عريض وشريط بيانات الموقع */}
             <div className="text-center">
               <h2 className="text-base sm:text-lg font-bold text-black tracking-wide">
                 طلب شراء رقم: <span className="font-mono text-gray-900">{displayPrNumber}</span>
               </h2>
+              <div className="text-[10px] sm:text-xs font-semibold text-gray-700 mt-1 flex items-center justify-center gap-1.5 flex-wrap">
+                <span>المشروع: <strong className="text-gray-900">{displayProject}</strong></span>
+                <span className="text-gray-300">|</span>
+                <span>المنطقة: <strong className="text-gray-900">{displayRegion}</strong></span>
+                <span className="text-gray-300">|</span>
+                <span>قطعة الأرض: <strong className="font-mono text-gray-900">{displayParcel}</strong></span>
+              </div>
             </div>
 
             {/* يسار: شعار الشركة */}
@@ -408,11 +459,23 @@ export const CombinedPrintTemplate = React.forwardRef<HTMLDivElement, CombinedPr
         <section className="print:break-inside-avoid">
           {/* الترويسة: grid grid-cols-3 items-center mb-4 */}
           <div className="grid grid-cols-3 items-center mb-4">
-            {/* يمين: بيانات المورد والتاريخ */}
-            <div className="text-right text-xs leading-normal space-y-1">
+            {/* يمين: بيانات المورد والتاريخ والموقع */}
+            <div className="text-right text-xs leading-normal space-y-0.5">
               <div>
                 <span className="font-bold text-gray-700">المورد: </span>
                 <span className="font-semibold text-gray-900">{supplierName}</span>
+              </div>
+              <div>
+                <span className="font-bold text-gray-700">المشروع: </span>
+                <span className="font-semibold text-gray-900">{displayProject}</span>
+              </div>
+              <div>
+                <span className="font-bold text-gray-700">المنطقة: </span>
+                <span className="font-semibold text-gray-900">{displayRegion}</span>
+              </div>
+              <div>
+                <span className="font-bold text-gray-700">رقم قطعة الأرض: </span>
+                <span className="font-mono font-semibold text-gray-900">{displayParcel}</span>
               </div>
               <div>
                 <span className="font-bold text-gray-700">تاريخ الأمر: </span>
@@ -420,7 +483,7 @@ export const CombinedPrintTemplate = React.forwardRef<HTMLDivElement, CombinedPr
               </div>
             </div>
 
-            {/* وسط: 'أمر شراء فعلي رقم: PO-XXX' بخط عريض ومميز */}
+            {/* وسط: 'أمر شراء فعلي رقم: PO-XXX' بخط عريض ومميز وشريط بيانات الموقع */}
             <div className="text-center">
               <h2 className="text-base sm:text-lg font-bold text-black tracking-wide">
                 أمر شراء فعلي رقم: <span className="font-mono text-gray-900">{displayPoNumber}</span>
@@ -430,6 +493,13 @@ export const CombinedPrintTemplate = React.forwardRef<HTMLDivElement, CombinedPr
                   </span>
                 )}
               </h2>
+              <div className="text-[10px] sm:text-xs font-semibold text-gray-700 mt-1 flex items-center justify-center gap-1.5 flex-wrap">
+                <span>المشروع: <strong className="text-gray-900">{displayProject}</strong></span>
+                <span className="text-gray-300">|</span>
+                <span>المنطقة: <strong className="text-gray-900">{displayRegion}</strong></span>
+                <span className="text-gray-300">|</span>
+                <span>قطعة الأرض: <strong className="font-mono text-gray-900">{displayParcel}</strong></span>
+              </div>
             </div>
 
             {/* يسار: شعار الشركة */}
@@ -513,11 +583,19 @@ export const CombinedPrintTemplate = React.forwardRef<HTMLDivElement, CombinedPr
         <section className="print:break-inside-avoid">
           {/* الترويسة: grid grid-cols-3 items-center mb-4 */}
           <div className="grid grid-cols-3 items-center mb-4">
-            {/* يمين: بيانات الموقع / المستلم وتاريخ الاستلام */}
-            <div className="text-right text-xs leading-normal space-y-1">
+            {/* يمين: بيانات المشروع والمنطقة وقطعة الأرض وتاريخ الاستلام */}
+            <div className="text-right text-xs leading-normal space-y-0.5">
               <div>
-                <span className="font-bold text-gray-700">الموقع: </span>
-                <span className="font-semibold text-gray-900">{projectName}</span>
+                <span className="font-bold text-gray-700">المشروع: </span>
+                <span className="font-semibold text-gray-900">{displayProject}</span>
+              </div>
+              <div>
+                <span className="font-bold text-gray-700">المنطقة: </span>
+                <span className="font-semibold text-gray-900">{displayRegion}</span>
+              </div>
+              <div>
+                <span className="font-bold text-gray-700">رقم قطعة الأرض: </span>
+                <span className="font-mono font-semibold text-gray-900">{displayParcel}</span>
               </div>
               <div>
                 <span className="font-bold text-gray-700">تاريخ الاستلام: </span>
@@ -525,11 +603,18 @@ export const CombinedPrintTemplate = React.forwardRef<HTMLDivElement, CombinedPr
               </div>
             </div>
 
-            {/* وسط: 'إذن استلام فعلي رقم: GRN-XXX' بخط عريض */}
+            {/* وسط: 'إذن استلام فعلي رقم: GRN-XXX' بخط عريض وشريط بيانات الموقع */}
             <div className="text-center">
               <h2 className="text-base sm:text-lg font-bold text-black tracking-wide">
                 إذن استلام فعلي رقم: <span className="font-mono text-gray-900">{displayGrnNumber}</span>
               </h2>
+              <div className="text-[10px] sm:text-xs font-semibold text-gray-700 mt-1 flex items-center justify-center gap-1.5 flex-wrap">
+                <span>المشروع: <strong className="text-gray-900">{displayProject}</strong></span>
+                <span className="text-gray-300">|</span>
+                <span>المنطقة: <strong className="text-gray-900">{displayRegion}</strong></span>
+                <span className="text-gray-300">|</span>
+                <span>قطعة الأرض: <strong className="font-mono text-gray-900">{displayParcel}</strong></span>
+              </div>
             </div>
 
             {/* يسار: شعار الشركة */}

@@ -705,7 +705,7 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                 <div>
                                   <span className="text-cyan-400 block text-xs font-bold">رقم قطعة الأرض:</span>
                                   <span className="font-mono font-black text-base sm:text-lg text-cyan-200 block mt-0.5">
-                                    {orderParcel || 'غير محددة'}
+                                    {orderParcel || 'غير مسجل'}
                                   </span>
                                 </div>
                               </div>
@@ -716,7 +716,7 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                 <div>
                                   <span className="text-amber-400 block text-xs font-bold">المنطقة الجغرافية:</span>
                                   <span className="font-black text-base sm:text-lg text-amber-200 block mt-0.5">
-                                    {orderRegion || 'غير محددة'}
+                                    {orderRegion || 'غير مسجلة'}
                                   </span>
                                 </div>
                               </div>
@@ -1216,7 +1216,7 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                 <span className="text-base">🏷️</span>
                                 <div>
                                   <span className="text-cyan-400/80 block text-[11px] font-bold">رقم قطعة الأرض:</span>
-                                  <span className="font-mono font-black text-cyan-300 text-xs sm:text-sm">{receiptParcel || 'غير محددة'}</span>
+                                  <span className="font-mono font-black text-cyan-300 text-xs sm:text-sm">{receiptParcel || 'غير مسجل'}</span>
                                 </div>
                               </div>
 
@@ -1225,7 +1225,7 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                 <span className="text-base">📍</span>
                                 <div>
                                   <span className="text-amber-400/80 block text-[11px] font-bold">المنطقة:</span>
-                                  <span className="font-black text-amber-300 text-xs sm:text-sm">{receiptRegion || 'غير محددة'}</span>
+                                  <span className="font-black text-amber-300 text-xs sm:text-sm">{receiptRegion || 'غير مسجلة'}</span>
                                 </div>
                               </div>
                             </div>

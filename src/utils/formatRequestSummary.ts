@@ -62,8 +62,8 @@ export function getItemsSummaryDisplay(items?: SummaryItem[] | null): string {
 /**
  * إرجاع رقم قطعة الأرض بدون أي تكرار
  */
-export function getSummaryParcels(pr?: SummaryRequest | any | null): string {
-  if (!pr) return '—';
+export function getSummaryParcels(pr?: SummaryRequest | any | null, fallback: string = '—'): string {
+  if (!pr) return fallback;
   const prObj = pr.purchase_request || pr.purchase_order?.purchase_request || pr;
   const items: SummaryItem[] = pr.items || pr.purchase_order?.items || [];
 
@@ -73,14 +73,14 @@ export function getSummaryParcels(pr?: SummaryRequest | any | null): string {
   ].filter(Boolean) as string[];
 
   const unique = Array.from(new Set(allParcels.map((p) => String(p).trim()).filter(Boolean)));
-  return unique.length > 0 ? unique.join('، ') : '—';
+  return unique.length > 0 ? unique.join('، ') : fallback;
 }
 
 /**
  * إرجاع المنطقة بدون أي تكرار
  */
-export function getSummaryRegions(pr?: SummaryRequest | any | null): string {
-  if (!pr) return '—';
+export function getSummaryRegions(pr?: SummaryRequest | any | null, fallback: string = '—'): string {
+  if (!pr) return fallback;
   const prObj = pr.purchase_request || pr.purchase_order?.purchase_request || pr;
   if (prObj.request_type === 'OFFICE_SUPPLIES') {
     return 'مقر الشركة';
@@ -93,7 +93,20 @@ export function getSummaryRegions(pr?: SummaryRequest | any | null): string {
   ].filter(Boolean) as string[];
 
   const unique = Array.from(new Set(allRegions.map((r) => String(r).trim()).filter(Boolean)));
-  return unique.length > 0 ? unique.join('، ') : '—';
+  return unique.length > 0 ? unique.join('، ') : fallback;
+}
+
+/**
+ * إرجاع اسم المشروع إذا كان مسجلاً أو القيمة الافتراضية
+ */
+export function getSummaryProject(pr?: SummaryRequest | any | null, fallback: string = 'غير مسجل'): string {
+  if (!pr) return fallback;
+  const prObj = pr.purchase_request || pr.purchase_order?.purchase_request || pr;
+  if (prObj.request_type === 'OFFICE_SUPPLIES') {
+    return 'المقر الرئيسي / إداري';
+  }
+  const name = prObj.project_name || pr.project_name || pr.projectName;
+  return name && String(name).trim() ? String(name).trim() : fallback;
 }
 
 export interface QuantitySummaryResult {

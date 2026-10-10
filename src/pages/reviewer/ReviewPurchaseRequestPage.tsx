@@ -324,9 +324,10 @@ export const ReviewPurchaseRequestPage: React.FC = () => {
           </p>
         </div>
 
-        <Card className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3 text-xs border-cyan-900/50 bg-cyan-950/10">
+        <Card className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-8 gap-3 text-xs border-cyan-900/50 bg-cyan-950/10">
+          <div><div className="text-[10px] text-slate-400 font-semibold">المشروع</div><div className="mt-1 font-bold text-slate-100">{requestData.project_name || (requestData.request_type === 'OFFICE_SUPPLIES' ? 'المقر الرئيسي / إداري' : 'غير مسجل')}</div></div>
           <div><div className="text-[10px] text-slate-400 font-semibold">القسم المستهدف</div><div className="mt-1 font-bold text-cyan-300">{requestData.target_department?.name || requestData.department?.name || 'غير محدد'}</div></div>
-          <div><div className="text-[10px] text-amber-400 font-semibold">تاريخ الاحتياج ⏳</div><div className="mt-1 font-mono font-bold text-amber-300">{requestData.date_needed || 'غير محدد'}</div></div>
+          <div><div className="text-[10px] text-amber-400 font-semibold">تاريخ الاحتياج ⏳</div><div className="mt-1 font-mono font-bold text-amber-300">{requestData.date_needed || 'غير مسجل'}</div></div>
           <div><div className="text-[10px] text-slate-400 font-semibold">مدير القسم</div><div className="mt-1 font-bold text-slate-200">{requestData.target_department?.manager?.name || 'غير محدد'}</div></div>
           <div><div className="text-[10px] text-slate-400 font-semibold">مسؤول الاستلام بالموقع</div><div className="mt-1 font-bold text-emerald-300">{requestData.site_engineer?.name || 'يحدده المراجع عند الاعتماد'}</div></div>
           <div>
@@ -339,8 +340,8 @@ export const ReviewPurchaseRequestPage: React.FC = () => {
               )}
             </div>
           </div>
-          <div><div className="text-[10px] text-slate-400 font-semibold">رقم قطعة الأرض</div><div className="mt-1 font-mono font-bold text-amber-300">{requestData.parcel_reference || requestData.items?.[0]?.item_reference || 'غير محدد'}</div></div>
-          <div><div className="text-[10px] text-slate-400 font-semibold">المنطقة</div><div className="mt-1 font-bold text-slate-200">{requestData.region || requestData.items?.[0]?.region || 'غير محددة'}</div></div>
+          <div><div className="text-[10px] text-slate-400 font-semibold">رقم قطعة الأرض</div><div className="mt-1 font-mono font-bold text-amber-300">{requestData.parcel_reference || requestData.items?.[0]?.item_reference || 'غير مسجل'}</div></div>
+          <div><div className="text-[10px] text-slate-400 font-semibold">المنطقة</div><div className="mt-1 font-bold text-slate-200">{requestData.region || requestData.items?.[0]?.region || 'غير مسجلة'}</div></div>
         </Card>
 
         {/* Responsive Action Bar: Sticky bottom on mobile, inline header on desktop */}

@@ -18,6 +18,7 @@ import SystemEventTimeline from '../../components/ui/SystemEventTimeline';
 import { UnifiedNotesCard } from '../../components/common/UnifiedNotesCard';
 import { SupplementItemBadge } from '../../components/common/SupplementItemBadge';
 import { isActualPurchaseOrder, getActualPoLineItems, calculateActualPoGrandTotal } from '../../utils/actualPo';
+import { getSummaryParcels, getSummaryRegions, getSummaryProject } from '../../utils/formatRequestSummary';
 
 export const PurchaseOrderDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -249,6 +250,35 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* ── بيانات الموقع والمشروع (المشروع • المنطقة • رقم قطعة الأرض) ── */}
+      <div className="rounded-2xl border-2 border-cyan-500/40 bg-gradient-to-r from-slate-900 via-cyan-950/20 to-slate-900 p-3.5 sm:p-4 shadow-xl">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+          {/* 1. المشروع */}
+          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5">
+            <span className="text-[10px] font-bold text-slate-400 block">المشروع:</span>
+            <span className="text-sm sm:text-base font-black text-slate-100 block mt-0.5">
+              {getSummaryProject(po, 'غير مسجل')}
+            </span>
+          </div>
+
+          {/* 2. المنطقة */}
+          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5">
+            <span className="text-[10px] font-bold text-slate-400 block">المنطقة الجغرافية:</span>
+            <span className="text-sm sm:text-base font-black text-amber-300 block mt-0.5">
+              {getSummaryRegions(po, 'غير مسجلة')}
+            </span>
+          </div>
+
+          {/* 3. رقم قطعة الأرض */}
+          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5">
+            <span className="text-[10px] font-bold text-slate-400 block">رقم قطعة الأرض:</span>
+            <span className="text-sm sm:text-base font-black font-mono text-cyan-300 block mt-0.5">
+              {getSummaryParcels(po, 'غير مسجل')}
+            </span>
+          </div>
+        </div>
+      </div>
 
       {/* Metadata Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">

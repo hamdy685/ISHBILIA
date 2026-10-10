@@ -93,6 +93,9 @@ export interface PurchaseOrder {
   manual_po_number?: string | null;
   manual_pr_number?: string | null;
   purchase_request_id?: number | null;
+  project_name?: string | null;
+  parcel_reference?: string | null;
+  region?: string | null;
   purchase_request?: {
     id: number;
     request_number: string;

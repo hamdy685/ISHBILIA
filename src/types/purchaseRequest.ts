@@ -231,6 +231,7 @@ export interface PurchaseRequest {
   manual_request_number?: string | null;
   user_id?: number | null;
   request_type?: PurchaseRequestType;
+  project_name?: string | null;
   is_complementary?: boolean;
   parcel_reference?: string | null;
   region?: string | null;

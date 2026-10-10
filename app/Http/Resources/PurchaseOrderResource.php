@@ -27,6 +27,15 @@ class PurchaseOrderResource extends JsonResource
                 ] : null;
             }),
             'purchase_request' => new PurchaseRequestResource($this->whenLoaded('purchaseRequest')),
+            'project_name' => $this->relationLoaded('purchaseRequest')
+                ? ($this->purchaseRequest?->project_name ?? ($this->purchaseRequest?->request_type === 'OFFICE_SUPPLIES' ? 'المقر الرئيسي / إداري' : null))
+                : null,
+            'parcel_reference' => $this->relationLoaded('purchaseRequest')
+                ? ($this->purchaseRequest?->parcel_reference ?? ($this->relationLoaded('items') ? $this->items->first()?->item_reference : null))
+                : ($this->relationLoaded('items') ? $this->items->first()?->item_reference : null),
+            'region' => $this->relationLoaded('purchaseRequest')
+                ? ($this->purchaseRequest?->region ?? ($this->relationLoaded('items') ? $this->items->first()?->region : null))
+                : ($this->relationLoaded('items') ? $this->items->first()?->region : null),
             'requested_by' => $this->when($this->relationLoaded('purchaseRequest') && $this->purchaseRequest?->relationLoaded('requester'), function () {
                 return $this->purchaseRequest?->requester ? [
                     'id' => $this->purchaseRequest->requester->id,

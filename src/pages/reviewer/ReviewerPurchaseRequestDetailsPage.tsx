@@ -19,7 +19,7 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/ui/Table';
 import { getUnitLabel } from '../../utils/units';
-import { getSummaryParcels, getSummaryRegions, getSummaryQuantities } from '../../utils/formatRequestSummary';
+import { getSummaryParcels, getSummaryRegions, getSummaryQuantities, getSummaryProject } from '../../utils/formatRequestSummary';
 import { formatCleanQty } from '../../utils/numberFormat';
 import { formatRebarDisplay, extractRebarInfo } from '../../utils/rebar';
 import SystemEventTimeline from '../../components/ui/SystemEventTimeline';
@@ -186,8 +186,9 @@ export const ReviewerPurchaseRequestDetailsPage: React.FC = () => {
     : itemNames.length === 1
       ? itemNames[0]
       : `${itemNames[0]} (+${itemNames.length - 1} أصناف)`;
-  const parcelsDisplay = getSummaryParcels(requestData);
-  const regionsDisplay = getSummaryRegions(requestData);
+  const projectDisplay = getSummaryProject(requestData, 'غير مسجل');
+  const parcelsDisplay = getSummaryParcels(requestData, 'غير مسجل');
+  const regionsDisplay = getSummaryRegions(requestData, 'غير مسجلة');
   const quantitiesInfo = getSummaryQuantities(requestData.items);
 
   return (
@@ -282,13 +283,13 @@ export const ReviewerPurchaseRequestDetailsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* ── شريط البيانات الأساسية الأربعة الإلزامي (المنطقة، رقم القطعة، الأصناف، والكمية) ── */}
+      {/* ── شريط البيانات الأساسية (المشروع، المنطقة، رقم القطعة، الأصناف، والكمية) ── */}
       <div className="rounded-2xl border-2 border-amber-500/40 bg-gradient-to-r from-slate-900 via-amber-950/20 to-slate-900 p-3 sm:p-3.5 shadow-lg">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 text-xs">
           <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5">
-            <span className="text-[10px] font-bold text-slate-400 block">رقم قطعة الأرض:</span>
-            <span className="text-sm sm:text-base font-black font-mono text-cyan-300 block mt-0.5">
-              {parcelsDisplay}
+            <span className="text-[10px] font-bold text-slate-400 block">المشروع:</span>
+            <span className="text-sm sm:text-base font-black text-emerald-300 block mt-0.5 truncate" title={projectDisplay}>
+              {projectDisplay}
             </span>
           </div>
 
@@ -296,6 +297,13 @@ export const ReviewerPurchaseRequestDetailsPage: React.FC = () => {
             <span className="text-[10px] font-bold text-slate-400 block">المنطقة الجغرافية:</span>
             <span className="text-sm sm:text-base font-black text-amber-300 block mt-0.5">
               {regionsDisplay}
+            </span>
+          </div>
+
+          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5">
+            <span className="text-[10px] font-bold text-slate-400 block">رقم قطعة الأرض:</span>
+            <span className="text-sm sm:text-base font-black font-mono text-cyan-300 block mt-0.5">
+              {parcelsDisplay}
             </span>
           </div>
 

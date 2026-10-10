@@ -64,7 +64,10 @@ export const PurchaseRequestPrintModal: React.FC<PurchaseRequestPrintModalProps>
   const emptyRowsCount = Math.max(TOTAL_FIXED_ROWS - items.length, 0);
 
   const requestNumber = pr.manual_request_number ? `${pr.request_number} (${pr.manual_request_number})` : pr.request_number;
-  const projectOrRegion = pr.region || pr.parcel_reference || pr.items?.[0]?.region || (pr as any).project_name || 'مجاورة عامة';
+  const isOfficePr = pr.request_type === 'OFFICE_SUPPLIES';
+  const displayProject = pr.project_name?.trim() || (isOfficePr ? 'المقر الرئيسي / إداري' : 'غير مسجل');
+  const displayRegion = (pr.region || pr.items?.find((i) => i.region)?.region)?.trim() || 'غير مسجلة';
+  const displayParcel = (pr.parcel_reference || pr.items?.find((i) => i.item_reference)?.item_reference)?.trim() || 'غير مسجل';
   const purpose = pr.department?.name || pr.notes || 'طلب صرف واحتياج للمشروع';
 
   return createPortal((
@@ -114,10 +117,17 @@ export const PurchaseRequestPrintModal: React.FC<PurchaseRequestPrintModalProps>
                   <h1 className="text-3xl sm:text-4xl font-black text-black tracking-wide font-sans">
                     طلب شراء
                   </h1>
+                  <div className="text-[10px] sm:text-xs font-semibold text-slate-700 mt-1 flex items-center justify-center gap-1.5 flex-wrap">
+                    <span>المشروع: <strong className="text-black">{displayProject}</strong></span>
+                    <span className="text-slate-400">|</span>
+                    <span>المنطقة: <strong className="text-black">{displayRegion}</strong></span>
+                    <span className="text-slate-400">|</span>
+                    <span>قطعة الأرض: <strong className="font-mono text-black">{displayParcel}</strong></span>
+                  </div>
                 </div>
 
                 {/* 3. Metadata on Top Right */}
-                <div className="text-right text-xs font-bold text-black space-y-1 w-1/4 shrink-0" dir="rtl">
+                <div className="text-right text-xs font-bold text-black space-y-0.5 w-1/4 shrink-0" dir="rtl">
                   <div className="flex items-center justify-end gap-1">
                     <span className="font-mono font-black text-sm">{formatDate(pr.created_at)}</span>
                     <span className="text-slate-800">/التاريخ</span>
@@ -127,8 +137,16 @@ export const PurchaseRequestPrintModal: React.FC<PurchaseRequestPrintModalProps>
                     <span className="text-slate-800">/رقم الطلب</span>
                   </div>
                   <div className="flex items-center justify-end gap-1">
-                    <span className="font-normal text-slate-900 truncate">{projectOrRegion}</span>
+                    <span className="font-normal text-slate-900 truncate">{displayProject}</span>
                     <span className="text-slate-800 shrink-0">/المشروع</span>
+                  </div>
+                  <div className="flex items-center justify-end gap-1">
+                    <span className="font-normal text-slate-900 truncate">{displayRegion}</span>
+                    <span className="text-slate-800 shrink-0">/المنطقة</span>
+                  </div>
+                  <div className="flex items-center justify-end gap-1">
+                    <span className="font-mono font-bold text-slate-900 truncate">{displayParcel}</span>
+                    <span className="text-slate-800 shrink-0">/قطعة الأرض</span>
                   </div>
                   <div className="flex items-center justify-end gap-1">
                     <span className="font-normal text-slate-900 truncate">{purpose}</span>
