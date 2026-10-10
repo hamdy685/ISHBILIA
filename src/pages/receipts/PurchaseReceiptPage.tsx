@@ -86,6 +86,7 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [itemNotes, setItemNotes] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<Record<number, string>>({});
+  const [actualReceivers, setActualReceivers] = useState<Record<number, string>>({});
   const [receiptPhotos, setReceiptPhotos] = useState<Record<number, { base64: string; name: string } | null>>({});
   const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
   const [expandedArchiveId, setExpandedArchiveId] = useState<number | null>(null);
@@ -386,11 +387,13 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
     setSuccessMessage(null);
     try {
       const photo = receiptPhotos[order.id];
+      const actualReceiverName = actualReceivers[order.id]?.trim() || undefined;
       await createPurchaseReceiptApi(order.id, { 
         items, 
         warehouse_notes: notes[order.id],
         photo_base64: photo?.base64,
         photo_name: photo?.name,
+        actual_receiver_name: actualReceiverName,
       });
       setSuccessMessage(`تم تسجيل استلام أمر الشراء ${order.po_number} وإرساله للمستلم/مهندس الموقع للفحص والاعتماد.`);
       await load();
@@ -921,6 +924,21 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                             onChange={(e) => setNotes({ ...notes, [order.id]: e.target.value })}
                             placeholder="مثال: تم فحص البضاعة ومطابقة الأختام، البضاعة سليمة وبحالة جيدة..."
                             className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-xs sm:text-sm text-slate-100 focus:border-cyan-400 focus:outline-none"
+                          />
+                        </div>
+
+                        {/* Actual Receiver in Site */}
+                        <div className="space-y-1.5 pt-2">
+                          <label className="text-xs sm:text-sm font-bold text-slate-300 flex items-center justify-between">
+                            <span>👤 المستلم الفعلي في الموقع (اختياري):</span>
+                            <span className="text-[11px] text-slate-400 font-normal">اسم الشخص أو المهندس الذي استلم الشحنة على الأرض</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={actualReceivers[order.id] || ''}
+                            onChange={(e) => setActualReceivers({ ...actualReceivers, [order.id]: e.target.value })}
+                            placeholder="مثال: م. أيمن ماهر / اسم المستلم الميداني..."
+                            className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-xs sm:text-sm text-slate-100 focus:border-cyan-400 focus:outline-none"
                           />
                         </div>
 

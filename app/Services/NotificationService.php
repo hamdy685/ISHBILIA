@@ -238,7 +238,7 @@ class NotificationService
         ])->first();
 
         $poId = $notifiable instanceof PurchaseOrder ? $notifiable->id : ($notifiable instanceof PurchaseReceipt ? $notifiable->purchase_order_id : null);
-        $receiptId = $notifiable instanceof PurchaseReceipt ? $notifiable->id : null;
+        $receiptId = $notifiable instanceof PurchaseReceipt ? $notifiable->id : ($notifiable instanceof PurchaseOrder ? $notifiable->receipts()->latest('id')->value('id') : null);
 
         if ($existing) {
             $existing->update([

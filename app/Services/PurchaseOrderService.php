@@ -596,8 +596,8 @@ class PurchaseOrderService
         $grandTotal = 0.0;
 
         foreach ($items as $input) {
-            $qty       = max(0.001, (float) ($input['quantity'] ?? 0));
-            $unitPrice = max(0.0,  (float) ($input['unit_price'] ?? 0));
+            $qty       = max(0.0, (float) ($input['quantity'] ?? 0));
+            $unitPrice = max(0.0, (float) ($input['unit_price'] ?? 0));
             $lineTotal = round($qty * $unitPrice, 2);
             $grandTotal += $lineTotal;
 
@@ -709,50 +709,86 @@ class PurchaseOrderService
                 throw new \RuntimeException('تغيرت حالة أمر الشراء أثناء المعالجة. أعد المحاولة.');
             }
 
-            // ── Strict Actual PO Isolation ─────────────────────────────────────────
-            // Ensure ONLY actually received items are inserted/retained in purchase_order_items.
-            // Any items from the Master PO that were not received in this GRN (or received_quantity = 0)
-            // must be excluded from $items, ensuring they are cleanly removed from purchase_order_items.
+            // ── Comprehensive Actual PO Line Items Preservation ──────────────────
+            // Retain ALL items from the Master PO in the Actual PO.
+            // Items with received quantity = 0 are preserved with actual_quantity = 0.
+            // Procurement Manager has full authority to review, adjust quantities (e.g. correcting a 0),
+            // edit prices, descriptions, and other line item details.
             $approvedReceipt = $lockedPo->receipts()->whereIn('status', ['APPROVED', 'PENDING_SITE_ENGINEER'])->latest('id')->first();
-            if ($approvedReceipt && $approvedReceipt->items()->exists()) {
-                $receiptItems = $approvedReceipt->items()->get();
-                $receivedMap = $receiptItems->pluck('received_quantity', 'purchase_order_item_id');
+            $receiptItems = $approvedReceipt ? $approvedReceipt->items()->get() : collect();
+            $receivedMap = $receiptItems->pluck('received_quantity', 'purchase_order_item_id');
 
-                $items = collect($items)->filter(function ($item) use ($receivedMap) {
-                    $qty = (float) ($item['quantity'] ?? 0);
-                    if ($qty <= 0) {
+            $existingPoItems = $lockedPo->items()->get();
+            $inputCollection = collect($items);
+            $matchedInputKeys = collect();
+            $finalizedItems = [];
+
+            foreach ($existingPoItems as $existingPoItem) {
+                // Find matching item in submitted $items by id, pr_item_id, item_id, or description
+                $matchKey = $inputCollection->search(function ($input, $key) use ($existingPoItem, $matchedInputKeys) {
+                    if ($matchedInputKeys->contains($key)) {
                         return false;
                     }
-
-                    if (!empty($item['id']) && $receivedMap->has($item['id'])) {
-                        $rcvQty = (float) $receivedMap->get($item['id']);
-                        if ($rcvQty <= 0) {
-                            return false; // Exclude delayed/unreceived item from Master PO
-                        }
+                    if (!empty($input['id']) && (int) $input['id'] === (int) $existingPoItem->id) {
+                        return true;
                     }
-
-                    return true;
-                })->map(function ($item) use ($receivedMap) {
-                    if (!empty($item['id']) && $receivedMap->has($item['id'])) {
-                        $rcvQty = (float) $receivedMap->get($item['id']);
-                        if ($rcvQty > 0) {
-                            $item['quantity'] = $rcvQty;
-                        }
+                    if (!empty($input['pr_item_id']) && (int) $input['pr_item_id'] === (int) $existingPoItem->pr_item_id) {
+                        return true;
                     }
-                    return $item;
-                })->values()->all();
-            } else {
-                $items = collect($items)->filter(fn ($item) => (float) ($item['quantity'] ?? 0) > 0)->values()->all();
+                    if (!empty($input['item_id']) && (int) $input['item_id'] === (int) $existingPoItem->item_id) {
+                        return true;
+                    }
+                    if (!empty($input['item_description']) && trim((string) $input['item_description']) === trim((string) $existingPoItem->item_description)) {
+                        return true;
+                    }
+                    return false;
+                });
+
+                if ($matchKey !== false) {
+                    $matchedInputKeys->push($matchKey);
+                    $input = $inputCollection->get($matchKey);
+                    $input['id'] = $existingPoItem->id;
+                    $qty = max(0.0, (float) ($input['quantity'] ?? 0));
+                    $unitPrice = max(0.0, (float) ($input['unit_price'] ?? $existingPoItem->unit_price));
+                    $input['quantity'] = $qty;
+                    $input['unit_price'] = $unitPrice;
+                    $finalizedItems[] = $input;
+                } else {
+                    // Item was in Master PO but omitted from input: preserve it with actual received quantity or 0
+                    $rcvQty = $receivedMap->has($existingPoItem->id) ? (float) $receivedMap->get($existingPoItem->id) : 0.0;
+                    $finalizedItems[] = [
+                        'id' => $existingPoItem->id,
+                        'item_id' => $existingPoItem->item_id,
+                        'pr_item_id' => $existingPoItem->pr_item_id,
+                        'item_description' => $existingPoItem->item_description,
+                        'item_reference' => $existingPoItem->item_reference,
+                        'region' => $existingPoItem->region,
+                        'quantity' => max(0.0, $rcvQty),
+                        'uom' => $existingPoItem->uom,
+                        'unit_price' => (float) $existingPoItem->unit_price,
+                        'specifications' => $existingPoItem->specifications,
+                        'supplier_id' => $existingPoItem->supplier_id,
+                        'is_supplementary' => $existingPoItem->is_supplementary,
+                        'supplement_batch' => $existingPoItem->supplement_batch,
+                    ];
+                }
             }
 
-            if (empty($items)) {
+            // Include any additional new items added by procurement manager
+            foreach ($inputCollection as $key => $newItem) {
+                if (! $matchedInputKeys->contains($key)) {
+                    $finalizedItems[] = $newItem;
+                }
+            }
+
+            if (empty($finalizedItems)) {
                 throw ValidationException::withMessages([
-                    'items' => ['يجب توفير بند واحد على الأقل تم استلامه فعلياً في إذن الاستلام لإصدار أمر الشراء الفعلي.'],
+                    'items' => ['يجب توفير بنود أمر الشراء لإصدار أمر الشراء الفعلي.'],
                 ]);
             }
 
-            // ── Full items sync (deletes omitted unreceived items) ──────────────────
-            $grandTotal = $this->syncPoItems($user, $lockedPo, $items);
+            // ── Full items sync (preserves all items, sets actual quantities including 0) ──
+            $grandTotal = $this->syncPoItems($user, $lockedPo, $finalizedItems);
 
             // Update PO totals and transition to ISSUED so accounting can see it
             $lockedPo->update([
@@ -777,7 +813,6 @@ class PurchaseOrderService
                         $receiptItem = $receipt->items()->where('purchase_order_item_id', $poItem->id)->first();
                         if ($receiptItem) {
                             $receiptItem->update([
-                                'ordered_quantity' => $poItem->quantity,
                                 'received_quantity' => $poItem->quantity,
                             ]);
                         } else {

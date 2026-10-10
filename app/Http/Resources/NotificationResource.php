@@ -94,6 +94,9 @@ class NotificationResource extends JsonResource
                     $targetUrl = "/procurement/purchase-orders/create?pr={$this->notifiable_id}";
                 } elseif ($this->type === 'purchase_request_pending_procurement') {
                     $targetUrl = "/procurement/purchase-requests";
+                } elseif ($this->type === 'grn_approved_pending_actual_po') {
+                    $poId = $this->purchase_order_id ?: ($this->notifiable_type === PurchaseOrder::class ? $this->notifiable_id : null);
+                    $targetUrl = $poId ? "/procurement/purchase-orders/{$poId}/edit" : "/procurement?tab=actual-pos";
                 } elseif ($this->notifiable_type === PurchaseOrder::class || $this->purchase_order_id) {
                     $poId = $this->notifiable_type === PurchaseOrder::class ? $this->notifiable_id : $this->purchase_order_id;
                     $targetUrl = "/procurement/purchase-orders/{$poId}";
@@ -139,6 +142,7 @@ class NotificationResource extends JsonResource
             'purchase_receipt_id' => $this->purchase_receipt_id,
             'data' => $data,
             'target_url' => $targetUrl,
+            'action_url' => $targetUrl,
             'read_at' => $this->read_at ? $this->read_at->toIso8601String() : null,
             'created_at' => $this->created_at ? $this->created_at->toIso8601String() : null,
         ];

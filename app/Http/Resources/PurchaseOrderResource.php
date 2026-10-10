@@ -117,6 +117,8 @@ class PurchaseOrderResource extends JsonResource
                             'id' => $receipt->warehouseKeeper->id,
                             'name' => $receipt->warehouseKeeper->name,
                         ] : null,
+                        'warehouse_keeper_pass_status' => $receipt->warehouse_keeper_pass_status,
+                        'warehouse_keeper_pass_label' => $receipt->warehouse_keeper_pass_label,
                         'site_engineer' => $receipt->relationLoaded('siteEngineer') && $receipt->siteEngineer ? [
                             'id' => $receipt->siteEngineer->id,
                             'name' => $receipt->siteEngineer->name,
@@ -125,6 +127,12 @@ class PurchaseOrderResource extends JsonResource
                             'id' => $receipt->receiver->id,
                             'name' => $receipt->receiver->name,
                         ] : null,
+                        'actual_receiver_name' => $receipt->actual_receiver_name,
+                        'actual_receiver' => $receipt->relationLoaded('actualReceiver') && $receipt->actualReceiver ? [
+                            'id' => $receipt->actualReceiver->id,
+                            'name' => $receipt->actualReceiver->name,
+                        ] : null,
+                        'actual_receiver_display_name' => $receipt->actual_receiver_display_name,
                         'items' => $receipt->relationLoaded('items') ? $receipt->items->map(function ($item) {
                             return [
                                 'id' => $item->id,

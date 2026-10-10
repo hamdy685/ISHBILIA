@@ -223,8 +223,8 @@ class PurchaseRequestService
                         ]);
                     }
 
-                    $isExecutiveRequester = $user->hasRole('general_manager');
-                    $isBypassRole = $user->hasAnyRole(['general_manager', 'procurement_manager', 'accountant', 'admin']);
+                    $isExecutiveRequester = $user->hasAnyRole(['general_manager', 'execution_manager']);
+                    $isBypassRole = $user->hasAnyRole(['general_manager', 'execution_manager', 'procurement_manager', 'accountant', 'admin']);
                     $isReviewerSameDept = $user->hasRole('reviewer') && ((int) $targetDepartment->id === (int) $user->department_id);
 
                     $assignedManager = $targetDepartment->manager;
@@ -435,7 +435,7 @@ class PurchaseRequestService
                 if ($assignedManager && !$targetDepartment->manager_user_id) {
                     $targetDepartment->update(['manager_user_id' => $assignedManager->id]);
                 }
-                $isExecutiveRequester = $user->hasRole('general_manager');
+                $isExecutiveRequester = $user->hasAnyRole(['general_manager', 'execution_manager']);
                 $updateFields['target_department_id'] = $targetDepartment->id;
                 $updateFields['reviewer_user_id'] = $isExecutiveRequester ? null : $assignedManager?->id;
             }
@@ -595,7 +595,7 @@ class PurchaseRequestService
             }
             $request->loadMissing(['department', 'targetDepartment', 'assignedReviewer', 'siteEngineer']);
             $normalizedNeededDate = $this->normalizeNeededDate($request->date_needed?->toDateString());
-            $isExecutiveRequester = $user->hasRole('general_manager');
+            $isExecutiveRequester = $user->hasAnyRole(['general_manager', 'execution_manager']);
             $isDepartmentManagerRequester = $user->hasRole('reviewer');
             // مدير المشتريات والحسابات: يتجاوزان المراجع ويذهبان مباشرةً للمدير التنفيذي.
             $isProcurementOrAccounting = $user->hasAnyRole(['procurement_manager', 'accountant']);
@@ -606,9 +606,9 @@ class PurchaseRequestService
 
             if ($isComplementary) {
                 // في طلبات الكمالة:
-                // - إذا أنشأه المدير التنفيذي أو مراجع القسم أو إدارة المشتريات -> يذهب مباشرة للمشتريات (تجاوز التنفيذي والمالية)
-                // - إذا أنشأه مهندس الموقع أو موظف عادي -> يذهب للمراجع أولاً (SUBMITTED) لتدقيقه
-                if ($isExecutiveRequester || $isDepartmentManagerRequester || $isProcurementOrAccounting || $canSkipReviewer) {
+                // - إذا أنشأه المدير التنفيذي أو مراجع القسم لنفس قسمه أو إدارة المشتريات -> يذهب مباشرة للمشتريات (تجاوز التنفيذي والمالية)
+                // - إذا أنشأه مهندس الموقع أو موظف عادي أو مراجع لقسم آخر -> يذهب للمراجع أولاً (SUBMITTED) لتدقيقه
+                if ($isExecutiveRequester || $canSkipReviewer || $isProcurementOrAccounting) {
                     $nextStatus = 'PENDING_PROCUREMENT_APPROVAL';
                 } else {
                     $nextStatus = 'SUBMITTED';
@@ -616,7 +616,7 @@ class PurchaseRequestService
             } else {
                 $nextStatus = $isExecutiveRequester
                     ? 'PENDING_PROCUREMENT_APPROVAL'
-                    : ($isProcurementOrAccounting || $canSkipReviewer || $isDepartmentManagerRequester
+                    : ($isProcurementOrAccounting || $canSkipReviewer
                         ? 'PENDING_EXECUTIVE_APPROVAL'
                         : 'SUBMITTED');
             }
@@ -626,8 +626,8 @@ class PurchaseRequestService
                 $assignedSiteEngineerId = $siteEngineerUserId;
             }
 
-            // إذا كان مقدم الطلب هو المدير التنفيذي أو مراجع القسم لطلب مشروعات/موقع، يجب تحديد مسؤول الاستلام
-            $requiresReceiverSelection = ($isExecutiveRequester || ($isDepartmentManagerRequester && in_array($nextStatus, ['PENDING_EXECUTIVE_APPROVAL', 'PENDING_PROCUREMENT_APPROVAL'], true)))
+            // إذا كان مقدم الطلب هو المدير التنفيذي أو مراجع القسم لنفس قسمه لطلب مشروعات/موقع، يجب تحديد مسؤول الاستلام
+            $requiresReceiverSelection = ($isExecutiveRequester || ($canSkipReviewer && in_array($nextStatus, ['PENDING_EXECUTIVE_APPROVAL', 'PENDING_PROCUREMENT_APPROVAL'], true)))
                 && $request->request_type !== 'OFFICE_SUPPLIES';
 
             if ($requiresReceiverSelection) {
@@ -644,11 +644,30 @@ class PurchaseRequestService
                 }
             }
 
+            $assignedReviewerId = null;
+            if (! $isExecutiveRequester) {
+                if ($canSkipReviewer) {
+                    $assignedReviewerId = $user->id;
+                } else {
+                    $assignedReviewerId = $request->targetDepartment?->manager_user_id;
+                    if (! $assignedReviewerId && $request->targetDepartment) {
+                        $targetReviewer = User::where('department_id', $request->targetDepartment->id)
+                            ->where('is_active', true)
+                            ->whereHas('roles', fn ($q) => $q->where('slug', 'reviewer'))
+                            ->first();
+                        $assignedReviewerId = $targetReviewer?->id;
+                    }
+                    if (! $assignedReviewerId && $request->reviewer_user_id && (int) $request->reviewer_user_id !== (int) $user->id) {
+                        $assignedReviewerId = $request->reviewer_user_id;
+                    }
+                }
+            }
+
             $updateData = [
                 'status' => $nextStatus,
                 'date_needed' => $normalizedNeededDate,
                 'submitted_at' => now(),
-                'reviewer_user_id' => $isExecutiveRequester ? null : ($isDepartmentManagerRequester ? $user->id : $request->reviewer_user_id),
+                'reviewer_user_id' => $assignedReviewerId,
                 'site_engineer_user_id' => $request->request_type === 'OFFICE_SUPPLIES' ? null : $assignedSiteEngineerId,
             ];
 
@@ -658,7 +677,7 @@ class PurchaseRequestService
 
             $request->update($updateData);
 
-            if ($isDepartmentManagerRequester && in_array($nextStatus, ['PENDING_EXECUTIVE_APPROVAL', 'PENDING_PROCUREMENT_APPROVAL'], true)) {
+            if ($canSkipReviewer && in_array($nextStatus, ['PENDING_EXECUTIVE_APPROVAL', 'PENDING_PROCUREMENT_APPROVAL'], true)) {
                 $actionName = $nextStatus === 'PENDING_PROCUREMENT_APPROVAL' ? 'APPROVED_BY_REVIEWER_FAST_TRACK' : 'APPROVED_BY_REVIEWER';
                 $commentText = $comment ?: ($nextStatus === 'PENDING_PROCUREMENT_APPROVAL'
                     ? 'أنشأ واعتمد مراجع القسم طلب الكمالة المستقل وأرسله مباشرةً إلى إدارة المشتريات (مسار سريع دون تنفيذي أو مالية).'
@@ -689,7 +708,7 @@ class PurchaseRequestService
                     $nextStatus === 'PENDING_PROCUREMENT_APPROVAL' && $isComplementary => 'أنشأ واعتمد مراجع القسم/المدير طلب كمالة مستقل وأرسله مباشرة إلى إدارة المشتريات (مسار سريع دون تنفيذي أو مالية).',
                     $nextStatus === 'PENDING_PROCUREMENT_APPROVAL' => 'أنشأ المدير التنفيذي طلب شراء وأرسله مباشرة إلى مدير المشتريات.',
                     $nextStatus === 'PENDING_EXECUTIVE_APPROVAL' && $isProcurementOrAccounting => 'أنشأ مدير المشتريات / الحسابات طلب شراء وأرسله مباشرةً للمدير التنفيذي متجاوزاً مرحلة المراجع.',
-                    $nextStatus === 'PENDING_EXECUTIVE_APPROVAL' && $isDepartmentManagerRequester => 'أنشأ واعتمد مراجع القسم الطلب وحدد مسؤول الاستلام ومسار المخزن وأرسله مباشرةً إلى المدير التنفيذي.',
+                    $nextStatus === 'PENDING_EXECUTIVE_APPROVAL' && $canSkipReviewer => 'أنشأ واعتمد مراجع القسم الطلب وحدد مسؤول الاستلام ومسار المخزن وأرسله مباشرةً إلى المدير التنفيذي.',
                     $nextStatus === 'PENDING_EXECUTIVE_APPROVAL' => 'أرسل مراجع القسم الطلب إلى المدير التنفيذي مباشرة لأن القسم المستهدف هو نفس قسمه.',
                     default => ($isComplementary ? 'أرسل طلب الكمالة إلى رئيس القسم للمراجعة والتدقيق.' : 'أرسل الطلب إلى مدير القسم المستهدف للمراجعة.'),
                 };
@@ -702,6 +721,7 @@ class PurchaseRequestService
 
                 $notificationService = app(NotificationService::class);
                 if ($nextStatus === 'SUBMITTED') {
+                    $request->load('assignedReviewer');
                     $reviewers = $request->assignedReviewer
                         ? collect([$request->assignedReviewer])
                         : $notificationService->resolveUsersWithPermission('purchase_request.review', $request->target_department_id);

@@ -124,14 +124,10 @@ export const EditPurchaseOrderPage: React.FC = () => {
             });
 
             if (foundInReceipt) {
-              // If received quantity is 0, strictly EXCLUDE this item from Actual PO!
-              if (totalReceived <= 0) {
-                return;
-              }
               qty = totalReceived;
+            } else if (isPendingActual) {
+              qty = 0;
             }
-          } else if (isPendingActual && qty <= 0) {
-            return;
           }
 
           const isSupplementary = Boolean(
@@ -237,7 +233,7 @@ export const EditPurchaseOrderPage: React.FC = () => {
     setItems((prev) =>
       prev.map((it) => {
         const grnQty = getReceivedQtyForPoItem(it.id);
-        if (grnQty !== null && grnQty > 0) {
+        if (grnQty !== null && grnQty >= 0) {
           const lineTotal = Math.round(grnQty * it.unit_price * 100) / 100;
           return { ...it, quantity: grnQty, line_total: lineTotal };
         }
@@ -311,10 +307,10 @@ export const EditPurchaseOrderPage: React.FC = () => {
       return;
     }
     const hasInvalid = items.some(
-      (it) => it.quantity <= 0 || !it.item_description.trim() || !it.item_reference.trim() || !it.region.trim()
+      (it) => it.quantity < 0 || !it.item_description.trim() || !it.item_reference.trim() || !it.region.trim()
     );
     if (hasInvalid) {
-      setError('يرجى التأكد من ملء حقول (الوصف، رقم قطعة الأرض، المنطقة، والكمية أكبر من صفر) لجميع البنود.');
+      setError('يرجى التأكد من ملء حقول (الوصف، رقم قطعة الأرض، المنطقة، والكمية لا تقل عن صفر) لجميع البنود.');
       return;
     }
 
@@ -377,9 +373,9 @@ export const EditPurchaseOrderPage: React.FC = () => {
       setError('لا يمكن إصدار أمر شراء فعلي بدون بنود.');
       return;
     }
-    const hasInvalid = items.some((it) => it.quantity <= 0 || !it.item_description || !it.item_reference || !it.region);
+    const hasInvalid = items.some((it) => it.quantity < 0 || !it.item_description || !it.item_reference || !it.region);
     if (hasInvalid) {
-      setError('يرجى التحقق من صحة جميع البنود (الكمية، الوصف، رقم قطعة الأرض، والمنطقة).');
+      setError('يرجى التحقق من صحة جميع البنود (الكمية لا تقل عن صفر، الوصف، رقم قطعة الأرض، والمنطقة).');
       return;
     }
 
@@ -838,7 +834,7 @@ export const EditPurchaseOrderPage: React.FC = () => {
                     <td className="p-3">
                       <input
                         type="number"
-                        min="0.001"
+                        min="0"
                         step="any"
                         required
                         disabled={!isEditable || busy}

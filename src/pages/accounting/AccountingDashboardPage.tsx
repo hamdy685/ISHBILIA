@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getAccountingPurchaseOrdersApi, getAccountingPurchaseOrderApi, approveAccountingPurchaseOrderApi } from '../../api/accounting';
+import { getAccountingPurchaseOrdersApi, getAccountingPurchaseOrderApi } from '../../api/accounting';
 import { getDirectAccountingPurchaseRequestsApi, approveDirectAccountingPurchaseRequestApi } from '../../api/accountingPurchaseRequests';
 import { getSupplierAccountsApi, SupplierAccountSummary } from '../../api/supplierFinance';
 import { getPendingQuoteRequestsApi } from '../../api/purchaseQuotes';
@@ -137,9 +137,9 @@ export const AccountingDashboardPage: React.FC = () => {
             supplier: po.supplier?.company_name,
             amount: Number(po.grand_total || 0),
             urgency: 'HIGH' as const,
-            reason: 'أمر شراء صادر بانتظار المراجعة والاعتماد المالي',
+            reason: 'أمر شراء صادر للاطلاع المالي والمطابقة',
             actionUrl: `/accounting/purchase-orders/${po.id}`,
-            actionLabel: 'المراجعة والاعتماد المالي',
+            actionLabel: 'عرض وتدقيق أمر الشراء',
             created_at: (po.purchase_request as any)?.created_at || po.created_at || undefined,
             timeAgo: ((po.purchase_request as any)?.created_at || po.created_at) ? formatDateTime24h((po.purchase_request as any)?.created_at || po.created_at) : undefined,
             items_count: po.items?.length || 0,
@@ -160,11 +160,6 @@ export const AccountingDashboardPage: React.FC = () => {
                 region: it.region,
               };
             }),
-            onDirectApprove: async (_item: any, comment?: string) => {
-              await approveAccountingPurchaseOrderApi(po.id, { comment, financial_notes: comment });
-              await loadData(true);
-            },
-            directApproveLabel: 'اعتماد مالي فوري لأمر الشراء',
           })),
           ...directPrs.map((pr: any) => ({
             id: `pr-${pr.id}`,

@@ -40,6 +40,8 @@ class PurchaseReceiptController extends Controller
             'photo' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:20480'], // max 20MB
             'photo_base64' => ['nullable', 'string'],
             'photo_name' => ['nullable', 'string', 'max:255'],
+            'actual_receiver_name' => ['nullable', 'string', 'max:255'],
+            'actual_receiver_user_id' => ['nullable', 'integer', 'exists:users,id'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.purchase_order_item_id' => ['required', 'integer', 'exists:purchase_order_items,id'],
             'items.*.received_quantity' => ['required', 'numeric', 'gte:0'],
@@ -66,6 +68,8 @@ class PurchaseReceiptController extends Controller
                 $validated['received_at'] ?? null,
                 $validated['warehouse_notes'] ?? null,
                 $photoData,
+                $validated['actual_receiver_name'] ?? null,
+                isset($validated['actual_receiver_user_id']) ? (int) $validated['actual_receiver_user_id'] : null,
             );
         } catch (\RuntimeException $exception) {
             return response()->json(['message' => $exception->getMessage()], 409);
@@ -92,6 +96,8 @@ class PurchaseReceiptController extends Controller
             'purchaseRequest.siteEngineer',
             'warehouseKeeper',
             'siteEngineer',
+            'receiver',
+            'actualReceiver',
             'items.purchaseOrderItem.item',
             'items.purchaseOrderItem.prItem',
         ]);
@@ -100,6 +106,7 @@ class PurchaseReceiptController extends Controller
             $query->where(function ($q) use ($user) {
                 $q->where('site_engineer_user_id', $user->id)
                   ->orWhere('receiver_user_id', $user->id)
+                  ->orWhere('actual_receiver_user_id', $user->id)
                   ->orWhereHas('purchaseOrder.purchaseRequest', fn ($prQ) => $prQ->where('site_engineer_user_id', $user->id))
                   ->orWhereHas('purchaseRequest', fn ($prQ) => $prQ->where('site_engineer_user_id', $user->id));
 
@@ -143,6 +150,8 @@ class PurchaseReceiptController extends Controller
             'purchaseRequest.siteEngineer',
             'warehouseKeeper',
             'siteEngineer',
+            'receiver',
+            'actualReceiver',
             'items.purchaseOrderItem.item',
             'items.purchaseOrderItem.prItem',
         ])->findOrFail((int) $id);

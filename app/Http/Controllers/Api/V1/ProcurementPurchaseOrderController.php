@@ -320,6 +320,7 @@ class ProcurementPurchaseOrderController extends Controller
             'receipts.warehouseKeeper',
             'receipts.siteEngineer',
             'receipts.receiver',
+            'receipts.actualReceiver',
         ])->findOrFail((int) $id);
 
         // عزل الحزمة المستندية للحسابات: حصر بنود طلب الشراء على البنود المرتبطة بأمر الشراء هذا فقط
@@ -708,7 +709,7 @@ class ProcurementPurchaseOrderController extends Controller
             'items.*.item_description' => ['required', 'string', 'max:500'],
             'items.*.item_reference'   => ['required', 'string', 'max:100'],
             'items.*.region'           => ['required', 'string', 'max:150'],
-            'items.*.quantity'         => ['required', 'numeric', 'gt:0'],
+            'items.*.quantity'         => ['required', 'numeric', 'gte:0'],
             'items.*.uom'              => ['nullable', 'string', 'max:20'],
             'items.*.unit_price'       => ['required', 'numeric', 'gte:0'],
             'items.*.specifications'   => ['nullable', 'string'],

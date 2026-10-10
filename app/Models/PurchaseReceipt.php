@@ -29,6 +29,8 @@ class PurchaseReceipt extends Model
         'warehouse_keeper_user_id',
         'site_engineer_user_id',
         'receiver_user_id',
+        'actual_receiver_name',
+        'actual_receiver_user_id',
         'receipt_number',
         'receipt_type',
         'status',
@@ -57,6 +59,9 @@ class PurchaseReceipt extends Model
         'warehouse_approval',
         'site_engineer_approval',
         'is_supplementary',
+        'warehouse_keeper_pass_status',
+        'warehouse_keeper_pass_label',
+        'actual_receiver_display_name',
     ];
 
     public function getIsSupplementaryAttribute(): bool
@@ -216,6 +221,38 @@ class PurchaseReceipt extends Model
     public function receiver(): BelongsTo
     {
         return $this->belongsTo(User::class, 'receiver_user_id');
+    }
+
+    public function actualReceiver(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'actual_receiver_user_id');
+    }
+
+    public function getWarehouseKeeperPassStatusAttribute(): string
+    {
+        if ($this->warehouse_keeper_user_id || $this->warehouse_submitted_at) {
+            return 'PASSED';
+        }
+        if ($this->receipt_type === 'SITE_DIRECT' || ($this->receipt_number && ! $this->warehouse_keeper_user_id)) {
+            return 'BYPASSED';
+        }
+        return 'UNVERIFIED';
+    }
+
+    public function getWarehouseKeeperPassLabelAttribute(): string
+    {
+        return match ($this->warehouse_keeper_pass_status) {
+            'PASSED' => 'مر على إذن الاستلام',
+            'BYPASSED' => 'لم يمر على إذن الاستلام',
+            default => 'غير مثبت',
+        };
+    }
+
+    public function getActualReceiverDisplayNameAttribute(): ?string
+    {
+        return $this->actual_receiver_name
+            ?: ($this->relationLoaded('actualReceiver') && $this->actualReceiver ? $this->actualReceiver->name : null)
+            ?: ($this->relationLoaded('receiver') && $this->receiver ? $this->receiver->name : null);
     }
 
     public function isOfficeReceipt(): bool

@@ -402,7 +402,7 @@ async function setupContextApiRoutes(context: BrowserContext, currentUser: MockU
   });
 
   // 3. Purchase Request generic routes
-  await context.route(/\/api\/v1\/purchase-requests$/, async (route) => {
+  await context.route(/\/api\/v1\/purchase-requests($|\?)/, async (route) => {
     if (route.request().method() === 'POST') {
       const payload = route.request().postDataJSON() || {};
       store.pr.request_type = payload.request_type || 'PROJECT';
@@ -432,7 +432,7 @@ async function setupContextApiRoutes(context: BrowserContext, currentUser: MockU
     });
   });
 
-  await context.route(/\/api\/v1\/purchase-requests\/\d+$/, async (route) => {
+  await context.route(/\/api\/v1\/purchase-requests\/\d+($|\?)/, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -461,7 +461,7 @@ async function setupContextApiRoutes(context: BrowserContext, currentUser: MockU
     });
   });
 
-  await context.route(/\/api\/v1\/reviewer\/purchase-requests\/\d+$/, async (route) => {
+  await context.route(/\/api\/v1\/reviewer\/purchase-requests\/\d+($|\?)/, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -469,7 +469,7 @@ async function setupContextApiRoutes(context: BrowserContext, currentUser: MockU
     });
   });
 
-  await context.route(/\/api\/v1\/reviewer\/purchase-requests$/, async (route) => {
+  await context.route(/\/api\/v1\/reviewer\/purchase-requests($|\?)/, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -478,7 +478,7 @@ async function setupContextApiRoutes(context: BrowserContext, currentUser: MockU
   });
 
   // 5. General Manager routes
-  await context.route(/\/api\/v1\/general-manager\/purchase-requests$/, async (route) => {
+  await context.route(/\/api\/v1\/general-manager\/purchase-requests($|\?)/, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -503,7 +503,7 @@ async function setupContextApiRoutes(context: BrowserContext, currentUser: MockU
   });
 
   // 6. Procurement routes
-  await context.route(/\/api\/v1\/procurement\/purchase-requests$/, async (route) => {
+  await context.route(/\/api\/v1\/procurement\/purchase-requests($|\?)/, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -832,7 +832,7 @@ test.describe('E2E Financial & Documentary Workflow Paths (Playwright Parallel C
     const reviewerConfirmBtn = dialog.getByRole('button', { name: /اعتماد الطلب/i });
     await expect(reviewerConfirmBtn).toBeVisible();
     await reviewerConfirmBtn.click();
-    await expect(reviewerSession.page.getByText(/تم اعتماد طلب الشراء بنجاح/i)).toBeVisible();
+    await expect(reviewerSession.page.getByText(/تم اعتماد طلب الشراء بنجاح/i).first()).toBeVisible();
 
     // Strict status assertion after reviewer approval
     expect(store.pr.status).toBe('PENDING_EXECUTIVE_APPROVAL');

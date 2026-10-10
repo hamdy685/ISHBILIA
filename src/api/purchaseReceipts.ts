@@ -72,7 +72,14 @@ export interface ReceiptRecord {
   supplier?: { id: number; company_name: string; contact_person?: string | null; phone?: string | null } | null;
   is_internal_warehouse?: boolean;
   warehouse_keeper?: { id: number; name: string } | null;
+  warehouse_keeper_pass_status?: string | null;
+  warehouse_keeper_pass_label?: string | null;
   site_engineer?: { id: number; name: string } | null;
+  receiver?: { id: number; name: string } | null;
+  actual_receiver_name?: string | null;
+  actual_receiver_user_id?: number | null;
+  actual_receiver?: { id: number; name: string } | null;
+  actual_receiver_display_name?: string | null;
   purchase_order_id?: number | null;
   purchase_order?: ReceiptPurchaseOrder | null;
   purchase_request?: ReceiptPurchaseOrder['purchase_request'];
@@ -131,6 +138,8 @@ export const createPurchaseReceiptApi = async (
     warehouse_notes?: string;
     photo_base64?: string;
     photo_name?: string;
+    actual_receiver_name?: string;
+    actual_receiver_user_id?: number;
     items: Array<{ purchase_order_item_id: number; received_quantity: number; notes?: string }>;
   },
 ): Promise<ReceiptRecord> =>

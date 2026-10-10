@@ -224,7 +224,9 @@ class PurchaseReceiptService
         array $items,
         ?string $receivedAt = null,
         ?string $notes = null,
-        ?array $photoData = null
+        ?array $photoData = null,
+        ?string $actualReceiverName = null,
+        ?int $actualReceiverUserId = null
     ): PurchaseReceipt {
         $purchaseOrder->loadMissing([
             'purchaseRequest.targetDepartment',
@@ -276,7 +278,7 @@ class PurchaseReceiptService
 
         $orderItems = $purchaseOrder->items->keyBy('id');
 
-        return DB::transaction(function () use ($warehouseKeeper, $purchaseOrder, $items, $receivedAt, $notes, $siteEngineerId, $orderItems, $photoData): PurchaseReceipt {
+        return DB::transaction(function () use ($warehouseKeeper, $purchaseOrder, $items, $receivedAt, $notes, $siteEngineerId, $orderItems, $photoData, $actualReceiverName, $actualReceiverUserId): PurchaseReceipt {
             $supplierId = $purchaseOrder->supplier_id ?: \App\Models\Supplier::getOrCreateInternalWarehouseSupplier()->id;
             if (! $purchaseOrder->supplier_id) {
                 $purchaseOrder->update(['supplier_id' => $supplierId]);
@@ -288,6 +290,8 @@ class PurchaseReceiptService
                 'supplier_id' => $supplierId,
                 'warehouse_keeper_user_id' => $warehouseKeeper->id,
                 'site_engineer_user_id' => $siteEngineerId,
+                'actual_receiver_name' => $actualReceiverName,
+                'actual_receiver_user_id' => $actualReceiverUserId,
                 'receipt_number' => $this->generateUniqueReceiptNumber('REC-'),
                 'status' => 'PENDING_SITE_ENGINEER',
                 'received_at' => $receivedAt ?: now()->toDateString(),
@@ -522,7 +526,7 @@ class PurchaseReceiptService
                 $notificationService->queueUsers(
                     $procurementUsers,
                     'grn_approved_pending_actual_po',
-                    'بند/شحنة مستلمة ومفحوصة — جاهز لأمر الشراء الفعلي',
+                    'مطلوب إنشاء أمر شراء فعلي',
                     $isInternalWarehouse
                         ? "اعتمد مهندس الموقع إذن استلام المخزن {$receipt->receipt_number} لأمر الشراء {$receipt->purchaseOrder->po_number}{$itemsSummary}. يرجى مراجعة الكميات وإصدار أمر الشراء الفعلي الخاص بها."
                         : "اعتمد وفحص مهندس الموقع إذن الاستلام {$receipt->receipt_number} لأمر الشراء {$receipt->purchaseOrder->po_number}{$itemsSummary}. هذا البند/الشحنة جاهز الآن لإصدار أمر الشراء الفعلي المستقل الخاص به.",

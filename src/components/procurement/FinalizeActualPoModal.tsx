@@ -99,11 +99,9 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
           });
 
           if (foundInReceipt) {
-            // Exclude items unreceived if 0
-            if (totalReceived <= 0) return;
             qty = totalReceived;
-          } else if (qty <= 0) {
-            return;
+          } else {
+            qty = 0;
           }
 
           const isSupplementary = Boolean(
@@ -212,10 +210,10 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
     }
 
     const invalidItem = items.find(
-      (it) => !it.item_description.trim() || Number(it.quantity) <= 0 || Number(it.unit_price) < 0
+      (it) => !it.item_description.trim() || Number(it.quantity) < 0 || Number(it.unit_price) < 0
     );
     if (invalidItem) {
-      setError('يرجى التحقق من صحة جميع البنود (الكمية أكبر من صفر، الوصف، والسعر لا يقل عن صفر).');
+      setError('يرجى التحقق من صحة جميع البنود (الكمية لا تقل عن صفر، الوصف، والسعر لا يقل عن صفر).');
       return;
     }
 
@@ -427,7 +425,7 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
                           <div className="flex items-center justify-center gap-1.5">
                             <input
                               type="number"
-                              min="0.01"
+                              min="0"
                               step="0.01"
                               value={item.quantity ?? ''}
                               onFocus={(e) => e.target.select()}

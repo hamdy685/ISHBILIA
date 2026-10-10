@@ -30,7 +30,7 @@ class UpdatePurchaseOrderHeaderRequest extends FormRequest
             'items.*.item_description' => ['sometimes', 'required', 'string', 'max:500'],
             'items.*.item_reference' => ['sometimes', 'required', 'string', 'max:100'],
             'items.*.region' => ['sometimes', 'required', 'string', 'max:150'],
-            'items.*.quantity' => ['sometimes', 'required', 'numeric', 'gt:0'],
+            'items.*.quantity' => ['sometimes', 'required', 'numeric', 'gte:0'],
             'items.*.unit_price' => ['sometimes', 'required', 'numeric', 'gte:0'],
             'items.*.uom' => ['nullable', 'string', 'max:20'],
             'items.*.specifications' => ['nullable', 'string'],

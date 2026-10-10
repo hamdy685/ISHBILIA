@@ -77,8 +77,11 @@ export interface CombinedPrintTemplateProps {
   grnNumber?: string;
   grnDate?: string | null;
   warehouseKeeperName?: string;
+  warehouseKeeperPassText?: string;
   siteEngineerName?: string;
   engineerName?: string;
+  actualReceiverName?: string;
+  receiverName?: string;
   grnItems?: Array<{
     item_description?: string;
     item_name?: string;
@@ -253,18 +256,36 @@ export const CombinedPrintTemplate = React.forwardRef<HTMLDivElement, CombinedPr
       resolvedReceipt?.created_at
     );
 
-    const storekeeperName =
+    const rawKeeperName =
       props.warehouseKeeperName ||
       resolvedReceipt?.warehouse_keeper?.name ||
-      (resolvedReceipt?.warehouse_keeper && typeof resolvedReceipt.warehouse_keeper === 'string' ? resolvedReceipt.warehouse_keeper : null) ||
-      '---';
+      (resolvedReceipt?.warehouse_keeper && typeof resolvedReceipt.warehouse_keeper === 'string' ? resolvedReceipt.warehouse_keeper : null);
 
-    const engineerName =
-      props.siteEngineerName ||
-      props.engineerName ||
-      resolvedReceipt?.site_engineer?.name ||
-      resolvedPr?.site_engineer?.name ||
-      '---';
+    const isDirectSite =
+      resolvedReceipt?.receipt_type === 'SITE_DIRECT' ||
+      resolvedPr?.requires_warehouse_receipt === false ||
+      (po as any)?.requires_warehouse_receipt === false;
+
+    const keeperPassText =
+      props.warehouseKeeperPassText ||
+      (rawKeeperName || resolvedReceipt?.warehouse_keeper_user_id || resolvedReceipt?.warehouse_submitted_at
+        ? 'مر على إذن الاستلام'
+        : isDirectSite
+        ? 'لم يمر على إذن الاستلام'
+        : resolvedReceipt
+        ? 'لم يمر على إذن الاستلام'
+        : 'غير مثبت');
+
+    const storekeeperName = rawKeeperName || (isDirectSite ? '—' : '---');
+
+    const actualReceiverName =
+      props.actualReceiverName ||
+      props.receiverName ||
+      resolvedReceipt?.actual_receiver?.name ||
+      resolvedReceipt?.actual_receiver_name ||
+      resolvedReceipt?.receiver?.name ||
+      resolvedReceipt?.actual_receiver_display_name ||
+      (resolvedReceipt ? 'غير مسجل' : '---');
 
     // GRN Line Items: map receipt items, strictly filtering out zero-quantity or non-received items
     const rawGrnItems = (props.grnItems || resolvedReceipt?.items || []).filter((item: any) => {
@@ -561,9 +582,14 @@ export const CombinedPrintTemplate = React.forwardRef<HTMLDivElement, CombinedPr
           </table>
 
           {/* التوقيعات الرقمية: flex justify-between text-sm font-bold mt-2 px-4 */}
-          <div className="flex justify-between text-sm font-bold mt-2 px-4 text-gray-900">
-            <div>أمين المخزن: <span className="font-semibold text-black">{storekeeperName}</span></div>
-            <div>مهندس الموقع / الاستلام: <span className="font-semibold text-black">{engineerName}</span></div>
+          <div className="flex justify-between items-center text-sm font-bold mt-2 px-4 text-gray-900">
+            <div>
+              أمين المخزن: <span className="font-semibold text-black">{storekeeperName}</span>{' '}
+              <span className="text-xs font-normal text-gray-700">({keeperPassText})</span>
+            </div>
+            <div>
+              المستلم الفعلي: <span className="font-semibold text-black">{actualReceiverName}</span>
+            </div>
           </div>
         </section>
       </div>

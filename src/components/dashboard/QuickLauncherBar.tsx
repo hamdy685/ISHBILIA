@@ -165,7 +165,7 @@ export const QuickLauncherBar: React.FC<QuickLauncherBarProps> = ({
       items.push(
         { id: 'gm-prs', label: 'قرارات طلبات الشراء', icon: '🛡️', to: '/general-manager/purchase-requests', variant: 'primary' },
         { id: 'gm-quotes', label: 'البت والترسية التنفيذية', icon: '⚖️', to: '/general-manager/purchase-quotes', variant: 'amber' },
-        { id: 'gm-pos', label: 'اعتماد أوامر الشراء', icon: '📑', to: '/general-manager/purchase-orders', variant: 'emerald' },
+        { id: 'gm-pos', label: 'أوامر الشراء الصادرة', icon: '📑', to: '/general-manager/purchase-orders', variant: 'emerald' },
         { id: 'gm-reports', label: 'التقارير والتحليلات التنفيذية', icon: '📊', to: '/general-manager/reports', variant: 'indigo' }
       );
       return items;

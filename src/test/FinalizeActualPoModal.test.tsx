@@ -178,4 +178,99 @@ describe('FinalizeActualPoModal', () => {
       );
     });
   });
+
+  it('preserves items with received quantity 0 and allows finalization with quantity 0', async () => {
+    const mockPoWithZero: PurchaseOrder = {
+      ...mockPo,
+      items: [
+        {
+          id: 501,
+          purchase_order_id: 101,
+          item_description: 'حديد تسليح 12 مم',
+          item_reference: '1518',
+          region: 'أكتوبر',
+          quantity: 100,
+          uom: 'TON',
+          unit_price: 1000,
+          line_total: 100000,
+        },
+        {
+          id: 502,
+          purchase_order_id: 101,
+          item_description: 'طوب أسمنتي مصمت',
+          item_reference: '1518',
+          region: 'أكتوبر',
+          quantity: 30,
+          uom: 'THOUSAND',
+          unit_price: 1500,
+          line_total: 45000,
+        },
+      ],
+      receipts: [
+        {
+          id: 701,
+          receipt_number: 'GRN-2026-00701',
+          purchase_order_id: 101,
+          status: 'APPROVED',
+          created_at: '2026-10-08T11:00:00Z',
+          updated_at: '2026-10-08T11:00:00Z',
+          items: [
+            {
+              id: 801,
+              purchase_receipt_id: 701,
+              purchase_order_item_id: 501,
+              received_quantity: 100,
+            },
+            {
+              id: 802,
+              purchase_receipt_id: 701,
+              purchase_order_item_id: 502,
+              received_quantity: 0,
+            },
+          ],
+        },
+      ],
+    };
+
+    vi.mocked(purchaseOrdersApi.getPurchaseOrderApi).mockResolvedValueOnce(mockPoWithZero);
+    vi.mocked(purchaseOrdersApi.finalizeActualPurchaseOrderApi).mockResolvedValueOnce({
+      ...mockPoWithZero,
+      status: 'ISSUED',
+    });
+
+    render(
+      <FinalizeActualPoModal
+        isOpen={true}
+        poId={101}
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText('طوب أسمنتي مصمت').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('حديد تسليح 12 مم').length).toBeGreaterThanOrEqual(1);
+    });
+
+    const finalizeBtn = screen.getByText('💰 اعتماد وإرسال للإدارة المالية');
+    fireEvent.click(finalizeBtn);
+
+    await waitFor(() => {
+      expect(purchaseOrdersApi.finalizeActualPurchaseOrderApi).toHaveBeenCalledWith(
+        101,
+        expect.objectContaining({
+          items: expect.arrayContaining([
+            expect.objectContaining({
+              id: 501,
+              quantity: 100,
+            }),
+            expect.objectContaining({
+              id: 502,
+              quantity: 0,
+            }),
+          ]),
+        })
+      );
+    });
+  });
 });

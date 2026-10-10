@@ -300,12 +300,33 @@ export const QuickReceiptInspectionModal: React.FC<QuickReceiptInspectionModalPr
               </div>
             </div>
 
-            {warehouseKeeperName && (
-              <div className="text-[11px] text-slate-400 flex items-center gap-1 pt-1">
-                <span>👤 أمين المخزن المسلم:</span>
-                <strong className="text-slate-200 font-bold">{warehouseKeeperName}</strong>
-              </div>
-            )}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px] text-slate-400">
+              {warehouseKeeperName ? (
+                <div className="flex items-center gap-1">
+                  <span>🏬 أمين المخزن:</span>
+                  <strong className="text-slate-200 font-bold">{warehouseKeeperName}</strong>
+                  <span className="text-emerald-400 font-bold text-[10px]">(مر على إذن الاستلام)</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1">
+                  <span>🏬 أمين المخزن:</span>
+                  <span className="text-amber-400 font-bold text-[10px]">(لم يمر على إذن الاستلام — توريد مباشر)</span>
+                </div>
+              )}
+              {receipt?.actual_receiver_name || receipt?.actual_receiver?.name || receipt?.receiver?.name ? (
+                <div className="flex items-center gap-1">
+                  <span>👤 المستلم الفعلي:</span>
+                  <strong className="text-cyan-300 font-bold">
+                    {receipt?.actual_receiver_name || receipt?.actual_receiver?.name || receipt?.receiver?.name}
+                  </strong>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1">
+                  <span>👤 المستلم الفعلي:</span>
+                  <span className="text-slate-400 font-normal">غير مسجل</span>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Warehouse Notes Banner */}
