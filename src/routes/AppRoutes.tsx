@@ -99,7 +99,7 @@ export const AppRoutes: React.FC = () => {
                 <Route path="/preferences" element={<UserPreferencesPage />} />
 
                 {/* ── Shared Purchase Request Routes for all operational roles ── */}
-                <Route element={<RoleRoute allowedRoles={["employee", "reviewer", "warehouse_keeper", "site_engineer", "procurement_manager", "accountant", "site_accountant", "licenses_accountant", "buffet_accountant", "general_manager", "admin"]} />}>
+                <Route element={<RoleRoute allowedRoles={["employee", "reviewer", "warehouse_keeper", "site_engineer", "procurement_manager", "accountant", "site_accountant", "licenses_accountant", "buffet_accountant", "general_manager", "execution_manager", "admin"]} />}>
                     <Route path="/requests" element={<PurchaseRequestsPage />} />
                     <Route path="/requests/create" element={<CreatePurchaseRequestPage />} />
                     <Route path="/requests/create-complementary" element={<CreatePurchaseRequestPage initialRequestType="COMPLEMENTARY" />} />
@@ -151,7 +151,7 @@ export const AppRoutes: React.FC = () => {
                 </Route>
 
                 {/* ── Material Receipt / Site Engineer Routes ──────────────────────── */}
-                <Route element={<RoleRoute allowedRoles={["employee", "reviewer", "warehouse_keeper", "site_engineer", "procurement_manager", "accountant", "general_manager", "admin"]} />}>
+                <Route element={<RoleRoute allowedRoles={["employee", "reviewer", "warehouse_keeper", "site_engineer", "procurement_manager", "accountant", "general_manager", "execution_manager", "admin"]} />}>
                     <Route path="/site-engineer" element={<PurchaseReceiptPage mode="site" />} />
                     <Route path="/site-engineer/:id" element={<PurchaseReceiptPage mode="site" />} />
                     <Route path="/receipts" element={<PurchaseReceiptPage mode="site" />} />

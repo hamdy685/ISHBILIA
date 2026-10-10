@@ -160,8 +160,8 @@ export const QuickLauncherBar: React.FC<QuickLauncherBarProps> = ({
       return items;
     }
 
-    // General Manager Shortcuts
-    if (hasRole('general_manager')) {
+    // General Manager & Execution Projects Manager Shortcuts
+    if (hasRole('general_manager') || hasRole('execution_manager')) {
       items.push(
         { id: 'gm-prs', label: 'قرارات طلبات الشراء', icon: '🛡️', to: '/general-manager/purchase-requests', variant: 'primary' },
         { id: 'gm-quotes', label: 'البت والترسية التنفيذية', icon: '⚖️', to: '/general-manager/purchase-quotes', variant: 'amber' },

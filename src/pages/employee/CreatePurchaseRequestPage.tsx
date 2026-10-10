@@ -219,7 +219,7 @@ export const CreatePurchaseRequestPage: React.FC<CreatePurchaseRequestPageProps>
   const draftStorageKey = isComplementaryRoute ? 'ashbiliya.purchase-request.draft.complementary.v1' : DRAFT_STORAGE_KEY;
 
   const { hasRole, user } = useAuth();
-  const isGeneralManager = hasRole('general_manager');
+  const isGeneralManager = hasRole('general_manager') || hasRole('execution_manager');
   const isReviewer = hasRole('reviewer');
   const [isReviewerModalOpen, setIsReviewerModalOpen] = useState(false);
   const [pendingSaveToFavorites, setPendingSaveToFavorites] = useState(false);

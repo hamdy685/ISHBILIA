@@ -45,7 +45,7 @@ export const RoleRoute: React.FC<RoleRouteProps> = ({ allowedRoles, children }) 
       if (hasRole('accountant') || hasRole('site_accountant') || hasRole('licenses_accountant') || hasRole('buffet_accountant')) {
         return <Navigate to={`/accounting/purchase-orders/${poId}${location.search}`} replace />;
       }
-      if (hasRole('general_manager')) {
+      if (hasRole('general_manager') || hasRole('execution_manager')) {
         return <Navigate to={`/general-manager/purchase-orders/${poId}${location.search}`} replace />;
       }
       if (hasRole('procurement_manager')) {
