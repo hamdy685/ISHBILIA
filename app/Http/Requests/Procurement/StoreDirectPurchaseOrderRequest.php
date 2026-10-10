@@ -18,6 +18,7 @@ class StoreDirectPurchaseOrderRequest extends FormRequest
             'one_time_supplier_name' => ['nullable', 'string', 'max:150'],
             'department_id' => ['required', 'integer', 'exists:departments,id'],
             'site_engineer_user_id' => ['required', 'integer', 'exists:users,id'],
+            'requires_warehouse_receipt' => ['nullable', 'boolean'],
             'delivery_date' => ['nullable', 'date'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'items' => ['required', 'array', 'min:1'],

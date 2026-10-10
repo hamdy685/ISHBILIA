@@ -112,6 +112,7 @@ export interface DirectPoPayload {
   one_time_supplier_name?: string;
   department_id: number;
   site_engineer_user_id: number;
+  requires_warehouse_receipt?: boolean;
   delivery_date?: string;
   notes?: string;
   items: Array<{

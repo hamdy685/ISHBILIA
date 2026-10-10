@@ -469,6 +469,7 @@ class ProcurementPurchaseRequestService
                 'user_id' => $procurementManager->id,
                 'department_id' => $data['department_id'],
                 'site_engineer_user_id' => $data['site_engineer_user_id'],
+                'requires_warehouse_receipt' => array_key_exists('requires_warehouse_receipt', $data) ? (bool)$data['requires_warehouse_receipt'] : true,
                 'direct_supplier_id' => $data['supplier_id'],
                 'procurement_route' => 'DIRECT',
                 'status' => 'PENDING_EXECUTIVE_APPROVAL',

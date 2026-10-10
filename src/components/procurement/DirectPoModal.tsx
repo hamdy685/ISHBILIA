@@ -53,6 +53,7 @@ export const DirectPoModal: React.FC<DirectPoModalProps> = ({ isOpen, onClose, o
     return new Date(now.getTime() - offset).toISOString().slice(0, 10);
   });
   const [items, setItems] = useState<ItemRow[]>([emptyItem()]);
+  const [requiresWarehouseReceipt, setRequiresWarehouseReceipt] = useState<boolean>(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -181,6 +182,7 @@ export const DirectPoModal: React.FC<DirectPoModalProps> = ({ isOpen, onClose, o
         one_time_supplier_name: oneTimeSupplierName.trim() || undefined,
         department_id: Number(departmentId),
         site_engineer_user_id: Number(siteEngineerId),
+        requires_warehouse_receipt: requiresWarehouseReceipt,
         delivery_date: deliveryDate || undefined,
         items: items.map(item => {
           const qty = Number(item.quantity);
@@ -294,6 +296,39 @@ export const DirectPoModal: React.FC<DirectPoModalProps> = ({ isOpen, onClose, o
               تاريخ الحاجة
               <input type="date" value={deliveryDate} onChange={event => setDeliveryDate(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-cyan-500/80 bg-[#0b1424] px-3 text-xs text-slate-100 outline-none focus:border-cyan-300" />
             </label>
+
+            {/* خيار استلام وفحص المخزن (عم سلامة) */}
+            <div className="rounded-xl border border-slate-700/80 bg-slate-800/60 p-3 space-y-2 col-span-full">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-start gap-2.5">
+                  <span className="text-xl shrink-0 mt-0.5">🏬</span>
+                  <div>
+                    <span className="font-bold text-slate-100 text-xs block">
+                      استلام وفحص بالمخزن (عم سلامة)
+                    </span>
+                    <span className="text-[11px] text-slate-400 block mt-0.5">
+                      {requiresWarehouseReceipt
+                        ? 'نعم (الافتراضي) — يمر أمر الشراء على عم سلامة في المخزن لاستلام البضاعة وفحصها وإصدار إذن الاستلام.'
+                        : 'لا (توريد مباشر) — يتم توريد البضاعة مباشرة للموقع لمهندس الموقع دون المرور على المخزن أو إشعار عم سلامة.'}
+                    </span>
+                  </div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer select-none shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={requiresWarehouseReceipt}
+                    onChange={(e) => setRequiresWarehouseReceipt(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                </label>
+              </div>
+              <div className="flex items-center gap-2 pt-1.5 border-t border-slate-700/50 text-[11px]">
+                <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${requiresWarehouseReceipt ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-amber-950 text-amber-300 border border-amber-800'}`}>
+                  {requiresWarehouseReceipt ? '✅ يمر على عم سلامة في المخزن' : '⚡ توريد مباشر للموقع (يتخطى عم سلامة)'}
+                </span>
+              </div>
+            </div>
           </div>
 
           <div className="px-3 pb-4 pt-5 sm:px-5 sm:pb-5 sm:pt-6">

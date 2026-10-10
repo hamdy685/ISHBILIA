@@ -402,6 +402,7 @@ class PurchaseReceiptWorkflowTest extends TestCase
             'user_id' => $emp->id,
             'department_id' => $licDept->id,
             'reviewer_user_id' => $reviewer->id,
+            'site_engineer_user_id' => $reviewer->id, // Reviewer designated himself as receiver
             'priority' => 'NORMAL',
             'status' => 'APPROVED_BY_PROCUREMENT',
             'total_estimated_cost' => 500,

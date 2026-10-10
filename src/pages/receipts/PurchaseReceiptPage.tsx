@@ -1567,41 +1567,51 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                   })()}
 
                   {/* Audit Trail & Sign-offs Banner */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs sm:text-sm">
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3.5 space-y-1">
-                      <div className="flex items-center justify-between text-slate-400 font-bold">
-                        <span>{receipt.receipt_type === 'SITE_DIRECT' ? '🏗️ توريد مباشر للموقع:' : '📦 استلام أمين المخزن:'}</span>
-                        <span className="font-mono text-xs text-slate-500">
-                          {receipt.received_at || receipt.created_at?.slice(0, 10) || '—'}
-                        </span>
-                      </div>
-                      <p className="text-slate-100 font-bold text-sm sm:text-base">
-                        {receipt.receipt_type === 'SITE_DIRECT' ? 'توريد مباشر من المورد لموقع المباني (بدون مخزن)' : (receipt.warehouse_keeper?.name || 'عم سلامة (أمين المخزن)')}
-                      </p>
-                      {receipt.warehouse_notes && (
-                        <p className="text-amber-300 text-xs sm:text-sm bg-amber-950/30 p-2.5 rounded-lg border border-amber-900/40 mt-1">
-                          «{receipt.warehouse_notes}»
-                        </p>
-                      )}
-                    </div>
+                  {(() => {
+                    const passedWarehouse = Boolean(receipt.warehouse_keeper || receipt.warehouse_received_at || (receipt.warehouse_keeper_user_id && receipt.receipt_type !== 'SITE_DIRECT'));
+                    const actualReceiverName = receipt.site_engineer?.name || receipt.actual_receiver_name || receipt.receiver?.name || receipt.purchase_order?.purchase_request?.site_engineer?.name || 'مهندس الموقع';
+                    return (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs sm:text-sm">
+                        <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3.5 space-y-1.5">
+                          <div className="flex items-center justify-between text-slate-400 font-bold">
+                            <span>📦 أمين المخزن:</span>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black border ${passedWarehouse ? 'bg-emerald-950 text-emerald-300 border-emerald-800' : 'bg-amber-950 text-amber-300 border-amber-800'}`}>
+                              {passedWarehouse ? '✅ مر على المخزن' : '⚡ لم يمر على المخزن'}
+                            </span>
+                          </div>
+                          <p className="text-slate-100 font-bold text-sm sm:text-base flex items-center gap-1.5">
+                            {passedWarehouse ? (
+                              <span>{receipt.warehouse_keeper?.name ? `تم الاستلام والتفريغ بواسطة: ${receipt.warehouse_keeper.name}` : 'تم الاستلام والتفريغ بالمخزن (عم سلامة)'}</span>
+                            ) : (
+                              <span className="text-amber-300">توريد مباشر للموقع (لم يمر على عم سلامة)</span>
+                            )}
+                          </p>
+                          {receipt.warehouse_notes && (
+                            <p className="text-amber-300 text-xs sm:text-sm bg-amber-950/30 p-2.5 rounded-lg border border-amber-900/40 mt-1">
+                              «{receipt.warehouse_notes}»
+                            </p>
+                          )}
+                        </div>
 
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3.5 space-y-1">
-                      <div className="flex items-center justify-between text-slate-400 font-bold">
-                        <span>👷 اعتماد مهندس الموقع:</span>
-                        <span className="font-mono text-xs text-slate-500">
-                          {isApproved ? 'تم الاعتماد الميداني' : 'قيد المراجعة'}
-                        </span>
+                        <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3.5 space-y-1.5">
+                          <div className="flex items-center justify-between text-slate-400 font-bold">
+                            <span>👷 مهندس الموقع / الاستلام:</span>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black border ${isApproved ? 'bg-emerald-950 text-emerald-300 border-emerald-800' : 'bg-amber-950 text-amber-300 border-amber-800'}`}>
+                              {isApproved ? '✓ استلم فعلياً' : '⏳ قيد الاستلام والمطابقة'}
+                            </span>
+                          </div>
+                          <p className="text-slate-100 font-bold text-sm sm:text-base">
+                            {actualReceiverName}
+                          </p>
+                          {receipt.site_engineer_notes && (
+                            <p className="text-emerald-300 text-xs sm:text-sm bg-emerald-950/30 p-2.5 rounded-lg border border-emerald-900/40 mt-1">
+                              «{receipt.site_engineer_notes}»
+                            </p>
+                          )}
+                        </div>
                       </div>
-                      <p className="text-slate-100 font-bold text-sm sm:text-base">
-                        {receipt.site_engineer?.name || receipt.purchase_order?.purchase_request?.site_engineer?.name || 'مهندس الموقع'}
-                      </p>
-                      {receipt.site_engineer_notes && (
-                        <p className="text-emerald-300 text-xs sm:text-sm bg-emerald-950/30 p-2.5 rounded-lg border border-emerald-900/40 mt-1">
-                          «{receipt.site_engineer_notes}»
-                        </p>
-                      )}
-                    </div>
-                  </div>
+                    );
+                  })()}
 
                   {/* Photo in Archive View */}
                   {Boolean(receipt.photo_url || receipt.photo_path) && (

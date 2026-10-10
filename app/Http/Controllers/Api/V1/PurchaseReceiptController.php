@@ -110,13 +110,19 @@ class PurchaseReceiptController extends Controller
                   ->orWhereHas('purchaseOrder.purchaseRequest', fn ($prQ) => $prQ->where('site_engineer_user_id', $user->id))
                   ->orWhereHas('purchaseRequest', fn ($prQ) => $prQ->where('site_engineer_user_id', $user->id));
 
+                // Only if no site engineer was designated on the receipt or request, fallback to the designated reviewer
                 if ($user->hasRole('reviewer') || $user->hasPermission('purchase_request.review')) {
-                    $q->orWhereHas('purchaseOrder.purchaseRequest', function ($prQ) use ($user) {
-                        $prQ->where('reviewer_user_id', $user->id)
-                            ->when($user->department_id, fn ($sub) => $sub->orWhere('department_id', $user->department_id)->orWhere('target_department_id', $user->department_id));
-                    })->orWhereHas('purchaseRequest', function ($prQ) use ($user) {
-                        $prQ->where('reviewer_user_id', $user->id)
-                            ->when($user->department_id, fn ($sub) => $sub->orWhere('department_id', $user->department_id)->orWhere('target_department_id', $user->department_id));
+                    $q->orWhere(function ($fallbackQ) use ($user) {
+                        $fallbackQ->whereNull('site_engineer_user_id')
+                            ->where(function ($sub) use ($user) {
+                                $sub->whereHas('purchaseOrder.purchaseRequest', function ($prQ) use ($user) {
+                                    $prQ->where('reviewer_user_id', $user->id)
+                                        ->whereNull('site_engineer_user_id');
+                                })->orWhereHas('purchaseRequest', function ($prQ) use ($user) {
+                                    $prQ->where('reviewer_user_id', $user->id)
+                                        ->whereNull('site_engineer_user_id');
+                                });
+                            });
                     });
                 }
             });

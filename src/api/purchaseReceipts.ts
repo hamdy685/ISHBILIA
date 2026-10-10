@@ -43,6 +43,7 @@ export interface ReceiptPurchaseOrder {
     requester?: { id: number; name: string; email?: string } | null;
     department?: { id: number; name: string } | null;
     site_engineer?: { id: number; name: string } | null;
+    site_engineer_user_id?: number | null;
     supplements?: Array<{
       id: number;
       batch_number: number;
@@ -71,15 +72,19 @@ export interface ReceiptRecord {
   supplier_name?: string | null;
   supplier?: { id: number; company_name: string; contact_person?: string | null; phone?: string | null } | null;
   is_internal_warehouse?: boolean;
+  warehouse_keeper_user_id?: number | null;
   warehouse_keeper?: { id: number; name: string } | null;
   warehouse_keeper_pass_status?: string | null;
   warehouse_keeper_pass_label?: string | null;
+  site_engineer_user_id?: number | null;
   site_engineer?: { id: number; name: string } | null;
+  receiver_user_id?: number | null;
   receiver?: { id: number; name: string } | null;
   actual_receiver_name?: string | null;
   actual_receiver_user_id?: number | null;
   actual_receiver?: { id: number; name: string } | null;
   actual_receiver_display_name?: string | null;
+  warehouse_received_at?: string | null;
   purchase_order_id?: number | null;
   purchase_order?: ReceiptPurchaseOrder | null;
   purchase_request?: ReceiptPurchaseOrder['purchase_request'];

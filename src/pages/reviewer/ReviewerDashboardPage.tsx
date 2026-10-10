@@ -244,7 +244,13 @@ export const ReviewerDashboardPage: React.FC = () => {
       })),
 
     ...safeAssignedReceipts
-      .filter((r) => r && (r.status === 'WAREHOUSE_RECEIPT_SUBMITTED' || r.status === 'PENDING_SITE_ENGINEER'))
+      .filter((r) => {
+        if (!r || (r.status !== 'WAREHOUSE_RECEIPT_SUBMITTED' && r.status !== 'PENDING_SITE_ENGINEER')) return false;
+        const siteEngId = r.site_engineer_user_id || (r.site_engineer as any)?.id || r.purchase_order?.purchase_request?.site_engineer_user_id;
+        const receiverId = r.receiver_user_id || (r.receiver as any)?.id || r.actual_receiver_user_id;
+        // Only show if user himself was selected as the receiver, or if completely unassigned
+        return (siteEngId === user?.id) || (receiverId === user?.id) || (!siteEngId && !receiverId);
+      })
       .map((r) => ({
         id: `receipt-${r.id}`,
         rawId: r.id,
