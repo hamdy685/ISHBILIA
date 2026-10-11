@@ -21,17 +21,53 @@ import TableColumnFilters from '../../components/ui/TableColumnFilters';
 import { Modal } from '../../components/ui/Modal';
 import { FormField, Input, Select, SearchableSelect } from '../../components/ui/FormField';
 
-const ROLE_LABELS: Record<string, string> = {
+export const ROLE_LABELS: Record<string, string> = {
   admin: 'مدير النظام',
   general_manager: 'المدير العام',
   execution_manager: 'مدير مشروعات التنفيذ',
+  execution_projects_manager: 'مدير مشروعات التنفيذ',
   accountant: 'المدير المالي',
-  site_accountant: 'الحسابات',
+  financial_director: 'المدير المالي',
+  site_accountant: 'حسابات الموقع والمشاريع',
+  licenses_accountant: 'حسابات التراخيص والمصروفات',
+  buffet_accountant: 'حسابات البوفيه والمكتبيات',
+  general_accountant: 'محاسب عام',
   procurement_manager: 'مدير المشتريات',
-  reviewer: 'المراجع',
-  employee: 'الموظف',
+  reviewer: 'مراجع القسم',
+  employee: 'موظف (مقدم طلب)',
   site_engineer: 'مهندس الموقع',
   warehouse_keeper: 'أمين المخزن',
+};
+
+export const getRoleArabicLabel = (role: { name?: string; slug?: string } | string | null | undefined): string => {
+  if (!role) return 'مستخدم';
+  if (typeof role === 'string') {
+    const key = role.toLowerCase().trim();
+    const underscoreKey = key.replace(/\s+/g, '_');
+    return ROLE_LABELS[key] || ROLE_LABELS[underscoreKey] || role;
+  }
+  const slugKey = (role.slug || '').toLowerCase().trim();
+  if (ROLE_LABELS[slugKey]) return ROLE_LABELS[slugKey];
+
+  const nameKey = (role.name || '').toLowerCase().trim().replace(/\s+/g, '_');
+  if (ROLE_LABELS[nameKey]) return ROLE_LABELS[nameKey];
+
+  switch ((role.name || '').toLowerCase().trim()) {
+    case 'employee': return 'موظف (مقدم طلب)';
+    case 'reviewer': return 'مراجع القسم';
+    case 'site engineer': return 'مهندس الموقع';
+    case 'warehouse keeper': return 'أمين المخزن';
+    case 'procurement manager': return 'مدير المشتريات';
+    case 'financial director': return 'المدير المالي';
+    case 'general manager': return 'المدير العام';
+    case 'admin': return 'مدير النظام';
+    case 'execution projects manager': return 'مدير مشروعات التنفيذ';
+    case 'site accountant': return 'حسابات الموقع والمشاريع';
+    case 'licenses accountant': return 'حسابات التراخيص والمصروفات';
+    case 'buffet accountant': return 'حسابات البوفيه والمكتبيات';
+    case 'general accountant': return 'محاسب عام';
+    default: return role.name || role.slug || 'مستخدم';
+  }
 };
 
 export const UsersPage: React.FC = () => {
@@ -230,7 +266,13 @@ export const UsersPage: React.FC = () => {
 
   const normalizedSearch = searchTerm.trim().toLowerCase();
   const filteredUsers = users.filter((user) => {
-    const roles = (user.roles || []).map((role) => typeof role === 'string' ? role : role.name || role.slug).join(' ');
+    const roles = (user.roles || [])
+      .map((role) => {
+        const arabic = getRoleArabicLabel(role);
+        const raw = typeof role === 'string' ? role : `${role.name || ''} ${role.slug || ''}`;
+        return `${arabic} ${raw}`;
+      })
+      .join(' ');
     const assignedDepartments = (user.site_engineer_departments || []).map((department) => department.name).join('، ');
     const departmentLabel = [user.department?.name, assignedDepartments].filter(Boolean).join('، ');
     const contains = (value: unknown, filter: string) => !filter || String(value ?? '').toLocaleLowerCase('ar-EG').includes(filter.toLocaleLowerCase('ar-EG'));
@@ -300,8 +342,7 @@ export const UsersPage: React.FC = () => {
                 <TableCell>
                   <div className="flex flex-wrap gap-1">
                     {u.roles?.map((r, idx) => {
-                      const roleSlug = typeof r === 'string' ? r : (r as any).slug || (r as any).name;
-                      const roleName = ROLE_LABELS[roleSlug] || 'مستخدم';
+                      const roleName = getRoleArabicLabel(r);
                       return (
                         <span
                           key={typeof r === 'object' && r ? (r as any).id || idx : idx}
@@ -407,8 +448,7 @@ export const UsersPage: React.FC = () => {
                   <dt className="text-slate-500">الأدوار</dt>
                   <dd className="mt-1 flex flex-wrap gap-1">
                     {u.roles?.map((r, idx) => {
-                      const roleSlug = typeof r === 'string' ? r : (r as any).slug || (r as any).name;
-                      const roleName = ROLE_LABELS[roleSlug] || 'مستخدم';
+                      const roleName = getRoleArabicLabel(r);
                       return (
                         <span
                           key={typeof r === 'object' && r ? (r as any).id || idx : idx}
@@ -637,12 +677,23 @@ export const UsersPage: React.FC = () => {
             />
           </FormField>
 
-          <FormField label="الأدوار والصلاحيات">
-            <div className="grid grid-cols-2 gap-2 p-3 bg-slate-950/60 border border-slate-800 rounded-lg">
+          <FormField
+            label="الأدوار والصلاحيات"
+            helperText="حدد دوراً واحداً أو أكثر لهذا المستخدم. يتم تفعيل صلاحيات ومسارات النظام تلقائياً حسب الأدوار المحددة."
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 bg-slate-950/70 border border-slate-800/90 rounded-xl">
               {roles.map((r) => {
                 const isChecked = (formData.role_ids || []).includes(r.id);
+                const arabicLabel = getRoleArabicLabel(r);
                 return (
-                  <label key={r.id} className="flex items-center gap-2 cursor-pointer text-slate-300 text-xs">
+                  <label
+                    key={r.id}
+                    className={`flex items-center gap-2.5 p-2 rounded-lg border transition-all cursor-pointer text-xs select-none ${
+                      isChecked
+                        ? 'bg-cyan-950/40 border-cyan-700/70 text-cyan-200 shadow-sm ring-1 ring-cyan-500/20'
+                        : 'bg-slate-900/60 border-slate-800/80 hover:border-slate-700 hover:bg-slate-900/90 text-slate-300'
+                    }`}
+                  >
                     <input
                       type="checkbox"
                       checked={isChecked}
@@ -657,9 +708,16 @@ export const UsersPage: React.FC = () => {
                           });
                         }
                       }}
-                      className="rounded bg-slate-900 border-slate-700 text-cyan-500 focus:ring-cyan-500"
+                      className="h-4 w-4 rounded bg-slate-950 border-slate-700 text-cyan-500 focus:ring-cyan-500/30 transition cursor-pointer"
                     />
-                    <span>{r.name}</span>
+                    <div className="flex flex-col min-w-0">
+                      <span className={`font-bold ${isChecked ? 'text-cyan-200' : 'text-slate-100'}`}>
+                        {arabicLabel}
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-mono tracking-tight">
+                        {r.name}
+                      </span>
+                    </div>
                   </label>
                 );
               })}

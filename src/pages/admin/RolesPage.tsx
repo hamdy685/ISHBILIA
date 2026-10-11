@@ -6,6 +6,7 @@ import { AdminRole, getRolesAdminApi } from '../../api/admin/roles';
 import { parseApiError } from '../../utils/apiError';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/ui/Table';
 import TableFilterBar from '../../components/ui/TableFilterBar';
+import { getRoleArabicLabel } from './UsersPage';
 
 export const RolesPage: React.FC = () => {
   const { hasPermission } = useAuth();
@@ -44,7 +45,11 @@ export const RolesPage: React.FC = () => {
   }
 
   const normalizedSearch = searchTerm.trim().toLowerCase();
-  const filteredRoles = roles.filter((role) => !normalizedSearch || [role.name, role.slug, role.description].filter(Boolean).join(' ').toLowerCase().includes(normalizedSearch));
+  const filteredRoles = roles.filter((role) => {
+    if (!normalizedSearch) return true;
+    const arabic = getRoleArabicLabel(role);
+    return [role.name, role.slug, role.description, arabic].filter(Boolean).join(' ').toLowerCase().includes(normalizedSearch);
+  });
 
   return (
     <div className="space-y-6 animate-fade-in" dir="rtl">
@@ -82,7 +87,10 @@ export const RolesPage: React.FC = () => {
             {filteredRoles.map((role) => (
               <TableRow key={role.id}>
                 <TableCell className="font-mono text-cyan-400 font-bold">#{role.id}</TableCell>
-                <TableCell className="font-bold text-slate-100">{role.name}</TableCell>
+                <TableCell className="font-bold text-slate-100">
+                  <div className="font-bold text-slate-100">{getRoleArabicLabel(role)}</div>
+                  <div className="text-[11px] font-normal text-slate-400 font-mono">{role.name}</div>
+                </TableCell>
                 <TableCell className="font-mono text-slate-400">{role.slug || role.name}</TableCell>
                 <TableCell className="font-mono text-slate-200">
                   <span className="inline-flex items-center px-2 py-0.5 text-xs font-bold bg-cyan-950 text-cyan-400 border border-cyan-800 rounded">
@@ -111,7 +119,10 @@ export const RolesPage: React.FC = () => {
           filteredRoles.map((role) => (
             <article key={`mobile-role-${role.id}`} className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
               <div className="flex min-w-0 items-start justify-between gap-3 border-b border-slate-800 pb-3">
-                <h3 className="break-normal font-bold text-sm text-slate-100">{role.name}</h3>
+                <div className="min-w-0">
+                  <h3 className="break-normal font-bold text-sm text-slate-100">{getRoleArabicLabel(role)}</h3>
+                  <span className="text-[11px] font-normal text-slate-400 font-mono">{role.name}</span>
+                </div>
                 <span className="shrink-0 font-mono text-xs font-bold text-cyan-400">#{role.id}</span>
               </div>
               <dl className="mt-3 grid min-w-0 grid-cols-1 gap-2 text-xs min-[420px]:grid-cols-2">
