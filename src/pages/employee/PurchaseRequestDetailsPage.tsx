@@ -81,6 +81,22 @@ export const PurchaseRequestDetailsPage: React.FC = () => {
     fetchRequest();
   }, [id]);
 
+  const isOffice = requestData?.request_type === 'OFFICE_SUPPLIES';
+  const issuedPos = requestData?.purchase_orders || [];
+  const confirmPoParam = searchParams.get('confirm_office_po');
+  const activeOfficePo = isOffice && issuedPos.length > 0
+    ? (issuedPos.find((p: any) => String(p.id) === String(confirmPoParam)) || issuedPos[0])
+    : null;
+  const isOfficeReceiptConfirmed = activeOfficePo?.has_approved_receipt || false;
+
+  useEffect(() => {
+    const confirmPoId = searchParams.get('confirm_office_po');
+    if (confirmPoId && activeOfficePo && !isOfficeReceiptConfirmed) {
+      setSelectedPoForReceipt(activeOfficePo);
+      setIsOfficeReceiptModalOpen(true);
+    }
+  }, [searchParams, activeOfficePo, isOfficeReceiptConfirmed]);
+
   const handleConfirmSubmit = async () => {
     if (!requestData) return;
     setIsSubmitting(true);
@@ -135,22 +151,6 @@ export const PurchaseRequestDetailsPage: React.FC = () => {
   const canDelete = isDraft && hasPermission('purchase_request.edit_own');
   const canSubmit = isDraft && hasPermission('purchase_request.submit');
   const reviewerDecisionFinal = REVIEWER_DECISION_STATUSES.includes(requestData.status);
-
-  const isOffice = requestData.request_type === 'OFFICE_SUPPLIES';
-  const issuedPos = requestData.purchase_orders || [];
-  const confirmPoParam = searchParams.get('confirm_office_po');
-  const activeOfficePo = isOffice && issuedPos.length > 0
-    ? (issuedPos.find((p: any) => String(p.id) === String(confirmPoParam)) || issuedPos[0])
-    : null;
-  const isOfficeReceiptConfirmed = activeOfficePo?.has_approved_receipt || false;
-
-  useEffect(() => {
-    const confirmPoId = searchParams.get('confirm_office_po');
-    if (confirmPoId && activeOfficePo && !isOfficeReceiptConfirmed) {
-      setSelectedPoForReceipt(activeOfficePo);
-      setIsOfficeReceiptModalOpen(true);
-    }
-  }, [searchParams, activeOfficePo, isOfficeReceiptConfirmed]);
   const canRequestSupplement =
     [
       'APPROVED_BY_REVIEWER',
