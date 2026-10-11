@@ -80,6 +80,62 @@ class DashboardPendingTasksController extends Controller
             ]);
         }
 
+        // 1.5. Office Supplies Requester: Pending Receipt Confirmation Tasks
+        // When an office supplies PO is issued, the requester themselves receives and confirms delivery.
+        $pendingOfficeOrders = PurchaseOrder::withoutGlobalScope(\App\Scopes\DataIsolationScope::class)
+            ->with(['purchaseRequest.department', 'purchaseRequest.requester', 'supplier', 'items'])
+            ->whereIn('status', ['ISSUED', 'APPROVED_BY_ACCOUNTING', 'PENDING_ACCOUNTING_REVIEW'])
+            ->whereHas('purchaseRequest', function ($prQ) use ($user) {
+                $prQ->where('user_id', $user->id)
+                    ->where('request_type', 'OFFICE_SUPPLIES');
+            })
+            ->whereDoesntHave('receipts', function ($rQ) {
+                $rQ->where('status', 'APPROVED');
+            })
+            ->orderByDesc('updated_at')
+            ->get();
+
+        foreach ($pendingOfficeOrders as $po) {
+            $pr = $po->purchaseRequest;
+            $tasks->push([
+                'id' => "po-office-{$po->id}",
+                'rawId' => $po->id,
+                'type' => 'OFFICE_RECEIPT',
+                'code' => $po->po_number,
+                'title' => "تأكيد استلام المستلزمات المكتبية لأمر الشراء {$po->po_number}",
+                'subtitle' => $pr ? "الطلب {$pr->request_number} — " . ($po->supplier?->company_name ?: 'المورد') : ($po->supplier?->company_name ?: 'المورد'),
+                'department' => $pr?->department?->name,
+                'supplier' => $po->supplier?->company_name,
+                'amount' => $po->grand_total ? (float) $po->grand_total : null,
+                'urgency' => 'HIGH',
+                'reason' => 'تم إصدار أمر الشراء وبانتظار تأكيد استلام الأصناف المكتبية في المقر لإحالتها لأمر الشراء الفعلي تمهيداً للحسابات',
+                'actionUrl' => "/employee/requests/{$pr->id}?confirm_office_po={$po->id}",
+                'actionLabel' => 'تأكيد استلام المستلزمات المكتبية',
+                'stageBadge' => [
+                    'text' => 'استلام مستلزمات مكتبية',
+                    'icon' => '📦',
+                    'className' => 'bg-indigo-950/80 text-indigo-300 border-indigo-800/60 ring-1 ring-indigo-500/40',
+                ],
+                'purchase_order_id' => $po->id,
+                'purchase_request_id' => $pr?->id,
+                'document_id' => $po->id,
+                'document_number' => $po->po_number,
+                'action_owner_id' => $user->id,
+                'requester_id' => $pr?->user_id,
+                'request_type' => 'OFFICE_SUPPLIES',
+                'items_count' => $po->items->count(),
+                'created_at' => $po->created_at?->toISOString(),
+                'timeAgo' => $po->created_at?->format('Y-m-d H:i'),
+                'items_list' => $po->items->map(fn ($it) => [
+                    'description' => $it->item_description ?: 'صنف مكتبي',
+                    'quantity' => (float) $it->quantity,
+                    'uom' => $it->uom,
+                    'parcel' => $it->item_reference,
+                    'region' => $it->region,
+                ])->values()->all(),
+            ]);
+        }
+
         // 2. Site Engineer / Technical Field Receiver: Pending Inspection Receipts
         // Sync direct site receipts for this user if assigned
         try {

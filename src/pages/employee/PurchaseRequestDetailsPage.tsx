@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, useSearchParams, Link } from 'react-router-dom';
 import ErrorMessage from '../../components/ErrorMessage';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import PurchaseRequestStatusBadge from '../../components/purchase-requests/PurchaseRequestStatusBadge';
@@ -42,6 +42,7 @@ export const PurchaseRequestDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { hasPermission, hasRole, user } = useAuth();
   const isReviewer = hasRole('reviewer');
 
@@ -137,8 +138,19 @@ export const PurchaseRequestDetailsPage: React.FC = () => {
 
   const isOffice = requestData.request_type === 'OFFICE_SUPPLIES';
   const issuedPos = requestData.purchase_orders || [];
-  const activeOfficePo = isOffice && issuedPos.length > 0 ? issuedPos[0] : null;
+  const confirmPoParam = searchParams.get('confirm_office_po');
+  const activeOfficePo = isOffice && issuedPos.length > 0
+    ? (issuedPos.find((p: any) => String(p.id) === String(confirmPoParam)) || issuedPos[0])
+    : null;
   const isOfficeReceiptConfirmed = activeOfficePo?.has_approved_receipt || false;
+
+  useEffect(() => {
+    const confirmPoId = searchParams.get('confirm_office_po');
+    if (confirmPoId && activeOfficePo && !isOfficeReceiptConfirmed) {
+      setSelectedPoForReceipt(activeOfficePo);
+      setIsOfficeReceiptModalOpen(true);
+    }
+  }, [searchParams, activeOfficePo, isOfficeReceiptConfirmed]);
   const canRequestSupplement =
     [
       'APPROVED_BY_REVIEWER',

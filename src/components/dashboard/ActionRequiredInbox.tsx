@@ -30,7 +30,7 @@ export interface ActionInboxItemDetail {
 export interface ActionInboxItem {
   id: string | number;
   rawId: number;
-  type: 'PR' | 'PO' | 'QUOTE' | 'INVOICE' | 'RECEIPT' | 'SUPPLEMENT';
+  type: 'PR' | 'PO' | 'QUOTE' | 'INVOICE' | 'RECEIPT' | 'SUPPLEMENT' | 'OFFICE_RECEIPT';
   code: string;
   title: string;
   subtitle?: string;
@@ -131,6 +131,10 @@ export const resolveReceiptId = (item: ActionInboxItem): number | string | null 
  * inspection route (/receipts/{receipt_id}/inspect) using the actual receipt_id.
  */
 export const resolveActionItemUrl = (item: ActionInboxItem): string => {
+  if (item.type === 'OFFICE_RECEIPT') {
+    return item.actionUrl;
+  }
+
   const isReceipt =
     item.type === 'RECEIPT' ||
     item.actionLabel?.includes('إذن الاستلام') ||
