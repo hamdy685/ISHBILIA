@@ -126,7 +126,7 @@ export const AppRoutes: React.FC = () => {
                 </Route>
 
                 {/* ── Employee Routes ───────────────────────────────────────── */}
-                <Route element={<RoleRoute allowedRoles={["employee"]} />}>
+                <Route element={<RoleRoute allowedRoles={["employee", "reviewer", "admin"]} />}>
                     <Route path="/employee" element={<EmployeeDashboardPage />} />
                     <Route path="/employee/requests" element={<PurchaseRequestsPage />} />
                     <Route path="/employee/requests/create" element={<CreatePurchaseRequestPage />} />

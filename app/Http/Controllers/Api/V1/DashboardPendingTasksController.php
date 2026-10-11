@@ -109,7 +109,7 @@ class DashboardPendingTasksController extends Controller
                 'amount' => $po->grand_total ? (float) $po->grand_total : null,
                 'urgency' => 'HIGH',
                 'reason' => 'تم إصدار أمر الشراء وبانتظار تأكيد استلام الأصناف المكتبية في المقر لإحالتها لأمر الشراء الفعلي تمهيداً للحسابات',
-                'actionUrl' => "/employee/requests/{$pr->id}?confirm_office_po={$po->id}",
+                'actionUrl' => "/requests/{$pr->id}?confirm_office_po={$po->id}",
                 'actionLabel' => 'تأكيد استلام المستلزمات المكتبية',
                 'stageBadge' => [
                     'text' => 'استلام مستلزمات مكتبية',

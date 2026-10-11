@@ -132,7 +132,8 @@ export const resolveReceiptId = (item: ActionInboxItem): number | string | null 
  */
 export const resolveActionItemUrl = (item: ActionInboxItem): string => {
   if (item.type === 'OFFICE_RECEIPT') {
-    return item.actionUrl;
+    const rawUrl = item.actionUrl || `/requests/${item.purchase_request_id || item.rawId}?confirm_office_po=${item.purchase_order_id || item.rawId}`;
+    return rawUrl.replace('/employee/requests/', '/requests/');
   }
 
   const isReceipt =
