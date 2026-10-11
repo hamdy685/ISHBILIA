@@ -1156,6 +1156,12 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                 <span>توريد مباشر لموقع المباني (استلام مباشر بالموقع دون مرور بالمخزن)</span>
                               </span>
                             )}
+                            {receipt.receipt_type === 'REQUESTER_OFFICE' && (
+                              <span className="text-xs sm:text-sm font-black text-indigo-200 bg-indigo-950/90 border border-indigo-500/80 px-3 py-1 rounded-xl flex items-center gap-1.5 shadow-md">
+                                <span>🏢</span>
+                                <span>توريد مستلزمات مكتبية (استلام وتأكيد مباشر في مقر الشركة)</span>
+                              </span>
+                            )}
                             {(receipt.is_internal_warehouse || receipt.supplier?.company_name === 'المخزن الداخلي' || receipt.purchase_order?.supplier?.company_name === 'المخزن الداخلي') && (
                               <span className="text-xs sm:text-sm font-black text-purple-200 bg-purple-950/90 border border-purple-500/80 px-3 py-1 rounded-xl flex items-center gap-1.5 shadow-md">
                                 <span>🏛️</span>
@@ -1291,7 +1297,12 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                       {/* Items Cards */}
                       <div className="space-y-4">
                         <h4 className="text-xs sm:text-sm font-black text-emerald-300 flex items-center gap-2">
-                          <span>🏗️</span> بنود الاستلام المطلوب فحصها هندسياً ({receipt.items?.length || 0} بنود):
+                          <span>{receipt.receipt_type === 'REQUESTER_OFFICE' ? '🏢' : '🏗️'}</span>
+                          <span>
+                            {receipt.receipt_type === 'REQUESTER_OFFICE'
+                              ? `بنود المستلزمات المكتبية المطلوب استلامها وفحصها (${receipt.items?.length || 0} صنف):`
+                              : `بنود الاستلام المطلوب فحصها هندسياً (${receipt.items?.length || 0} بنود):`}
+                          </span>
                         </h4>
 
                         <div className="space-y-3.5">
@@ -1351,7 +1362,11 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                       <>
                                         <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-4 flex flex-col justify-between space-y-1">
                                           <span className="text-xs font-bold text-slate-400">
-                                            {receipt.receipt_type === 'SITE_DIRECT' ? 'الكمية المطلوبة للتوريد المباشر بالموقع:' : 'الكمية المسجلة من أمين المخزن:'}
+                                            {receipt.receipt_type === 'REQUESTER_OFFICE'
+                                              ? 'الكمية المطلوبة في أمر الشراء:'
+                                              : receipt.receipt_type === 'SITE_DIRECT'
+                                              ? 'الكمية المطلوبة للتوريد المباشر بالموقع:'
+                                              : 'الكمية المسجلة من أمين المخزن:'}
                                           </span>
                                           <div className="font-mono text-xl sm:text-2xl font-black text-cyan-300 flex items-baseline gap-2 mt-1">
                                             <span>{displayReceivedQty}</span>
@@ -1359,12 +1374,16 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                           </div>
                                         </div>
 
-                                        {/* Site Engineer Confirmed Quantity */}
+                                        {/* Site Engineer / Receiver Confirmed Quantity */}
                                         <div className="rounded-2xl border-2 border-emerald-500/80 bg-emerald-950/30 p-4 space-y-2 shadow-inner">
                                           <div className="flex items-center justify-between">
                                             <label htmlFor={`site-qty-${key}`} className="text-xs sm:text-sm font-black text-emerald-300 flex items-center gap-1.5">
-                                              <span>👷</span>
-                                              <span>الكمية المعتمدة ميدانياً:</span>
+                                              <span>{receipt.receipt_type === 'REQUESTER_OFFICE' ? '🏢' : '👷'}</span>
+                                              <span>
+                                                {receipt.receipt_type === 'REQUESTER_OFFICE'
+                                                  ? 'الكمية المستلمة فعلياً في المقر:'
+                                                  : 'الكمية المعتمدة ميدانياً:'}
+                                              </span>
                                             </label>
                                             <span className="text-[11px] font-bold text-emerald-400 bg-emerald-950 border border-emerald-500/50 px-2 py-0.5 rounded-full">
                                               جاهزة للاعتماد
@@ -1410,13 +1429,23 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                         {/* General Site Notes */}
                         <div className="space-y-1.5 pt-2">
                           <label className="text-xs sm:text-sm font-bold text-slate-300">
-                            {isReviewer ? 'ملاحظات واعتماد المراجع الفني / رئيس القسم (اختياري):' : 'ملاحظات واعتماد مهندس الموقع (اختياري):'}
+                            {receipt.receipt_type === 'REQUESTER_OFFICE'
+                              ? 'ملاحظات المستلم الفعلي (اختياري):'
+                              : isReviewer
+                              ? 'ملاحظات واعتماد المراجع الفني / رئيس القسم (اختياري):'
+                              : 'ملاحظات واعتماد مهندس الموقع (اختياري):'}
                           </label>
                           <textarea
                             rows={2}
                             value={notes[receipt.id] || ''}
                             onChange={(e) => setNotes({ ...notes, [receipt.id]: e.target.value })}
-                            placeholder={isReviewer ? 'ملاحظات المراجع الفني على استلام وفحص ومطابقة المواد...' : 'ملاحظات مهندس الموقع على استلام وفحص المواد بالموقع...'}
+                            placeholder={
+                              receipt.receipt_type === 'REQUESTER_OFFICE'
+                                ? 'ملاحظاتك على استلام وفحص المستلزمات المكتبية...'
+                                : isReviewer
+                                ? 'ملاحظات المراجع الفني على استلام وفحص ومطابقة المواد...'
+                                : 'ملاحظات مهندس الموقع على استلام وفحص المواد بالموقع...'
+                            }
                             className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-xs sm:text-sm text-slate-100 focus:border-cyan-400 focus:outline-none"
                           />
                         </div>
@@ -1430,7 +1459,12 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                             onClick={() => approveReceipt(receipt)}
                             className="w-full font-black text-base sm:text-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 py-3.5 rounded-2xl shadow-xl shadow-emerald-950/60 flex items-center justify-center gap-2"
                           >
-                            <span>✓</span> {isReviewer ? 'اعتماد ومطابقة إذن الاستلام وإرساله للمشتريات لإصدار أمر الشراء الفعلي' : 'اعتماد مطابق للموقع وإرسال للمشتريات لإصدار أمر الشراء الفعلي'}
+                            <span>✓</span>{' '}
+                            {receipt.receipt_type === 'REQUESTER_OFFICE'
+                              ? 'اعتماد استلام المستلزمات المكتبية وإرساله للمشتريات لإصدار أمر الشراء الفعلي'
+                              : isReviewer
+                              ? 'اعتماد ومطابقة إذن الاستلام وإرساله للمشتريات لإصدار أمر الشراء الفعلي'
+                              : 'اعتماد مطابق للموقع وإرسال للمشتريات لإصدار أمر الشراء الفعلي'}
                           </Button>
                         </div>
                       </div>

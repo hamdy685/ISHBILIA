@@ -267,8 +267,15 @@ export const QuickReceiptInspectionModal: React.FC<QuickReceiptInspectionModalPr
                     📑 أمر الشراء: <strong className="text-cyan-300 font-mono">{poNumber}</strong>
                   </span>
                 )}
-                <span className="text-xs font-black bg-emerald-950 text-emerald-300 border border-emerald-800/60 px-2.5 py-1 rounded-xl flex items-center gap-1">
-                  <span>📦</span> إذن استلام مواد
+                <span
+                  className={`text-xs font-black px-2.5 py-1 rounded-xl flex items-center gap-1 ${
+                    receipt?.receipt_type === 'REQUESTER_OFFICE'
+                      ? 'bg-indigo-950 text-indigo-300 border border-indigo-800/60'
+                      : 'bg-emerald-950 text-emerald-300 border border-emerald-800/60'
+                  }`}
+                >
+                  <span>{receipt?.receipt_type === 'REQUESTER_OFFICE' ? '🏢' : '📦'}</span>{' '}
+                  {receipt?.receipt_type === 'REQUESTER_OFFICE' ? 'استلام مستلزمات مكتبية' : 'إذن استلام مواد'}
                 </span>
               </div>
 

@@ -81,6 +81,7 @@ class PurchaseReceiptController extends Controller
     public function indexAssigned(Request $request)
     {
         $this->service->syncPendingDirectSiteReceiptsForEngineer($request->user());
+        $this->service->syncPendingOfficeReceiptsForRequester($request->user());
         $user = $request->user();
 
         $query = PurchaseReceipt::with([

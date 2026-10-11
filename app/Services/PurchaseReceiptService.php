@@ -386,6 +386,7 @@ class PurchaseReceiptService
         $isAuthorized = $siteEngineer->hasAnyRole(['admin', 'general_manager'])
             || $assignedSiteId === (int) $siteEngineer->id
             || (int) $receipt->receiver_user_id === (int) $siteEngineer->id
+            || (int) ($pr?->user_id) === (int) $siteEngineer->id
             || $isReviewerAuthorized;
 
         if (! $isAuthorized) {
@@ -464,6 +465,7 @@ class PurchaseReceiptService
         $isAuthorized = $siteEngineer->hasAnyRole(['admin', 'general_manager'])
             || $assignedSiteId === (int) $siteEngineer->id
             || (int) $receipt->receiver_user_id === (int) $siteEngineer->id
+            || (int) ($pr?->user_id) === (int) $siteEngineer->id
             || $isReviewerAuthorized;
 
         if (! $isAuthorized) {
@@ -477,7 +479,7 @@ class PurchaseReceiptService
             throw new \RuntimeException('لا يمكن إتمام الاستلام حالياً؛ يوجد طلب كمالة قيد التسعير وإصدار أمر الشراء لدى إدارة المشتريات (م. أحمد). يرجى الانتظار حتى يتم تحميل البنود على أمر الشراء.');
         }
 
-        return DB::transaction(function () use ($siteEngineer, $receipt, $notes): PurchaseReceipt {
+        return DB::transaction(function () use ($siteEngineer, $receipt, $notes, $pr): PurchaseReceipt {
             $receipt->loadMissing(['purchaseOrder.supplier', 'supplier']);
             $isInternalWarehouse = $receipt->isInternalWarehouse();
 
@@ -486,6 +488,9 @@ class PurchaseReceiptService
                 'site_engineer_approved_at' => now(),
                 'site_engineer_notes' => $notes,
                 'site_engineer_user_id' => $receipt->site_engineer_user_id ?: $siteEngineer->id,
+                'receiver_user_id' => $receipt->receiver_user_id ?: $siteEngineer->id,
+                'receiver_approved_at' => $receipt->receipt_type === 'REQUESTER_OFFICE' ? now() : $receipt->receiver_approved_at,
+                'receiver_notes' => $receipt->receipt_type === 'REQUESTER_OFFICE' ? ($notes ?: $receipt->receiver_notes) : $receipt->receiver_notes,
             ]);
 
             // Regardless of whether it is an internal warehouse order or an external supplier,
@@ -504,17 +509,25 @@ class PurchaseReceiptService
             })->filter()->unique()->values()->all();
             $itemsSummary = !empty($itemDescriptions) ? ' [البنود: ' . implode('، ', array_slice($itemDescriptions, 0, 3)) . (count($itemDescriptions) > 3 ? '...' : '') . ']' : '';
 
-            $actorRoleLabel = $siteEngineer->hasRole('reviewer') ? 'المراجع الفني/رئيس القسم' : 'مهندس الموقع';
+            $isOffice = $receipt->receipt_type === 'REQUESTER_OFFICE';
+            $actorRoleLabel = $isOffice
+                ? 'مقدم الطلب / المستلم'
+                : ($siteEngineer->hasRole('reviewer') ? 'المراجع الفني/رئيس القسم' : 'مهندس الموقع');
+
             ApprovalHistory::create([
                 'target_type' => PurchaseReceipt::class,
                 'target_id' => $receipt->id,
                 'actor_user_id' => $siteEngineer->id,
-                'action' => $isInternalWarehouse ? 'INTERNAL_STOCK_RECEIPT_APPROVED' : 'SITE_ENGINEER_RECEIPT_APPROVED',
+                'action' => $isOffice
+                    ? 'OFFICE_RECEIPT_APPROVED'
+                    : ($isInternalWarehouse ? 'INTERNAL_STOCK_RECEIPT_APPROVED' : 'SITE_ENGINEER_RECEIPT_APPROVED'),
                 'from_state' => 'PENDING_SITE_ENGINEER',
                 'to_state' => 'APPROVED',
-                'comments' => $isInternalWarehouse
-                    ? ($notes ? "{$notes} — استلام وتفريغ{$itemsSummary} من المخزن الداخلي، بانتظار إصدار أمر الشراء الفعلي." : "اعتمد {$actorRoleLabel} استلام المواد{$itemsSummary} المنصرفة من المخزن الداخلي، وبانتظار مراجعة وإصدار أمر الشراء الفعلي.")
-                    : ($notes ? "{$notes} — البنود المستلمة{$itemsSummary}" : "اعتمد {$actorRoleLabel} فحص واستلام البنود{$itemsSummary} وأُعيد الملف لإدارة المشتريات لإصدار أمر الشراء الفعلي المستقل الخاص بها."),
+                'comments' => $isOffice
+                    ? ($notes ? "{$notes} — استلام المستلزمات المكتبية بمقر الشركة{$itemsSummary}، وأُحيل الملف للمشتريات لإصدار أمر الشراء الفعلي." : "اعتمد {$actorRoleLabel} استلام وفحص المستلزمات المكتبية{$itemsSummary} بمقر الشركة، وبانتظار أمر الشراء الفعلي.")
+                    : ($isInternalWarehouse
+                        ? ($notes ? "{$notes} — استلام وتفريغ{$itemsSummary} من المخزن الداخلي، بانتظار إصدار أمر الشراء الفعلي." : "اعتمد {$actorRoleLabel} استلام المواد{$itemsSummary} المنصرفة من المخزن الداخلي، وبانتظار مراجعة وإصدار أمر الشراء الفعلي.")
+                        : ($notes ? "{$notes} — البنود المستلمة{$itemsSummary}" : "اعتمد {$actorRoleLabel} فحص واستلام البنود{$itemsSummary} وأُعيد الملف لإدارة المشتريات لإصدار أمر الشراء الفعلي المستقل الخاص بها.")),
             ]);
 
             $notificationService = app(NotificationService::class);
@@ -606,38 +619,87 @@ class PurchaseReceiptService
         $itemsMap = collect($items)->keyBy('purchase_order_item_id');
 
         return DB::transaction(function () use ($requester, $purchaseOrder, $pr, $orderItems, $itemsMap, $notes): PurchaseReceipt {
-            $supplierId = $purchaseOrder->supplier_id ?: \App\Models\Supplier::getOrCreateInternalWarehouseSupplier()->id;
-            $receipt = PurchaseReceipt::create([
-                'purchase_order_id' => $purchaseOrder->id,
-                'purchase_request_id' => $pr->id,
-                'supplier_id' => $supplierId,
-                'warehouse_keeper_user_id' => null,
-                'site_engineer_user_id' => null,
-                'receiver_user_id' => $requester->id,
-                'receipt_number' => $this->generateUniqueReceiptNumber('REC-OFFICE-'),
-                'receipt_type' => 'REQUESTER_OFFICE',
-                'status' => 'APPROVED',
-                'received_at' => now()->toDateString(),
-                'receiver_approved_at' => now(),
-                'receiver_notes' => $notes,
-            ]);
+            $existingReceipt = PurchaseReceipt::where('purchase_order_id', $purchaseOrder->id)
+                ->where('status', 'PENDING_SITE_ENGINEER')
+                ->first();
 
-            foreach ($orderItems as $orderItem) {
-                $itemPayload = $itemsMap->get($orderItem->id);
-                $receivedQuantity = $itemPayload && isset($itemPayload['received_quantity'])
-                    ? (float) $itemPayload['received_quantity']
-                    : (float) $orderItem->quantity;
+            if ($existingReceipt) {
+                $existingReceipt->loadMissing('items');
+                $receiptItems = $existingReceipt->items->keyBy('purchase_order_item_id');
 
-                if ($receivedQuantity < 0) {
-                    $receivedQuantity = (float) $orderItem->quantity;
+                foreach ($orderItems as $orderItem) {
+                    $itemPayload = $itemsMap->get($orderItem->id);
+                    $receivedQuantity = $itemPayload && isset($itemPayload['received_quantity'])
+                        ? (float) $itemPayload['received_quantity']
+                        : (float) $orderItem->quantity;
+
+                    if ($receivedQuantity < 0) {
+                        $receivedQuantity = (float) $orderItem->quantity;
+                    }
+
+                    $rItem = $receiptItems->get($orderItem->id);
+                    if ($rItem) {
+                        $rItem->update([
+                            'received_quantity' => $receivedQuantity,
+                            'notes' => $itemPayload['notes'] ?? $rItem->notes ?? 'تم الاستلام بواسطة مقدم الطلب',
+                        ]);
+                    } else {
+                        $existingReceipt->items()->create([
+                            'purchase_order_item_id' => $orderItem->id,
+                            'ordered_quantity' => $orderItem->quantity,
+                            'received_quantity' => $receivedQuantity,
+                            'notes' => $itemPayload['notes'] ?? 'تم الاستلام بواسطة مقدم الطلب',
+                        ]);
+                    }
                 }
 
-                $receipt->items()->create([
-                    'purchase_order_item_id' => $orderItem->id,
-                    'ordered_quantity' => $orderItem->quantity,
-                    'received_quantity' => $receivedQuantity,
-                    'notes' => $itemPayload['notes'] ?? 'تم الاستلام بواسطة مقدم الطلب',
+                $existingReceipt->update([
+                    'status' => 'APPROVED',
+                    'receiver_user_id' => $requester->id,
+                    'site_engineer_user_id' => $existingReceipt->site_engineer_user_id ?: $requester->id,
+                    'receiver_approved_at' => now(),
+                    'site_engineer_approved_at' => now(),
+                    'receiver_notes' => $notes,
+                    'site_engineer_notes' => $notes,
                 ]);
+
+                $receipt = $existingReceipt;
+            } else {
+                $supplierId = $purchaseOrder->supplier_id ?: \App\Models\Supplier::getOrCreateInternalWarehouseSupplier()->id;
+                $receipt = PurchaseReceipt::create([
+                    'purchase_order_id' => $purchaseOrder->id,
+                    'purchase_request_id' => $pr->id,
+                    'supplier_id' => $supplierId,
+                    'warehouse_keeper_user_id' => null,
+                    'site_engineer_user_id' => $requester->id,
+                    'receiver_user_id' => $requester->id,
+                    'receipt_number' => $this->generateUniqueReceiptNumber('REC-OFFICE-'),
+                    'receipt_type' => 'REQUESTER_OFFICE',
+                    'status' => 'APPROVED',
+                    'received_at' => now()->toDateString(),
+                    'receiver_approved_at' => now(),
+                    'site_engineer_approved_at' => now(),
+                    'receiver_notes' => $notes,
+                    'site_engineer_notes' => $notes,
+                ]);
+
+                foreach ($orderItems as $orderItem) {
+                    $itemPayload = $itemsMap->get($orderItem->id);
+                    $receivedQuantity = $itemPayload && isset($itemPayload['received_quantity'])
+                        ? (float) $itemPayload['received_quantity']
+                        : (float) $orderItem->quantity;
+
+                    if ($receivedQuantity < 0) {
+                        $receivedQuantity = (float) $orderItem->quantity;
+                    }
+
+                    $receipt->items()->create([
+                        'purchase_order_item_id' => $orderItem->id,
+                        'ordered_quantity' => $orderItem->quantity,
+                        'received_quantity' => $receivedQuantity,
+                        'notes' => $itemPayload['notes'] ?? 'تم الاستلام بواسطة مقدم الطلب',
+                    ]);
+                }
             }
 
             $purchaseOrder->update([
@@ -812,5 +874,102 @@ class PurchaseReceiptService
     {
         $this->syncPendingDirectSiteReceiptsForEngineer($siteEngineer);
     }
+
+    /**
+     * Automatically create a pending office receipt for office supplies orders bypassing the warehouse,
+     * assigning inspection and acceptance to the requester directly.
+     */
+    public function createOfficeReceipt(PurchaseOrder $purchaseOrder, int $requesterId): PurchaseReceipt
+    {
+        $existing = PurchaseReceipt::where('purchase_order_id', $purchaseOrder->id)
+            ->whereIn('status', ['PENDING_SITE_ENGINEER', 'APPROVED'])
+            ->first();
+
+        if ($existing) {
+            return $existing;
+        }
+
+        return DB::transaction(function () use ($purchaseOrder, $requesterId): PurchaseReceipt {
+            $supplierId = $purchaseOrder->supplier_id ?: \App\Models\Supplier::getOrCreateInternalWarehouseSupplier()->id;
+            $receipt = PurchaseReceipt::create([
+                'purchase_order_id' => $purchaseOrder->id,
+                'purchase_request_id' => $purchaseOrder->purchase_request_id,
+                'supplier_id' => $supplierId,
+                'warehouse_keeper_user_id' => null,
+                'site_engineer_user_id' => $requesterId,
+                'receiver_user_id' => $requesterId,
+                'receipt_number' => $this->generateUniqueReceiptNumber('REC-OFFICE-'),
+                'receipt_type' => 'REQUESTER_OFFICE',
+                'status' => 'PENDING_SITE_ENGINEER',
+                'received_at' => now()->toDateString(),
+                'warehouse_submitted_at' => now(),
+                'warehouse_notes' => 'توريد مستلزمات مكتبية لمقر الشركة — تم تخطي المخزن وتوجيه إذن الاستلام لمقدم الطلب للفحص والاعتماد.',
+            ]);
+
+            foreach ($purchaseOrder->items as $orderItem) {
+                $receipt->items()->create([
+                    'purchase_order_item_id' => $orderItem->id,
+                    'ordered_quantity' => $orderItem->quantity,
+                    'received_quantity' => $orderItem->quantity,
+                    'notes' => 'مستلزمات مكتبية',
+                ]);
+            }
+
+            if (! in_array($purchaseOrder->delivery_status, ['DELIVERED', 'COMPLETED', 'COMPLETE'], true)) {
+                $purchaseOrder->update(['delivery_status' => 'IN_RECEIPT']);
+            }
+
+            ApprovalHistory::create([
+                'target_type' => PurchaseReceipt::class,
+                'target_id' => $receipt->id,
+                'actor_user_id' => $purchaseOrder->created_by_user_id ?? $requesterId,
+                'action' => 'OFFICE_RECEIPT_CREATED',
+                'from_state' => 'ISSUED',
+                'to_state' => 'PENDING_SITE_ENGINEER',
+                'comments' => 'تم إنشاء إذن استلام المستلزمات المكتبية وتوجيهه لمقدم الطلب للفحص وتعديل الكميات المستلمة واعتمادها.',
+            ]);
+
+            $requester = User::find($requesterId);
+            if ($requester) {
+                app(NotificationService::class)->queueNotification(
+                    $requester,
+                    'purchase_receipt_pending_site_engineer',
+                    'استلام مستلزمات مكتبية بانتظار فحصك واعتمادك',
+                    "أمر الشراء {$purchaseOrder->po_number} تم توجيهه إليك لاستلام الأصناف المكتبية واعتماد إذن الاستلام {$receipt->receipt_number}.",
+                    $receipt
+                );
+            }
+
+            return $receipt->fresh(['purchaseOrder.supplier', 'purchaseOrder.items.item', 'purchaseRequest', 'warehouseKeeper', 'siteEngineer', 'receiver', 'items.purchaseOrderItem']);
+        });
+    }
+
+    /**
+     * Sync and generate any missing pending office receipts for office supplies orders assigned to this requester.
+     */
+    public function syncPendingOfficeReceiptsForRequester(User $user): void
+    {
+        $pendingPos = PurchaseOrder::with([
+            'purchaseRequest',
+            'items',
+        ])
+            ->whereIn('status', ['ISSUED', 'PENDING_ACCOUNTING_REVIEW', 'APPROVED_BY_ACCOUNTING'])
+            ->whereDoesntHave('receipts', fn ($query) => $query->whereIn('status', ['PENDING_SITE_ENGINEER', 'APPROVED']))
+            ->whereHas('purchaseRequest', function ($query) use ($user) {
+                $query->withoutGlobalScope(\App\Scopes\DataIsolationScope::class)
+                    ->where('request_type', 'OFFICE_SUPPLIES');
+
+                if (! $user->hasAnyRole(['admin', 'procurement_manager', 'general_manager'])) {
+                    $query->where('user_id', $user->id);
+                }
+            })
+            ->get();
+
+        foreach ($pendingPos as $po) {
+            $requesterId = (int) ($po->purchaseRequest?->user_id ?? $user->id);
+            $this->createOfficeReceipt($po, $requesterId);
+        }
+    }
 }
+
 

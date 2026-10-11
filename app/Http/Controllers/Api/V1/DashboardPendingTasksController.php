@@ -80,8 +80,15 @@ class DashboardPendingTasksController extends Controller
             ]);
         }
 
+        // Sync direct site receipts & office receipts for this user if assigned
+        try {
+            $this->receiptService->syncPendingDirectSiteReceiptsForEngineer($user);
+            $this->receiptService->syncPendingOfficeReceiptsForRequester($user);
+        } catch (\Throwable) {}
+
         // 1.5. Office Supplies Requester: Pending Receipt Confirmation Tasks
-        // When an office supplies PO is issued, the requester themselves receives and confirms delivery.
+        // When an office supplies PO is issued, if no pending/approved receipt was generated yet,
+        // show this task pointing to confirmation.
         $pendingOfficeOrders = PurchaseOrder::withoutGlobalScope(\App\Scopes\DataIsolationScope::class)
             ->with(['purchaseRequest.department', 'purchaseRequest.requester', 'supplier', 'items'])
             ->whereIn('status', ['ISSUED', 'APPROVED_BY_ACCOUNTING', 'PENDING_ACCOUNTING_REVIEW'])
@@ -90,7 +97,7 @@ class DashboardPendingTasksController extends Controller
                     ->where('request_type', 'OFFICE_SUPPLIES');
             })
             ->whereDoesntHave('receipts', function ($rQ) {
-                $rQ->where('status', 'APPROVED');
+                $rQ->whereIn('status', ['PENDING_SITE_ENGINEER', 'APPROVED']);
             })
             ->orderByDesc('updated_at')
             ->get();
@@ -137,11 +144,6 @@ class DashboardPendingTasksController extends Controller
         }
 
         // 2. Site Engineer / Technical Field Receiver: Pending Inspection Receipts
-        // Sync direct site receipts for this user if assigned
-        try {
-            $this->receiptService->syncPendingDirectSiteReceiptsForEngineer($user);
-        } catch (\Throwable) {}
-
         $assignedReceipts = PurchaseReceipt::withoutGlobalScope(\App\Scopes\DataIsolationScope::class)
             ->with([
                 'supplier',
@@ -186,20 +188,29 @@ class DashboardPendingTasksController extends Controller
             ->get();
 
         foreach ($assignedReceipts as $r) {
+            $isOfficeReceipt = $r->receipt_type === 'REQUESTER_OFFICE';
             $tasks->push([
                 'id' => "receipt-{$r->id}",
                 'rawId' => $r->id,
                 'type' => 'RECEIPT',
                 'code' => $r->receipt_number,
-                'title' => $r->purchaseOrder?->items?->first()?->item_description ?: "إذن استلام {$r->receipt_number}",
+                'title' => $isOfficeReceipt
+                    ? ($r->purchaseOrder?->items?->first()?->item_description ?: "استلام مستلزمات مكتبية {$r->receipt_number}")
+                    : ($r->purchaseOrder?->items?->first()?->item_description ?: "إذن استلام {$r->receipt_number}"),
                 'subtitle' => $r->purchaseOrder ? "لأمر الشراء {$r->purchaseOrder->po_number}" : null,
                 'department' => $r->purchaseRequest?->department?->name ?: $r->purchaseOrder?->purchaseRequest?->department?->name,
                 'supplier' => $r->purchaseOrder?->supplier?->company_name ?: $r->supplier?->company_name,
                 'urgency' => 'CRITICAL',
-                'reason' => 'تم استلام المواد وبانتظار معاينتك وفحصك الميداني/الهندسي واعتماد الاستلام بالموقع',
+                'reason' => $isOfficeReceipt
+                    ? 'تم توريد المستلزمات المكتبية وبانتظار فحصك وتأكيدك واعتمادك لإذن الاستلام وتعديل الكميات'
+                    : 'تم استلام المواد وبانتظار معاينتك وفحصك الميداني/الهندسي واعتماد الاستلام بالموقع',
                 'actionUrl' => "/site-engineer?receipt_id={$r->id}",
-                'actionLabel' => 'فحص واعتماد إذن الاستلام',
-                'stageBadge' => [
+                'actionLabel' => $isOfficeReceipt ? 'فحص وتأكيد استلام المستلزمات' : 'فحص واعتماد إذن الاستلام',
+                'stageBadge' => $isOfficeReceipt ? [
+                    'text' => 'استلام مستلزمات مكتبية',
+                    'icon' => '🏢',
+                    'className' => 'bg-indigo-950/80 text-indigo-300 border-indigo-800/60 ring-1 ring-indigo-500/40',
+                ] : [
                     'text' => 'إذن استلام مواد',
                     'icon' => '📦',
                     'className' => 'bg-emerald-950/80 text-emerald-300 border-emerald-800/60',

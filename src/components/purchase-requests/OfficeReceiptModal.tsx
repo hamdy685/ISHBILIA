@@ -26,18 +26,50 @@ export const OfficeReceiptModal: React.FC<Props> = ({
   onSuccess,
 }) => {
   const [notes, setNotes] = useState<string>('تم استلام جميع الأصناف بحالة ممتازة ومطابقة للمواصفات في مقر الشركة.');
+  const [itemQuantities, setItemQuantities] = useState<Record<number, string>>(() => {
+    const initial: Record<number, string> = {};
+    items.forEach((it) => {
+      initial[it.id] = String(it.quantity ?? 1);
+    });
+    return initial;
+  });
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [error, setError] = useState<ApiError | null>(null);
+
+  // Sync itemQuantities whenever items prop changes
+  React.useEffect(() => {
+    const updated: Record<number, string> = {};
+    items.forEach((it) => {
+      updated[it.id] = String(it.quantity ?? 1);
+    });
+    setItemQuantities(updated);
+  }, [items]);
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validate quantities
+    const payloadItems = items.map((it) => {
+      const qVal = Number(itemQuantities[it.id] ?? it.quantity);
+      return {
+        purchase_order_item_id: it.id,
+        received_quantity: qVal,
+      };
+    });
+
+    if (payloadItems.some((it) => Number.isNaN(it.received_quantity) || it.received_quantity < 0)) {
+      setError({ message: 'يرجى إدخال كميات مستلمة صحيحة وغير سالبة لجميع الأصناف.' } as ApiError);
+      return;
+    }
+
     setIsSubmitting(true);
     setError(null);
     try {
       const res = await confirmOfficeReceiptApi(purchaseOrderId, {
         notes: notes.trim() || undefined,
+        items: payloadItems,
       });
       onSuccess(res.message || 'تم تأكيد استلام المستلزمات المكتبية بنجاح وإحالة الأمر لإدارة المشتريات لإصدار أمر الشراء الفعلي.');
       onClose();
@@ -74,7 +106,7 @@ export const OfficeReceiptModal: React.FC<Props> = ({
 
         <div className="rounded-xl border border-indigo-900/60 bg-indigo-950/30 p-3.5 text-xs text-indigo-200 leading-relaxed">
           <span>ℹ️ </span>
-          بصفتك مقدم الطلب والمستلم الفعلي، يؤكد هذا الإجراء استلامك للأصناف في مقر الشركة، ويحوّل أمر الشراء إلى إدارة المشتريات لإصدار أمر الشراء الفعلي قبل إرساله للحسابات وصرف المستحقات.
+          بصفتك مقدم الطلب والمستلم الفعلي، يمكنك فحص الأصناف وتعديل الكمية المستلمة فعلياً في مقر الشركة قبل تأكيد الاستلام لإحالة أمر الشراء إلى إدارة المشتريات لإصدار أمر الشراء الفعلي تمهيداً للحسابات.
         </div>
 
         {supplierName && (
@@ -86,12 +118,30 @@ export const OfficeReceiptModal: React.FC<Props> = ({
 
         {items.length > 0 && (
           <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-300">الأصناف المطلوب تأكيد استلامها:</label>
-            <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/60 p-2.5 space-y-1.5 text-xs">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-300">الأصناف والكميات المستلمة فعلياً:</label>
+              <span className="text-[11px] text-indigo-300 font-medium">يمكنك تعديل الكمية المستلمة</span>
+            </div>
+            <div className="max-h-56 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/60 p-2.5 space-y-2 text-xs">
               {items.map((item, idx) => (
-                <div key={item.id || idx} className="flex items-center justify-between py-1 border-b border-slate-800/60 last:border-0">
-                  <span className="text-slate-200 font-medium">{item.item_description}</span>
-                  <span className="font-mono font-bold text-indigo-300">{item.quantity} {item.uom || ''}</span>
+                <div key={item.id || idx} className="flex items-center justify-between py-2 border-b border-slate-800/60 last:border-0 gap-3">
+                  <div className="flex-1 min-w-0">
+                    <span className="text-slate-200 font-medium block truncate">{item.item_description}</span>
+                    <span className="text-[10px] text-slate-400">الكمية بأمر الشراء: {item.quantity} {item.uom || ''}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <label htmlFor={`office-qty-${item.id}`} className="text-[11px] text-indigo-300 font-bold">المستلم:</label>
+                    <input
+                      id={`office-qty-${item.id}`}
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={itemQuantities[item.id] ?? item.quantity}
+                      onChange={(e) => setItemQuantities({ ...itemQuantities, [item.id]: e.target.value })}
+                      className="w-20 px-2 py-1 text-center font-mono font-bold text-xs bg-slate-900 border border-indigo-500/50 rounded-lg text-indigo-200 focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-500"
+                    />
+                    <span className="text-[11px] text-slate-400 font-bold min-w-[28px]">{item.uom || ''}</span>
+                  </div>
                 </div>
               ))}
             </div>
