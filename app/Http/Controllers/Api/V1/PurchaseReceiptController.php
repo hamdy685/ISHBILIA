@@ -174,6 +174,11 @@ class PurchaseReceiptController extends Controller
 
     public function update(Request $request, string|int $id)
     {
+        $user = $request->user();
+        if ($user->hasRole('general_accountant') || ! ($user->hasRole('admin') || $user->hasRole('general_manager') || $user->hasPermission('purchase_receipt.edit') || ($user->hasRole('reviewer') && $user->hasPermission('purchase_request.review')))) {
+            return response()->json(['message' => 'غير مصرح للمحاسب العام أو المستخدم الحالي بتعديل أذونات الاستلام الميدانية.'], 403);
+        }
+
         $validated = $request->validate([
             'site_engineer_notes' => ['nullable', 'string', 'max:3000'],
             'items' => ['required', 'array', 'min:1'],
@@ -190,6 +195,8 @@ class PurchaseReceiptController extends Controller
                 $validated['items'],
                 $validated['site_engineer_notes'] ?? null,
             );
+        } catch (\Illuminate\Auth\Access\AuthorizationException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 403);
         } catch (\RuntimeException $exception) {
             return response()->json(['message' => $exception->getMessage()], 409);
         }
@@ -199,6 +206,11 @@ class PurchaseReceiptController extends Controller
 
     public function approve(Request $request, string|int $id)
     {
+        $user = $request->user();
+        if ($user->hasRole('general_accountant') || ! ($user->hasRole('admin') || $user->hasRole('general_manager') || $user->hasPermission('purchase_receipt.approve') || ($user->hasRole('reviewer') && $user->hasPermission('purchase_request.review')))) {
+            return response()->json(['message' => 'غير مصرح للمحاسب العام أو المستخدم الحالي باعتماد أذونات الاستلام الميدانية.'], 403);
+        }
+
         $validated = $request->validate([
             'site_engineer_notes' => ['nullable', 'string', 'max:3000'],
             'items' => ['nullable', 'array'],
@@ -223,6 +235,8 @@ class PurchaseReceiptController extends Controller
                 $receipt,
                 $validated['site_engineer_notes'] ?? null,
             );
+        } catch (\Illuminate\Auth\Access\AuthorizationException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 403);
         } catch (\RuntimeException $exception) {
             return response()->json(['message' => $exception->getMessage()], 409);
         }

@@ -390,7 +390,7 @@ class PurchaseReceiptService
             || $isReviewerAuthorized;
 
         if (! $isAuthorized) {
-            throw new \RuntimeException('هذا الإذن غير مخصص لمهندس الموقع أو المراجع الحالي.');
+            throw new \Illuminate\Auth\Access\AuthorizationException('هذا الإذن غير مخصص لمهندس الموقع أو المراجع الحالي.');
         }
         if ($receipt->status !== 'PENDING_SITE_ENGINEER') {
             throw new \RuntimeException('لا يمكن تعديل إذن الاستلام بعد اعتماده أو إرساله للحسابات.');
@@ -452,9 +452,6 @@ class PurchaseReceiptService
     public function approveBySiteEngineer(User $siteEngineer, PurchaseReceipt $receipt, ?string $notes = null): PurchaseReceipt
     {
         $receipt->loadMissing(['purchaseOrder.purchaseRequest.department', 'purchaseRequest.department', 'items']);
-        if ($receipt->status === 'APPROVED') {
-            return $receipt;
-        }
         $assignedSiteId = (int) ($receipt->site_engineer_user_id ?: $receipt->purchaseOrder?->purchaseRequest?->site_engineer_user_id ?: $receipt->purchaseRequest?->site_engineer_user_id);
         $pr = $receipt->purchaseOrder?->purchaseRequest ?: $receipt->purchaseRequest;
         $isReviewerAuthorized = ($siteEngineer->hasRole('reviewer') || $siteEngineer->hasPermission('purchase_request.review')) && (
@@ -469,8 +466,13 @@ class PurchaseReceiptService
             || $isReviewerAuthorized;
 
         if (! $isAuthorized) {
-            throw new \RuntimeException('هذا الإذن غير مخصص لمهندس الموقع أو المراجع الحالي.');
+            throw new \Illuminate\Auth\Access\AuthorizationException('هذا الإذن غير مخصص لمهندس الموقع أو المراجع الحالي.');
         }
+
+        if ($receipt->status === 'APPROVED') {
+            return $receipt;
+        }
+
         if ($receipt->status !== 'PENDING_SITE_ENGINEER') {
             throw new \RuntimeException('إذن الاستلام ليس بانتظار اعتماد مهندس الموقع.');
         }
