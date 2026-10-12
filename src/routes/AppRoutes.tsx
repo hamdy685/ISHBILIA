@@ -190,7 +190,7 @@ export const AppRoutes: React.FC = () => {
                 </Route>
 
                 {/* ── Department Accountants Dedicated Dashboard ─────────────────────── */}
-                <Route element={<RoleRoute allowedRoles={["site_accountant", "licenses_accountant", "buffet_accountant", "development_accountant", "admin"]} />}>
+                <Route element={<RoleRoute allowedRoles={["general_accountant", "site_accountant", "licenses_accountant", "buffet_accountant", "development_accountant", "admin"]} />}>
                     <Route path="/site-accountant" element={<SiteAccountantDashboardPage />} />
                 </Route>
 

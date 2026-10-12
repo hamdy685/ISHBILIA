@@ -546,7 +546,9 @@ class DashboardPendingTasksController extends Controller
 
         if ($isAccountant) {
             $allowedCodes = $this->invoiceService->getAllowedDepartmentCodesForAccountant($user);
-            $primaryRole = $user->roles->first()?->slug ?? 'accountant';
+            $primaryRole = $user->hasRole('general_accountant')
+                ? 'general_accountant'
+                : ($user->roles->first()?->slug ?? 'accountant');
 
             // 6.1 Approved Receipts pending invoice recording / accounting action
             $pendingReceiptsQuery = PurchaseReceipt::withoutGlobalScope(\App\Scopes\DataIsolationScope::class)
@@ -609,13 +611,22 @@ class DashboardPendingTasksController extends Controller
                     'subtitle' => $po ? "لأمر الشراء {$po->po_number} — " . ($po->supplier?->company_name ?: 'المورد') : ($rc->supplier?->company_name ?: 'المورد'),
                     'department' => $dept?->name,
                     'department_scope' => $deptCode,
+                    'department_id' => $dept?->id,
+                    'department_code' => $deptCode,
+                    'department_name' => $dept?->name,
                     'action_owner_id' => $user->id,
                     'action_owner_role' => $primaryRole,
                     'current_status' => 'PENDING',
                     'current_stage' => 'ACCOUNTING',
                     'request_id' => $pr?->id,
+                    'purchase_request_id' => $pr?->id,
                     'purchase_order_id' => $po?->id,
-                    'actual_purchase_order_id' => $po?->is_actual_po ? $po->id : null,
+                    'actual_po_id' => ($po?->is_actual_po || $po?->finalized_at) ? $po->id : null,
+                    'actual_po_number' => ($po?->is_actual_po || $po?->finalized_at) ? $po->po_number : null,
+                    'actual_purchase_order_id' => ($po?->is_actual_po || $po?->finalized_at) ? $po->id : null,
+                    'project' => $pr?->project_name ?? null,
+                    'region' => $pr?->items?->first()?->region ?? null,
+                    'land_plot' => $pr?->items?->first()?->item_reference ?? null,
                     'supplier' => $po?->supplier?->company_name ?: $rc->supplier?->company_name,
                     'urgency' => 'HIGH',
                     'reason' => 'تم اعتماد إذن الاستلام وبانتظار تسجيل فاتورة المورد واستكمال الدورة المحاسبية',
@@ -671,13 +682,22 @@ class DashboardPendingTasksController extends Controller
                     'subtitle' => $po ? "لأمر الشراء {$po->po_number} — " . ($inv->supplier?->company_name ?: 'المورد') : ($inv->supplier?->company_name ?: 'المورد'),
                     'department' => $dept?->name,
                     'department_scope' => $deptCode,
+                    'department_id' => $dept?->id,
+                    'department_code' => $deptCode,
+                    'department_name' => $dept?->name,
                     'action_owner_id' => $user->id,
                     'action_owner_role' => $primaryRole,
                     'current_status' => 'PENDING',
                     'current_stage' => 'ACCOUNTING',
                     'request_id' => $pr?->id,
+                    'purchase_request_id' => $pr?->id,
                     'purchase_order_id' => $po?->id,
-                    'actual_purchase_order_id' => $po?->is_actual_po ? $po->id : null,
+                    'actual_po_id' => ($po?->is_actual_po || $po?->finalized_at) ? $po->id : null,
+                    'actual_po_number' => ($po?->is_actual_po || $po?->finalized_at) ? $po->po_number : null,
+                    'actual_purchase_order_id' => ($po?->is_actual_po || $po?->finalized_at) ? $po->id : null,
+                    'project' => $pr?->project_name ?? null,
+                    'region' => $pr?->items?->first()?->region ?? null,
+                    'land_plot' => $pr?->items?->first()?->item_reference ?? null,
                     'amount' => (float) $inv->amount,
                     'supplier' => $inv->supplier?->company_name,
                     'urgency' => 'CRITICAL',

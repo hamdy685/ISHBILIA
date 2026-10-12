@@ -23,6 +23,7 @@ use Illuminate\Validation\ValidationException;
 class SupplierInvoiceService
 {
     public const ACCOUNTANT_DEPARTMENT_MAPPINGS = [
+        'general_accountant' => ['EXECUTION', 'FINISHING', 'BUILDINGS', 'OFFICE'],
         'site_accountant' => ['EXECUTION', 'FINISHING', 'BUILDINGS', 'SITE'],
         'licenses_accountant' => ['LICENSES'],
         'buffet_accountant' => ['BUFFET'],
@@ -42,11 +43,6 @@ class SupplierInvoiceService
             return null;
         }
 
-        // General Accountant has unrestricted access across all company departments
-        if ($this->isGeneralAccountant($user)) {
-            return null;
-        }
-
         foreach (array_keys(self::ACCOUNTANT_DEPARTMENT_MAPPINGS) as $role) {
             if ($user->hasRole($role)) {
                 return $role;
@@ -58,7 +54,7 @@ class SupplierInvoiceService
 
     public function isRestrictedDepartmentAccountant(?User $user): bool
     {
-        if (! $user || $user->hasRole('admin') || $this->isGeneralAccountant($user)) {
+        if (! $user || $user->hasRole('admin')) {
             return false;
         }
 
@@ -72,8 +68,14 @@ class SupplierInvoiceService
 
     public function getAllowedDepartmentCodesForAccountant(?User $user): ?array
     {
-        if (! $user || $user->hasRole('admin') || $this->isGeneralAccountant($user)) {
+        if (! $user || $user->hasRole('admin')) {
             return null;
+        }
+
+        // General Accountant (Eng. Habiba) action scope is strictly the 4 departments:
+        // EXECUTION, FINISHING, BUILDINGS, OFFICE
+        if ($user->hasRole('general_accountant') || $this->isGeneralAccountant($user)) {
+            return ['EXECUTION', 'FINISHING', 'BUILDINGS', 'OFFICE'];
         }
 
         $role = $this->getDepartmentAccountantRole($user);
@@ -100,8 +102,8 @@ class SupplierInvoiceService
 
     /**
      * Resolve accountants for a given department.
-     * If the department has a dedicated accountant (e.g., licenses, buffet, execution), return them.
-     * Otherwise, fallback to the General Accountant (Eng. Habiba) as the default accountant for all other departments.
+     * If the department has a dedicated accountant, return them.
+     * Otherwise, fallback to the General Accountant (Eng. Habiba) ONLY if within her 4-department scope.
      */
     public function getAccountantsForDepartment(?string $deptCode): \Illuminate\Support\Collection
     {
@@ -109,43 +111,35 @@ class SupplierInvoiceService
         if ($deptCode) {
             foreach (self::ACCOUNTANT_DEPARTMENT_MAPPINGS as $roleSlug => $deptCodes) {
                 if (in_array($deptCode, $deptCodes, true)) {
-                    $deptAccountants = User::whereHas('roles', fn ($q) => $q->where('slug', $roleSlug))
+                    $users = User::whereHas('roles', fn ($q) => $q->where('slug', $roleSlug))
                         ->where('is_active', true)
                         ->get();
-                    break;
+                    $deptAccountants = $deptAccountants->merge($users);
                 }
             }
 
-            // Also resolve any accountants directly assigned to this department (e.g. Eng. Ahmed in Development)
+            // Also resolve any accountants directly assigned to this department
             $department = \App\Models\Department::where('code', $deptCode)->first();
             if ($department) {
                 $deptUsers = User::where('department_id', $department->id)
-                    ->whereHas('roles', fn ($q) => $q->whereIn('slug', ['accountant', 'site_accountant', 'licenses_accountant', 'buffet_accountant', 'development_accountant']))
+                    ->whereHas('roles', fn ($q) => $q->whereIn('slug', ['accountant', 'site_accountant', 'licenses_accountant', 'buffet_accountant', 'development_accountant', 'general_accountant']))
                     ->where('is_active', true)
                     ->get();
                 if ($deptUsers->isNotEmpty()) {
-                    $deptAccountants = $deptAccountants->merge($deptUsers)->unique('id');
+                    $deptAccountants = $deptAccountants->merge($deptUsers);
                 }
             }
         }
 
-        $generalAccountant = $this->getGeneralAccountant();
-
-        // Default Fallback: If no dedicated department accountant is mapped for this department, route to General Accountant (Eng. Habiba)
-        if ($deptAccountants->isEmpty()) {
+        // Fallback: If no dedicated accountant mapped, route to General Accountant ONLY if the department is in her 4-department scope
+        if ($deptAccountants->isEmpty() && in_array($deptCode, ['EXECUTION', 'FINISHING', 'BUILDINGS', 'OFFICE'], true)) {
+            $generalAccountant = $this->getGeneralAccountant();
             if ($generalAccountant) {
                 $deptAccountants = collect([$generalAccountant]);
             }
-        } else {
-            // Guarantee: For DEVELOPMENT, MARKETING, and SALES departments, General Accountant (Eng. Habiba)
-            // MUST always be included alongside the department accountant (Eng. Ahmed)
-            // so all financial notifications, POs, and receipts reach her dashboard without exception!
-            if ($generalAccountant && in_array($deptCode, ['DEVELOPMENT', 'MARKETING', 'SALES'], true) && ! $deptAccountants->contains('id', $generalAccountant->id)) {
-                $deptAccountants->push($generalAccountant);
-            }
         }
 
-        return $deptAccountants->values();
+        return $deptAccountants->unique('id')->values();
     }
 
     public function approvedReceipts(int $limit = 100, ?User $user = null, ?string $statusFilter = 'pending')

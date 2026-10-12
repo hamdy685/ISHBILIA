@@ -55,7 +55,7 @@ const ROLE_LABELS: Record<AppRoleSlug, string> = {
     admin: "مدير النظام",
     general_manager: "المدير العام",
     execution_manager: "مدير مشروعات التنفيذ",
-    general_accountant: "المحاسب العام",
+    general_accountant: "المحاسب العام (التنفيذ • التشطيبات • المباني • المكتبيات)",
     accountant: "المدير المالي",
     site_accountant: "الحسابات (التنفيذ والتشطيبات)",
     licenses_accountant: "حسابات التراخيص",
