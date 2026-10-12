@@ -3,22 +3,42 @@ import { createRoot } from 'react-dom/client';
 import html2pdf from 'html2pdf.js';
 import { CombinedPrintTemplate } from '../components/procurement/CombinedPrintTemplate';
 import { toast } from './toast';
-import { formatCleanNumber } from './numberFormat';
+import { formatCleanNumber, formatCleanQty } from './numberFormat';
 
 export interface WhatsAppReceiptData {
   receipt_number?: string | null;
   received_at?: string | null;
   amount?: number | string | null;
+  item_reference?: string | null;
+  parcel_reference?: string | null;
+  region?: string | null;
   purchase_order?: {
     po_number?: string | null;
+    project_name?: string | null;
+    parcel_reference?: string | null;
+    region?: string | null;
+    notes?: string | null;
     supplier?: {
       company_name?: string | null;
       phone?: string | null;
     } | null;
     purchase_request?: {
+      project_name?: string | null;
+      parcel_reference?: string | null;
+      region?: string | null;
+      notes?: string | null;
       department?: {
         name?: string | null;
       } | null;
+      items?: Array<{
+        id?: number;
+        item_description?: string | null;
+        quantity?: number | string | null;
+        uom?: string | null;
+        specifications?: string | null;
+        item_reference?: string | null;
+        region?: string | null;
+      }>;
     } | null;
     items?: Array<{
       item_name?: string | null;
@@ -30,6 +50,14 @@ export interface WhatsAppReceiptData {
       line_total?: number | string | null;
       item_reference?: string | null;
       region?: string | null;
+      specifications?: string | null;
+      pr_item?: {
+        item_description?: string | null;
+        specifications?: string | null;
+        item_reference?: string | null;
+        region?: string | null;
+        uom?: string | null;
+      } | null;
     }>;
   } | null;
   items?: Array<{
@@ -42,61 +70,149 @@ export interface WhatsAppReceiptData {
       line_total?: number | string | null;
       item_reference?: string | null;
       region?: string | null;
+      specifications?: string | null;
+      pr_item?: {
+        item_description?: string | null;
+        specifications?: string | null;
+        item_reference?: string | null;
+        region?: string | null;
+        uom?: string | null;
+      } | null;
     } | null;
   }>;
+  [key: string]: any;
 }
 
-export const buildReceiptWhatsAppText = (receipt: WhatsAppReceiptData, totalValue?: number): string => {
-  const po = receipt.purchase_order;
-  const supplierName = po?.supplier?.company_name || 'غير محدد';
-  const deptName = po?.purchase_request?.department?.name || 'مشتريات المشروعات';
-  const receivedDate = receipt.received_at ? String(receipt.received_at).slice(0, 10) : '—';
+export const buildReceiptWhatsAppText = (
+  receipt: WhatsAppReceiptData,
+  totalValue?: number,
+  options?: ShareReceiptWhatsAppOptions | string
+): string => {
+  const opt: ShareReceiptWhatsAppOptions = typeof options === 'string' ? { overridePhone: options } : (options || {});
+  const po = opt.po || receipt?.purchase_order || null;
+  const pr = po?.purchase_request || (receipt as any)?.purchase_request || null;
 
-  let linesOfItems: string[] = [];
-  if (receipt.items && receipt.items.length > 0) {
-    linesOfItems = receipt.items.map((it, idx) => {
-      const desc = it.purchase_order_item?.item_name || it.purchase_order_item?.item_description || 'صنف';
-      const qty = it.received_quantity ?? '—';
-      const uom = it.purchase_order_item?.uom || '';
-      const price = Number(it.purchase_order_item?.unit_price || 0);
-      const total = price > 0 ? Math.round(Number(qty) * price * 100) / 100 : null;
-      const ref = it.purchase_order_item?.item_reference ? ` (قطعة: ${it.purchase_order_item.item_reference})` : '';
-      return `🔹 ${idx + 1}. *${desc}*${ref}\n   الكمية المستلمة: ${qty} ${uom}${price > 0 ? ` | السعر: ${formatCleanNumber(price)} ج.م` : ''}${total ? ` | الإجمالي: ${formatCleanNumber(total)} ج.م` : ''}`;
-    });
-  } else if (po?.items && po.items.length > 0) {
-    linesOfItems = po.items.map((poi, idx) => {
-      const desc = poi.item_name || poi.item_description || 'صنف';
-      const qty = poi.actual_quantity ?? poi.quantity ?? '—';
-      const uom = poi.uom || '';
-      const price = Number(poi.unit_price || 0);
-      const total = price > 0 ? Math.round(Number(qty) * price * 100) / 100 : null;
-      const ref = poi.item_reference ? ` (قطعة: ${poi.item_reference})` : '';
-      return `🔹 ${idx + 1}. *${desc}*${ref}\n   الكمية: ${qty} ${uom}${price > 0 ? ` | السعر: ${formatCleanNumber(price)} ج.م` : ''}${total ? ` | الإجمالي: ${formatCleanNumber(total)} ج.م` : ''}`;
-    });
+  // Extract the single received item from receipt or fallback to PO item
+  const receiptItem = receipt?.items && receipt.items.length > 0 ? receipt.items[0] : null;
+  const poItem =
+    receiptItem?.purchase_order_item ||
+    (po?.items && po.items.length > 0 ? po.items[0] : null);
+  const prItem =
+    poItem?.pr_item ||
+    (pr?.items && pr.items.length > 0 ? pr.items[0] : null);
+
+  // 1. RECEIVED_QUANTITY = الكمية المستلمة فعليًا
+  let receivedQuantityStr = 'غير مسجل';
+  const rawReceivedQty = receiptItem?.received_quantity;
+  if (rawReceivedQty !== undefined && rawReceivedQty !== null && String(rawReceivedQty).trim() !== '') {
+    const num = parseFloat(String(rawReceivedQty));
+    if (!isNaN(num)) {
+      receivedQuantityStr = formatCleanQty(num);
+    } else {
+      receivedQuantityStr = String(rawReceivedQty).trim();
+    }
   }
 
-  const finalTotal = totalValue ?? Number(receipt.amount || 0);
+  // 2. UNIT = وحدة القياس
+  const rawUnit =
+    receiptItem?.purchase_order_item?.uom ||
+    poItem?.uom ||
+    prItem?.uom ||
+    (receiptItem as any)?.uom ||
+    null;
+  const unitStr = rawUnit && String(rawUnit).trim() ? String(rawUnit).trim() : '';
 
-  const messageSections = [
-    '🏢 *شركة إشبيلية للتطوير العقاري والمقاولات*',
-    '📋 *بيان إذن استلام معتمد ومطابقة التوريد الميداني*',
-    '─────────────────────────',
-    `📥 *رقم إذن الاستلام:* ${receipt.receipt_number || '—'}`,
-    `📦 *رقم أمر الشراء الفعلي:* ${po?.po_number || '—'}`,
-    `🏬 *المورد:* ${supplierName}`,
-    `🏗️ *القسم / المشروع:* ${deptName}`,
-    `📅 *تاريخ الاستلام الفعلي:* ${receivedDate}`,
-    '─────────────────────────',
-    '📦 *بيان البنود والكميات المستلمة في الموقع:*',
-    ...linesOfItems,
-    '─────────────────────────',
-    finalTotal > 0 ? `💰 *القيمة الإجمالية الفعلية:* ${formatCleanNumber(finalTotal)} ج.م` : '',
-    '─────────────────────────',
-    '✅ *المعاملة تم فحصها واعتمادها بالموقع وجاهزة للمطابقة والتسجيل.*',
-    '📎 *ملاحظة للمورد:* ملخص التوريد موضح أعلاه، ويتم إرفاق مستند أمر الشراء وإذن الاستلام المعتمد (PDF) مع هذه المحادثة.',
-  ].filter(Boolean);
+  // 3. ITEM_NAME = اسم الصنف
+  const rawItemName =
+    receiptItem?.purchase_order_item?.item_name ||
+    receiptItem?.purchase_order_item?.item_description ||
+    poItem?.item_name ||
+    poItem?.item_description ||
+    (poItem as any)?.item?.name ||
+    prItem?.item_description ||
+    (receiptItem as any)?.item_name ||
+    (receiptItem as any)?.item_description ||
+    null;
+  const itemNameStr = rawItemName && String(rawItemName).trim() ? String(rawItemName).trim() : 'غير مسجل';
 
-  return messageSections.join('\n');
+  // 4. UNIT_PRICE = سعر الوحدة
+  let unitPriceNum: number | null = null;
+  const rawUnitPrice = poItem?.unit_price ?? (poItem as any)?.actual_unit_price;
+  if (rawUnitPrice !== undefined && rawUnitPrice !== null && String(rawUnitPrice).trim() !== '') {
+    const p = parseFloat(String(rawUnitPrice));
+    if (!isNaN(p)) {
+      unitPriceNum = p;
+    }
+  }
+  const unitPriceStr = unitPriceNum !== null ? `${formatCleanNumber(unitPriceNum)} ج.م` : 'غير مسجل';
+
+  // 5. LINE_TOTAL = إجمالي البند
+  let lineTotalNum: number | null = null;
+  const numRecQty = rawReceivedQty !== undefined && rawReceivedQty !== null ? parseFloat(String(rawReceivedQty)) : NaN;
+  if (!isNaN(numRecQty) && unitPriceNum !== null) {
+    lineTotalNum = Math.round(numRecQty * unitPriceNum * 100) / 100;
+  } else if ((poItem as any)?.actual_line_total !== undefined && (poItem as any)?.actual_line_total !== null && String((poItem as any).actual_line_total).trim() !== '') {
+    const parsed = parseFloat(String((poItem as any).actual_line_total));
+    if (!isNaN(parsed)) lineTotalNum = parsed;
+  } else if (poItem?.line_total !== undefined && poItem?.line_total !== null && String(poItem.line_total).trim() !== '') {
+    const parsed = parseFloat(String(poItem.line_total));
+    if (!isNaN(parsed)) lineTotalNum = parsed;
+  }
+  const lineTotalStr = lineTotalNum !== null ? `${formatCleanNumber(lineTotalNum)} ج.م` : 'غير مسجل';
+
+  // 6. LAND_PLOT_NUMBER = رقم قطعة الأرض
+  const rawPlot =
+    poItem?.item_reference ||
+    receiptItem?.purchase_order_item?.item_reference ||
+    prItem?.item_reference ||
+    (receipt as any)?.parcel_reference ||
+    (receipt as any)?.item_reference ||
+    po?.parcel_reference ||
+    pr?.parcel_reference ||
+    null;
+  const landPlotNumberStr = rawPlot && String(rawPlot).trim() ? String(rawPlot).trim() : 'غير مسجل';
+
+  // 7. REGION = المنطقة
+  const rawRegion =
+    poItem?.region ||
+    receiptItem?.purchase_order_item?.region ||
+    prItem?.region ||
+    (receipt as any)?.region ||
+    po?.region ||
+    pr?.region ||
+    null;
+  const regionStr = rawRegion && String(rawRegion).trim() ? String(rawRegion).trim() : 'غير مسجل';
+
+  // 8. PURPOSE = الغرض
+  const rawPurpose =
+    poItem?.specifications ||
+    receiptItem?.purchase_order_item?.specifications ||
+    prItem?.specifications ||
+    (poItem as any)?.purpose ||
+    (receiptItem as any)?.purpose ||
+    (prItem as any)?.purpose ||
+    po?.project_name ||
+    pr?.project_name ||
+    po?.purchase_request?.department?.name ||
+    pr?.department?.name ||
+    null;
+  const purposeStr = rawPurpose && String(rawPurpose).trim() ? String(rawPurpose).trim() : 'غير مسجل';
+
+  // Construction of lines according to strict template
+  const quantityLine =
+    receivedQuantityStr !== 'غير مسجل'
+      ? `🔹 الكمية: ${receivedQuantityStr}${unitStr ? ` ${unitStr}` : ''}`
+      : '🔹 الكمية: غير مسجل';
+
+  return [
+    quantityLine,
+    `🔹 الصنف: ${itemNameStr}`,
+    `🔹 المبلغ الكلي: ${lineTotalStr}`,
+    `🔹 سعر الوحدة: ${unitPriceStr}`,
+    `🔹 رقم قطعة الأرض: ${landPlotNumberStr}`,
+    `🔹 المنطقة: ${regionStr}`,
+    `🔹 الغرض: ${purposeStr}`,
+  ].join('\n');
 };
 
 export const normalizeWhatsAppPhone = (phone?: string | null): string => {
@@ -236,65 +352,25 @@ export const shareReceiptOnWhatsApp = async (
   options?: ShareReceiptWhatsAppOptions | string
 ): Promise<void> => {
   const opt: ShareReceiptWhatsAppOptions = typeof options === 'string' ? { overridePhone: options } : (options || {});
-  const text = buildReceiptWhatsAppText(receipt, totalValue);
+  const text = buildReceiptWhatsAppText(receipt, totalValue, opt);
   const isMobile = isMobileBrowser();
 
-  // Desktop: توجيه مباشر إلى واتساب ويب web.whatsapp.com بدون رقم هاتف
+  const phone = normalizeWhatsAppPhone(opt.overridePhone || receipt.purchase_order?.supplier?.phone);
+  const phoneQuery = phone ? `phone=${phone}&` : '';
+
+  // Desktop: توجيه مباشر إلى واتساب ويب web.whatsapp.com (أو برقم هاتف إذا توفر)
   // Mobile: api.whatsapp.com
   const whatsappUrl = isMobile
-    ? `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`
-    : `https://web.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+    ? `https://api.whatsapp.com/send?${phoneQuery}text=${encodeURIComponent(text)}`
+    : (phone
+        ? `https://web.whatsapp.com/send?${phoneQuery}text=${encodeURIComponent(text)}`
+        : `https://web.whatsapp.com/send?text=${encodeURIComponent(text)}`);
 
   try {
-    // 1. توليد ملف PDF للمستند
-    const { blob, fileName } = await generateReceiptPdfBlob(receipt, opt);
-
-    // 2. إلغاء/تخطي استخدام navigator.share() على أجهزة الكمبيوتر (Desktop) ودعمه فقط للموبايل
-    if (isMobile) {
-      const pdfFile = new File([blob], fileName, { type: 'application/pdf' });
-      if (
-        typeof navigator !== 'undefined' &&
-        navigator.share &&
-        navigator.canShare &&
-        navigator.canShare({ files: [pdfFile] })
-      ) {
-        try {
-          await navigator.share({
-            title: fileName,
-            text: text,
-            files: [pdfFile],
-          });
-          toast.success('تمت مشاركة ملف الـ PDF بنجاح ✅');
-          return;
-        } catch (shareErr: any) {
-          if (shareErr.name === 'AbortError') {
-            return;
-          }
-        }
-      }
-    }
-
-    // 3. مسار التحميل المباشر للكمبيوتر (Force download)
-    const downloadUrl = URL.createObjectURL(blob);
-    const downloadLink = document.createElement('a');
-    downloadLink.href = downloadUrl;
-    downloadLink.download = fileName;
-    document.body.appendChild(downloadLink);
-    downloadLink.click();
-    document.body.removeChild(downloadLink);
-    setTimeout(() => URL.revokeObjectURL(downloadUrl), 10000);
-
-    // 4. فتح علامة تبويب جديدة لواتساب ويب مباشرة
     window.open(whatsappUrl, '_blank');
-
-    // 5. إشعار التوجيه المطلوب
-    toast.success('تم تحميل ملف الـ PDF بنجاح. سيتم تحويلك لواتساب ويب، يرجى اختيار المورد وإرفاق الملف.', {
-      duration: 7000,
-    });
+    toast.success('تم فتح واتساب لإرسال بيانات البند ✅');
   } catch (err) {
     console.error('Error in shareReceiptOnWhatsApp:', err);
-    // Fallback if PDF generation fails: still open WhatsApp Web directly
     window.open(whatsappUrl, '_blank');
-    toast.info('تم فتح واتساب لاختيار جهة الاتصال.');
   }
 };

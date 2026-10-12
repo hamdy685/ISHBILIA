@@ -660,9 +660,9 @@ export const SiteAccountantDashboardPage: React.FC = () => {
                                 disabled={sharingWhatsAppReceiptId === receipt.id}
                                 className="whitespace-nowrap font-bold text-[11px] text-emerald-400 border-emerald-700/60 hover:bg-emerald-950/40"
                                 onClick={() => void handleWhatsAppShare(receipt)}
-                                title="توليد ملف PDF للمستند واختيار جهة الاتصال للمشاركة عبر واتساب"
+                                title="إرسال بيانات البند المستلم عبر واتساب"
                               >
-                                {sharingWhatsAppReceiptId === receipt.id ? '⏳ جاري تجهيز PDF...' : '💬 واتساب'}
+                                {sharingWhatsAppReceiptId === receipt.id ? '⏳ جاري الفتح...' : '💬 واتساب'}
                               </Button>
 
                               {/* 3. زر تسجيل الفاتورة في نفس الصفحة */}

@@ -158,9 +158,9 @@ export const ThreeWayMatchPrintModal: React.FC<ThreeWayMatchPrintModalProps> = (
                 disabled={isGeneratingPdf}
                 onClick={() => void handleWhatsAppShare()}
                 className="flex-1 sm:flex-none inline-flex min-h-[40px] sm:min-h-0 items-center justify-center gap-1.5 rounded-xl bg-green-700 hover:bg-green-600 px-3.5 py-2 text-xs font-bold text-white transition-colors shadow-md cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
-                title="توليد ملف PDF واختيار جهة الاتصال عبر واتساب"
+                title="إرسال بيانات البند المستلم عبر واتساب"
               >
-                <span>💬</span> {isGeneratingPdf ? 'جاري تجهيز PDF...' : 'واتساب'}
+                <span>💬</span> {isGeneratingPdf ? 'جاري الفتح...' : 'واتساب'}
               </button>
             )}
 
