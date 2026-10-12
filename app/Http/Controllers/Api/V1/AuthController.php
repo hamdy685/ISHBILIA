@@ -108,6 +108,7 @@ class AuthController extends Controller
                 'mohamed@gmail.com',
                 'ayman@gmail.com',
                 'hatem@gmail.com',
+                'masoud@gmail.com',
                 'kheshen@gmail.com',
                 'mostafa@gmail.com',
                 'amr@gmail.com',
@@ -116,6 +117,9 @@ class AuthController extends Controller
                 'islam@gmail.com',
                 'banhawy@gmail.com',
                 'karim@eshbelia.com',
+                'karim.marketing@gmail.com',
+                'amr.sales@gmail.com',
+                'ahmed.dev@gmail.com',
             ], true);
 
             $passwordMatches = Hash::check($password, $user->password)
@@ -140,6 +144,7 @@ class AuthController extends Controller
                 'mohamed@gmail.com',
                 'ayman@gmail.com',
                 'hatem@gmail.com',
+                'masoud@gmail.com',
                 'kheshen@gmail.com',
                 'mostafa@gmail.com',
                 'amr@gmail.com',
@@ -148,6 +153,9 @@ class AuthController extends Controller
                 'islam@gmail.com',
                 'banhawy@gmail.com',
                 'karim@eshbelia.com',
+                'karim.marketing@gmail.com',
+                'amr.sales@gmail.com',
+                'ahmed.dev@gmail.com',
             ], true)) {
                 $user->update(['is_active' => true]);
             }
