@@ -60,7 +60,7 @@ const ROLE_LABELS: Record<AppRoleSlug, string> = {
     site_accountant: "الحسابات (التنفيذ والتشطيبات)",
     licenses_accountant: "حسابات التراخيص",
     buffet_accountant: "حسابات المكتبيات والبوفيه",
-    development_accountant: "محاسب قسم التطوير",
+    development_accountant: "محاسب (التطوير • التسويق • المبيعات)",
     procurement_manager: "مدير المشتريات",
     reviewer: "المراجع",
     warehouse_keeper: "أمين المخزن",

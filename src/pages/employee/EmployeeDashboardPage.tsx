@@ -21,6 +21,7 @@ import { Button } from '../../components/ui/Button';
 import ActionRequiredInbox, { ActionInboxItem } from '../../components/dashboard/ActionRequiredInbox';
 import QuickLauncherBar from '../../components/dashboard/QuickLauncherBar';
 import { formatDateTime24h } from '../../utils/dateTime';
+import { getPrimaryRoleSlug, getRoleHomePath, getRoleLabel } from '../../routes/roleRouting';
 
 import { useRealtimeRefresh, emitAppDataUpdated } from '../../hooks/useRealtimeRefresh';
 
@@ -165,6 +166,43 @@ export const EmployeeDashboardPage: React.FC = () => {
           </Link>
         )}
       </div>
+
+      {/* ── تنبيه توجيه المحاسبين إلى لوحة الحسابات المخصصة ── */}
+      {(() => {
+        const primaryRoleSlug = getPrimaryRoleSlug(user);
+        const isAccountantRole = [
+          'development_accountant',
+          'site_accountant',
+          'licenses_accountant',
+          'buffet_accountant',
+          'general_accountant',
+          'accountant',
+        ].includes(primaryRoleSlug || '');
+
+        if (!isAccountantRole) return null;
+
+        return (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-gradient-to-r from-cyan-950/70 via-slate-900 to-blue-950/60 border border-cyan-800/80 rounded-xl shadow-lg">
+            <div className="flex items-center gap-3">
+              <span className="text-3xl">🧾</span>
+              <div>
+                <p className="text-sm font-black text-cyan-200">
+                  أنت مسجل بصلاحية: <span className="text-cyan-400 font-black">{getRoleLabel(primaryRoleSlug)}</span>
+                </p>
+                <p className="text-xs text-slate-300 mt-1">
+                  لوحة إدارة الحسابات، فواتير الموردين، والمطابقة الثلاثية لأقسامك جاهزة وتستقبل إجراءاتك.
+                </p>
+              </div>
+            </div>
+            <Link
+              to={getRoleHomePath(primaryRoleSlug)}
+              className="inline-flex items-center justify-center px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-black shadow-md transition whitespace-nowrap gap-1.5"
+            >
+              الانتقال للوحة الحسابات المخصصة ←
+            </Link>
+          </div>
+        );
+      })()}
 
       <ErrorMessage error={error} onDismiss={() => setError(null)} />
 
