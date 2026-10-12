@@ -31,6 +31,7 @@ class StrictManualGateWorkflowTest extends TestCase
     private User $procurementOfficer;
     private User $warehouseKeeper;
     private User $habibaAccountant;
+    private User $financialDirector;
     private Supplier $supplier;
     private LandParcel $parcel;
 
@@ -53,6 +54,8 @@ class StrictManualGateWorkflowTest extends TestCase
         
         // Eng. Habiba (General Accountant)
         $this->habibaAccountant = $this->createUser('habiba@ashbiliya.com', 'م. حبيبة (المحاسب العام)', 'general_accountant');
+        // Financial Director (Accountant)
+        $this->financialDirector = $this->createUser('hasan_finance@test', 'أ. حسن (المدير المالي)', 'accountant');
 
         // Assign site engineer and reviewer to department defaults
         $this->deptExecution->update([
@@ -271,14 +274,21 @@ class StrictManualGateWorkflowTest extends TestCase
         $this->assertDatabaseMissing('purchase_orders', ['purchase_request_id' => $pr->id]);
 
         // ─────────────────────────────────────────────────────────────
-        // GATE 4c: GENERAL ACCOUNTANT (ENG. HABIBA) APPROVES BUDGET (Manual Action by Habiba)
+        // GATE 4c: FINANCIAL DIRECTOR APPROVES BUDGET (Financial Director has exclusive authority)
         // ─────────────────────────────────────────────────────────────
+        // Eng. Habiba (General Accountant) attempts to approve -> 403 Forbidden
         $habibaDirectApproveResponse = $this->actingAs($this->habibaAccountant, 'sanctum')
+            ->postJson("/api/v1/accounting/purchase-requests/{$pr->id}/direct-approve", [
+                'comment' => 'محاولة اعتماد مالي غير مصرح بها من المحاسب العام',
+            ]);
+        $habibaDirectApproveResponse->assertStatus(403);
+
+        // Financial Director (Hasan) executes manual budget approval -> 200 OK
+        $financialDirectorApproveResponse = $this->actingAs($this->financialDirector, 'sanctum')
             ->postJson("/api/v1/accounting/purchase-requests/{$pr->id}/direct-approve", [
                 'comment' => 'تمت الموافقة المالية وتوفر الميزانية المخصصة لبند حديد التسليح.',
             ]);
-
-        $habibaDirectApproveResponse->assertStatus(200);
+        $financialDirectorApproveResponse->assertStatus(200);
         $pr->refresh();
         // Gate 4c Check: PR is now APPROVED_BY_ACCOUNTING
         $this->assertSame('APPROVED_BY_ACCOUNTING', $pr->status);

@@ -236,9 +236,6 @@ class RolePermissionSeeder extends Seeder
                     'purchase_request.view_own',
                     'purchase_request.edit_own',
                     'purchase_request.submit',
-                    'purchase_request.accounting_view',
-                    'purchase_request.accounting_approve',
-                    'purchase_request.accounting_reject',
                 ],
             ],
             'general_manager' => [

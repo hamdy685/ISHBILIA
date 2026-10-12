@@ -38,7 +38,7 @@ const ROLE_HOME_PATHS: Record<AppRoleSlug, string> = {
     admin: "/admin",
     general_manager: "/general-manager",
     execution_manager: "/general-manager",
-    general_accountant: "/accounting",
+    general_accountant: "/site-accountant",
     accountant: "/accounting",
     site_accountant: "/site-accountant",
     licenses_accountant: "/site-accountant",

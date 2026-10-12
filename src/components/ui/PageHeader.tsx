@@ -78,7 +78,7 @@ export const PageHeader: React.FC = () => {
         admin: '/admin',
         general_manager: '/general-manager',
         accountant: '/accounting',
-        general_accountant: '/accounting',
+        general_accountant: '/site-accountant',
         site_accountant: '/site-accountant',
         licenses_accountant: '/site-accountant',
         buffet_accountant: '/site-accountant',

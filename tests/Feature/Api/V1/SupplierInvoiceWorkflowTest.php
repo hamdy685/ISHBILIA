@@ -510,26 +510,26 @@ class SupplierInvoiceWorkflowTest extends TestCase
     public function test_general_accountant_sees_all_departments_and_can_create_invoice_and_record_receipt(): void
     {
         $habiba = $this->makeUser('habiba@gmail.com', 'المهندسة حبيبة', 'general_accountant');
-        $buffetDept = Department::firstOrCreate(['code' => 'BUFFET'], ['name' => 'البوفيه', 'is_active' => true]);
-        $licensesDept = Department::firstOrCreate(['code' => 'LICENSES'], ['name' => 'التراخيص', 'is_active' => true]);
-        $itDept = Department::firstOrCreate(['code' => 'IT'], ['name' => 'تكنولوجيا المعلومات', 'is_active' => true]);
+        $execDept = Department::firstOrCreate(['code' => 'EXECUTION'], ['name' => 'التنفيذ والمشاريع', 'is_active' => true]);
+        $finishingDept = Department::firstOrCreate(['code' => 'FINISHING'], ['name' => 'التشطيبات', 'is_active' => true]);
+        $officeDept = Department::firstOrCreate(['code' => 'OFFICE'], ['name' => 'المكتبيات', 'is_active' => true]);
 
         $employee = $this->makeUser('emp-all@test', 'موظف عام', 'employee');
 
-        // 1. Order & Receipt for BUFFET
-        $prBuffet = PurchaseRequest::create([
-            'request_number' => 'PR-BUF-GEN',
+        // 1. Order & Receipt for EXECUTION
+        $prExec = PurchaseRequest::create([
+            'request_number' => 'PR-EXEC-GEN',
             'user_id' => $employee->id,
-            'department_id' => $buffetDept->id,
+            'department_id' => $execDept->id,
             'site_engineer_user_id' => $this->siteEngineer->id,
             'priority' => 'NORMAL',
             'status' => 'APPROVED_BY_PROCUREMENT',
             'total_estimated_cost' => 150,
             'date_needed' => '2026-08-01',
         ]);
-        $orderBuffet = PurchaseOrder::create([
-            'po_number' => 'PO-BUF-GEN',
-            'purchase_request_id' => $prBuffet->id,
+        $orderExec = PurchaseOrder::create([
+            'po_number' => 'PO-EXEC-GEN',
+            'purchase_request_id' => $prExec->id,
             'supplier_id' => $this->supplier->id,
             'created_by_user_id' => $employee->id,
             'status' => 'ISSUED',
@@ -537,29 +537,29 @@ class SupplierInvoiceWorkflowTest extends TestCase
             'grand_total' => 150,
             'delivery_status' => 'NOT_STARTED',
         ]);
-        $orderBuffet->items()->create([
-            'item_description' => 'شاي وسكر',
+        $orderExec->items()->create([
+            'item_description' => 'أسمنت مقاوم',
             'quantity' => 1,
             'uom' => 'PCS',
             'unit_price' => 150,
             'line_total' => 150,
         ]);
-        $receiptBuffet = $this->approveReceipt($orderBuffet, 1);
+        $receiptExec = $this->approveReceipt($orderExec, 1);
 
-        // 2. Order & Receipt for LICENSES
-        $prLicenses = PurchaseRequest::create([
-            'request_number' => 'PR-LIC-GEN',
+        // 2. Order & Receipt for FINISHING
+        $prFinishing = PurchaseRequest::create([
+            'request_number' => 'PR-FIN-GEN',
             'user_id' => $employee->id,
-            'department_id' => $licensesDept->id,
+            'department_id' => $finishingDept->id,
             'site_engineer_user_id' => $this->siteEngineer->id,
             'priority' => 'NORMAL',
             'status' => 'APPROVED_BY_PROCUREMENT',
             'total_estimated_cost' => 600,
             'date_needed' => '2026-08-01',
         ]);
-        $orderLicenses = PurchaseOrder::create([
-            'po_number' => 'PO-LIC-GEN',
-            'purchase_request_id' => $prLicenses->id,
+        $orderFinishing = PurchaseOrder::create([
+            'po_number' => 'PO-FIN-GEN',
+            'purchase_request_id' => $prFinishing->id,
             'supplier_id' => $this->supplier->id,
             'created_by_user_id' => $employee->id,
             'status' => 'ISSUED',
@@ -567,29 +567,29 @@ class SupplierInvoiceWorkflowTest extends TestCase
             'grand_total' => 600,
             'delivery_status' => 'NOT_STARTED',
         ]);
-        $orderLicenses->items()->create([
-            'item_description' => 'تجديد تصريح',
+        $orderFinishing->items()->create([
+            'item_description' => 'دهانات داخلية',
             'quantity' => 1,
             'uom' => 'PCS',
             'unit_price' => 600,
             'line_total' => 600,
         ]);
-        $receiptLicenses = $this->approveReceipt($orderLicenses, 1);
+        $receiptFinishing = $this->approveReceipt($orderFinishing, 1);
 
-        // 3. Order & Receipt for IT
-        $prIt = PurchaseRequest::create([
-            'request_number' => 'PR-IT-GEN',
+        // 3. Order & Receipt for OFFICE
+        $prOffice = PurchaseRequest::create([
+            'request_number' => 'PR-OFF-GEN',
             'user_id' => $employee->id,
-            'department_id' => $itDept->id,
+            'department_id' => $officeDept->id,
             'site_engineer_user_id' => $this->siteEngineer->id,
             'priority' => 'NORMAL',
             'status' => 'APPROVED_BY_PROCUREMENT',
             'total_estimated_cost' => 1200,
             'date_needed' => '2026-08-01',
         ]);
-        $orderIt = PurchaseOrder::create([
-            'po_number' => 'PO-IT-GEN',
-            'purchase_request_id' => $prIt->id,
+        $orderOffice = PurchaseOrder::create([
+            'po_number' => 'PO-OFF-GEN',
+            'purchase_request_id' => $prOffice->id,
             'supplier_id' => $this->supplier->id,
             'created_by_user_id' => $employee->id,
             'status' => 'ISSUED',
@@ -597,45 +597,45 @@ class SupplierInvoiceWorkflowTest extends TestCase
             'grand_total' => 1200,
             'delivery_status' => 'NOT_STARTED',
         ]);
-        $orderIt->items()->create([
-            'item_description' => 'راوتر شبكة',
+        $orderOffice->items()->create([
+            'item_description' => 'أوراق طباعة وتجهيزات',
             'quantity' => 1,
             'uom' => 'PCS',
             'unit_price' => 1200,
             'line_total' => 1200,
         ]);
-        $receiptIt = $this->approveReceipt($orderIt, 1);
+        $receiptOffice = $this->approveReceipt($orderOffice, 1);
 
         $service = app(SupplierInvoiceService::class);
         $receipts = $service->approvedReceipts(100, $habiba);
-        $this->assertTrue($receipts->contains('id', $receiptBuffet->id));
-        $this->assertTrue($receipts->contains('id', $receiptLicenses->id));
-        $this->assertTrue($receipts->contains('id', $receiptIt->id));
+        $this->assertTrue($receipts->contains('id', $receiptExec->id));
+        $this->assertTrue($receipts->contains('id', $receiptFinishing->id));
+        $this->assertTrue($receipts->contains('id', $receiptOffice->id));
 
-        // General Accountant can record invoices for any department
-        $resBuffet = $this->actingAs($habiba, 'sanctum')->postJson('/api/v1/accounting/invoices', [
-            'purchase_order_id' => $orderBuffet->id,
-            'purchase_receipt_id' => $receiptBuffet->id,
-            'invoice_number' => 'INV-GEN-BUF',
+        // General Accountant can record invoices for scoped departments
+        $resExec = $this->actingAs($habiba, 'sanctum')->postJson('/api/v1/accounting/invoices', [
+            'purchase_order_id' => $orderExec->id,
+            'purchase_receipt_id' => $receiptExec->id,
+            'invoice_number' => 'INV-GEN-EXEC',
             'amount' => 150,
         ]);
-        $resBuffet->assertStatus(201);
+        $resExec->assertStatus(201);
 
-        $resLicenses = $this->actingAs($habiba, 'sanctum')->postJson('/api/v1/accounting/invoices', [
-            'purchase_order_id' => $orderLicenses->id,
-            'purchase_receipt_id' => $receiptLicenses->id,
-            'invoice_number' => 'INV-GEN-LIC',
+        $resFinishing = $this->actingAs($habiba, 'sanctum')->postJson('/api/v1/accounting/invoices', [
+            'purchase_order_id' => $orderFinishing->id,
+            'purchase_receipt_id' => $receiptFinishing->id,
+            'invoice_number' => 'INV-GEN-FIN',
             'amount' => 600,
         ]);
-        $resLicenses->assertStatus(201);
+        $resFinishing->assertStatus(201);
 
         // General Accountant can mark receipt as recorded
-        $resRecorded = $this->actingAs($habiba, 'sanctum')->postJson("/api/v1/accounting/receipts/{$receiptIt->id}/mark-recorded", [
+        $resRecorded = $this->actingAs($habiba, 'sanctum')->postJson("/api/v1/accounting/receipts/{$receiptOffice->id}/mark-recorded", [
             'notes' => 'تم التسجيل في شيت الإكسيل بواسطة المهندسة حبيبة',
         ]);
         $resRecorded->assertStatus(200);
-        $this->assertNotNull($receiptIt->fresh()->accountant_recorded_at);
-        $this->assertSame($habiba->id, $receiptIt->fresh()->accountant_recorded_by_user_id);
+        $this->assertNotNull($receiptOffice->fresh()->accountant_recorded_at);
+        $this->assertSame($habiba->id, $receiptOffice->fresh()->accountant_recorded_by_user_id);
     }
 
     public function test_unmapped_departments_route_notifications_to_general_accountant_fallback(): void
@@ -653,20 +653,18 @@ class SupplierInvoiceWorkflowTest extends TestCase
         $accountantsLic = $service->getAccountantsForDepartment('LICENSES');
         $this->assertTrue($accountantsLic->contains('id', $licensesAccountant->id));
 
-        // 3. Any unmapped department (e.g. IT, LEGAL, MARKETING, null) falls back to General Accountant (Habiba)
-        $accountantsIt = $service->getAccountantsForDepartment('IT');
-        $this->assertTrue($accountantsIt->contains('id', $habiba->id));
+        // 3. Departments in Habiba's 4-department scope route to Habiba
+        $accountantsExec = $service->getAccountantsForDepartment('EXECUTION');
+        $this->assertTrue($accountantsExec->contains('id', $habiba->id));
 
-        $accountantsLegal = $service->getAccountantsForDepartment('LEGAL');
-        $this->assertTrue($accountantsLegal->contains('id', $habiba->id));
-
-        $accountantsUnknown = $service->getAccountantsForDepartment(null);
-        $this->assertTrue($accountantsUnknown->contains('id', $habiba->id));
+        $accountantsOffice = $service->getAccountantsForDepartment('OFFICE');
+        $this->assertTrue($accountantsOffice->contains('id', $habiba->id));
     }
 
-    public function test_general_accountant_can_view_and_approve_direct_requests_for_any_department(): void
+    public function test_general_accountant_cannot_approve_pr_while_financial_director_can(): void
     {
         $habiba = $this->makeUser('habiba@gmail.com', 'المهندسة حبيبة', 'general_accountant');
+        $financialDirector = $this->makeUser('hasan_finance@test', 'أ. حسن (المدير المالي)', 'accountant');
         $itDept = Department::firstOrCreate(['code' => 'IT'], ['name' => 'تكنولوجيا المعلومات', 'is_active' => true]);
         $employee = $this->makeUser('emp-it@test', 'مهندس الشبكات', 'employee');
 
@@ -689,16 +687,24 @@ class SupplierInvoiceWorkflowTest extends TestCase
             'estimated_line_total' => 5000.00,
         ]);
 
-        // General Accountant can view pending requests from IT
-        $resIndex = $this->actingAs($habiba, 'sanctum')->getJson('/api/v1/accounting/purchase-requests/direct-approval');
-        $resIndex->assertStatus(200);
-        $resIndex->assertJsonFragment(['request_number' => 'PR-IT-DIRECT-001']);
+        // General Accountant (Habiba) has NO right to view or approve PRs -> 403 Forbidden
+        $resIndexHabiba = $this->actingAs($habiba, 'sanctum')->getJson('/api/v1/accounting/purchase-requests/direct-approval');
+        $resIndexHabiba->assertStatus(403);
 
-        // General Accountant can approve request
-        $resApprove = $this->actingAs($habiba, 'sanctum')->postJson("/api/v1/accounting/purchase-requests/{$pr->id}/direct-approve", [
-            'comment' => 'معتمد من المحاسب العام المهندسة حبيبة',
+        $resApproveHabiba = $this->actingAs($habiba, 'sanctum')->postJson("/api/v1/accounting/purchase-requests/{$pr->id}/direct-approve", [
+            'comment' => 'محاولة اعتماد من محاسب عادي',
         ]);
-        $resApprove->assertStatus(200);
+        $resApproveHabiba->assertStatus(403);
+
+        // Financial Director (Hasan) can view and approve
+        $resIndexCfo = $this->actingAs($financialDirector, 'sanctum')->getJson('/api/v1/accounting/purchase-requests/direct-approval');
+        $resIndexCfo->assertStatus(200);
+        $resIndexCfo->assertJsonFragment(['request_number' => 'PR-IT-DIRECT-001']);
+
+        $resApproveCfo = $this->actingAs($financialDirector, 'sanctum')->postJson("/api/v1/accounting/purchase-requests/{$pr->id}/direct-approve", [
+            'comment' => 'معتمد من المدير المالي',
+        ]);
+        $resApproveCfo->assertStatus(200);
         $this->assertSame('APPROVED_BY_ACCOUNTING', $pr->fresh()->status);
     }
 

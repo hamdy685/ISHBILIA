@@ -57,9 +57,6 @@ return new class extends Migration
                 'purchase_request.view_own',
                 'purchase_request.edit_own',
                 'purchase_request.submit',
-                'purchase_request.accounting_view',
-                'purchase_request.accounting_approve',
-                'purchase_request.accounting_reject',
             ];
 
             $allowedPermissions = Permission::whereIn('slug', $allowedPermissionSlugs)->pluck('id');

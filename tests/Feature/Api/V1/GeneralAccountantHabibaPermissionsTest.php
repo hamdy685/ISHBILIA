@@ -58,20 +58,20 @@ class GeneralAccountantHabibaPermissionsTest extends TestCase
         ]);
 
         $this->deptBuffet = Department::create([
-            'name' => 'قسم البوفيه والضيافة',
-            'code' => 'BUFFET',
+            'name' => 'قسم التشطيبات',
+            'code' => 'FINISHING',
             'is_active' => true,
         ]);
 
         $this->deptHeadOffice = Department::create([
-            'name' => 'المقر الرئيسي والإدارة',
-            'code' => 'HEAD_OFFICE',
+            'name' => 'قسم المكتبيات',
+            'code' => 'OFFICE',
             'is_active' => true,
         ]);
 
         // 2. Setup Users
         // Eng. Habiba identified by email
-        $this->habibaByEmail = $this->createUser('habiba@ashbiliya.com', 'المهندسة حبيبة (المحاسب العام)', 'accountant');
+        $this->habibaByEmail = $this->createUser('habiba@ashbiliya.com', 'المهندسة حبيبة (المحاسب العام)', 'general_accountant');
         // Eng. Habiba identified by role
         $this->habibaByRole = $this->createUser('habiba_role@test.com', 'م. حبيبة (دور المحاسب العام)', 'general_accountant');
 
@@ -93,16 +93,16 @@ class GeneralAccountantHabibaPermissionsTest extends TestCase
     }
 
     /**
-     * Test that Eng. Habiba sees 100% of approved receipts across all departments,
-     * while department accountants are strictly confined to their own departments.
+     * Test that Eng. Habiba sees approved receipts across her scoped departments
+     * (EXECUTION, FINISHING, BUILDINGS, OFFICE), while restricted accountants are confined.
      */
     public function test_habiba_has_omni_project_visibility_across_all_departments(): void
     {
         // Create an approved receipt in each department
         $receiptExecution = $this->createApprovedReceiptForDept($this->deptExecution, 'GRN-EXEC-001');
         $receiptLicenses = $this->createApprovedReceiptForDept($this->deptLicenses, 'GRN-LIC-001');
-        $receiptBuffet = $this->createApprovedReceiptForDept($this->deptBuffet, 'GRN-BUF-001');
-        $receiptHeadOffice = $this->createApprovedReceiptForDept($this->deptHeadOffice, 'GRN-HO-001');
+        $receiptFinishing = $this->createApprovedReceiptForDept($this->deptBuffet, 'GRN-FIN-001');
+        $receiptOffice = $this->createApprovedReceiptForDept($this->deptHeadOffice, 'GRN-OFF-001');
 
         // ─────────────────────────────────────────────────────────────
         // 1. Verify Restricted Accountant Visibility (Licenses Accountant)
@@ -117,11 +117,11 @@ class GeneralAccountantHabibaPermissionsTest extends TestCase
         // Must ONLY see Licenses receipt
         $this->assertContains($receiptLicenses->id, $licensesIds);
         $this->assertNotContains($receiptExecution->id, $licensesIds);
-        $this->assertNotContains($receiptBuffet->id, $licensesIds);
-        $this->assertNotContains($receiptHeadOffice->id, $licensesIds);
+        $this->assertNotContains($receiptFinishing->id, $licensesIds);
+        $this->assertNotContains($receiptOffice->id, $licensesIds);
 
         // ─────────────────────────────────────────────────────────────
-        // 2. Verify Eng. Habiba (by email) Sees 100% of Receipts
+        // 2. Verify Eng. Habiba (by email) Sees Scoped Receipts (and NOT Licenses)
         // ─────────────────────────────────────────────────────────────
         $habibaEmailResponse = $this->actingAs($this->habibaByEmail, 'sanctum')
             ->getJson('/api/v1/accounting/receipts/approved');
@@ -131,12 +131,12 @@ class GeneralAccountantHabibaPermissionsTest extends TestCase
         $habibaEmailIds = collect($habibaEmailData)->pluck('id')->all();
 
         $this->assertContains($receiptExecution->id, $habibaEmailIds);
-        $this->assertContains($receiptLicenses->id, $habibaEmailIds);
-        $this->assertContains($receiptBuffet->id, $habibaEmailIds);
-        $this->assertContains($receiptHeadOffice->id, $habibaEmailIds);
+        $this->assertContains($receiptFinishing->id, $habibaEmailIds);
+        $this->assertContains($receiptOffice->id, $habibaEmailIds);
+        $this->assertNotContains($receiptLicenses->id, $habibaEmailIds);
 
         // ─────────────────────────────────────────────────────────────
-        // 3. Verify Eng. Habiba (by role) Sees 100% of Receipts
+        // 3. Verify Eng. Habiba (by role) Sees Scoped Receipts
         // ─────────────────────────────────────────────────────────────
         $habibaRoleResponse = $this->actingAs($this->habibaByRole, 'sanctum')
             ->getJson('/api/v1/accounting/receipts/approved');
@@ -146,9 +146,9 @@ class GeneralAccountantHabibaPermissionsTest extends TestCase
         $habibaRoleIds = collect($habibaRoleData)->pluck('id')->all();
 
         $this->assertContains($receiptExecution->id, $habibaRoleIds);
-        $this->assertContains($receiptLicenses->id, $habibaRoleIds);
-        $this->assertContains($receiptBuffet->id, $habibaRoleIds);
-        $this->assertContains($receiptHeadOffice->id, $habibaRoleIds);
+        $this->assertContains($receiptFinishing->id, $habibaRoleIds);
+        $this->assertContains($receiptOffice->id, $habibaRoleIds);
+        $this->assertNotContains($receiptLicenses->id, $habibaRoleIds);
     }
 
     /**

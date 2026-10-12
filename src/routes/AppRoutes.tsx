@@ -195,7 +195,7 @@ export const AppRoutes: React.FC = () => {
                 </Route>
 
                 {/* ── Financial Director (Accountant) Only Routes ─────────────── */}
-                <Route element={<RoleRoute allowedRoles={["accountant", "general_accountant"]} />}>
+                <Route element={<RoleRoute allowedRoles={["accountant", "admin"]} />}>
                     <Route path="/accounting" element={<AccountingDashboardPage />} />
                     <Route path="/accounting/purchase-requests" element={<AccountingPurchaseRequestsPage />} />
                     <Route path="/accounting/purchase-quotes" element={<PurchaseQuotesDecisionPage mode="recommend" />} />
