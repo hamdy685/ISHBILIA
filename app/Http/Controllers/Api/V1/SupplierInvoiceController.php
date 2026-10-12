@@ -34,10 +34,12 @@ class SupplierInvoiceController extends Controller
     public function markReceiptRecorded(Request $request, int $id): JsonResponse
     {
         $user = $request->user();
-        $receipt = PurchaseReceipt::withoutDataIsolation()->with([
-            'purchaseOrder' => fn ($q) => $q->withoutDataIsolation(),
-            'purchaseOrder.purchaseRequest.department' => fn ($q) => $q->withoutDataIsolation(),
-            'purchaseRequest.department' => fn ($q) => $q->withoutDataIsolation(),
+        $receipt = PurchaseReceipt::withoutGlobalScope(\App\Scopes\DataIsolationScope::class)->with([
+            'purchaseOrder' => fn ($q) => $q->withoutGlobalScope(\App\Scopes\DataIsolationScope::class),
+            'purchaseOrder.purchaseRequest' => fn ($q) => $q->withoutGlobalScope(\App\Scopes\DataIsolationScope::class),
+            'purchaseOrder.purchaseRequest.department',
+            'purchaseRequest' => fn ($q) => $q->withoutGlobalScope(\App\Scopes\DataIsolationScope::class),
+            'purchaseRequest.department',
         ])->findOrFail($id);
 
         $allowedCodes = $this->service->getAllowedDepartmentCodesForAccountant($user);
@@ -45,6 +47,8 @@ class SupplierInvoiceController extends Controller
             $deptCode = $receipt->purchaseOrder?->purchaseRequest?->department?->code
                 ?: $receipt->purchaseRequest?->department?->code;
             if (! in_array($deptCode, $allowedCodes, true)) {
+                \Illuminate\Support\Facades\Log::warning("Unauthorized accounting mutation attempt by user {$user->id} ({$user->name}) on receipt #{$id} belonging to dept {$deptCode}. Allowed: " . implode(',', $allowedCodes));
+
                 return response()->json([
                     'message' => 'غير مصرح بتسجيل إذن استلام لأقسام خارج نطاق اختصاصك المحاسبي.',
                 ], 403);
@@ -284,6 +288,15 @@ class SupplierInvoiceController extends Controller
 
     public function setOpeningBalance(Request $request, Supplier $supplier): JsonResponse
     {
+        $user = $request->user();
+        if ($this->service->isRestrictedDepartmentAccountant($user)) {
+            \Illuminate\Support\Facades\Log::warning("Unauthorized opening balance update attempt by user {$user->id} ({$user->name}) on supplier #{$supplier->id}");
+
+            return response()->json([
+                'message' => 'تعديل الرصيد الافتتاحي للموردين مقتصر على الإدارة المالية والمحاسب العام.',
+            ], 403);
+        }
+
         $validated = $request->validate([
             'opening_balance' => ['required', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string', 'max:1000'],
