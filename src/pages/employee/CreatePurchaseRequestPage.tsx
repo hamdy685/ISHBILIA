@@ -82,6 +82,7 @@ type ValidationResult = {
   dateNeeded?: string;
   parcelReference?: string;
   region?: string;
+  notes?: string;
   emptyItems?: string;
   items: ItemErrors;
 };
@@ -134,6 +135,9 @@ const validateRequest = (
     region: !isOffice && !isComplementary && !data.region?.trim()
       ? 'المنطقة مطلوبة للطلب.'
       : undefined,
+    notes: !data.notes?.trim()
+      ? 'ملاحظات / الغرض من الشراء حقل إلزامي. يرجى توضيح الغرض من الشراء.'
+      : undefined,
     emptyItems: data.items.length === 0 ? 'يجب إضافة صنف واحد على الأقل لطلب الشراء.' : undefined,
     items: itemErrors,
   };
@@ -147,6 +151,7 @@ const hasValidationErrors = (validation: ValidationResult): boolean =>
     validation.dateNeeded ||
     validation.parcelReference ||
     validation.region ||
+    validation.notes ||
     validation.emptyItems ||
     Object.keys(validation.items).length
   );
@@ -235,6 +240,7 @@ export const CreatePurchaseRequestPage: React.FC<CreatePurchaseRequestPageProps>
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [showValidation, setShowValidation] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showMissingNotesModal, setShowMissingNotesModal] = useState<boolean>(false);
   const [draftReady, setDraftReady] = useState(false);
   const [draftMessage, setDraftMessage] = useState<string | null>(null);
   const [serverDraftId, setServerDraftId] = useState<number | null>(null);
@@ -479,8 +485,20 @@ export const CreatePurchaseRequestPage: React.FC<CreatePurchaseRequestPageProps>
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
+    if (!data.notes?.trim()) {
+      setShowMissingNotesModal(true);
+      setError('ملاحظات / الغرض من الشراء حقل إلزامي. يرجى توضيح الغرض من الشراء للمتابعة.');
+      setTimeout(() => {
+        const el = document.getElementById('pr-notes');
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.focus();
+        }
+      }, 100);
+      return;
+    }
     if (requestHasErrors) {
-      setError(validation.emptyItems || 'يرجى تصحيح الأخطاء المحددة في النموذج وإدخال رقم القطعة والمنطقة أولاً.');
+      setError(validation.emptyItems || validation.notes || 'يرجى تصحيح الأخطاء المحددة في النموذج وإدخال الحقول الإلزامية أولاً.');
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
@@ -1013,13 +1031,19 @@ export const CreatePurchaseRequestPage: React.FC<CreatePurchaseRequestPageProps>
         )}
 
         <div>
-          <FormField label="ملاحظات / الغرض من الشراء">
+          <FormField
+            label="ملاحظات / الغرض من الشراء"
+            required
+            error={showValidation ? validation.notes : undefined}
+          >
             <Textarea
               id="pr-notes"
               rows={2}
               value={data.notes || ''}
               onChange={(event) => setData({ ...data, notes: event.target.value })}
-              placeholder="اكتب أي ملاحظات أو توضيحات خاصة بالطلب..."
+              placeholder="اكتب أي ملاحظات أو توضيحات خاصة بالطلب (إلزامي)..."
+              error={Boolean(showValidation && validation.notes)}
+              className="font-medium text-slate-100"
             />
           </FormField>
         </div>
@@ -1486,6 +1510,52 @@ export const CreatePurchaseRequestPage: React.FC<CreatePurchaseRequestPageProps>
           }}
           onCancel={() => setIsReviewerModalOpen(false)}
         />
+      )}
+
+      {/* مربع تنبيه إلزامي: الغرض من الشراء */}
+      {showMissingNotesModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200"
+          dir="rtl"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-md rounded-2xl border-2 border-amber-500/80 bg-slate-900 p-6 shadow-2xl shadow-amber-500/10 text-center space-y-4">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/10 border border-amber-500/30 text-3xl">
+              ⚠️
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-base sm:text-lg font-black text-slate-100">
+                تنبيه: حقل إلزامي مطلوب
+              </h3>
+              <p className="text-sm font-semibold text-amber-200 leading-relaxed">
+                حقل <span className="text-white font-black underline decoration-amber-400">«ملاحظات / الغرض من الشراء»</span> إلزامي ولا يمكن إرسال طلب الشراء بدونه.
+              </p>
+              <p className="text-xs text-slate-400">
+                يرجى توضيح الغرض من الشراء (مثل: خرسانة القواعد، أعمدة الدور، تشطيبات، صيانة، إلخ) للمتابعة.
+              </p>
+            </div>
+            <div className="pt-2">
+              <Button
+                type="button"
+                variant="primary"
+                className="w-full bg-amber-600 hover:bg-amber-500 text-slate-950 font-black py-2.5 rounded-xl shadow-lg shadow-amber-600/30 cursor-pointer"
+                onClick={() => {
+                  setShowMissingNotesModal(false);
+                  setTimeout(() => {
+                    const el = document.getElementById('pr-notes');
+                    if (el) {
+                      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      el.focus();
+                    }
+                  }, 100);
+                }}
+              >
+                ✏️ حسناً، سأكتب الغرض الآن
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

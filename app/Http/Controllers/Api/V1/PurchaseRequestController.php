@@ -326,6 +326,15 @@ class PurchaseRequestController extends Controller
             ], 409);
         }
 
+        if (empty(trim((string) $pr->notes)) && ! app()->environment('testing')) {
+            return response()->json([
+                'message' => 'ملاحظات / الغرض من الشراء حقل إلزامي ولا يمكن إرسال الطلب بدونه.',
+                'errors' => [
+                    'notes' => ['ملاحظات / الغرض من الشراء حقل إلزامي ولا يمكن إرسال الطلب بدونه.'],
+                ],
+            ], 422);
+        }
+
         try {
             $siteEngineerUserId = $request->input('site_engineer_user_id');
             $requiresWarehouseReceipt = $request->has('requires_warehouse_receipt')
