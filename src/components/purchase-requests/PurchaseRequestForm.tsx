@@ -244,7 +244,7 @@ export const PurchaseRequestForm: React.FC<Props> = ({
     }
 
     const selectedDepartment = departmentOptions.find((department) => department.id === Number(targetDepartmentId));
-    if (targetDepartmentId && !isGeneralManager && !selectedDepartment?.manager && !['EXECUTION', 'BUILDINGS', 'FINISHING', 'LICENSES', 'BUFFET', 'DEVELOPMENT'].includes(selectedDepartment?.code || '')) {
+    if (targetDepartmentId && !isGeneralManager && !selectedDepartment?.manager && !['EXECUTION', 'BUILDINGS', 'FINISHING', 'LICENSES', 'BUFFET', 'DEVELOPMENT', 'MARKETING', 'SALES'].includes(selectedDepartment?.code || '')) {
       nextFieldErrors.targetDepartment = 'القسم المختار لا يحتوي على مدير قسم معين من الإدارة.';
     }
 
@@ -406,7 +406,9 @@ export const PurchaseRequestForm: React.FC<Props> = ({
                   dept.code === 'FINISHING' ? '🎨' :
                   dept.code === 'LICENSES' ? '📜' :
                   dept.code === 'BUFFET' ? '☕' :
-                  dept.code === 'DEVELOPMENT' ? '💻' : '🏢';
+                  dept.code === 'DEVELOPMENT' ? '💻' :
+                  dept.code === 'MARKETING' ? '📢' :
+                  dept.code === 'SALES' ? '💼' : '🏢';
                 const managerName =
                   dept.manager?.name ||
                   (dept.code === 'EXECUTION' ? 'م. أيمن ماهر' :
@@ -414,7 +416,9 @@ export const PurchaseRequestForm: React.FC<Props> = ({
                    dept.code === 'FINISHING' ? 'المهندس مصطفى الخشن' :
                    dept.code === 'LICENSES' ? 'م. مصطفى' :
                    dept.code === 'BUFFET' ? 'أ. عمرو' :
-                   dept.code === 'DEVELOPMENT' ? 'المهندس محمود' : '');
+                   dept.code === 'DEVELOPMENT' ? 'المهندس محمود' :
+                   dept.code === 'MARKETING' ? 'المهندس كريم أحمد' :
+                   dept.code === 'SALES' ? 'المهندس عمرو بيومي' : '');
                 return (
                   <option key={dept.id} value={dept.id}>
                     {icon} {dept.name} {managerName ? `— (المراجع: ${managerName})` : ''}

@@ -142,12 +142,12 @@ export const SiteAccountantDashboardPage: React.FC = () => {
   const accountantScope = useMemo(() => {
     if (hasRole('development_accountant')) {
       return {
-        dashboardTitle: 'لوحة حسابات قسم التطوير',
+        dashboardTitle: 'لوحة حسابات التطوير والتسويق والمبيعات',
         defaultName: 'المهندس أحمد',
-        deptBadge: 'قسم التطوير',
-        inboxTitle: 'المهام والإجراءات العاجلة لقسم التطوير',
-        defaultDeptName: 'قسم التطوير',
-        scopeDescription: 'متابعة أذونات استلام وأوامر شراء قسم التطوير، تسجيل فواتير الموردين، وإجراء المطابقة الثلاثية.',
+        deptBadge: 'التطوير • التسويق • المبيعات',
+        inboxTitle: 'المهام والإجراءات العاجلة للأقسام المسندة (تطوير • تسويق • مبيعات)',
+        defaultDeptName: 'قسم التطوير / التسويق / المبيعات',
+        scopeDescription: 'متابعة أذونات استلام وأوامر شراء أقسام التطوير والتسويق والمبيعات، تسجيل فواتير الموردين، وإجراء المطابقة الثلاثية.',
       };
     }
     if (hasRole('licenses_accountant')) {

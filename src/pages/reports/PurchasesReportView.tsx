@@ -68,7 +68,12 @@ export const PurchasesReportView: React.FC = () => {
     if (!canRegisterInvoice) return false;
     if (hasRole('admin') || hasRole('general_accountant')) return true;
     if (hasRole('development_accountant')) {
-      return row.department_code === 'DEVELOPMENT' || (row.department_name && row.department_name.includes('تطوير'));
+      return (
+        row.department_code === 'DEVELOPMENT' ||
+        row.department_code === 'MARKETING' ||
+        row.department_code === 'SALES' ||
+        (row.department_name && (row.department_name.includes('تطوير') || row.department_name.includes('تسويق') || row.department_name.includes('مبيعات')))
+      );
     }
     if (hasRole('licenses_accountant')) {
       return row.department_code === 'LICENSES' || (row.department_name && row.department_name.includes('تراخيص'));

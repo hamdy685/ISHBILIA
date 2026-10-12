@@ -26,7 +26,7 @@ class SupplierInvoiceService
         'site_accountant' => ['EXECUTION', 'FINISHING', 'BUILDINGS', 'SITE'],
         'licenses_accountant' => ['LICENSES'],
         'buffet_accountant' => ['BUFFET'],
-        'development_accountant' => ['DEVELOPMENT'],
+        'development_accountant' => ['DEVELOPMENT', 'MARKETING', 'SALES'],
     ];
 
     public const SITE_ACCOUNTANT_DEPARTMENT_CODES = ['EXECUTION', 'FINISHING', 'BUILDINGS'];
@@ -137,10 +137,10 @@ class SupplierInvoiceService
                 $deptAccountants = collect([$generalAccountant]);
             }
         } else {
-            // Guarantee: For DEVELOPMENT department, General Accountant (Eng. Habiba)
+            // Guarantee: For DEVELOPMENT, MARKETING, and SALES departments, General Accountant (Eng. Habiba)
             // MUST always be included alongside the department accountant (Eng. Ahmed)
             // so all financial notifications, POs, and receipts reach her dashboard without exception!
-            if ($generalAccountant && $deptCode === 'DEVELOPMENT' && ! $deptAccountants->contains('id', $generalAccountant->id)) {
+            if ($generalAccountant && in_array($deptCode, ['DEVELOPMENT', 'MARKETING', 'SALES'], true) && ! $deptAccountants->contains('id', $generalAccountant->id)) {
                 $deptAccountants->push($generalAccountant);
             }
         }

@@ -298,7 +298,7 @@ class PurchaseReceiptController extends Controller
                     }
                 } elseif ($user->hasRole('development_accountant')) {
                     $deptCode = $pr->department?->code ?: $pr->targetDepartment?->code;
-                    if ($deptCode !== 'DEVELOPMENT') {
+                    if (! in_array($deptCode, ['DEVELOPMENT', 'MARKETING', 'SALES'], true)) {
                         abort(403, 'غير مصرح لك باستعراض صور استلام هذا القسم.');
                     }
                 } elseif ($user->hasRole('site_engineer')) {

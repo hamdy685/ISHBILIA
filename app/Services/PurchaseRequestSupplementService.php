@@ -148,7 +148,13 @@ class PurchaseRequestSupplementService
                 // Otherwise (created by site engineer, requester, etc.), it MUST go to the reviewer first!
                 $status = 'SUBMITTED';
                 $reviewedAt = null;
-                $reviewerUserId = $pr->reviewer_user_id;
+                $targetDept = $pr->targetDepartment ?: $pr->department;
+                if ($targetDept && in_array($targetDept->code, ['MARKETING', 'SALES'], true)) {
+                    $deptReviewer = $targetDept->manager ?: User::where('department_id', $targetDept->id)->whereHas('roles', fn ($q) => $q->where('slug', 'reviewer'))->first();
+                    $reviewerUserId = $deptReviewer?->id ?: $pr->reviewer_user_id;
+                } else {
+                    $reviewerUserId = $pr->reviewer_user_id;
+                }
             }
 
             $supplement = PurchaseRequestSupplement::create([

@@ -117,7 +117,7 @@ const validateRequest = (
   const today = getTodayDateInputValue();
   return {
     targetDepartment: data.target_department_id ? undefined : 'اختر القسم الذي سيعالج الطلب.',
-    targetManager: !isGeneralManager && data.target_department_id && targetDepartment && !targetDepartment.manager && !['EXECUTION', 'BUILDINGS', 'FINISHING', 'LICENSES', 'BUFFET', 'DEVELOPMENT'].includes(targetDepartment?.code || '')
+    targetManager: !isGeneralManager && data.target_department_id && targetDepartment && !targetDepartment.manager && !['EXECUTION', 'BUILDINGS', 'FINISHING', 'LICENSES', 'BUFFET', 'DEVELOPMENT', 'MARKETING', 'SALES'].includes(targetDepartment?.code || '')
       ? 'القسم المستهدف لا يوجد له مدير قسم معين. اطلب من مدير النظام تعيين مدير للقسم أولًا.'
       : undefined,
     targetSiteEngineer: isGeneralManager && !isOffice && !data.site_engineer_user_id
@@ -819,7 +819,9 @@ export const CreatePurchaseRequestPage: React.FC<CreatePurchaseRequestPageProps>
                   dept.code === 'FINISHING' ? '🎨' :
                   dept.code === 'LICENSES' ? '📜' :
                   dept.code === 'BUFFET' ? '☕' :
-                  dept.code === 'DEVELOPMENT' ? '💻' : '🏢';
+                  dept.code === 'DEVELOPMENT' ? '💻' :
+                  dept.code === 'MARKETING' ? '📢' :
+                  dept.code === 'SALES' ? '💼' : '🏢';
                 const managerName =
                   dept.manager?.name ||
                   (dept.code === 'EXECUTION' ? 'م. أيمن ماهر' :
@@ -827,7 +829,9 @@ export const CreatePurchaseRequestPage: React.FC<CreatePurchaseRequestPageProps>
                    dept.code === 'FINISHING' ? 'المهندس مصطفى الخشن' :
                    dept.code === 'LICENSES' ? 'م. مصطفى' :
                    dept.code === 'BUFFET' ? 'أ. عمرو' :
-                   dept.code === 'DEVELOPMENT' ? 'المهندس محمود' : '');
+                   dept.code === 'DEVELOPMENT' ? 'المهندس محمود' :
+                   dept.code === 'MARKETING' ? 'المهندس كريم أحمد' :
+                   dept.code === 'SALES' ? 'المهندس عمرو بيومي' : '');
                 return (
                   <option key={dept.id} value={dept.id}>
                     {icon} {dept.name} {managerName ? `— (المراجع: ${managerName})` : ''}

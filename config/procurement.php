@@ -17,5 +17,7 @@ return [
         'LICENSES' => env('REVIEWER_EMAIL_LICENSES', 'mostafa@gmail.com'),
         'BUFFET' => env('REVIEWER_EMAIL_BUFFET', 'amr@gmail.com'),
         'DEVELOPMENT' => env('REVIEWER_EMAIL_DEVELOPMENT', 'mahmoud@gmail.com'),
+        'MARKETING' => env('REVIEWER_EMAIL_MARKETING', 'karim.marketing@gmail.com'),
+        'SALES' => env('REVIEWER_EMAIL_SALES', 'amr.sales@gmail.com'),
     ],
 ];
