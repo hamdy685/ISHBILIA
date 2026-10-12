@@ -185,9 +185,13 @@ export const buildReceiptWhatsAppText = (
 
   // 8. PURPOSE = الغرض
   const rawPurpose =
+    po?.purchase_request?.notes ||
+    pr?.notes ||
     poItem?.specifications ||
     receiptItem?.purchase_order_item?.specifications ||
     prItem?.specifications ||
+    (receiptItem as any)?.notes ||
+    (receipt as any)?.warehouse_notes ||
     (poItem as any)?.purpose ||
     (receiptItem as any)?.purpose ||
     (prItem as any)?.purpose ||

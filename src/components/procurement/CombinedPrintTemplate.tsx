@@ -206,18 +206,27 @@ export const CombinedPrintTemplate = React.forwardRef<HTMLDivElement, CombinedPr
       }
     }
 
+    const requestPurpose =
+      resolvedPr?.notes ||
+      (po as any)?.purchase_request?.notes ||
+      props.purpose ||
+      (po as any)?.notes ||
+      null;
+
     const resolvedPrItems = rawPrItems.length > 0
       ? rawPrItems.map((item: any) => ({
           description: item.item_description || item.item_name || item.item?.name || '---',
           uom: item.uom || 'PCS',
           quantity: item.quantity ?? '---',
-          specifications: item.specifications || item.notes || item.purpose || '---',
+          specifications: item.specifications || '---',
+          purpose: requestPurpose || item.purpose || item.notes || item.specifications || '---',
         }))
       : (po?.items || []).map((poItem: any) => ({
           description: poItem.pr_item?.item_description || poItem.item_description || poItem.item_name || '---',
           uom: poItem.pr_item?.uom || poItem.uom || 'PCS',
           quantity: poItem.pr_item?.quantity || poItem.quantity || '---',
           specifications: poItem.pr_item?.specifications || poItem.specifications || '---',
+          purpose: requestPurpose || poItem.pr_item?.notes || poItem.specifications || '---',
         }));
 
     // ── 2. Section 2: Actual Purchase Order (أمر الشراء الفعلي) ───────────────
@@ -264,9 +273,17 @@ export const CombinedPrintTemplate = React.forwardRef<HTMLDivElement, CombinedPr
         const qty = Number(item.quantity || 0);
         const price = Number(item.unit_price || 0);
         const lineTotal = item.line_total !== undefined ? Number(item.line_total) : Math.round(qty * price * 100) / 100;
+        const itemPurpose =
+          requestPurpose ||
+          item.specifications ||
+          item.pr_item?.notes ||
+          item.pr_item?.specifications ||
+          item.notes ||
+          '---';
         return {
           description: item.item_description || item.item_name || '---',
           supplier: item.supplier_name || props.supplierName || po?.supplier?.company_name || '---',
+          purpose: itemPurpose,
           uom: item.uom || 'PCS',
           quantity: item.quantity ?? 0,
           unit_price: price,
@@ -335,8 +352,16 @@ export const CombinedPrintTemplate = React.forwardRef<HTMLDivElement, CombinedPr
     const resolvedGrnItems = rawGrnItems.length > 0
       ? rawGrnItems.map((item: any) => {
           const poItem = item.purchase_order_item || po?.items?.find((p: any) => p.id === item.purchase_order_item_id);
+          const grnPurpose =
+            requestPurpose ||
+            poItem?.specifications ||
+            poItem?.pr_item?.notes ||
+            poItem?.pr_item?.specifications ||
+            item.notes ||
+            '---';
           return {
             description: poItem?.item_description || poItem?.item_name || item.item_description || '---',
+            purpose: grnPurpose,
             uom: poItem?.uom || item.uom || 'PCS',
             received_quantity: item.received_quantity ?? item.quantity ?? '---',
             notes: item.notes || resolvedReceipt?.warehouse_notes || 'مطابق للفحص والمعاينة',
@@ -344,6 +369,7 @@ export const CombinedPrintTemplate = React.forwardRef<HTMLDivElement, CombinedPr
         })
       : resolvedPoItems.map((poItem: any) => ({
           description: poItem.description,
+          purpose: poItem.purpose,
           uom: poItem.uom,
           received_quantity: poItem.quantity,
           notes: resolvedReceipt?.warehouse_notes || 'مطابق للفحص والمعاينة',
@@ -419,6 +445,7 @@ export const CombinedPrintTemplate = React.forwardRef<HTMLDivElement, CombinedPr
                 <th className="border border-gray-300 p-2 text-center w-10">م</th>
                 <th className="border border-gray-300 p-2">الصنف</th>
                 <th className="border border-gray-300 p-2">المواصفات الفنية</th>
+                <th className="border border-gray-300 p-2 text-center w-32">الغرض</th>
                 <th className="border border-gray-300 p-2 text-center w-20">الوحدة</th>
                 <th className="border border-gray-300 p-2 text-center w-28">الكمية المطلوبة</th>
               </tr>
@@ -430,13 +457,14 @@ export const CombinedPrintTemplate = React.forwardRef<HTMLDivElement, CombinedPr
                     <td className="border border-gray-300 p-2 text-center font-bold text-gray-600">{idx + 1}</td>
                     <td className="border border-gray-300 p-2 font-semibold text-gray-900">{item.description}</td>
                     <td className="border border-gray-300 p-2 text-gray-700 text-[10.5pt]">{item.specifications}</td>
+                    <td className="border border-gray-300 p-2 text-center text-gray-800 text-[10.5pt] font-medium">{item.purpose}</td>
                     <td className="border border-gray-300 p-2 text-center text-gray-700">{getUnitLabel(item.uom)}</td>
                     <td className="border border-gray-300 p-2 text-center font-mono font-bold text-gray-900">{item.quantity}</td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} className="border border-gray-300 p-3 text-center text-gray-500">لا توجد أصناف مسجلة بطلب الشراء</td>
+                  <td colSpan={6} className="border border-gray-300 p-3 text-center text-gray-500">لا توجد أصناف مسجلة بطلب الشراء</td>
                 </tr>
               )}
             </tbody>
@@ -525,7 +553,8 @@ export const CombinedPrintTemplate = React.forwardRef<HTMLDivElement, CombinedPr
               <tr className="bg-gray-50 print:bg-gray-100 font-bold border-b border-gray-300 text-gray-800">
                 <th className="border border-gray-300 p-2 text-center w-10">م</th>
                 <th className="border border-gray-300 p-2">الصنف</th>
-                <th className="border border-gray-300 p-2 text-center w-32">المورد</th>
+                <th className="border border-gray-300 p-2 text-center w-32">الغرض</th>
+                <th className="border border-gray-300 p-2 text-center w-28">المورد</th>
                 <th className="border border-gray-300 p-2 text-center w-16">الوحدة</th>
                 <th className="border border-gray-300 p-2 text-center w-20">الكمية</th>
                 <th className="border border-gray-300 p-2 text-center w-24">السعر</th>
@@ -538,6 +567,7 @@ export const CombinedPrintTemplate = React.forwardRef<HTMLDivElement, CombinedPr
                   <tr key={`po-item-${idx}`} className="border-b border-gray-300">
                     <td className="border border-gray-300 p-2 text-center font-bold text-gray-600">{idx + 1}</td>
                     <td className="border border-gray-300 p-2 font-semibold text-gray-900">{item.description}</td>
+                    <td className="border border-gray-300 p-2 text-center text-gray-800 text-[10.5pt] font-medium">{item.purpose}</td>
                     <td className="border border-gray-300 p-2 text-center text-gray-700 text-xs">{item.supplier}</td>
                     <td className="border border-gray-300 p-2 text-center text-gray-700">{getUnitLabel(item.uom)}</td>
                     <td className="border border-gray-300 p-2 text-center font-mono font-bold text-gray-900">{item.quantity}</td>
@@ -551,13 +581,13 @@ export const CombinedPrintTemplate = React.forwardRef<HTMLDivElement, CombinedPr
                 ))
               ) : (
                 <tr>
-                  <td colSpan={7} className="border border-gray-300 p-3 text-center text-gray-500">لا توجد بنود بأمر الشراء</td>
+                  <td colSpan={8} className="border border-gray-300 p-3 text-center text-gray-500">لا توجد بنود بأمر الشراء</td>
                 </tr>
               )}
 
               {/* صف الإجمالي النهائي بخلفية رمادية فاتحة جداً */}
               <tr className="bg-gray-100 print:bg-gray-100 font-bold border-t-2 border-gray-300">
-                <td colSpan={6} className="border border-gray-300 p-2 text-left font-bold text-[11pt] text-gray-900">
+                <td colSpan={7} className="border border-gray-300 p-2 text-left font-bold text-[11pt] text-gray-900">
                   الإجمالي النهائي:
                 </td>
                 <td className="border border-gray-300 p-2 text-center font-mono font-bold text-[11pt] text-black">
@@ -640,6 +670,7 @@ export const CombinedPrintTemplate = React.forwardRef<HTMLDivElement, CombinedPr
               <tr className="bg-gray-50 print:bg-gray-100 font-bold border-b border-gray-300 text-gray-800">
                 <th className="border border-gray-300 p-2 text-center w-10">م</th>
                 <th className="border border-gray-300 p-2">الصنف</th>
+                <th className="border border-gray-300 p-2 text-center w-36">الغرض</th>
                 <th className="border border-gray-300 p-2 text-center w-20">الوحدة</th>
                 <th className="border border-gray-300 p-2 text-center w-28">الكمية المستلمة</th>
                 <th className="border border-gray-300 p-2">حالة الفحص والملاحظات</th>
@@ -651,6 +682,7 @@ export const CombinedPrintTemplate = React.forwardRef<HTMLDivElement, CombinedPr
                   <tr key={`grn-item-${idx}`} className="border-b border-gray-300">
                     <td className="border border-gray-300 p-2 text-center font-bold text-gray-600">{idx + 1}</td>
                     <td className="border border-gray-300 p-2 font-semibold text-gray-900">{item.description}</td>
+                    <td className="border border-gray-300 p-2 text-center text-gray-800 text-[10.5pt] font-medium">{item.purpose}</td>
                     <td className="border border-gray-300 p-2 text-center text-gray-700">{getUnitLabel(item.uom)}</td>
                     <td className="border border-gray-300 p-2 text-center font-mono font-bold text-gray-900">
                       {item.received_quantity}
@@ -660,7 +692,7 @@ export const CombinedPrintTemplate = React.forwardRef<HTMLDivElement, CombinedPr
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} className="border border-gray-300 p-3 text-center text-gray-500">لا توجد بيانات استلام مسجلة</td>
+                  <td colSpan={6} className="border border-gray-300 p-3 text-center text-gray-500">لا توجد بيانات استلام مسجلة</td>
                 </tr>
               )}
             </tbody>
