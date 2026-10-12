@@ -31,6 +31,7 @@ export const ROLE_LABELS: Record<string, string> = {
   site_accountant: 'حسابات الموقع والمشاريع',
   licenses_accountant: 'حسابات التراخيص والمصروفات',
   buffet_accountant: 'حسابات البوفيه والمكتبيات',
+  development_accountant: 'محاسب قسم التطوير',
   general_accountant: 'محاسب عام',
   procurement_manager: 'مدير المشتريات',
   reviewer: 'مراجع القسم',

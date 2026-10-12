@@ -59,7 +59,7 @@ const SupplierAccountDedicatedPage: React.FC<{
   const [quotesLoading, setQuotesLoading] = useState<boolean>(true);
   const { hasRole } = useAuth();
   const isManagerOrExecutive = hasRole('procurement_manager') || hasRole('general_manager') || hasRole('execution_manager');
-  const isDepartmentAccountant = !isManagerOrExecutive && (hasRole('site_accountant') || hasRole('licenses_accountant') || hasRole('buffet_accountant'));
+  const isDepartmentAccountant = !isManagerOrExecutive && (hasRole('site_accountant') || hasRole('licenses_accountant') || hasRole('buffet_accountant') || hasRole('development_accountant'));
 
   useEffect(() => {
     setQuotesLoading(true);

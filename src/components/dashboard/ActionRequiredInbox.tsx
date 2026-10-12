@@ -30,7 +30,7 @@ export interface ActionInboxItemDetail {
 export interface ActionInboxItem {
   id: string | number;
   rawId: number;
-  type: 'PR' | 'PO' | 'QUOTE' | 'INVOICE' | 'RECEIPT' | 'SUPPLEMENT' | 'OFFICE_RECEIPT';
+  type: 'PR' | 'PO' | 'QUOTE' | 'INVOICE' | 'RECEIPT' | 'SUPPLEMENT' | 'OFFICE_RECEIPT' | 'ACCOUNTING_RECEIPT' | 'ACCOUNTING_INVOICE';
   code: string;
   title: string;
   subtitle?: string;

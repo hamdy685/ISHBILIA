@@ -33,7 +33,7 @@ export const AccountingPurchaseOrderDetailsPage: React.FC = () => {
   const isActual = useMemo(() => isActualPurchaseOrder(po), [po]);
   const displayedItems = useMemo(() => getActualPoLineItems(po), [po]);
   const displayedGrandTotal = useMemo(() => calculateActualPoGrandTotal(displayedItems, po?.grand_total), [displayedItems, po?.grand_total]);
-  const isDepartmentAccountant = !isManagerOrExecutive && (hasRole('site_accountant') || hasRole('licenses_accountant') || hasRole('buffet_accountant'));
+  const isDepartmentAccountant = !isManagerOrExecutive && (hasRole('site_accountant') || hasRole('licenses_accountant') || hasRole('buffet_accountant') || hasRole('development_accountant'));
   const isFinancialDirector = !isManagerOrExecutive && hasRole('accountant') && !isDepartmentAccountant && !hasRole('admin');
 
   const load = async () => {

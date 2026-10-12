@@ -549,7 +549,7 @@ class NotificationService
         }
 
         // 4. Accountants: dismiss notifications for receipts that are already invoiced/matched
-        if ($user->hasAnyRole(['accountant', 'site_accountant', 'licenses_accountant', 'buffet_accountant', 'general_accountant']) || $user->isGeneralAccountant()) {
+        if ($user->hasAnyRole(['accountant', 'site_accountant', 'licenses_accountant', 'buffet_accountant', 'development_accountant', 'general_accountant']) || $user->isGeneralAccountant()) {
             Notification::where('user_id', $user->id)
                 ->whereNull('read_at')
                 ->where('notifiable_type', PurchaseReceipt::class)

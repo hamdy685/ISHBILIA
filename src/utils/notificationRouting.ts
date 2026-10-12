@@ -363,7 +363,7 @@ export const resolveNotificationAction = (
   // 2. Material Receipts & Goods Received Notes (أذونات الاستلام والفحص)
   if (info.docType === 'RECEIPT' || info.receiptId || type.includes('receipt') || type.includes('grn') || type.includes('goods_received')) {
     const receiptParam = info.receiptId ? `receipt_id=${info.receiptId}` : '';
-    const isDeptAccountant = roleSlugs.some((r) => ['site_accountant', 'licenses_accountant', 'buffet_accountant'].includes(r));
+    const isDeptAccountant = roleSlugs.some((r) => ['site_accountant', 'licenses_accountant', 'buffet_accountant', 'development_accountant'].includes(r));
     if (roleSlugs.includes('accountant') || isDeptAccountant) {
       return {
         url: info.receiptId

@@ -64,7 +64,7 @@ const receiptValue = (receipt: ApprovedReceipt) => {
 export const SupplierPaymentsPage: React.FC = () => {
   const { hasRole } = useAuth();
   const isManagerOrExecutive = hasRole('procurement_manager') || hasRole('general_manager') || hasRole('execution_manager');
-  const isDepartmentAccountant = !isManagerOrExecutive && (hasRole('site_accountant') || hasRole('licenses_accountant') || hasRole('buffet_accountant'));
+  const isDepartmentAccountant = !isManagerOrExecutive && (hasRole('site_accountant') || hasRole('licenses_accountant') || hasRole('buffet_accountant') || hasRole('development_accountant'));
   const isFinancialDirector = !isManagerOrExecutive && hasRole('accountant') && !isDepartmentAccountant && !hasRole('admin');
   const isSiteAccountant = isDepartmentAccountant;
 

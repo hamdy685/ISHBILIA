@@ -7,9 +7,11 @@ use App\Models\PurchaseOrder;
 use App\Models\PurchaseReceipt;
 use App\Models\PurchaseRequest;
 use App\Models\PurchaseRequestSupplement;
+use App\Models\SupplierInvoice;
 use App\Services\ProcurementPurchaseRequestService;
 use App\Services\PurchaseReceiptService;
 use App\Services\ReviewerPurchaseRequestService;
+use App\Services\SupplierInvoiceService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -18,7 +20,8 @@ class DashboardPendingTasksController extends Controller
     public function __construct(
         protected PurchaseReceiptService $receiptService,
         protected ReviewerPurchaseRequestService $reviewerService,
-        protected ProcurementPurchaseRequestService $procurementService
+        protected ProcurementPurchaseRequestService $procurementService,
+        protected SupplierInvoiceService $invoiceService
     ) {}
 
     /**
@@ -529,6 +532,166 @@ class DashboardPendingTasksController extends Controller
                     'actionLabel' => 'البت والاعتماد التنفيذي',
                     'created_at' => $pr->created_at?->toISOString(),
                     'timeAgo' => $pr->created_at?->format('Y-m-d H:i'),
+                ]);
+            }
+        }
+
+        // 6. Accounting: Approved Receipts Pending Invoice Registration & Invoices Pending 3-Way Match
+        $isAccountant = $user->hasRole('general_accountant')
+            || $user->hasRole('site_accountant')
+            || $user->hasRole('development_accountant')
+            || $user->hasRole('licenses_accountant')
+            || $user->hasRole('buffet_accountant')
+            || $user->isGeneralAccountant();
+
+        if ($isAccountant) {
+            $allowedCodes = $this->invoiceService->getAllowedDepartmentCodesForAccountant($user);
+            $primaryRole = $user->roles->first()?->slug ?? 'accountant';
+
+            // 6.1 Approved Receipts pending invoice recording / accounting action
+            $pendingReceiptsQuery = PurchaseReceipt::withoutGlobalScope(\App\Scopes\DataIsolationScope::class)
+                ->with([
+                    'purchaseOrder.supplier',
+                    'purchaseOrder.purchaseRequest.department',
+                    'purchaseRequest.department',
+                    'items.purchaseOrderItem',
+                ])
+                ->where('status', 'APPROVED')
+                ->whereNull('accountant_recorded_at')
+                ->whereDoesntHave('supplierInvoices', function ($iq) {
+                    $iq->whereNotIn('status', ['VOIDED', 'CANCELLED']);
+                })
+                ->where(function ($query) {
+                    $internalSupplier = \App\Models\Supplier::getOrCreateInternalWarehouseSupplier();
+                    $query->where(function ($nonWhQuery) use ($internalSupplier) {
+                        $nonWhQuery->where('supplier_id', '!=', $internalSupplier->id)
+                                   ->whereHas('purchaseOrder', function ($poQ) use ($internalSupplier) {
+                                       $poQ->where('supplier_id', '!=', $internalSupplier->id)
+                                           ->whereDoesntHave('purchaseRequest', function ($prQ) {
+                                               $prQ->where('request_type', 'OFFICE_SUPPLIES');
+                                           });
+                                   });
+                    })->orWhereHas('purchaseOrder', function ($poQuery) {
+                        $poQuery->where('status', '!=', 'PENDING_ACTUAL_PO')
+                            ->where(function ($q) {
+                                $q->whereNotNull('finalized_at')
+                                  ->orWhereIn('status', ['ISSUED', 'APPROVED_BY_ACCOUNTING', 'FINAL_APPROVED']);
+                            });
+                    });
+                });
+
+            // Department filter for restricted department accountants
+            if ($allowedCodes !== null) {
+                $pendingReceiptsQuery->where(function ($q) use ($allowedCodes) {
+                    $q->whereHas('purchaseOrder.purchaseRequest.department', fn ($dq) => $dq->whereIn('code', $allowedCodes))
+                      ->orWhereHas('purchaseRequest.department', fn ($dq) => $dq->whereIn('code', $allowedCodes));
+                });
+            }
+
+            $pendingReceipts = $pendingReceiptsQuery->orderByDesc('created_at')->limit(50)->get();
+
+            foreach ($pendingReceipts as $rc) {
+                $dept = $rc->purchaseOrder?->purchaseRequest?->department ?: $rc->purchaseRequest?->department;
+                $deptCode = $dept?->code;
+                $po = $rc->purchaseOrder;
+                $pr = $po?->purchaseRequest ?: $rc->purchaseRequest;
+
+                $tasks->push([
+                    'id' => "acct-receipt-{$rc->id}",
+                    'rawId' => $rc->id,
+                    'type' => 'ACCOUNTING_RECEIPT',
+                    'action_type' => 'RECORD_SUPPLIER_INVOICE',
+                    'code' => $rc->receipt_number,
+                    'document_number' => $rc->receipt_number,
+                    'document_type' => 'PURCHASE_RECEIPT',
+                    'document_id' => $rc->id,
+                    'title' => "إذن استلام معتمد جاهز لتسجيل الفاتورة ({$rc->receipt_number})",
+                    'subtitle' => $po ? "لأمر الشراء {$po->po_number} — " . ($po->supplier?->company_name ?: 'المورد') : ($rc->supplier?->company_name ?: 'المورد'),
+                    'department' => $dept?->name,
+                    'department_scope' => $deptCode,
+                    'action_owner_id' => $user->id,
+                    'action_owner_role' => $primaryRole,
+                    'current_status' => 'PENDING',
+                    'current_stage' => 'ACCOUNTING',
+                    'request_id' => $pr?->id,
+                    'purchase_order_id' => $po?->id,
+                    'actual_purchase_order_id' => $po?->is_actual_po ? $po->id : null,
+                    'supplier' => $po?->supplier?->company_name ?: $rc->supplier?->company_name,
+                    'urgency' => 'HIGH',
+                    'reason' => 'تم اعتماد إذن الاستلام وبانتظار تسجيل فاتورة المورد واستكمال الدورة المحاسبية',
+                    'actionUrl' => "/site-accountant?receipt_id={$rc->id}",
+                    'action_url' => "/site-accountant?receipt_id={$rc->id}",
+                    'actionLabel' => 'تسجيل فاتورة المورد',
+                    'stageBadge' => [
+                        'text' => 'الحسابات والتسجيل',
+                        'icon' => '🧾',
+                        'className' => 'bg-emerald-950/80 text-emerald-300 border-emerald-800/60 ring-1 ring-emerald-500/40',
+                    ],
+                    'created_at' => $rc->created_at?->toISOString(),
+                    'timeAgo' => $rc->created_at?->format('Y-m-d H:i'),
+                ]);
+            }
+
+            // 6.2 Invoices pending 3-way matching
+            $pendingInvoicesQuery = SupplierInvoice::withoutGlobalScope(\App\Scopes\DataIsolationScope::class)
+                ->with([
+                    'supplier',
+                    'purchaseOrder.purchaseRequest.department',
+                ])
+                ->whereNotIn('status', ['VOIDED', 'CANCELLED'])
+                ->where(function ($iq) {
+                    $iq->whereNull('matched_at')
+                       ->orWhere('matching_status', '!=', 'MATCHED');
+                });
+
+            if ($allowedCodes !== null) {
+                $pendingInvoicesQuery->whereHas('purchaseOrder.purchaseRequest.department', function ($dq) use ($allowedCodes) {
+                    $dq->whereIn('code', $allowedCodes);
+                });
+            }
+
+            $pendingInvoices = $pendingInvoicesQuery->orderByDesc('created_at')->limit(50)->get();
+
+            foreach ($pendingInvoices as $inv) {
+                $dept = $inv->purchaseOrder?->purchaseRequest?->department;
+                $deptCode = $dept?->code;
+                $po = $inv->purchaseOrder;
+                $pr = $po?->purchaseRequest;
+
+                $tasks->push([
+                    'id' => "acct-invoice-{$inv->id}",
+                    'rawId' => $inv->id,
+                    'type' => 'ACCOUNTING_INVOICE',
+                    'action_type' => 'THREE_WAY_MATCH',
+                    'code' => $inv->invoice_number ?: "INV-{$inv->id}",
+                    'document_number' => $inv->invoice_number ?: "INV-{$inv->id}",
+                    'document_type' => 'SUPPLIER_INVOICE',
+                    'document_id' => $inv->id,
+                    'title' => "فاتورة مورد بانتظار المطابقة الثلاثية (" . ($inv->invoice_number ?: "INV-{$inv->id}") . ")",
+                    'subtitle' => $po ? "لأمر الشراء {$po->po_number} — " . ($inv->supplier?->company_name ?: 'المورد') : ($inv->supplier?->company_name ?: 'المورد'),
+                    'department' => $dept?->name,
+                    'department_scope' => $deptCode,
+                    'action_owner_id' => $user->id,
+                    'action_owner_role' => $primaryRole,
+                    'current_status' => 'PENDING',
+                    'current_stage' => 'ACCOUNTING',
+                    'request_id' => $pr?->id,
+                    'purchase_order_id' => $po?->id,
+                    'actual_purchase_order_id' => $po?->is_actual_po ? $po->id : null,
+                    'amount' => (float) $inv->amount,
+                    'supplier' => $inv->supplier?->company_name,
+                    'urgency' => 'CRITICAL',
+                    'reason' => 'فاتورة مسجلة بانتظار إجراء المطابقة الثلاثية (أمر الشراء + إذن الاستلام + الفاتورة)',
+                    'actionUrl' => "/site-accountant?invoice_id={$inv->id}",
+                    'action_url' => "/site-accountant?invoice_id={$inv->id}",
+                    'actionLabel' => 'إجراء المطابقة الثلاثية',
+                    'stageBadge' => [
+                        'text' => 'مطابقة ثلاثية',
+                        'icon' => '⚖️',
+                        'className' => 'bg-amber-950/80 text-amber-300 border-amber-800/60 ring-1 ring-amber-500/40',
+                    ],
+                    'created_at' => $inv->created_at?->toISOString(),
+                    'timeAgo' => $inv->created_at?->format('Y-m-d H:i'),
                 ]);
             }
         }

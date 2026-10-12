@@ -47,7 +47,7 @@ const getLabel = (segment: string): string => {
 export const Breadcrumbs: React.FC = () => {
   const location = useLocation();
   const { hasRole } = useAuth();
-  const isDeptAccountant = hasRole('site_accountant') || hasRole('licenses_accountant') || hasRole('buffet_accountant');
+  const isDeptAccountant = hasRole('site_accountant') || hasRole('licenses_accountant') || hasRole('buffet_accountant') || hasRole('development_accountant');
   const segments = location.pathname.split('/').filter(Boolean);
 
   return (

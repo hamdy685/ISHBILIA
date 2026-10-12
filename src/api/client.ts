@@ -367,7 +367,7 @@ apiClient.interceptors.response.use(
         ? user.roles.map((r: any) => (typeof r === 'string' ? r : r.slug))
         : [];
       const isPrivilegedFinancialRole = roleSlugs.some((r: string) =>
-        ['procurement_manager', 'accountant', 'site_accountant', 'licenses_accountant', 'buffet_accountant', 'general_manager', 'admin'].includes(r)
+        ['procurement_manager', 'general_accountant', 'accountant', 'site_accountant', 'licenses_accountant', 'buffet_accountant', 'development_accountant', 'general_manager', 'admin'].includes(r)
       );
       if (!isPrivilegedFinancialRole && response.data) {
         stripFinancialData(response.data);

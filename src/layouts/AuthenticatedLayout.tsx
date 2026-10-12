@@ -147,6 +147,7 @@ export const AuthenticatedLayout: React.FC = () => {
                         </Link>
                     </>
                 );
+            case "general_accountant":
             case "accountant":
                 return (
                     <>
@@ -213,6 +214,7 @@ export const AuthenticatedLayout: React.FC = () => {
             case "site_accountant":
             case "licenses_accountant":
             case "buffet_accountant":
+            case "development_accountant":
                 return (
                     <>
                         <Link

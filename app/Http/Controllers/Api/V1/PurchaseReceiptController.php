@@ -296,6 +296,11 @@ class PurchaseReceiptController extends Controller
                     if ($deptCode !== 'BUFFET') {
                         abort(403, 'غير مصرح لك باستعراض صور استلام هذا القسم.');
                     }
+                } elseif ($user->hasRole('development_accountant')) {
+                    $deptCode = $pr->department?->code ?: $pr->targetDepartment?->code;
+                    if ($deptCode !== 'DEVELOPMENT') {
+                        abort(403, 'غير مصرح لك باستعراض صور استلام هذا القسم.');
+                    }
                 } elseif ($user->hasRole('site_engineer')) {
                     if ($receipt->site_engineer_user_id && $receipt->site_engineer_user_id !== $user->id) {
                         abort(403, 'غير مصرح لك باستعراض استلام غير مسند إليك.');

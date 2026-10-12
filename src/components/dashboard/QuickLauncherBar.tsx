@@ -138,7 +138,7 @@ export const QuickLauncherBar: React.FC<QuickLauncherBarProps> = ({
     }
 
     // Financial Director (Accountant) Shortcuts
-    if (hasRole('accountant') && !hasRole('site_accountant') && !hasRole('licenses_accountant') && !hasRole('buffet_accountant')) {
+    if (hasRole('accountant') && !hasRole('site_accountant') && !hasRole('licenses_accountant') && !hasRole('buffet_accountant') && !hasRole('development_accountant')) {
       items.push(
         { id: 'acc-prs', label: 'اعتماد الطلبات المباشرة', icon: '⚡', to: '/accounting/purchase-requests', variant: 'primary' },
         { id: 'acc-quotes', label: 'الرأي المالي للعروض', icon: '⚖️', to: '/accounting/purchase-quotes', variant: 'amber' },
@@ -149,8 +149,8 @@ export const QuickLauncherBar: React.FC<QuickLauncherBarProps> = ({
       return items;
     }
 
-    // Department Accountant (Site / Licenses / Buffet) Shortcuts
-    if (hasRole('site_accountant') || hasRole('licenses_accountant') || hasRole('buffet_accountant')) {
+    // Department Accountant (Site / Licenses / Buffet / Development) Shortcuts
+    if (hasRole('site_accountant') || hasRole('licenses_accountant') || hasRole('buffet_accountant') || hasRole('development_accountant')) {
       items.push(
         { id: 'siteacc-invoice', label: 'فواتير ودفعات الموردين', icon: '🧾', to: '/accounting/supplier-payments', variant: 'primary' },
         { id: 'siteacc-accounts', label: 'كشف حساب مورد وسداد', icon: '🏦', to: '/accounting/supplier-accounts', variant: 'emerald' },

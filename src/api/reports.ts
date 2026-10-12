@@ -30,6 +30,7 @@ export interface PurchasesReportRow {
   region: string;
   department_id?: number | null;
   department_name: string;
+  department_code?: string;
   works: string;
   invoice_number?: string;
   matching_status?: string;

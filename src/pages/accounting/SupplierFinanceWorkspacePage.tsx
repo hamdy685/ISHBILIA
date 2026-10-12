@@ -65,13 +65,25 @@ export const SupplierFinanceWorkspacePage: React.FC = () => {
         </div>
 
         <div className="text-[11px] font-bold px-3 py-1 rounded-xl flex items-center gap-2">
-          {isSiteAccountant ? (
+          {hasRole('development_accountant') ? (
+            <span className="text-teal-300 bg-teal-950/50 border border-teal-800/50 px-2.5 py-0.5 rounded-lg">
+              🏢 حسابات قسم التطوير
+            </span>
+          ) : hasRole('site_accountant') ? (
             <span className="text-amber-300 bg-amber-950/50 border border-amber-800/50 px-2.5 py-0.5 rounded-lg">
               🏗️ قسم الحسابات: أقسام التنفيذ والتشطيبات والمباني
             </span>
+          ) : hasRole('licenses_accountant') ? (
+            <span className="text-purple-300 bg-purple-950/50 border border-purple-800/50 px-2.5 py-0.5 rounded-lg">
+              📜 حسابات التراخيص
+            </span>
+          ) : hasRole('buffet_accountant') ? (
+            <span className="text-pink-300 bg-pink-950/50 border border-pink-800/50 px-2.5 py-0.5 rounded-lg">
+              ☕ حسابات المكتبيات والبوفيه
+            </span>
           ) : (
             <span className="text-slate-400">
-              💼 مساحة عمل المدير المالي
+              💼 مساحة عمل الحسابات
             </span>
           )}
         </div>

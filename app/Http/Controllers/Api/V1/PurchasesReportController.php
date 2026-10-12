@@ -20,6 +20,8 @@ class PurchasesReportController extends Controller
         'site_accountant',
         'licenses_accountant',
         'buffet_accountant',
+        'development_accountant',
+        'general_accountant',
         'general_manager',
         'execution_manager',
         'procurement_manager',
@@ -107,7 +109,9 @@ class PurchasesReportController extends Controller
         }
 
         // 3. Query all Purchase Orders in the period with items, receipts and supplier invoices
-        $allowedDepartmentCodes = app(\App\Services\SupplierInvoiceService::class)->getAllowedDepartmentCodesForAccountant($user);
+        $allowedDepartmentCodes = ($user->hasRole('development_accountant') || $user->hasRole('general_accountant') || $user->hasRole('admin'))
+            ? null
+            : app(\App\Services\SupplierInvoiceService::class)->getAllowedDepartmentCodesForAccountant($user);
 
         $ordersQuery = PurchaseOrder::query()
             ->with([
@@ -350,6 +354,7 @@ class PurchasesReportController extends Controller
                         'region' => $rowRegion ?: '—',
                         'department_id' => $deptId,
                         'department_name' => $deptName,
+                        'department_code' => $defaultDept?->code,
                         'works' => $works ?: '—',
                         // الحالة المحاسبية
                         'accounting_status' => $primaryInvoice ? 'VERIFIED' : 'PENDING',
@@ -395,6 +400,7 @@ class PurchasesReportController extends Controller
                     'region' => $defaultRegion,
                     'department_id' => $deptId,
                     'department_name' => $deptName,
+                    'department_code' => $defaultDept?->code,
                     'works' => $requestModel?->notes ?: '—',
                     'accounting_status' => $primaryInvoice ? 'VERIFIED' : 'PENDING',
                     'accounting_status_label' => $primaryInvoice ? 'مسقط ومسجل بالحسابات' : 'صادر - بانتظار تسجيل الحسابات',

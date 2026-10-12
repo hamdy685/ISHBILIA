@@ -26,6 +26,7 @@ class SupplierInvoiceService
         'site_accountant' => ['EXECUTION', 'FINISHING', 'BUILDINGS', 'SITE'],
         'licenses_accountant' => ['LICENSES'],
         'buffet_accountant' => ['BUFFET'],
+        'development_accountant' => ['DEVELOPMENT'],
     ];
 
     public const SITE_ACCOUNTANT_DEPARTMENT_CODES = ['EXECUTION', 'FINISHING', 'BUILDINGS'];
@@ -119,7 +120,7 @@ class SupplierInvoiceService
             $department = \App\Models\Department::where('code', $deptCode)->first();
             if ($department) {
                 $deptUsers = User::where('department_id', $department->id)
-                    ->whereHas('roles', fn ($q) => $q->whereIn('slug', ['accountant', 'site_accountant', 'licenses_accountant', 'buffet_accountant']))
+                    ->whereHas('roles', fn ($q) => $q->whereIn('slug', ['accountant', 'site_accountant', 'licenses_accountant', 'buffet_accountant', 'development_accountant']))
                     ->where('is_active', true)
                     ->get();
                 if ($deptUsers->isNotEmpty()) {

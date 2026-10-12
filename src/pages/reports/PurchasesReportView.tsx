@@ -62,7 +62,25 @@ const formatCleanQty = (val: number | string | null | undefined) => {
 export const PurchasesReportView: React.FC = () => {
   const { hasRole } = useAuth();
   const isManagerOrExecutive = hasRole('procurement_manager') || hasRole('general_manager') || hasRole('execution_manager');
-  const canRegisterInvoice = !isManagerOrExecutive && (hasRole('site_accountant') || hasRole('licenses_accountant') || hasRole('buffet_accountant') || hasRole('admin'));
+  const canRegisterInvoice = !isManagerOrExecutive && (hasRole('general_accountant') || hasRole('site_accountant') || hasRole('licenses_accountant') || hasRole('buffet_accountant') || hasRole('development_accountant') || hasRole('admin'));
+
+  const isRowActionAllowed = (row: PurchasesReportRow) => {
+    if (!canRegisterInvoice) return false;
+    if (hasRole('admin') || hasRole('general_accountant')) return true;
+    if (hasRole('development_accountant')) {
+      return row.department_code === 'DEVELOPMENT' || (row.department_name && row.department_name.includes('تطوير'));
+    }
+    if (hasRole('licenses_accountant')) {
+      return row.department_code === 'LICENSES' || (row.department_name && row.department_name.includes('تراخيص'));
+    }
+    if (hasRole('buffet_accountant')) {
+      return row.department_code === 'BUFFET' || row.department_code === 'OFFICE' || (row.department_name && (row.department_name.includes('مكتبيات') || row.department_name.includes('بوفيه')));
+    }
+    if (hasRole('site_accountant')) {
+      return ['EXECUTION', 'FINISHING', 'BUILDINGS', 'SITE'].includes(row.department_code || '');
+    }
+    return false;
+  };
 
   // Period filter states
   const [filterType, setFilterType] = useState<'daily' | 'monthly' | 'custom'>('monthly');
@@ -309,7 +327,7 @@ export const PurchasesReportView: React.FC = () => {
 
   // Open invoice modal for a specific PO row
   const handleOpenInvoiceModal = (row: PurchasesReportRow) => {
-    if (!canRegisterInvoice) return;
+    if (!canRegisterInvoice || !isRowActionAllowed(row)) return;
     setSelectedRowForInvoice(row);
     setInvoiceError(null);
 
@@ -1535,7 +1553,7 @@ export const PurchasesReportView: React.FC = () => {
                                 </span>
                               )}
                             </div>
-                          ) : canRegisterInvoice ? (
+                          ) : canRegisterInvoice && isRowActionAllowed(row) ? (
                             isUnpriced ? (
                               <button
                                 type="button"
@@ -1563,10 +1581,10 @@ export const PurchasesReportView: React.FC = () => {
                           ) : (
                             <span
                               className="inline-flex items-center justify-center gap-1 w-full rounded-md bg-slate-100 border border-slate-200 py-1 px-2 text-[11px] font-medium text-slate-500 shadow-2xs"
-                              title="تسجيل الفواتير المالية مسند لمحاسب القسم المختص وفقاً لقاعدة فصل المهام"
+                              title={canRegisterInvoice ? "المستند خارج نطاق اختصاصك - متاح للاطلاع والتحليلات فقط" : "تسجيل الفواتير المالية مسند لمحاسب القسم المختص وفقاً لقاعدة فصل المهام"}
                             >
-                              <span className="text-slate-400">⏳</span>
-                              <span>(مسند للحسابات)</span>
+                              <span className="text-slate-400">{canRegisterInvoice ? "🔒" : "⏳"}</span>
+                              <span>{canRegisterInvoice ? "(للاطلاع فقط)" : "(مسند للحسابات)"}</span>
                             </span>
                           )}
                         </td>

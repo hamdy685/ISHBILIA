@@ -36,8 +36,20 @@ class SupplierInvoiceController extends Controller
         $user = $request->user();
         $receipt = PurchaseReceipt::withoutDataIsolation()->with([
             'purchaseOrder' => fn ($q) => $q->withoutDataIsolation(),
-            'purchaseOrder.purchaseRequest' => fn ($q) => $q->withoutDataIsolation(),
+            'purchaseOrder.purchaseRequest.department' => fn ($q) => $q->withoutDataIsolation(),
+            'purchaseRequest.department' => fn ($q) => $q->withoutDataIsolation(),
         ])->findOrFail($id);
+
+        $allowedCodes = $this->service->getAllowedDepartmentCodesForAccountant($user);
+        if ($allowedCodes !== null) {
+            $deptCode = $receipt->purchaseOrder?->purchaseRequest?->department?->code
+                ?: $receipt->purchaseRequest?->department?->code;
+            if (! in_array($deptCode, $allowedCodes, true)) {
+                return response()->json([
+                    'message' => 'غير مصرح بتسجيل إذن استلام لأقسام خارج نطاق اختصاصك المحاسبي.',
+                ], 403);
+            }
+        }
 
         $isRestricted = $receipt->isInternalWarehouse() || $receipt->purchaseOrder?->purchaseRequest?->isOfficeRequest();
         if ($isRestricted && ($receipt->purchaseOrder?->status === 'PENDING_ACTUAL_PO' || ! $receipt->purchaseOrder?->finalized_at)) {
@@ -170,7 +182,19 @@ class SupplierInvoiceController extends Controller
 
     public function match(Request $request, SupplierInvoice $invoice): JsonResponse
     {
-        $matched = $this->service->matchThreeWay($request->user(), $invoice);
+        $user = $request->user();
+        $invoice->loadMissing('purchaseOrder.purchaseRequest.department');
+        $allowedCodes = $this->service->getAllowedDepartmentCodesForAccountant($user);
+        if ($allowedCodes !== null) {
+            $deptCode = $invoice->purchaseOrder?->purchaseRequest?->department?->code;
+            if (! in_array($deptCode, $allowedCodes, true)) {
+                return response()->json([
+                    'message' => 'غير مصرح بإجراء المطابقة لفواتير خارج نطاق اختصاصك المحاسبي.',
+                ], 403);
+            }
+        }
+
+        $matched = $this->service->matchThreeWay($user, $invoice);
 
         return response()->json([
             'data' => $matched,
@@ -180,6 +204,18 @@ class SupplierInvoiceController extends Controller
 
     public function storePayment(Request $request, SupplierInvoice $invoice): JsonResponse
     {
+        $user = $request->user();
+        $invoice->loadMissing('purchaseOrder.purchaseRequest.department');
+        $allowedCodes = $this->service->getAllowedDepartmentCodesForAccountant($user);
+        if ($allowedCodes !== null) {
+            $deptCode = $invoice->purchaseOrder?->purchaseRequest?->department?->code;
+            if (! in_array($deptCode, $allowedCodes, true)) {
+                return response()->json([
+                    'message' => 'غير مصرح بتسجيل دفعات لفواتير خارج نطاق اختصاصك المحاسبي.',
+                ], 403);
+            }
+        }
+
         $validated = $request->validate([
             'amount' => ['required', 'numeric', 'gt:0'],
             'payment_date' => ['nullable', 'date'],
@@ -203,6 +239,13 @@ class SupplierInvoiceController extends Controller
 
     public function storeSupplierPayment(Request $request, Supplier $supplier): JsonResponse
     {
+        $user = $request->user();
+        if ($this->service->isRestrictedDepartmentAccountant($user)) {
+            return response()->json([
+                'message' => 'تسجيل دفعات عامة للموردين مقتصر على الإدارة المالية والمحاسب العام.',
+            ], 403);
+        }
+
         $validated = $request->validate([
             'amount' => ['required', 'numeric', 'gt:0'],
             'payment_date' => ['nullable', 'date'],
@@ -272,6 +315,16 @@ class SupplierInvoiceController extends Controller
 
         if (!empty($validated['invoice_id'])) {
             $invoice = SupplierInvoice::findOrFail($validated['invoice_id']);
+            $invoice->loadMissing('purchaseOrder.purchaseRequest.department');
+            $allowedCodes = $this->service->getAllowedDepartmentCodesForAccountant($request->user());
+            if ($allowedCodes !== null) {
+                $deptCode = $invoice->purchaseOrder?->purchaseRequest?->department?->code;
+                if (! in_array($deptCode, $allowedCodes, true)) {
+                    return response()->json([
+                        'message' => 'غير مصرح بتسجيل دفعات لفواتير خارج نطاق اختصاصك المحاسبي.',
+                    ], 403);
+                }
+            }
             $result = $this->service->recordPayment(
                 $request->user(),
                 $invoice,
@@ -285,6 +338,11 @@ class SupplierInvoiceController extends Controller
         }
 
         if (!empty($validated['supplier_id'])) {
+            if ($this->service->isRestrictedDepartmentAccountant($request->user())) {
+                return response()->json([
+                    'message' => 'تسجيل دفعات عامة للموردين مقتصر على الإدارة المالية والمحاسب العام.',
+                ], 403);
+            }
             $supplier = Supplier::findOrFail($validated['supplier_id']);
             $result = $this->service->recordSupplierPayment(
                 $request->user(),
