@@ -297,15 +297,23 @@ class PurchasesReportController extends Controller
                                 || ($ri->purchaseOrderItem && $ri->purchaseOrderItem->item_description === $poItem->item_description);
                         });
                     }
-                    $receivedQty = $matchingReceiptItem ? (float) $matchingReceiptItem->received_quantity : null;
+                    // الاستلام الفعلي بالموقع كمعلومة استرشادية للعرض فقط
+                    $rawReceivedQty = $matchingReceiptItem ? (float) $matchingReceiptItem->received_quantity : null;
+                    $receivedQty = $rawReceivedQty;
 
-                    // كميات وأسعار أمر الشراء الفعلي هي المصدر الحصري للتقارير المالية
+                    // كميات وأسعار أمر الشراء الفعلي هي المصدر الحصري المعتمد للتقارير والتحليلات المالية
                     $poQty = (float) ($poItem->quantity ?? 0);
                     $unitPrice = (float) ($poItem->unit_price ?? $poItem->estimated_unit_price ?? 0);
-                    $effectiveQty = ($receivedQty !== null && $receivedQty > 0) ? $receivedQty : $poQty;
-                    $lineTotal = (float) ($poItem->line_total !== null && (float) $poItem->line_total > 0 && $effectiveQty === $poQty
+                    $lineTotal = (float) ($poItem->line_total !== null && (float) $poItem->line_total > 0
                         ? $poItem->line_total
-                        : round($effectiveQty * $unitPrice, 2));
+                        : round($poQty * $unitPrice, 2));
+
+                    // إذا كان البند بالألف طوبة وتم إدخال الاستلام كعدد فردي (مثلاً 9360 طوبة فردية)، نوحد وحدة العرض
+                    $uomUpper = strtoupper((string) ($poItem->uom ?? ''));
+                    $isThousandBricks = $uomUpper === 'THOUSAND_BRICKS' || str_contains($uomUpper, 'ألف') || str_contains($uomUpper, 'الف');
+                    if ($isThousandBricks && $receivedQty !== null && $receivedQty >= 100 && $poQty < 100) {
+                        $receivedQty = round($receivedQty / 1000, 3);
+                    }
 
                     $rowParcelRef = $poItem->item_reference
                         ?: ($prItem?->item_reference ?: $defaultParcelRef);
@@ -340,11 +348,11 @@ class PurchasesReportController extends Controller
                         // الصنف والوحدة
                         'item_name' => $poItem->item_description ?? ($poItem->item?->name ?? '—'),
                         'uom' => $poItem->uom ?? '—',
-                        // كمية وأسعار أمر الشراء (الأساس المالي والمحاسبي)
-                        'quantity' => $effectiveQty,
+                        // كمية وأسعار أمر الشراء الفعلي (الأساس المالي والمحاسبي الحصري)
+                        'quantity' => $poQty,
                         'unit_price' => $unitPrice,
                         'total_price' => $lineTotal,
-                        // بيانات الاستلام الفعلي بالموقع (بيان استرشادي للحسابات)
+                        // بيانات الاستلام الفعلي بالموقع (بيان استرشادي للحسابات فقط)
                         'received_quantity' => $receivedQty,
                         'receipt_status' => $approvedReceipt?->status,
                         // المورد والموقع

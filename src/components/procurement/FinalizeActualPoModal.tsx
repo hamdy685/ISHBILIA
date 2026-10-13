@@ -99,9 +99,15 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
           });
 
           if (foundInReceipt) {
-            qty = totalReceived;
+            const uomUpper = String(it.uom || '').toUpperCase();
+            const isThousandBricks = uomUpper === 'THOUSAND_BRICKS' || String(it.uom || '').includes('ألف') || String(it.uom || '').includes('الف');
+            if (isThousandBricks && totalReceived >= 100 && Number(it.quantity || 0) < 100) {
+              qty = Math.round((totalReceived / 1000) * 1000) / 1000;
+            } else {
+              qty = totalReceived;
+            }
           } else {
-            qty = 0;
+            qty = Number(it.quantity || 0);
           }
 
           const isSupplementary = Boolean(
