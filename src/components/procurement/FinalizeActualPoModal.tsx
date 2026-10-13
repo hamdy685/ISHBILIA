@@ -98,16 +98,26 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
             }
           });
 
+          const uomUpper = String(it.uom || '').toUpperCase();
+          const itemDesc = String(it.item_description || (it as any).item_name || '');
+          const isThousandBricks = uomUpper === 'THOUSAND_BRICKS'
+            || String(it.uom || '').includes('ألف')
+            || String(it.uom || '').includes('الف')
+            || String(it.uom || '').includes('طوب')
+            || itemDesc.includes('طوب');
+
           if (foundInReceipt) {
-            const uomUpper = String(it.uom || '').toUpperCase();
-            const isThousandBricks = uomUpper === 'THOUSAND_BRICKS' || String(it.uom || '').includes('ألف') || String(it.uom || '').includes('الف');
-            if (isThousandBricks && totalReceived >= 100 && Number(it.quantity || 0) < 100) {
+            if (isThousandBricks && totalReceived >= 100) {
               qty = Math.round((totalReceived / 1000) * 1000) / 1000;
             } else {
               qty = totalReceived;
             }
           } else {
             qty = Number(it.quantity || 0);
+          }
+
+          if (isThousandBricks && qty >= 100 && price >= 500) {
+            qty = Math.round((qty / 1000) * 1000) / 1000;
           }
 
           const isSupplementary = Boolean(

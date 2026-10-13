@@ -598,11 +598,25 @@ class PurchaseOrderService
         foreach ($items as $input) {
             $qty       = max(0.0, (float) ($input['quantity'] ?? 0));
             $unitPrice = max(0.0, (float) ($input['unit_price'] ?? 0));
-            $lineTotal = round($qty * $unitPrice, 2);
-            $grandTotal += $lineTotal;
 
             $existingItemId = !empty($input['id']) ? (int) $input['id'] : null;
             $existingItem   = ($existingItemId && $existingItems->has($existingItemId)) ? $existingItems->get($existingItemId) : null;
+
+            $uom = $input['uom'] ?? ($existingItem?->uom ?? 'PCS');
+            $uomUpper = strtoupper(trim((string) $uom));
+            $itemDesc = (string) ($input['item_description'] ?? ($existingItem?->item_description ?? ''));
+            $isThousandBricks = $uomUpper === 'THOUSAND_BRICKS'
+                || str_contains($uomUpper, 'ألف')
+                || str_contains($uomUpper, 'الف')
+                || str_contains($uomUpper, 'طوب')
+                || str_contains($itemDesc, 'طوب');
+
+            if ($isThousandBricks && $qty >= 100 && $unitPrice >= 500) {
+                $qty = round($qty / 1000, 3);
+            }
+
+            $lineTotal = round($qty * $unitPrice, 2);
+            $grandTotal += $lineTotal;
 
             $rawRef = !empty($input['item_reference']) ? $input['item_reference'] : ($existingItem?->item_reference ?? 'عام');
             $rawReg = !empty($input['region']) ? $input['region'] : ($existingItem?->region ?? 'عام');

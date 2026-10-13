@@ -304,15 +304,31 @@ class PurchasesReportController extends Controller
                     // كميات وأسعار أمر الشراء الفعلي هي المصدر الحصري المعتمد للتقارير والتحليلات المالية
                     $poQty = (float) ($poItem->quantity ?? 0);
                     $unitPrice = (float) ($poItem->unit_price ?? $poItem->estimated_unit_price ?? 0);
-                    $lineTotal = (float) ($poItem->line_total !== null && (float) $poItem->line_total > 0
-                        ? $poItem->line_total
-                        : round($poQty * $unitPrice, 2));
 
-                    // إذا كان البند بالألف طوبة وتم إدخال الاستلام كعدد فردي (مثلاً 9360 طوبة فردية)، نوحد وحدة العرض
-                    $uomUpper = strtoupper((string) ($poItem->uom ?? ''));
-                    $isThousandBricks = $uomUpper === 'THOUSAND_BRICKS' || str_contains($uomUpper, 'ألف') || str_contains($uomUpper, 'الف');
-                    if ($isThousandBricks && $receivedQty !== null && $receivedQty >= 100 && $poQty < 100) {
-                        $receivedQty = round($receivedQty / 1000, 3);
+                    // فحص بند الطوب: إذا كان التسعير بالألف طوبة والكمية مسجلة بعدد الطوب الفردي (مثلاً 9360 طوبة فردية)
+                    $uomUpper = strtoupper(trim((string) ($poItem->uom ?? '')));
+                    $itemDesc = (string) ($poItem->item_description ?? '');
+                    $isThousandBricks = $uomUpper === 'THOUSAND_BRICKS'
+                        || str_contains($uomUpper, 'ألف')
+                        || str_contains($uomUpper, 'الف')
+                        || str_contains($uomUpper, 'طوب')
+                        || str_contains($itemDesc, 'طوب');
+
+                    if ($isThousandBricks) {
+                        if ($poQty >= 100 && $unitPrice >= 500) {
+                            $poQty = round($poQty / 1000, 3);
+                        }
+                        if ($receivedQty !== null && $receivedQty >= 100) {
+                            $receivedQty = round($receivedQty / 1000, 3);
+                        }
+                    }
+
+                    // حساب إجمالي البند دائماً بناءً على كمية أمر الشراء الفعلي وسعر الوحدة المعتمد
+                    $lineTotal = round($poQty * $unitPrice, 2);
+
+                    $effectiveGrandTotal = (float) $order->grand_total;
+                    if ($isThousandBricks && $effectiveGrandTotal > 500000 && $lineTotal < 100000) {
+                        $effectiveGrandTotal = $lineTotal;
                     }
 
                     $rowParcelRef = $poItem->item_reference
@@ -330,7 +346,7 @@ class PurchasesReportController extends Controller
                         'receipt_number' => $approvedReceipt?->receipt_number,
                         'photo_url' => $approvedReceipt?->photo_url,
                         'purchase_order_id' => $order->id,
-                        'grand_total' => (float) $order->grand_total,
+                        'grand_total' => $effectiveGrandTotal,
                         // التواريخ حسب الفلترة
                         'date_basis' => $dateBasis,
                         'primary_date' => $primaryDate,

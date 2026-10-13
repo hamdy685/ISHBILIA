@@ -40,7 +40,7 @@ class ProcurementAnalyticsController extends Controller
         $user = $request->user();
         $allowedDepartmentCodes = app(\App\Services\SupplierInvoiceService::class)->getAllowedDepartmentCodesForAccountant($user);
 
-        $cacheKey = 'procurement:analytics:v6:' . $dateBasis . ':' . ($user->hasRole('execution_manager') ? 'exec_mgr_' . $user->id . ':' : '') . ($allowedDepartmentCodes !== null ? 'dept_acc_' . ($user->id ?? 0) . ':' : '') . md5(json_encode($request->all()));
+        $cacheKey = 'procurement:analytics:v7:' . $dateBasis . ':' . ($user->hasRole('execution_manager') ? 'exec_mgr_' . $user->id . ':' : '') . ($allowedDepartmentCodes !== null ? 'dept_acc_' . ($user->id ?? 0) . ':' : '') . md5(json_encode($request->all()));
 
         if (Cache::has($cacheKey)) {
             return response()->json(Cache::get($cacheKey));
