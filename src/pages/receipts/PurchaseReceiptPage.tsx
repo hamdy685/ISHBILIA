@@ -385,6 +385,25 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
   }, [mode, receipts, isReviewer]);
 
   const submitWarehouseReceipt = async (order: ReceiptPurchaseOrder) => {
+    const activeWg = order.weighing_groups?.find((wg) => wg.status === 'PENDING_RECEIPT');
+    if (activeWg) {
+      const rawScaleVal = scaleTicketWeights[order.id];
+      const scaleWeight = parseFloat(rawScaleVal !== undefined && rawScaleVal.trim() !== '' ? rawScaleVal : String(activeWg.total_ordered_weight));
+      if (isNaN(scaleWeight) || scaleWeight <= 0) {
+        setError('يرجى إدخال وزن ميزان البسكول بالطن في المربع الإجمالي (أكبر من صفر).');
+        return;
+      }
+      const orderedTotal = Number(activeWg.total_ordered_weight) || 1;
+      (order.items || []).forEach((item) => {
+        const key = `${order.id}-${item.id}`;
+        const itemOrdered = Number(item.quantity) || 0;
+        const ratio = orderedTotal > 0 ? itemOrdered / orderedTotal : 1 / (order.items?.length || 1);
+        const distributed = Math.round(scaleWeight * ratio * 1000) / 1000;
+        quantities[key] = String(distributed);
+      });
+      scaleTicketWeights[order.id] = String(scaleWeight);
+    }
+
     const hasUnentered = (order.items || []).some((item) => {
       const q = quantities[`${order.id}-${item.id}`];
       return q === undefined || q === null || q.trim() === '';
@@ -790,7 +809,11 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                         const activeWeighingGroup = order.weighing_groups?.find((wg) => wg.status === 'PENDING_RECEIPT');
                         if (!activeWeighingGroup) return null;
 
-                        const enteredWeight = parseFloat(scaleTicketWeights[order.id] ?? '');
+                        const enteredWeight = parseFloat(
+                          scaleTicketWeights[order.id] !== undefined
+                            ? scaleTicketWeights[order.id]
+                            : String(activeWeighingGroup.total_ordered_weight || '')
+                        );
                         const orderedWeight = Number(activeWeighingGroup.total_ordered_weight) || 0;
                         const hasEntered = !isNaN(enteredWeight) && enteredWeight > 0;
                         const diff = hasEntered ? Math.round((enteredWeight - orderedWeight) * 1000) / 1000 : 0;
@@ -814,7 +837,7 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                     </span>
                                   </div>
                                   <p className="text-xs text-indigo-200/80 mt-0.5">
-                                    تم تجميع بنود الحديد من نفس المورد لتسجيل وزن ميزان البسكول بدقة وتوزيعه تلقائياً مع الاحتفاظ بكافة المقاسات وقطع الأراضي.
+                                    تم تجميع بنود الحديد من نفس المورد لتسجيل وزن ميزان البسكول بدقة في مربع واحد وتوزيعه تلقائياً مع الاحتفاظ بكافة المقاسات وقطع الأراضي.
                                   </p>
                                 </div>
                               </div>
@@ -837,7 +860,7 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                     step="0.001"
                                     min="0"
                                     placeholder="مثال: 5.800"
-                                    value={scaleTicketWeights[order.id] ?? ''}
+                                    value={scaleTicketWeights[order.id] ?? String(activeWeighingGroup.total_ordered_weight || '')}
                                     onChange={(e) => handleScaleWeightChange(order, e.target.value)}
                                     className="w-full h-12 rounded-xl border-2 border-indigo-400 bg-slate-900/90 px-3 text-lg font-black text-indigo-100 placeholder:text-slate-500 focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
                                   />
@@ -907,7 +930,7 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                 </thead>
                                 <tbody className="divide-y divide-slate-800/60">
                                   {activeWeighingGroup.items?.map((wgItem) => {
-                                    const currentVal = quantities[`${order.id}-${wgItem.purchase_order_item_id}`] ?? '';
+                                    const currentVal = quantities[`${order.id}-${wgItem.purchase_order_item_id}`] ?? String(wgItem.ordered_weight);
                                     return (
                                       <tr key={wgItem.id} className="hover:bg-slate-900/50">
                                         <td className="p-2.5 font-black text-white">
@@ -936,16 +959,18 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                         );
                       })()}
 
-                      {/* 2. Items List: Ultra Simple Big Visual Cards */}
+                      {/* 2. Items List: Ultra Simple Big Visual Cards (Hidden if order has an active Weighing Group) */}
                       <div className="space-y-4">
-                        <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                          <h4 className="text-sm sm:text-base font-black text-slate-100 flex items-center gap-2">
-                            <span>📦</span>
-                            <span>الأصناف المطلوب استلامها في هذا الإذن ({order.items?.length || 0} صنف):</span>
-                          </h4>
-                        </div>
+                        {!order.weighing_groups?.some((wg) => wg.status === 'PENDING_RECEIPT') && (
+                          <>
+                            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                              <h4 className="text-sm sm:text-base font-black text-slate-100 flex items-center gap-2">
+                                <span>📦</span>
+                                <span>الأصناف المطلوب استلامها في هذا الإذن ({order.items?.length || 0} صنف):</span>
+                              </h4>
+                            </div>
 
-                        <div className="space-y-4">
+                            <div className="space-y-4">
                           {(order.items || []).map((item, idx) => {
                             const key = `${order.id}-${item.id}`;
                             const val = quantities[key] ?? '';
@@ -1109,6 +1134,8 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                             );
                           })}
                         </div>
+                      </>
+                    )}
 
                         {/* General Order Notes */}
                         <div className="space-y-1.5 pt-2">
