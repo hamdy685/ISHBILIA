@@ -1,5 +1,6 @@
 import apiClient from './client';
 import { getToken } from '../utils/authStorage';
+import { WeighingGroup } from '../types/weighingGroup';
 
 export interface ReceiptOrderItem {
   id: number;
@@ -33,6 +34,7 @@ export interface ReceiptPurchaseOrder {
   created_at?: string | null;
   notes?: string | null;
   supplier?: { id: number; company_name: string; contact_person?: string | null; phone?: string | null } | null;
+  weighing_groups?: WeighingGroup[];
   purchase_request?: {
     id: number;
     request_number: string;
@@ -85,6 +87,8 @@ export interface ReceiptRecord {
   actual_receiver?: { id: number; name: string } | null;
   actual_receiver_display_name?: string | null;
   warehouse_received_at?: string | null;
+  weighing_group_id?: number | null;
+  weighing_group?: WeighingGroup | null;
   purchase_order_id?: number | null;
   purchase_order?: ReceiptPurchaseOrder | null;
   purchase_request?: ReceiptPurchaseOrder['purchase_request'];
@@ -145,6 +149,8 @@ export const createPurchaseReceiptApi = async (
     photo_name?: string;
     actual_receiver_name?: string;
     actual_receiver_user_id?: number;
+    weighing_group_id?: number;
+    scale_ticket_weight?: number;
     items: Array<{ purchase_order_item_id: number; received_quantity: number; notes?: string }>;
   },
 ): Promise<ReceiptRecord> =>

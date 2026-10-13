@@ -88,6 +88,7 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
   const [notes, setNotes] = useState<Record<number, string>>({});
   const [actualReceivers, setActualReceivers] = useState<Record<number, string>>({});
   const [receiptPhotos, setReceiptPhotos] = useState<Record<number, { base64: string; name: string } | null>>({});
+  const [scaleTicketWeights, setScaleTicketWeights] = useState<Record<number, string>>({});
   const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
   const [expandedArchiveId, setExpandedArchiveId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -106,6 +107,28 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
       setReceiptPhotos((prev) => ({ ...prev, [orderId]: { base64, name: file.name } }));
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleScaleWeightChange = (order: ReceiptPurchaseOrder, totalWeightStr: string) => {
+    setScaleTicketWeights((prev) => ({ ...prev, [order.id]: totalWeightStr }));
+    const totalWeight = parseFloat(totalWeightStr);
+    const activeWg = order.weighing_groups?.find((wg) => wg.status === 'PENDING_RECEIPT');
+    if (!activeWg || isNaN(totalWeight) || totalWeight <= 0) return;
+
+    const orderedTotal = Number(activeWg.total_ordered_weight) || 0;
+    if (orderedTotal <= 0) return;
+
+    // Distribute total scale weight proportionally across individual rebar items
+    setQuantities((prev) => {
+      const next = { ...prev };
+      activeWg.items?.forEach((wgItem) => {
+        const itemOrdered = Number(wgItem.ordered_weight) || 0;
+        const ratio = itemOrdered / orderedTotal;
+        const distributed = Math.round(totalWeight * ratio * 1000) / 1000;
+        next[`${order.id}-${wgItem.purchase_order_item_id}`] = String(distributed);
+      });
+      return next;
+    });
   };
 
   const today = getTodayInputDate();
@@ -388,12 +411,17 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
     try {
       const photo = receiptPhotos[order.id];
       const actualReceiverName = actualReceivers[order.id]?.trim() || undefined;
+      const activeWg = order.weighing_groups?.find((wg) => wg.status === 'PENDING_RECEIPT');
+      const scaleWeightVal = activeWg && scaleTicketWeights[order.id] ? parseFloat(scaleTicketWeights[order.id]) : undefined;
+
       await createPurchaseReceiptApi(order.id, { 
         items, 
         warehouse_notes: notes[order.id],
         photo_base64: photo?.base64,
         photo_name: photo?.name,
         actual_receiver_name: actualReceiverName,
+        weighing_group_id: activeWg?.id,
+        scale_ticket_weight: scaleWeightVal && !isNaN(scaleWeightVal) ? scaleWeightVal : undefined,
       });
       setSuccessMessage(`تم تسجيل استلام أمر الشراء ${order.po_number} وإرساله للمستلم/مهندس الموقع للفحص والاعتماد.`);
       await load();
@@ -740,6 +768,157 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                           </p>
                         </div>
                       )}
+
+                      {/* ── Active Steel Weighing Group Card (ميزان بسكول) ── */}
+                      {(() => {
+                        const activeWeighingGroup = order.weighing_groups?.find((wg) => wg.status === 'PENDING_RECEIPT');
+                        if (!activeWeighingGroup) return null;
+
+                        const enteredWeight = parseFloat(scaleTicketWeights[order.id] ?? '');
+                        const orderedWeight = Number(activeWeighingGroup.total_ordered_weight) || 0;
+                        const hasEntered = !isNaN(enteredWeight) && enteredWeight > 0;
+                        const diff = hasEntered ? Math.round((enteredWeight - orderedWeight) * 1000) / 1000 : 0;
+                        const isMatch = hasEntered && Math.abs(diff) < 0.001;
+                        const isShortage = hasEntered && diff < -0.001;
+
+                        return (
+                          <div className="rounded-3xl border-2 border-indigo-500/80 bg-gradient-to-br from-indigo-950/70 via-slate-950 to-slate-900 p-5 sm:p-6 shadow-2xl space-y-4">
+                            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-indigo-500/30 pb-3">
+                              <div className="flex items-center gap-3">
+                                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-500/20 text-indigo-300 text-2xl border border-indigo-500/50 shadow-inner shrink-0">
+                                  ⚖️
+                                </span>
+                                <div>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <h4 className="text-base sm:text-lg font-black text-white">
+                                      وزنة حديد مجمعة (ميزان بسكول) — {activeWeighingGroup.group_number}
+                                    </h4>
+                                    <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-indigo-500/20 text-indigo-300 border border-indigo-500/50">
+                                      {activeWeighingGroup.items?.length || 0} أقطار مجمعة
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-indigo-200/80 mt-0.5">
+                                    تم تجميع بنود الحديد من نفس المورد لتسجيل وزن ميزان البسكول بدقة وتوزيعه تلقائياً مع الاحتفاظ بكافة المقاسات وقطع الأراضي.
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="bg-slate-900/90 border border-indigo-500/40 px-3.5 py-1.5 rounded-xl font-mono text-xs sm:text-sm">
+                                <span className="text-slate-400">إجمالي الطلب: </span>
+                                <strong className="text-indigo-300 font-black">{activeWeighingGroup.total_ordered_weight} طن</strong>
+                              </div>
+                            </div>
+
+                            {/* Scale Weight Input, Difference, and Auto Distribute */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                              <div className="space-y-1.5">
+                                <label className="text-xs sm:text-sm font-black text-indigo-200 flex items-center gap-1.5">
+                                  <span>🚚</span>
+                                  <span>إجمالي وزن ميزان البسكول (طن):</span>
+                                </label>
+                                <div className="relative">
+                                  <input
+                                    type="number"
+                                    step="0.001"
+                                    min="0"
+                                    placeholder="مثال: 5.800"
+                                    value={scaleTicketWeights[order.id] ?? ''}
+                                    onChange={(e) => handleScaleWeightChange(order, e.target.value)}
+                                    className="w-full h-12 rounded-xl border-2 border-indigo-400 bg-slate-900/90 px-3 text-lg font-black text-indigo-100 placeholder:text-slate-500 focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                                  />
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-indigo-300 bg-indigo-950/80 px-2 py-0.5 rounded-md pointer-events-none">
+                                    طن
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Difference Indicator */}
+                              <div>
+                                <label className="text-xs sm:text-sm font-black text-slate-300 block mb-1.5">
+                                  حالة المطابقة مع أمر الشراء:
+                                </label>
+                                {!hasEntered ? (
+                                  <div className="h-12 flex items-center px-4 rounded-xl border border-dashed border-slate-700 bg-slate-900/60 text-xs text-slate-400 font-medium">
+                                    أدخل وزن البسكول لحساب الفارق تلقائياً...
+                                  </div>
+                                ) : (
+                                  <div
+                                    className={`h-12 flex items-center justify-between px-4 rounded-xl border-2 font-black text-xs sm:text-sm shadow-md ${
+                                      isMatch
+                                        ? 'border-emerald-500/70 bg-emerald-950/60 text-emerald-300'
+                                        : isShortage
+                                        ? 'border-amber-500/80 bg-amber-950/60 text-amber-300'
+                                        : 'border-cyan-500/80 bg-cyan-950/60 text-cyan-300'
+                                    }`}
+                                  >
+                                    <span>
+                                      {isMatch ? '✅ مطابق تماماً' : isShortage ? '⚠️ عجز في التوريد' : '📈 زيادة في التوريد'}
+                                    </span>
+                                    <span className="font-mono text-base dir-ltr">
+                                      {diff > 0 ? `+${diff}` : diff} طن
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Proportional Distribute Button */}
+                              <div className="flex flex-col justify-end pt-5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const w = scaleTicketWeights[order.id] || String(activeWeighingGroup.total_ordered_weight);
+                                    handleScaleWeightChange(order, w);
+                                  }}
+                                  className="h-12 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg hover:shadow-indigo-500/20 transition-all cursor-pointer"
+                                >
+                                  <span>🔄</span>
+                                  <span>توزيع الوزن تناسبياً على الأقطار</span>
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Breakdown Sub-table */}
+                            <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950/80 mt-2">
+                              <table className="w-full text-right text-xs">
+                                <thead className="bg-slate-900/90 text-slate-300 border-b border-slate-800 font-bold">
+                                  <tr>
+                                    <th className="p-2.5">المقاس / القطر</th>
+                                    <th className="p-2.5">رقم قطعة الأرض</th>
+                                    <th className="p-2.5">المنطقة</th>
+                                    <th className="p-2.5 text-center">الوزن المطلوب</th>
+                                    <th className="p-2.5 text-center">الوزن المستلم الفعلي</th>
+                                    <th className="p-2.5 text-left">سعر الطن</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-800/60">
+                                  {activeWeighingGroup.items?.map((wgItem) => {
+                                    const currentVal = quantities[`${order.id}-${wgItem.purchase_order_item_id}`] ?? '';
+                                    return (
+                                      <tr key={wgItem.id} className="hover:bg-slate-900/50">
+                                        <td className="p-2.5 font-black text-white">
+                                          {wgItem.size_or_diameter || wgItem.item_description}
+                                        </td>
+                                        <td className="p-2.5 font-mono text-cyan-300">
+                                          {wgItem.land_plot_number || '—'}
+                                        </td>
+                                        <td className="p-2.5 text-amber-300">{wgItem.region || '—'}</td>
+                                        <td className="p-2.5 text-center font-mono text-slate-300">
+                                          {wgItem.ordered_weight} طن
+                                        </td>
+                                        <td className="p-2.5 text-center font-mono font-black text-emerald-400">
+                                          {currentVal ? `${currentVal} طن` : <span className="text-slate-500">—</span>}
+                                        </td>
+                                        <td className="p-2.5 text-left font-mono text-slate-400">
+                                          {Number(wgItem.unit_price).toLocaleString('en-US')} ج.م
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       {/* 2. Items List: Ultra Simple Big Visual Cards */}
                       <div className="space-y-4">
@@ -1168,6 +1347,12 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                 <span>صرف من رصيد المخزن الداخلي (بضاعة متواجدة مسبقاً - سعر 0)</span>
                               </span>
                             )}
+                            {receipt.weighing_group && (
+                              <span className="text-xs sm:text-sm font-black text-indigo-200 bg-indigo-950/90 border border-indigo-500/80 px-3 py-1 rounded-xl flex items-center gap-1.5 shadow-md">
+                                <span>⚖️</span>
+                                <span>وزنة حديد مجمعة ({receipt.weighing_group.group_number})</span>
+                              </span>
+                            )}
                           </div>
                         </div>
 
@@ -1539,8 +1724,15 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                         )}
                       </span>
                       {receipt.receipt_type === 'SITE_DIRECT' && (
-                        <span className="text-xs font-black px-2.5 py-0.5 rounded-full border bg-amber-950/80 text-amber-300 border-amber-600/70 shadow-sm">
-                          🏗️ توريد مباشر لموقع المباني
+                        <span className="text-xs font-black px-2.5 py-0.5 rounded-full border bg-amber-950/80 text-amber-300 border-amber-600/70 shadow-sm flex items-center gap-1">
+                          <span>🏗️</span>
+                          <span>توريد مباشر لموقع المباني</span>
+                        </span>
+                      )}
+                      {receipt.weighing_group && (
+                        <span className="text-xs font-black px-2.5 py-0.5 rounded-full border bg-indigo-950/80 text-indigo-300 border-indigo-600/70 shadow-sm flex items-center gap-1">
+                          <span>⚖️</span>
+                          <span>وزنة حديد {receipt.weighing_group.group_number}</span>
                         </span>
                       )}
                       <span

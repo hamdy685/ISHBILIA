@@ -106,6 +106,11 @@ class PurchaseOrderItem extends Model
         return $this->hasMany(PurchaseReceiptItem::class, 'purchase_order_item_id');
     }
 
+    public function weighingGroupItem(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(WeighingGroupItem::class, 'purchase_order_item_id');
+    }
+
     public function getActualQuantityAttribute(): float
     {
         return (float) ($this->quantity ?? 0);

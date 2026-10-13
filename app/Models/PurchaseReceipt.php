@@ -26,6 +26,7 @@ class PurchaseReceipt extends Model
         'purchase_order_id',
         'purchase_request_id',
         'supplier_id',
+        'weighing_group_id',
         'warehouse_keeper_user_id',
         'site_engineer_user_id',
         'receiver_user_id',
@@ -201,6 +202,11 @@ class PurchaseReceipt extends Model
     public function purchaseOrder(): BelongsTo
     {
         return $this->belongsTo(PurchaseOrder::class);
+    }
+
+    public function weighingGroup(): BelongsTo
+    {
+        return $this->belongsTo(WeighingGroup::class, 'weighing_group_id');
     }
 
     public function purchaseRequest(): BelongsTo

@@ -42,6 +42,8 @@ class PurchaseReceiptController extends Controller
             'photo_name' => ['nullable', 'string', 'max:255'],
             'actual_receiver_name' => ['nullable', 'string', 'max:255'],
             'actual_receiver_user_id' => ['nullable', 'integer', 'exists:users,id'],
+            'weighing_group_id' => ['nullable', 'integer', 'exists:weighing_groups,id'],
+            'scale_ticket_weight' => ['nullable', 'numeric', 'gte:0'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.purchase_order_item_id' => ['required', 'integer', 'exists:purchase_order_items,id'],
             'items.*.received_quantity' => ['required', 'numeric', 'gte:0'],
@@ -70,6 +72,8 @@ class PurchaseReceiptController extends Controller
                 $photoData,
                 $validated['actual_receiver_name'] ?? null,
                 isset($validated['actual_receiver_user_id']) ? (int) $validated['actual_receiver_user_id'] : null,
+                isset($validated['weighing_group_id']) ? (int) $validated['weighing_group_id'] : null,
+                isset($validated['scale_ticket_weight']) ? (float) $validated['scale_ticket_weight'] : null,
             );
         } catch (\RuntimeException $exception) {
             return response()->json(['message' => $exception->getMessage()], 409);
@@ -101,6 +105,7 @@ class PurchaseReceiptController extends Controller
             'actualReceiver',
             'items.purchaseOrderItem.item',
             'items.purchaseOrderItem.prItem',
+            'weighingGroup.items',
         ]);
 
         if (! $user->hasRole('admin')) {

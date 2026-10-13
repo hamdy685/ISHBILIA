@@ -19,6 +19,7 @@ import { SupplementItemBadge } from '../../components/common/SupplementItemBadge
 import { getReceiptPhotoUrl } from '../../api/purchaseReceipts';
 import { getSummaryParcels, getSummaryRegions } from '../../utils/formatRequestSummary';
 import { toast } from '../../utils/toast';
+import CreateWeighingGroupModal from '../../components/procurement/CreateWeighingGroupModal';
 
 
 const UNIT_OPTIONS = getUnitOptions(DEFAULT_PR_UNIT_CODES);
@@ -73,6 +74,7 @@ export const EditPurchaseOrderPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
+  const [weighingModalOpen, setWeighingModalOpen] = useState<boolean>(false);
 
   const loadData = async () => {
     if (!id) return;
@@ -428,6 +430,16 @@ export const EditPurchaseOrderPage: React.FC = () => {
 
   const latestReceipt = po.receipts && po.receipts.length > 0 ? po.receipts[0] : null;
 
+  const hasSteelItems = Boolean(
+    po?.items?.some((item) => {
+      const desc = (item.item_description || '').toLowerCase();
+      const uom = (item.uom || '').toUpperCase();
+      const isExcluded = ['رمل', 'سن', 'زلط', 'ركام', 'أسمنت', 'اسمنت', 'خشب', 'طوب', 'بلوك', 'سلك'].some((kw) => desc.includes(kw));
+      if (isExcluded) return false;
+      return desc.includes('حديد') || desc.includes('تسليح') || desc.includes('سيخ') || ['BAR_2_5LINIA', 'BAR_3LINIA', 'BAR_4LINIA', 'BAR_5LINIA', 'PARCEL', 'TON'].includes(uom);
+    })
+  );
+
   return (
     <div className="procurement-reference-page space-y-6 pb-20 animate-fade-in" dir="rtl">
       {/* ── Header Bar ── */}
@@ -452,6 +464,18 @@ export const EditPurchaseOrderPage: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {hasSteelItems && (
+            <button
+              type="button"
+              onClick={() => setWeighingModalOpen(true)}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-4 py-2 rounded-lg shadow-lg shadow-indigo-600/30 flex items-center gap-1.5 transition-all cursor-pointer"
+              title="تجميع بنود الحديد من نفس المورد في وزنة ميزان بسكول واحدة"
+            >
+              <span>⚖️</span>
+              <span>تجميع الوزنة</span>
+            </button>
+          )}
+
           <Link
             to={`/procurement/purchase-orders/${po.id}`}
             className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-4 py-2 rounded-lg font-semibold transition-colors"
@@ -1293,6 +1317,19 @@ export const EditPurchaseOrderPage: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {po && (
+        <CreateWeighingGroupModal
+          isOpen={weighingModalOpen}
+          poId={po.id}
+          poNumber={po.po_number}
+          onClose={() => setWeighingModalOpen(false)}
+          onSuccess={() => {
+            setWeighingModalOpen(false);
+            void loadData();
+          }}
+        />
       )}
     </div>
   );

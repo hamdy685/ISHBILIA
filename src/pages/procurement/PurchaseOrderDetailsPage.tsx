@@ -19,6 +19,10 @@ import { UnifiedNotesCard } from '../../components/common/UnifiedNotesCard';
 import { SupplementItemBadge } from '../../components/common/SupplementItemBadge';
 import { isActualPurchaseOrder, getActualPoLineItems, calculateActualPoGrandTotal } from '../../utils/actualPo';
 import { getSummaryParcels, getSummaryRegions, getSummaryProject } from '../../utils/formatRequestSummary';
+import CreateWeighingGroupModal from '../../components/procurement/CreateWeighingGroupModal';
+import { getWeighingGroupsByPoApi } from '../../api/weighingGroup';
+import { WeighingGroup } from '../../types/weighingGroup';
+import { formatCleanQty } from '../../utils/numberFormat';
 
 export const PurchaseOrderDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -30,10 +34,35 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
 
   const [isPrintModalOpen, setIsPrintModalOpen] = useState<boolean>(false);
   const [isCyclePrintModalOpen, setIsCyclePrintModalOpen] = useState<boolean>(false);
+  const [isWeighingModalOpen, setIsWeighingModalOpen] = useState<boolean>(false);
+  const [weighingGroups, setWeighingGroups] = useState<WeighingGroup[]>([]);
 
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const { hasPermission } = useAuth();
+  const { hasPermission, hasRole } = useAuth();
+
+  const isProcurementManager = hasRole('procurement_manager') || hasRole('admin');
+
+  const hasSteelItems = React.useMemo(() => {
+    return po?.items?.some((it) => {
+      const desc = (it.item_description || (it as any).item_name || '').toLowerCase();
+      const uom = String(it.uom || '').toUpperCase();
+      return (
+        desc.includes('حديد') ||
+        desc.includes('تسليح') ||
+        desc.includes('steel') ||
+        desc.includes('rebar') ||
+        ['BAR_2_5LINIA', 'BAR_3LINIA', 'BAR_4LINIA', 'BAR_5LINIA', 'PARCEL', 'TON'].includes(uom)
+      ) && !desc.includes('رمل') && !desc.includes('أسمنت') && !desc.includes('خشب') && !desc.includes('طوب');
+    });
+  }, [po]);
+
+  const canCreateWeighingGroup = Boolean(
+    isProcurementManager &&
+    hasSteelItems &&
+    po &&
+    !['PO_DRAFT', 'REJECTED', 'CANCELLED', 'VOIDED'].includes(po.status)
+  );
 
   const isActual = React.useMemo(() => isActualPurchaseOrder(po), [po]);
   const displayedItems = React.useMemo(() => getActualPoLineItems(po), [po]);
@@ -44,8 +73,13 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await getPurchaseOrderApi(parseInt(id, 10));
+      const parsedId = parseInt(id, 10);
+      const data = await getPurchaseOrderApi(parsedId);
       setPo(data);
+      // Fetch weighing groups in parallel
+      getWeighingGroupsByPoApi(parsedId)
+        .then((groups) => setWeighingGroups(groups || []))
+        .catch(() => {});
       return data;
     } catch (err: unknown) {
       const parsed = parseApiError(err);
@@ -140,6 +174,18 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
             </Link>
           )}
 
+          {canCreateWeighingGroup && (
+            <Button
+              variant="warning"
+              size="md"
+              onClick={() => setIsWeighingModalOpen(true)}
+              className="flex-1 md:flex-none min-h-10 text-xs font-black bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-slate-950 shadow-md border-amber-500/50"
+              title="تجميع بنود الحديد في وزنة استلام واحدة لميزان البسكول مع الحفاظ على كل مقاس وسعر"
+            >
+              ⚖️ تجميع الوزنة
+            </Button>
+          )}
+
           {isDraftOrReturned && hasPermission('purchase_order.edit') && (
             <Button
               variant="primary"
@@ -189,6 +235,55 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
       )}
 
       {error && <ErrorMessage error={error} />}
+
+      {/* ── Active Steel Weighing Groups Banner ── */}
+      {weighingGroups.length > 0 && (
+        <div className="space-y-2">
+          {weighingGroups.map((wg) => (
+            <div
+              key={wg.id}
+              className={`rounded-2xl border-2 p-4 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs ${
+                wg.status === 'RECEIVED'
+                  ? 'border-emerald-500/50 bg-emerald-950/30 text-emerald-200'
+                  : wg.status === 'CANCELLED'
+                  ? 'border-slate-700 bg-slate-900/50 text-slate-400'
+                  : 'border-amber-500/60 bg-gradient-to-r from-amber-950/40 via-slate-900 to-slate-950 text-amber-200'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">⚖️</span>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-black text-sm text-white">وزنة حديد مجمعة ({wg.group_number})</span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                        wg.status === 'RECEIVED'
+                          ? 'bg-emerald-900/60 border-emerald-500 text-emerald-300'
+                          : wg.status === 'CANCELLED'
+                          ? 'bg-slate-800 border-slate-700 text-slate-400'
+                          : 'bg-amber-900/60 border-amber-500 text-amber-300'
+                      }`}
+                    >
+                      {wg.status === 'RECEIVED' ? '✅ تم استلامها بالبسكول' : (wg.status === 'CANCELLED' ? 'ملغاة' : '⏳ بانتظار استلام البسكول بالموقع')}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-300 mt-0.5 flex items-center gap-3">
+                    <span>إجمالي الوزن المطلوب: <strong className="font-mono text-amber-300">{formatCleanQty(wg.total_ordered_weight)} طن</strong></span>
+                    {wg.total_received_weight !== null && wg.total_received_weight !== undefined && (
+                      <span>الوزن المستلم: <strong className="font-mono text-emerald-300">{formatCleanQty(wg.total_received_weight)} طن</strong></span>
+                    )}
+                    {wg.weight_difference !== null && wg.weight_difference !== undefined && Number(wg.weight_difference) !== 0 && (
+                      <span className="font-mono font-bold text-rose-300">
+                        (فرق: {formatCleanQty(wg.weight_difference)} طن)
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* ── Actual PO Callout Banner ── */}
       {isPendingActual && (
@@ -454,6 +549,18 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
         po={po}
         isOpen={isCyclePrintModalOpen}
         onClose={() => setIsCyclePrintModalOpen(false)}
+      />
+
+      {/* مودال تجميع وزنة الحديد */}
+      <CreateWeighingGroupModal
+        isOpen={isWeighingModalOpen}
+        poId={po.id}
+        poNumber={po.po_number}
+        onClose={() => setIsWeighingModalOpen(false)}
+        onSuccess={() => {
+          setIsWeighingModalOpen(false);
+          loadPo();
+        }}
       />
     </div>
   );

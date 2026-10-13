@@ -76,6 +76,8 @@ class PurchaseReceiptService
                 'purchaseRequest.supplements',
                 'items.item',
                 'items.prItem',
+                'items.weighingGroupItem',
+                'weighingGroups.items',
                 'receipts.warehouseKeeper',
             ])
             // 1. Status allows receiving (issued or approved)
@@ -182,6 +184,7 @@ class PurchaseReceiptService
             'siteEngineer',
             'items.purchaseOrderItem.item',
             'items.purchaseOrderItem.prItem',
+            'weighingGroup.items',
         ])->orderByDesc('created_at');
 
         if (! $user->hasAnyRole(['admin', 'general_manager', 'accountant', 'procurement_manager'])) {
@@ -226,7 +229,9 @@ class PurchaseReceiptService
         ?string $notes = null,
         ?array $photoData = null,
         ?string $actualReceiverName = null,
-        ?int $actualReceiverUserId = null
+        ?int $actualReceiverUserId = null,
+        ?int $weighingGroupId = null,
+        ?float $scaleTicketWeight = null
     ): PurchaseReceipt {
         $purchaseOrder->loadMissing([
             'purchaseRequest.targetDepartment',
@@ -278,16 +283,29 @@ class PurchaseReceiptService
 
         $orderItems = $purchaseOrder->items->keyBy('id');
 
-        return DB::transaction(function () use ($warehouseKeeper, $purchaseOrder, $items, $receivedAt, $notes, $siteEngineerId, $orderItems, $photoData, $actualReceiverName, $actualReceiverUserId): PurchaseReceipt {
+        return DB::transaction(function () use ($warehouseKeeper, $purchaseOrder, $items, $receivedAt, $notes, $siteEngineerId, $orderItems, $photoData, $actualReceiverName, $actualReceiverUserId, $weighingGroupId, $scaleTicketWeight): PurchaseReceipt {
             $supplierId = $purchaseOrder->supplier_id ?: \App\Models\Supplier::getOrCreateInternalWarehouseSupplier()->id;
             if (! $purchaseOrder->supplier_id) {
                 $purchaseOrder->update(['supplier_id' => $supplierId]);
+            }
+
+            // Check for weighing group (either explicitly passed or active pending on PO)
+            $weighingGroup = null;
+            if ($weighingGroupId) {
+                $weighingGroup = \App\Models\WeighingGroup::where('id', $weighingGroupId)
+                    ->where('purchase_order_id', $purchaseOrder->id)
+                    ->first();
+            } else {
+                $weighingGroup = \App\Models\WeighingGroup::where('purchase_order_id', $purchaseOrder->id)
+                    ->where('status', 'PENDING_RECEIPT')
+                    ->first();
             }
 
             $receipt = PurchaseReceipt::create([
                 'purchase_order_id' => $purchaseOrder->id,
                 'purchase_request_id' => $purchaseOrder->purchase_request_id,
                 'supplier_id' => $supplierId,
+                'weighing_group_id' => $weighingGroup?->id,
                 'warehouse_keeper_user_id' => $warehouseKeeper->id,
                 'site_engineer_user_id' => $siteEngineerId,
                 'actual_receiver_name' => $actualReceiverName,
@@ -338,6 +356,53 @@ class PurchaseReceiptService
                     'ordered_quantity' => $orderItem->quantity,
                     'received_quantity' => $finalReceivedQuantity,
                     'notes' => $noteText,
+                ]);
+            }
+
+            if ($weighingGroup) {
+                $weighingGroup->loadMissing('items');
+                $wgItemMap = $weighingGroup->items->keyBy('purchase_order_item_id');
+                $totalReceivedWeight = 0.0;
+
+                foreach ($items as $item) {
+                    $orderItemId = (int) ($item['purchase_order_item_id'] ?? 0);
+                    $recQty = (float) ($item['received_quantity'] ?? 0);
+                    if ($wgItem = $wgItemMap->get($orderItemId)) {
+                        $wgItem->update(['received_weight' => $recQty]);
+                        $totalReceivedWeight += $recQty;
+                    }
+                }
+
+                $finalTotalWeight = ($scaleTicketWeight !== null && $scaleTicketWeight > 0)
+                    ? (float) $scaleTicketWeight
+                    : round($totalReceivedWeight, 3);
+
+                $diff = round($finalTotalWeight - (float) $weighingGroup->total_ordered_weight, 3);
+                $weighingGroup->update([
+                    'status' => 'RECEIVED',
+                    'received_at' => now(),
+                    'received_by_user_id' => $warehouseKeeper->id,
+                    'total_received_weight' => $finalTotalWeight,
+                    'weight_difference' => $diff,
+                    'scale_ticket_photo' => $photoData['path'] ?? $weighingGroup->scale_ticket_photo,
+                    'receiver_notes' => $notes ?: $weighingGroup->receiver_notes,
+                ]);
+
+                \App\Models\AuditLog::create([
+                    'user_id'     => $warehouseKeeper->id,
+                    'entity_type' => \App\Models\WeighingGroup::class,
+                    'entity_id'   => $weighingGroup->id,
+                    'action'      => 'STEEL_WEIGHT_GROUP_RECEIVED',
+                    'field_name'  => 'status',
+                    'old_value'   => 'PENDING_RECEIPT',
+                    'new_value'   => json_encode([
+                        'group_number'          => $weighingGroup->group_number,
+                        'receipt_id'            => $receipt->id,
+                        'receipt_number'        => $receipt->receipt_number,
+                        'total_ordered_weight'  => (float) $weighingGroup->total_ordered_weight,
+                        'total_received_weight' => $finalTotalWeight,
+                        'weight_difference'     => $diff,
+                    ], JSON_UNESCAPED_UNICODE),
                 ]);
             }
 

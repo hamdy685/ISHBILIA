@@ -208,6 +208,11 @@ class PurchaseOrder extends Model
         return $this->hasMany(PurchaseReceipt::class, 'purchase_order_id');
     }
 
+    public function weighingGroups(): HasMany
+    {
+        return $this->hasMany(WeighingGroup::class, 'purchase_order_id');
+    }
+
     public function purchaseReceipts(): HasMany
     {
         return $this->receipts();
