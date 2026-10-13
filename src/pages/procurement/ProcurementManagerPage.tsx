@@ -12,6 +12,7 @@ import {
   getProcurementDepartmentsApi,
   getProcurementCatalogItemsApi,
   rejectProcurementPrApi,
+  resetProcurementPrRouteApi,
   ProcurementAnalyticsResponse,
   ProcurementCatalogItemOption,
   ProcurementDepartmentOption,
@@ -360,6 +361,20 @@ export const ProcurementManagerPage: React.FC = () => {
     setRefreshing(true);
     try {
       await rejectProcurementPrApi(id, 'تم الرفض بواسطة مدير المشتريات');
+      await loadData();
+    } catch (error) {
+      setPageError(parseApiError(error).message);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const handleRevertRoute = async (request: PurchaseRequest) => {
+    if (!window.confirm(`هل أنت متأكد من التراجع عن مسار عروض الأسعار للطلب ${request.request_number} وإعادته إلى قسم اختيار المسار وتحديد الأسعار المباشرة؟`)) return;
+    setRefreshing(true);
+    try {
+      const response = await resetProcurementPrRouteApi(request.id);
+      setSuccessBanner(response.message || 'تم التراجع عن مسار عروض الأسعار وإعادة الطلب لقسم اختيار المسار بنجاح.');
       await loadData();
     } catch (error) {
       setPageError(parseApiError(error).message);
@@ -1629,14 +1644,26 @@ export const ProcurementManagerPage: React.FC = () => {
                               </>
                             )}
                             {stage === 'QUOTE_SETUP' && (
-                              <Button
-                                variant="primary"
-                                size="sm"
-                                onClick={() => setQuoteRequest(request)}
-                                className="font-bold bg-indigo-600 hover:bg-indigo-500 shadow-md shadow-indigo-900/30"
-                              >
-                                📝 إدخال عروض الأسعار
-                              </Button>
+                              <>
+                                <Button
+                                  variant="primary"
+                                  size="sm"
+                                  onClick={() => setQuoteRequest(request)}
+                                  className="font-bold bg-indigo-600 hover:bg-indigo-500 shadow-md shadow-indigo-900/30"
+                                >
+                                  📝 إدخال عروض الأسعار
+                                </Button>
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() => void handleRevertRoute(request)}
+                                  className="font-bold border-amber-600/70 text-amber-300 hover:bg-amber-950/50 flex items-center gap-1 shadow-sm"
+                                  title="التراجع عن عروض الأسعار والعودة لقسم اختيار المسار / الشراء المباشر"
+                                >
+                                  <span>↩️</span>
+                                  <span>تراجع لاختيار المسار / شراء مباشر</span>
+                                </Button>
+                              </>
                             )}
                             {stage === 'READY_FOR_PO' && (
                               <Button

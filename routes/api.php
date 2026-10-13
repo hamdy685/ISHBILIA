@@ -200,6 +200,9 @@ Route::middleware('auth:sanctum')->prefix('procurement')->group(function () {
     Route::post('/purchase-requests/{id}/reject', [ProcurementPurchaseOrderController::class, 'rejectPurchaseRequest'])
         ->middleware('permission:purchase_request.approve_procurement');
 
+    Route::post('/purchase-requests/{id}/reset-route', [ProcurementPurchaseOrderController::class, 'resetRoute'])
+        ->middleware('permission:purchase_request.approve_procurement');
+
     // ── PR Approved by Procurement (APPROVED_BY_PROCUREMENT — ready for PO creation) ──
     Route::get('/approved-purchase-requests', [ProcurementPurchaseOrderController::class, 'indexProcurementApprovedPrs'])
         ->middleware('permission:purchase_request.view_approved');

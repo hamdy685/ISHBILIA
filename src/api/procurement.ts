@@ -212,6 +212,12 @@ export const approveProcurementPrApi = async (
 export const rejectProcurementPrApi = async (id: number, comment: string): Promise<PurchaseRequest> =>
   (await apiClient.post<{ data: PurchaseRequest }>(`/procurement/purchase-requests/${id}/reject`, { comment })).data.data;
 
+/** Procurement Manager resets route back to PENDING_ROUTE / direct route selection */
+export const resetProcurementPrRouteApi = async (id: number, comment?: string): Promise<{ message: string; data: PurchaseRequest }> => {
+  const response = await apiClient.post<{ message: string; data: PurchaseRequest }>(`/procurement/purchase-requests/${id}/reset-route`, { comment });
+  return response.data;
+};
+
 export const getPurchaseRequestQuotesApi = async (id: number): Promise<PurchaseRequest> =>
   (await apiClient.get<{ data: PurchaseRequest }>(`/procurement/purchase-requests/${id}/quotes`)).data.data;
 

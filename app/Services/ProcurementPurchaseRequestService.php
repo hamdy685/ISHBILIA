@@ -632,5 +632,54 @@ class ProcurementPurchaseRequestService
             return $pr->fresh(['requester.roles', 'department', 'items.item', 'items.supplier', 'approvalHistory']);
         });
     }
+
+    /**
+     * Revert PR route from PENDING_QUOTE_RECOMMENDATIONS back to PENDING_PROCUREMENT_APPROVAL (UNDECIDED route)
+     * so Procurement Manager can change decision, select direct route, or input direct prices.
+     */
+    public function resetRoute(User $procurementManager, PurchaseRequest $request, ?string $comment = null): PurchaseRequest
+    {
+        if (! in_array($request->status, ['PENDING_QUOTE_RECOMMENDATIONS', 'PENDING_PROCUREMENT_APPROVAL'], true)) {
+            throw new \RuntimeException('لا يمكن التراجع إلا إذا كان الطلب في مرحلة عروض الأسعار أو اعتماد المشتريات ولم يتم إصدار أمر شراء له.');
+        }
+
+        return DB::transaction(function () use ($procurementManager, $request, $comment) {
+            $pr = PurchaseRequest::where('id', $request->id)->lockForUpdate()->first();
+            $oldStatus = $pr->status;
+
+            // Delete any unselected quotes created during quotes stage
+            $pr->quotes()->delete();
+
+            $pr->update([
+                'status' => 'PENDING_PROCUREMENT_APPROVAL',
+                'procurement_route' => 'UNDECIDED',
+            ]);
+
+            ApprovalHistory::create([
+                'target_type' => PurchaseRequest::class,
+                'target_id' => $pr->id,
+                'actor_user_id' => $procurementManager->id,
+                'action' => 'ROUTE_RESET_TO_PENDING',
+                'from_state' => $oldStatus,
+                'to_state' => 'PENDING_PROCUREMENT_APPROVAL',
+                'comments' => $comment ?? 'تم التراجع عن مسار عروض الأسعار وإعادة الطلب إلى قسم اختيار المسار وتحديد الأسعار المباشرة.',
+            ]);
+
+            app(SystemEventService::class)->recordAction(
+                $pr,
+                'ROUTE_RESET_TO_PENDING',
+                'تم التراجع عن مسار عروض الأسعار وإعادة الطلب إلى مرحلة اختيار المسار وتحديد الأسعار.',
+                [
+                    'event_type' => 'purchase_request.route_reset',
+                    'from_state' => $oldStatus,
+                    'to_state' => 'PENDING_PROCUREMENT_APPROVAL',
+                    'actor_user_id' => $procurementManager->id,
+                    'metadata' => ['comment' => $comment],
+                ]
+            );
+
+            return $pr->fresh(['requester.roles', 'department', 'items.item', 'items.supplier', 'approvalHistory']);
+        });
+    }
 }
 

@@ -208,6 +208,30 @@ class ProcurementPurchaseOrderController extends Controller
         ], 200);
     }
 
+    /**
+     * Revert PR route from PENDING_QUOTE_RECOMMENDATIONS back to PENDING_PROCUREMENT_APPROVAL
+     * (e.g. if quotes was clicked by mistake and procurement manager wants to choose direct route / pricing).
+     */
+    public function resetRoute(Request $request, string|int $id): JsonResponse
+    {
+        $pr = PurchaseRequest::with(['requester', 'department', 'items'])->findOrFail((int) $id);
+
+        try {
+            $updated = $this->procurementPrService->resetRoute(
+                $request->user(),
+                $pr,
+                $request->input('comment')
+            );
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 409);
+        }
+
+        return response()->json([
+            'message' => 'تم التراجع عن مسار عروض الأسعار وإعادة الطلب إلى قسم اختيار المسار وتحديد الأسعار بنجاح.',
+            'data' => new PurchaseRequestResource($updated),
+        ], 200);
+    }
+
     // ─────────────────────────────────────────────
     // SUPPLIERS
     // ─────────────────────────────────────────────
