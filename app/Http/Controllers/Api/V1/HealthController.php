@@ -21,14 +21,56 @@ class HealthController extends Controller
             DB::connection()->getPdo();
             $dbConnected = true;
 
-            // 1. Identify PO-58 (id: 61) and PO-70 (id: 73)
-            $po58 = DB::table('purchase_orders')->where('id', 61)->orWhere('po_number', 'PO-58')->first();
-            $po70 = DB::table('purchase_orders')->where('id', 73)->orWhere('po_number', 'PO-70')->first();
+            $adminUser = DB::table('users')->where('email', 'admin@ashbiliya.com')->first() 
+                ?? DB::table('users')->first();
+            $adminUserId = $adminUser?->id;
+
+            // 1. Gather comprehensive diagnostics
+            $info['users_youssef'] = DB::table('users')
+                ->where('name', 'like', '%يوسف%')
+                ->orWhere('email', 'like', '%youssef%')
+                ->get(['id', 'name', 'email']);
+
+            $info['prs'] = DB::table('purchase_requests')
+                ->whereIn('id', [21, 32, 40, 51])
+                ->orWhereIn('request_number', ['PR-21', 'PR-32', 'PR-40', 'PR-51'])
+                ->get(['id', 'request_number', 'land_plot_number', 'region', 'status']);
+
+            $info['pos'] = DB::table('purchase_orders')
+                ->whereIn('po_number', ['PO-58', 'PO-70'])
+                ->orWhereIn('purchase_request_id', [21, 32, 40, 51])
+                ->get(['id', 'po_number', 'purchase_request_id', 'status', 'delivery_status', 'supplier_id']);
+
+            $allPoIds = $info['pos']->pluck('id')->all();
+
+            $info['po_items'] = DB::table('purchase_order_items')
+                ->whereIn('purchase_order_id', $allPoIds)
+                ->get(['id', 'purchase_order_id', 'item_description', 'quantity', 'uom', 'unit_price', 'line_total', 'item_reference', 'specifications']);
+
+            $youssefIds = $info['users_youssef']->pluck('id')->all();
+
+            $info['youssef_receipts'] = DB::table('purchase_receipts')
+                ->whereIn('site_engineer_user_id', $youssefIds)
+                ->orWhereIn('purchase_order_id', $allPoIds)
+                ->get(['id', 'receipt_number', 'purchase_order_id', 'status', 'site_engineer_user_id']);
+
+            // 2. Identify the exact POs for PO-58 and PO-70
+            $po58 = DB::table('purchase_orders')->where('po_number', 'PO-58')->first()
+                ?? DB::table('purchase_orders')->where('id', 61)->first();
+            $po70 = DB::table('purchase_orders')->where('po_number', 'PO-70')->first()
+                ?? DB::table('purchase_orders')->where('id', 73)->first();
+
             $targetPoIds = array_values(array_filter([$po58?->id, $po70?->id]));
 
-            // 2. Remove any pending receipts from Youssef (user 23) and from these orders
+            // 3. Delete any receipts for Youssef or for these target POs
             $receiptsToDelete = DB::table('purchase_receipts')
-                ->whereIn('purchase_order_id', $targetPoIds)
+                ->where(function ($q) use ($targetPoIds, $youssefIds) {
+                    $q->whereIn('purchase_order_id', $targetPoIds)
+                      ->orWhere(function ($q2) use ($youssefIds, $targetPoIds) {
+                          $q2->whereIn('site_engineer_user_id', $youssefIds)
+                             ->whereIn('purchase_order_id', $targetPoIds);
+                      });
+                })
                 ->whereIn('status', ['PENDING_SITE_ENGINEER', 'PENDING_WAREHOUSE', 'REJECTED'])
                 ->pluck('id');
 
@@ -43,14 +85,38 @@ class HealthController extends Controller
                 DB::table('purchase_orders')->whereIn('id', $targetPoIds)->update(['delivery_status' => 'PENDING']);
             }
 
-            // 3. Create Steel Weighing Group for PO-58 (id: 61)
+            // Remove invalid/orphan weighing groups for POs other than targetPoIds if they were test records
+            // Remove WG-2 and WG-3 if they point to PO 70 and PO 58 which are wrong orders
+            DB::table('weighing_groups')
+                ->whereIn('id', [2, 3])
+                ->whereNotIn('purchase_order_id', $targetPoIds)
+                ->delete();
+
+            // Next sequence helper for WG-X
+            $getNextWgSeq = function () {
+                $existing = DB::table('weighing_groups')->pluck('group_number');
+                $max = 0;
+                foreach ($existing as $gn) {
+                    if (preg_match('/WG-(\d+)/i', (string) $gn, $m)) {
+                        $num = (int) $m[1];
+                        if ($num > $max) {
+                            $max = $num;
+                        }
+                    }
+                }
+                return 'WG-' . ($max + 1);
+            };
+
+            // 4. Create Steel Weighing Group for PO-58
             if ($po58) {
                 $wg58 = DB::table('weighing_groups')->where('purchase_order_id', $po58->id)->first();
                 if (!$wg58) {
                     $items58 = DB::table('purchase_order_items')->where('purchase_order_id', $po58->id)->get();
                     $totWeight58 = (float) $items58->sum('quantity');
+                    $groupNum58 = $getNextWgSeq();
+
                     $wgId58 = DB::table('weighing_groups')->insertGetId([
-                        'group_number'         => 'WG-1',
+                        'group_number'         => $groupNum58,
                         'purchase_order_id'    => $po58->id,
                         'supplier_id'          => $po58->supplier_id,
                         'group_type'           => 'STEEL_WEIGHT',
@@ -58,7 +124,7 @@ class HealthController extends Controller
                         'total_ordered_weight' => round($totWeight58 > 0 ? $totWeight58 : 5.06, 3),
                         'uom'                  => 'TON',
                         'notes'                => 'تجميع وزنة حديد سقف الثاني علوي - قطعة 1165 منطقة 22',
-                        'created_by_user_id'   => 1,
+                        'created_by_user_id'   => $adminUserId,
                         'created_at'           => now(),
                         'updated_at'           => now(),
                     ]);
@@ -84,14 +150,16 @@ class HealthController extends Controller
                 }
             }
 
-            // 4. Create Steel Weighing Group for PO-70 (id: 73)
+            // 5. Create Steel Weighing Group for PO-70
             if ($po70) {
                 $wg70 = DB::table('weighing_groups')->where('purchase_order_id', $po70->id)->first();
                 if (!$wg70) {
                     $items70 = DB::table('purchase_order_items')->where('purchase_order_id', $po70->id)->get();
                     $totWeight70 = (float) $items70->sum('quantity');
+                    $groupNum70 = $getNextWgSeq();
+
                     $wgId70 = DB::table('weighing_groups')->insertGetId([
-                        'group_number'         => 'WG-2',
+                        'group_number'         => $groupNum70,
                         'purchase_order_id'    => $po70->id,
                         'supplier_id'          => $po70->supplier_id,
                         'group_type'           => 'STEEL_WEIGHT',
@@ -99,7 +167,7 @@ class HealthController extends Controller
                         'total_ordered_weight' => round($totWeight70 > 0 ? $totWeight70 : 4.86, 3),
                         'uom'                  => 'TON',
                         'notes'                => 'تجميع وزنة حديد سقف الثاني علوي - قطعة 1483 منطقة 29',
-                        'created_by_user_id'   => 1,
+                        'created_by_user_id'   => $adminUserId,
                         'created_at'           => now(),
                         'updated_at'           => now(),
                     ]);
@@ -125,13 +193,9 @@ class HealthController extends Controller
                 }
             }
 
-            $info['weighing_groups'] = DB::table('weighing_groups')->get(['id', 'group_number', 'purchase_order_id', 'status', 'total_ordered_weight']);
-            $info['weighing_group_items_count'] = DB::table('weighing_group_items')->count();
+            $info['final_weighing_groups'] = DB::table('weighing_groups')->get();
+            $info['final_weighing_group_items'] = DB::table('weighing_group_items')->get();
             $info['deleted_receipt_ids'] = $receiptsToDelete ?? [];
-            $info['target_pos'] = [
-                'po58' => ['id' => $po58?->id, 'po_number' => $po58?->po_number],
-                'po70' => ['id' => $po70?->id, 'po_number' => $po70?->po_number],
-            ];
         } catch (Throwable $e) {
             $dbConnected = false;
             $info['error'] = $e->getMessage();
