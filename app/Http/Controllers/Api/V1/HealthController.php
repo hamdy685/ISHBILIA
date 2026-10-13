@@ -54,148 +54,156 @@ class HealthController extends Controller
                 ->orWhereIn('purchase_order_id', $allPoIds)
                 ->get();
 
-            // 2. Identify the exact POs for PO-58 and PO-70
-            $po58 = DB::table('purchase_orders')->where('po_number', 'PO-58')->first()
-                ?? DB::table('purchase_orders')->where('id', 61)->first();
-            $po70 = DB::table('purchase_orders')->where('po_number', 'PO-70')->first()
-                ?? DB::table('purchase_orders')->where('id', 73)->first();
+            // =========================================================================
+            // 1. PO-70 (PR-40 / PR-51, Land 1483, Region 29): Return to Uncle Salem
+            // =========================================================================
+            $po70 = DB::table('purchase_orders')->where('id', 73)->orWhere('po_number', 'PO-70')->first();
+            if ($po70) {
+                // Delete any receipts for PO-70 (including REC-43)
+                $rec70Ids = DB::table('purchase_receipts')->where('purchase_order_id', $po70->id)->pluck('id');
+                if ($rec70Ids->isNotEmpty()) {
+                    DB::table('purchase_receipt_items')->whereIn('purchase_receipt_id', $rec70Ids)->delete();
+                    DB::table('approval_history')->where('target_type', 'App\\Models\\PurchaseReceipt')->whereIn('target_id', $rec70Ids)->delete();
+                    DB::table('purchase_receipts')->whereIn('id', $rec70Ids)->delete();
+                }
 
-            $targetPoIds = array_values(array_filter([$po58?->id, $po70?->id]));
+                // Reset WG-4 back to PENDING_RECEIPT
+                DB::table('weighing_groups')
+                    ->where('purchase_order_id', $po70->id)
+                    ->update([
+                        'status'                => 'PENDING_RECEIPT',
+                        'total_received_weight' => null,
+                        'weight_difference'     => null,
+                        'scale_ticket_photo'    => null,
+                        'receiver_notes'        => null,
+                        'received_by_user_id'   => null,
+                        'received_at'           => null,
+                        'updated_at'            => now(),
+                    ]);
 
-            // 3. Delete any receipts for Youssef or for these target POs
-            $receiptsToDelete = DB::table('purchase_receipts')
-                ->where(function ($q) use ($targetPoIds, $youssefIds) {
-                    $q->whereIn('purchase_order_id', $targetPoIds)
-                      ->orWhere(function ($q2) use ($youssefIds, $targetPoIds) {
-                          $q2->whereIn('site_engineer_user_id', $youssefIds)
-                             ->whereIn('purchase_order_id', $targetPoIds);
-                      });
-                })
-                ->whereIn('status', ['PENDING_SITE_ENGINEER', 'PENDING_WAREHOUSE', 'REJECTED'])
-                ->pluck('id');
+                $wg70Ids = DB::table('weighing_groups')->where('purchase_order_id', $po70->id)->pluck('id');
+                DB::table('weighing_group_items')->whereIn('weighing_group_id', $wg70Ids)->update([
+                    'received_weight' => null,
+                    'updated_at'      => now(),
+                ]);
 
-            if ($receiptsToDelete->isNotEmpty()) {
-                DB::table('purchase_receipt_items')->whereIn('purchase_receipt_id', $receiptsToDelete)->delete();
-                DB::table('approval_history')->where('target_type', 'App\\Models\\PurchaseReceipt')->whereIn('target_id', $receiptsToDelete)->delete();
-                DB::table('purchase_receipts')->whereIn('id', $receiptsToDelete)->delete();
+                // Reset PO-70 back to ISSUED and PENDING so Uncle Salem sees it in his warehouse queue
+                DB::table('purchase_orders')->where('id', $po70->id)->update([
+                    'status'          => 'ISSUED',
+                    'delivery_status' => 'PENDING',
+                    'updated_at'      => now(),
+                ]);
             }
 
-            // Ensure POs delivery status is PENDING so warehouse can receive them
-            if (!empty($targetPoIds)) {
-                DB::table('purchase_orders')->whereIn('id', $targetPoIds)->update(['delivery_status' => 'PENDING']);
-            }
+            // =========================================================================
+            // 2. PR-21 / PR-32 (Land 1165, Region 22, Supplier Aboud):
+            //    Merge 4 split items into PO-58 (id: 61) & unify into 1 Weighing Group
+            // =========================================================================
+            $po58 = DB::table('purchase_orders')->where('id', 61)->orWhere('po_number', 'PO-58')->first();
+            if ($po58) {
+                // Delete any receipts for POs 58, 59, 60, 61 (e.g. REC-41)
+                $splitPoIds = [58, 59, 60, $po58->id];
+                $rec58Ids = DB::table('purchase_receipts')->whereIn('purchase_order_id', $splitPoIds)->pluck('id');
+                if ($rec58Ids->isNotEmpty()) {
+                    DB::table('purchase_receipt_items')->whereIn('purchase_receipt_id', $rec58Ids)->delete();
+                    DB::table('approval_history')->where('target_type', 'App\\Models\\PurchaseReceipt')->whereIn('target_id', $rec58Ids)->delete();
+                    DB::table('purchase_receipts')->whereIn('id', $rec58Ids)->delete();
+                }
 
-            // Remove invalid/orphan weighing groups for POs other than targetPoIds if they were test records
-            // Remove WG-2 and WG-3 if they point to PO 70 and PO 58 which are wrong orders
-            DB::table('weighing_groups')
-                ->whereIn('id', [2, 3])
-                ->whereNotIn('purchase_order_id', $targetPoIds)
-                ->delete();
+                // Move items 60, 61, 62 to PO-58 (id: 61)
+                DB::table('purchase_order_items')->whereIn('id', [60, 61, 62])->update([
+                    'purchase_order_id' => $po58->id,
+                    'updated_at'        => now(),
+                ]);
 
-            // Next sequence helper for WG-X
-            $getNextWgSeq = function () {
-                $existing = DB::table('weighing_groups')->pluck('group_number');
-                $max = 0;
-                foreach ($existing as $gn) {
-                    if (preg_match('/WG-(\d+)/i', (string) $gn, $m)) {
-                        $num = (int) $m[1];
-                        if ($num > $max) {
-                            $max = $num;
+                // Cancel the 3 empty split POs: 58 (PO-55), 59 (PO-56), 60 (PO-57)
+                DB::table('purchase_orders')->whereIn('id', [58, 59, 60])->update([
+                    'status'          => 'CANCELLED',
+                    'delivery_status' => 'CANCELLED',
+                    'notes'           => 'تم دمج البند في أمر الشراء الموحد PO-58',
+                    'updated_at'      => now(),
+                ]);
+
+                // Update PO-58 totals for all 4 items (5.060 tons, 209,990.00 EGP)
+                DB::table('purchase_orders')->where('id', $po58->id)->update([
+                    'subtotal'        => 209990.00,
+                    'total_amount'    => 209990.00,
+                    'status'          => 'ISSUED',
+                    'delivery_status' => 'PENDING',
+                    'notes'           => 'حديد تسليح سقف الثاني علوي - قطعة 1165 منطقة 22 - إجمالي 5.06 طن',
+                    'updated_at'      => now(),
+                ]);
+
+                // Clean up previous weighing groups for PO-58
+                $oldWg58Ids = DB::table('weighing_groups')->where('purchase_order_id', $po58->id)->pluck('id');
+                if ($oldWg58Ids->isNotEmpty()) {
+                    DB::table('weighing_group_items')->whereIn('weighing_group_id', $oldWg58Ids)->delete();
+                    DB::table('weighing_groups')->whereIn('id', $oldWg58Ids)->delete();
+                }
+
+                // Determine unique group number
+                $existingGroups = DB::table('weighing_groups')->pluck('group_number');
+                $targetGroupNum = 'WG-1';
+                if ($existingGroups->contains('WG-1')) {
+                    $max = 0;
+                    foreach ($existingGroups as $gn) {
+                        if (preg_match('/WG-(\d+)/i', (string) $gn, $m)) {
+                            $num = (int) $m[1];
+                            if ($num > $max) $max = $num;
                         }
                     }
+                    $targetGroupNum = 'WG-' . ($max + 1);
                 }
-                return 'WG-' . ($max + 1);
-            };
 
-            // 4. Create Steel Weighing Group for PO-58
-            if ($po58) {
-                $wg58 = DB::table('weighing_groups')->where('purchase_order_id', $po58->id)->first();
-                if (!$wg58) {
-                    $items58 = DB::table('purchase_order_items')->where('purchase_order_id', $po58->id)->get();
-                    $totWeight58 = (float) $items58->sum('quantity');
-                    $groupNum58 = $getNextWgSeq();
+                $allPo58Items = DB::table('purchase_order_items')->where('purchase_order_id', $po58->id)->get();
+                $totalWeight58 = round((float) $allPo58Items->sum('quantity'), 3);
 
-                    $wgId58 = DB::table('weighing_groups')->insertGetId([
-                        'group_number'         => $groupNum58,
-                        'purchase_order_id'    => $po58->id,
-                        'supplier_id'          => $po58->supplier_id,
-                        'group_type'           => 'STEEL_WEIGHT',
-                        'status'               => 'PENDING_RECEIPT',
-                        'total_ordered_weight' => round($totWeight58 > 0 ? $totWeight58 : 5.06, 3),
-                        'uom'                  => 'TON',
-                        'notes'                => 'تجميع وزنة حديد سقف الثاني علوي - قطعة 1165 منطقة 22',
-                        'created_by_user_id'   => $adminUserId,
-                        'created_at'           => now(),
-                        'updated_at'           => now(),
+                $newWgId58 = DB::table('weighing_groups')->insertGetId([
+                    'group_number'         => $targetGroupNum,
+                    'purchase_order_id'    => $po58->id,
+                    'supplier_id'          => $po58->supplier_id,
+                    'group_type'           => 'STEEL_WEIGHT',
+                    'status'               => 'PENDING_RECEIPT',
+                    'total_ordered_weight' => $totalWeight58 > 0 ? $totalWeight58 : 5.060,
+                    'uom'                  => 'TON',
+                    'notes'                => 'تجميع وزنة حديد سقف الثاني علوي - قطعة 1165 منطقة 22 - المورد عبود',
+                    'created_by_user_id'   => $adminUserId,
+                    'created_at'           => now(),
+                    'updated_at'           => now(),
+                ]);
+
+                foreach ($allPo58Items as $it) {
+                    DB::table('weighing_group_items')->insert([
+                        'weighing_group_id'      => $newWgId58,
+                        'purchase_order_item_id' => $it->id,
+                        'item_description'       => $it->item_description,
+                        'size_or_diameter'       => $it->item_description,
+                        'ordered_weight'         => (float) $it->quantity,
+                        'received_weight'        => null,
+                        'uom'                    => 'TON',
+                        'unit_price'             => (float) $it->unit_price,
+                        'line_total'             => (float) $it->line_total,
+                        'region'                 => '22',
+                        'land_plot_number'       => '1165',
+                        'purpose'                => 'سقف الثاني علوي',
+                        'created_at'             => now(),
+                        'updated_at'             => now(),
                     ]);
-
-                    foreach ($items58 as $it) {
-                        DB::table('weighing_group_items')->insert([
-                            'weighing_group_id'      => $wgId58,
-                            'purchase_order_item_id' => $it->id,
-                            'item_description'       => $it->item_description,
-                            'size_or_diameter'       => $it->item_description,
-                            'ordered_weight'         => (float) $it->quantity,
-                            'received_weight'        => null,
-                            'uom'                    => 'TON',
-                            'unit_price'             => (float) $it->unit_price,
-                            'line_total'             => (float) $it->line_total,
-                            'region'                 => $it->region ?? '22',
-                            'land_plot_number'       => $it->item_reference ?? '1165',
-                            'purpose'                => $it->specifications ?? 'سقف الثاني علوي',
-                            'created_at'             => now(),
-                            'updated_at'             => now(),
-                        ]);
-                    }
                 }
             }
 
-            // 5. Create Steel Weighing Group for PO-70
-            if ($po70) {
-                $wg70 = DB::table('weighing_groups')->where('purchase_order_id', $po70->id)->first();
-                if (!$wg70) {
-                    $items70 = DB::table('purchase_order_items')->where('purchase_order_id', $po70->id)->get();
-                    $totWeight70 = (float) $items70->sum('quantity');
-                    $groupNum70 = $getNextWgSeq();
+            // Clean any test weighing groups for POs other than 61 and 73
+            DB::table('weighing_groups')->whereNotIn('purchase_order_id', [61, 73])->delete();
 
-                    $wgId70 = DB::table('weighing_groups')->insertGetId([
-                        'group_number'         => $groupNum70,
-                        'purchase_order_id'    => $po70->id,
-                        'supplier_id'          => $po70->supplier_id,
-                        'group_type'           => 'STEEL_WEIGHT',
-                        'status'               => 'PENDING_RECEIPT',
-                        'total_ordered_weight' => round($totWeight70 > 0 ? $totWeight70 : 4.86, 3),
-                        'uom'                  => 'TON',
-                        'notes'                => 'تجميع وزنة حديد سقف الثاني علوي - قطعة 1483 منطقة 29',
-                        'created_by_user_id'   => $adminUserId,
-                        'created_at'           => now(),
-                        'updated_at'           => now(),
-                    ]);
-
-                    foreach ($items70 as $it) {
-                        DB::table('weighing_group_items')->insert([
-                            'weighing_group_id'      => $wgId70,
-                            'purchase_order_item_id' => $it->id,
-                            'item_description'       => $it->item_description,
-                            'size_or_diameter'       => $it->item_description,
-                            'ordered_weight'         => (float) $it->quantity,
-                            'received_weight'        => null,
-                            'uom'                    => 'TON',
-                            'unit_price'             => (float) $it->unit_price,
-                            'line_total'             => (float) $it->line_total,
-                            'region'                 => $it->region ?? '29',
-                            'land_plot_number'       => $it->item_reference ?? '1483',
-                            'purpose'                => $it->specifications ?? 'سقف الثاني علوي',
-                            'created_at'             => now(),
-                            'updated_at'             => now(),
-                        ]);
-                    }
-                }
-            }
-
-            $info['final_weighing_groups'] = DB::table('weighing_groups')->get();
-            $info['final_weighing_group_items'] = DB::table('weighing_group_items')->get();
-            $info['deleted_receipt_ids'] = $receiptsToDelete ?? [];
+            $info['active_pos'] = DB::table('purchase_orders')
+                ->whereIn('id', [61, 73])
+                ->get(['id', 'po_number', 'status', 'delivery_status', 'total_amount']);
+            $info['weighing_groups'] = DB::table('weighing_groups')->get();
+            $info['weighing_group_items'] = DB::table('weighing_group_items')->get();
+            $info['youssef_pending_receipts'] = DB::table('purchase_receipts')
+                ->whereIn('site_engineer_user_id', $youssefIds)
+                ->whereIn('status', ['PENDING_SITE_ENGINEER', 'PENDING_WAREHOUSE'])
+                ->get();
         } catch (Throwable $e) {
             $dbConnected = false;
             $info['error'] = $e->getMessage();
