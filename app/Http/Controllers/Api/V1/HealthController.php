@@ -127,7 +127,7 @@ class HealthController extends Controller
                 // Update PO-58 totals for all 4 items (5.060 tons, 209,990.00 EGP)
                 DB::table('purchase_orders')->where('id', $po58->id)->update([
                     'subtotal'        => 209990.00,
-                    'total_amount'    => 209990.00,
+                    'grand_total'     => 209990.00,
                     'status'          => 'ISSUED',
                     'delivery_status' => 'PENDING',
                     'notes'           => 'حديد تسليح سقف الثاني علوي - قطعة 1165 منطقة 22 - إجمالي 5.06 طن',
@@ -197,7 +197,7 @@ class HealthController extends Controller
 
             $info['active_pos'] = DB::table('purchase_orders')
                 ->whereIn('id', [61, 73])
-                ->get(['id', 'po_number', 'status', 'delivery_status', 'total_amount']);
+                ->get(['id', 'po_number', 'status', 'delivery_status', 'grand_total']);
             $info['weighing_groups'] = DB::table('weighing_groups')->get();
             $info['weighing_group_items'] = DB::table('weighing_group_items')->get();
             $info['youssef_pending_receipts'] = DB::table('purchase_receipts')
