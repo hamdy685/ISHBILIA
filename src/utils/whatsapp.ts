@@ -101,26 +101,45 @@ export const buildReceiptWhatsAppText = (
     poItem?.pr_item ||
     (pr?.items && pr.items.length > 0 ? pr.items[0] : null);
 
-  // 1. RECEIVED_QUANTITY = الكمية المستلمة فعليًا
+  // 1. RECEIVED_QUANTITY = الكمية المستلمة فعليًا (kept as English digits, no conversion)
   let receivedQuantityStr = 'غير مسجل';
   const rawReceivedQty = receiptItem?.received_quantity;
   if (rawReceivedQty !== undefined && rawReceivedQty !== null && String(rawReceivedQty).trim() !== '') {
     const num = parseFloat(String(rawReceivedQty));
     if (!isNaN(num)) {
-      receivedQuantityStr = formatCleanQty(num);
+      // Keep as plain English number string (no Arabic numeral conversion)
+      receivedQuantityStr = String(num);
     } else {
       receivedQuantityStr = String(rawReceivedQty).trim();
     }
   }
 
-  // 2. UNIT = وحدة القياس
+  // 2. UNIT = وحدة القياس — translate to Arabic using fixed dictionary
+  const UNIT_AR_MAP: Record<string, string> = {
+    PCS: 'قطعة',
+    PC: 'قطعة',
+    M: 'متر',
+    M2: 'متر مربع',
+    M3: 'متر مكعب',
+    KG: 'كجم',
+    TON: 'طن',
+    L: 'لتر',
+    BOX: 'كرتونة',
+    ROLL: 'لفة',
+    BAG: 'شيكارة',
+    SET: 'طقم',
+    UNIT: 'وحدة',
+  };
   const rawUnit =
     receiptItem?.purchase_order_item?.uom ||
     poItem?.uom ||
     prItem?.uom ||
     (receiptItem as any)?.uom ||
     null;
-  const unitStr = rawUnit && String(rawUnit).trim() ? String(rawUnit).trim() : '';
+  const rawUnitNorm = rawUnit ? String(rawUnit).trim().toUpperCase() : '';
+  const unitStr = rawUnitNorm
+    ? (UNIT_AR_MAP[rawUnitNorm] ?? rawUnit ?? 'غير مسجل')
+    : 'غير مسجل';
 
   // 3. ITEM_NAME = اسم الصنف
   const rawItemName =
@@ -202,15 +221,21 @@ export const buildReceiptWhatsAppText = (
     null;
   const purposeStr = rawPurpose && String(rawPurpose).trim() ? String(rawPurpose).trim() : 'غير مسجل';
 
+  // SUPPLIER = اسم المورد
+  const rawSupplier =
+    po?.supplier?.company_name ||
+    (poItem as any)?.supplier_name ||
+    (receipt as any)?.supplier_name ||
+    null;
+  const supplierStr = rawSupplier && String(rawSupplier).trim() ? String(rawSupplier).trim() : 'غير مسجل';
+
   // Construction of lines according to strict template
-  const quantityLine =
-    receivedQuantityStr !== 'غير مسجل'
-      ? `🔹 الكمية: ${receivedQuantityStr}${unitStr ? ` ${unitStr}` : ''}`
-      : '🔹 الكمية: غير مسجل';
+  const quantityLine = `🔹 الكمية: ${receivedQuantityStr} ${unitStr}`;
 
   return [
     quantityLine,
     `🔹 الصنف: ${itemNameStr}`,
+    `🔹 المورد: ${supplierStr}`,
     `🔹 المبلغ الكلي: ${lineTotalStr}`,
     `🔹 سعر الوحدة: ${unitPriceStr}`,
     `🔹 رقم قطعة الأرض: ${landPlotNumberStr}`,
