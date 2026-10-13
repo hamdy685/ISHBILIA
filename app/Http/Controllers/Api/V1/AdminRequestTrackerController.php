@@ -342,6 +342,7 @@ class AdminRequestTrackerController extends Controller
             'can_cancel'  => ! in_array($pr->status, ['CANCELLED']) && ! $pr->trashed(),
             'can_archive' => $pr->status === 'DRAFT' && ! $pr->trashed(),
             'can_restore' => $pr->trashed(),
+            'can_reopen'  => in_array($pr->status, ['REJECTED', 'CANCELLED']),
             'has_linked_po'       => $pr->purchaseOrders->isNotEmpty(),
             'has_issued_po'       => $hasIssuedPo,
             'has_linked_receipts' => $hasReceipts,
@@ -444,6 +445,67 @@ class AdminRequestTrackerController extends Controller
         });
 
         return response()->json(['message' => 'تم استعادة الطلب بنجاح.']);
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // REOPEN — unreject/reopen a REJECTED or CANCELLED PR
+    // ─────────────────────────────────────────────────────────
+    public function reopen(Request $request, int $id): JsonResponse
+    {
+        $pr = PurchaseRequest::withTrashed()->findOrFail($id);
+
+        if (! in_array($pr->status, ['REJECTED', 'CANCELLED'], true)) {
+            return response()->json(['message' => 'إعادة الفتح متاحة فقط للطلبات المرفوضة أو الملغاة.'], 422);
+        }
+
+        $targetStatus = (string) $request->input('target_status', 'PENDING_PROCUREMENT_APPROVAL');
+        $validStatuses = [
+            'DRAFT',
+            'SUBMITTED',
+            'PENDING_EXECUTIVE_APPROVAL',
+            'PENDING_PROCUREMENT_APPROVAL',
+            'APPROVED_BY_PROCUREMENT',
+            'PENDING_ACCOUNTING_APPROVAL',
+        ];
+
+        if (! in_array($targetStatus, $validStatuses, true)) {
+            $targetStatus = 'PENDING_PROCUREMENT_APPROVAL';
+        }
+
+        $admin = Auth::user();
+        $reason = $request->input('reason', 'تم إلغاء الرفض وإعادة فتح الطلب واستئناف الدورة إدارياً');
+
+        DB::transaction(function () use ($pr, $admin, $targetStatus, $reason) {
+            $fromStatus = $pr->status;
+            $pr->status = $targetStatus;
+            $pr->rejection_reason = null;
+            if ($pr->trashed()) {
+                $pr->restore();
+            }
+            $pr->save();
+
+            ApprovalHistory::create([
+                'target_type'   => PurchaseRequest::class,
+                'target_id'     => $pr->id,
+                'actor_user_id' => $admin->id,
+                'action'        => 'ADMIN_REOPENED',
+                'from_state'    => $fromStatus,
+                'to_state'      => $targetStatus,
+                'comments'      => $reason,
+            ]);
+
+            app(SystemEventService::class)->recordAction($pr, 'ADMIN_REOPENED', $reason . ' بواسطة ' . $admin->name, [
+                'event_type' => 'purchase_request.reopened',
+                'from_state' => $fromStatus,
+                'to_state'   => $targetStatus,
+                'metadata'   => ['admin_id' => $admin->id, 'reason' => $reason],
+            ]);
+        });
+
+        return response()->json([
+            'message' => 'تم إلغاء الرفض وإعادة الطلب بنجاح إلى مرحلة: ' . $targetStatus,
+            'status'  => $targetStatus,
+        ]);
     }
 
     // ─────────────────────────────────────────────────────────

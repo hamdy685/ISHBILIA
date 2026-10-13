@@ -101,6 +101,7 @@ export interface TrackerPrDetail extends Omit<TrackerPrSummary, 'assigned_review
     can_cancel: boolean;
     can_archive: boolean;
     can_restore: boolean;
+    can_reopen?: boolean;
     has_linked_po: boolean;
     has_issued_po: boolean;
     has_linked_receipts: boolean;
@@ -158,6 +159,10 @@ export const archiveRequestApi = async (id: number, reason?: string): Promise<vo
 
 export const restoreRequestApi = async (id: number): Promise<void> => {
   await client.post(`/admin/request-tracker/${id}/restore`);
+};
+
+export const reopenRequestApi = async (id: number, targetStatus: string = 'PENDING_PROCUREMENT_APPROVAL', reason?: string): Promise<void> => {
+  await client.post(`/admin/request-tracker/${id}/reopen`, { target_status: targetStatus, reason });
 };
 
 export const addAdminNoteApi = async (id: number, note: string): Promise<void> => {

@@ -542,5 +542,6 @@ Route::middleware(['auth:sanctum', 'permission:system.users.manage'])->prefix('a
     Route::post('/{id}/cancel', [AdminRequestTrackerController::class, 'cancel'])->whereNumber('id');
     Route::post('/{id}/archive', [AdminRequestTrackerController::class, 'archive'])->whereNumber('id');
     Route::post('/{id}/restore', [AdminRequestTrackerController::class, 'restore'])->whereNumber('id');
+    Route::post('/{id}/reopen', [AdminRequestTrackerController::class, 'reopen'])->whereNumber('id');
     Route::post('/{id}/note', [AdminRequestTrackerController::class, 'addNote'])->whereNumber('id');
 });

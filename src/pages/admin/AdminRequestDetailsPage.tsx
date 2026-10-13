@@ -5,6 +5,7 @@ import {
   cancelRequestApi,
   archiveRequestApi,
   restoreRequestApi,
+  reopenRequestApi,
   addAdminNoteApi,
   TrackerPrDetail,
 } from '../../api/admin/requestTracker';
@@ -73,6 +74,12 @@ export const AdminRequestDetailsPage: React.FC = () => {
 
   const [restoreModalOpen, setRestoreModalOpen] = useState(false);
   const [restoreSubmitting, setRestoreSubmitting] = useState(false);
+
+  const [reopenModalOpen, setReopenModalOpen] = useState(false);
+  const [reopenTargetStatus, setReopenTargetStatus] = useState('PENDING_PROCUREMENT_APPROVAL');
+  const [reopenReason, setReopenReason] = useState('إلغاء الرفض الخاطئ وإعادة الطلب لمراجعة مدير المشتريات (أ. أحمد بدوي)');
+  const [reopenSubmitting, setReopenSubmitting] = useState(false);
+  const [reopenError, setReopenError] = useState<string | null>(null);
 
   const [noteModalOpen, setNoteModalOpen] = useState(false);
   const [noteText, setNoteText] = useState('');
@@ -146,6 +153,21 @@ export const AdminRequestDetailsPage: React.FC = () => {
       setError(parseApiError(err).message);
     } finally {
       setRestoreSubmitting(false);
+    }
+  };
+
+  const handleReopen = async () => {
+    setReopenSubmitting(true);
+    setReopenError(null);
+    try {
+      await reopenRequestApi(prId, reopenTargetStatus, reopenReason.trim());
+      setReopenModalOpen(false);
+      setActionSuccess('تم إلغاء الرفض وإعادة الطلب بنجاح إلى مرحلة مراجعة مدير المشتريات.');
+      await loadData();
+    } catch (err: unknown) {
+      setReopenError(parseApiError(err).message);
+    } finally {
+      setReopenSubmitting(false);
     }
   };
 
@@ -233,6 +255,16 @@ export const AdminRequestDetailsPage: React.FC = () => {
           <Button variant="outline" size="sm" onClick={() => setNoteModalOpen(true)}>
             📝 إضافة ملاحظة
           </Button>
+          {pr.admin_actions.can_reopen && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setReopenModalOpen(true)}
+              className="!bg-emerald-600 hover:!bg-emerald-500 text-white font-bold shadow-md shadow-emerald-950/40"
+            >
+              ↩️ إلغاء الرفض / استئناف الطلب
+            </Button>
+          )}
           {pr.admin_actions.can_restore && (
             <Button variant="secondary" size="sm" onClick={() => setRestoreModalOpen(true)}>
               ♻️ استعادة الطلب
@@ -277,7 +309,7 @@ export const AdminRequestDetailsPage: React.FC = () => {
               {pr.status === 'CANCELLED' ? '🚫' : pr.status === 'REJECTED' ? '❌' : pr.days_in_stage >= 3 ? '⏳' : '⚡'}
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-black text-slate-300">المسؤول الحالي عن الخطوة:</span>
                 {pr.current_responsible ? (
                   <span className="text-xs font-black text-cyan-300 bg-cyan-950/60 border border-cyan-800/40 rounded-lg px-2 py-0.5">
@@ -285,6 +317,15 @@ export const AdminRequestDetailsPage: React.FC = () => {
                   </span>
                 ) : (
                   <span className="text-xs text-slate-500 font-bold">لا يوجد (الطلب منتهي أو صادر)</span>
+                )}
+                {pr.admin_actions.can_reopen && (
+                  <button
+                    onClick={() => setReopenModalOpen(true)}
+                    className="mr-2 text-[11px] font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-950/80 border border-emerald-800/60 px-2.5 py-0.5 rounded-lg transition-colors flex items-center gap-1 shadow-sm"
+                  >
+                    <span>↩️</span>
+                    <span>إلغاء الرفض وإعادة الطلب الآن</span>
+                  </button>
                 )}
               </div>
               <p className="text-[11px] text-slate-400 mt-1">
@@ -792,6 +833,81 @@ export const AdminRequestDetailsPage: React.FC = () => {
               </Button>
               <Button variant="primary" size="sm" onClick={handleAddNote} disabled={noteSubmitting || noteText.trim().length < 3}>
                 {noteSubmitting ? 'جاري الإضافة...' : 'حفظ الملاحظة'}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Reopen / Un-reject Modal ── */}
+      {reopenModalOpen && (
+        <Modal
+          isOpen={reopenModalOpen}
+          onClose={() => !reopenSubmitting && setReopenModalOpen(false)}
+          title="↩️ إلغاء الرفض وإعادة فتح الطلب"
+        >
+          <div className="space-y-4 text-xs" dir="rtl">
+            {reopenError && <ErrorMessage error={reopenError} />}
+            <p className="text-slate-300 leading-relaxed">
+              يمكنك كمدير عام للنظام إلغاء حالة الرفض أو الإلغاء للطلب{' '}
+              <strong className="text-white font-mono">{pr.request_number}</strong> وإعادته مباشرة إلى مسار العمل
+              ليظهر في قائمة الانتظار للمسؤول المحدد.
+            </p>
+
+            <div>
+              <label className="block text-slate-300 font-bold mb-1">
+                المرحلة المستهدفة لإعادة الطلب إليها <span className="text-emerald-400">*</span>
+              </label>
+              <select
+                value={reopenTargetStatus}
+                onChange={e => setReopenTargetStatus(e.target.value)}
+                className="w-full rounded-xl border border-slate-700 bg-slate-900 p-2.5 text-xs text-slate-200 focus:border-cyan-500 focus:outline-none"
+              >
+                <option value="PENDING_PROCUREMENT_APPROVAL">
+                  🛒 مدير المشتريات (أ. أحمد بدوي) — PENDING_PROCUREMENT_APPROVAL
+                </option>
+                <option value="PENDING_EXECUTIVE_APPROVAL">
+                  🏛️ المدير التنفيذي — PENDING_EXECUTIVE_APPROVAL
+                </option>
+                <option value="SUBMITTED">
+                  🔍 مراجع القسم — SUBMITTED
+                </option>
+                <option value="DRAFT">
+                  📝 مسودة لمقدم الطلب — DRAFT
+                </option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-slate-300 font-bold mb-1">
+                سبب إعادة الفتح / ملاحظة التراجع
+              </label>
+              <textarea
+                value={reopenReason}
+                onChange={e => setReopenReason(e.target.value)}
+                placeholder="وضح سبب إعادة الفتح (مثلاً: تم الرفض بالخطأ ويتم استئناف دورة العمل)..."
+                rows={3}
+                className="w-full rounded-xl border border-slate-700 bg-slate-900 p-3 text-xs text-slate-200 focus:border-emerald-500 focus:outline-none"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setReopenModalOpen(false)}
+                disabled={reopenSubmitting}
+              >
+                إلغاء
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleReopen}
+                disabled={reopenSubmitting}
+                className="!bg-emerald-600 hover:!bg-emerald-500 text-white font-bold"
+              >
+                {reopenSubmitting ? 'جاري إعادة فتح الطلب...' : 'تأكيد وإعادة الطلب'}
               </Button>
             </div>
           </div>
