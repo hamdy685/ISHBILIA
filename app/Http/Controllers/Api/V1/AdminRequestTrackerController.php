@@ -479,6 +479,9 @@ class AdminRequestTrackerController extends Controller
             $fromStatus = $pr->status;
             $pr->status = $targetStatus;
             $pr->rejection_reason = null;
+            if ($targetStatus === 'PENDING_PROCUREMENT_APPROVAL') {
+                $pr->procurement_route = 'UNDECIDED';
+            }
             if ($pr->trashed()) {
                 $pr->restore();
             }

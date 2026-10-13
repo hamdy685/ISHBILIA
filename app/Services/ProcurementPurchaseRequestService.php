@@ -37,9 +37,6 @@ class ProcurementPurchaseRequestService
             $query->whereNotIn('status', ['REJECTED']);
         }])
         ->where('status', 'PENDING_PROCUREMENT_APPROVAL')
-        ->where(function ($route): void {
-            $route->whereNull('procurement_route')->orWhere('procurement_route', '!=', 'DIRECT');
-        })
         ->orderBy('updated_at', 'desc')
         ->paginate($perPage);
     }
@@ -187,10 +184,6 @@ class ProcurementPurchaseRequestService
     {
         if ($request->status !== 'PENDING_PROCUREMENT_APPROVAL') {
             throw new \RuntimeException('Only purchase requests pending procurement approval can be approved by the procurement manager.');
-        }
-
-        if ($request->procurement_route === 'DIRECT') {
-            throw new \RuntimeException('هذا طلب شراء مباشر؛ يجب إرساله إلى الحسابات أولًا، ولا يمكن إنشاء أمر الشراء قبل اعتماد الحسابات.');
         }
 
         if ($request->items()->count() === 0) {
