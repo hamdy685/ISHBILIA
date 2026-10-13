@@ -18,13 +18,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Find procurement manager user or fallback to admin
-        $userId = DB::table('users')
-            ->join('model_has_roles', 'users.id', '=', 'model_has_roles.model_id')
-            ->join('roles', 'model_has_roles.role_id', '=', 'roles.id')
-            ->whereIn('roles.slug', ['procurement_manager', 'admin'])
-            ->value('users.id')
-            ?? (DB::table('users')->first()?->id ?? 1);
+        $userId = DB::table('users')->first()?->id ?? 1;
 
         $nextWgSeq = 1;
         $existingMaxWg = DB::table('weighing_groups')->pluck('group_number');

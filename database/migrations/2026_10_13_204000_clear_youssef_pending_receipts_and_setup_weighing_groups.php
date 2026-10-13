@@ -18,12 +18,7 @@ return new class extends Migration
     public function up(): void
     {
         // 1. Identify admin or procurement manager user
-        $userId = DB::table('users')
-            ->join('model_has_roles', 'users.id', '=', 'model_has_roles.model_id')
-            ->join('roles', 'model_has_roles.role_id', '=', 'roles.id')
-            ->whereIn('roles.slug', ['procurement_manager', 'admin', 'general_manager'])
-            ->value('users.id')
-            ?? (DB::table('users')->first()?->id ?? 1);
+        $userId = DB::table('users')->first()?->id ?? 1;
 
         // Find engineer Youssef user id
         $youssefId = DB::table('users')
@@ -53,7 +48,6 @@ return new class extends Migration
             ->where(function ($q) {
                 $q->where('po_number', 'PO-58')
                   ->orWhere('po_number', 'like', '%PO-58%')
-                  ->orWhere('id', 58)
                   ->orWhereHas('purchaseRequest', function ($prQ) {
                       $prQ->whereIn('request_number', ['PR-51', 'PR-21'])
                           ->orWhere('id', 51);
@@ -128,7 +122,6 @@ return new class extends Migration
             ->where(function ($q) {
                 $q->where('po_number', 'PO-70')
                   ->orWhere('po_number', 'like', '%PO-70%')
-                  ->orWhere('id', 70)
                   ->orWhereHas('purchaseRequest', function ($prQ) {
                       $prQ->where('request_number', 'PR-40')
                           ->orWhere('id', 40);
