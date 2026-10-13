@@ -41,7 +41,7 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
 
   const { hasPermission, hasRole } = useAuth();
 
-  const isProcurementManager = hasRole('procurement_manager') || hasRole('admin');
+  const isProcurementManager = hasRole('procurement_manager') || hasRole('admin') || hasRole('general_manager');
 
   const hasSteelItems = React.useMemo(() => {
     return po?.items?.some((it) => {
