@@ -34,25 +34,25 @@ class HealthController extends Controller
             $info['prs'] = DB::table('purchase_requests')
                 ->whereIn('id', [21, 32, 40, 51])
                 ->orWhereIn('request_number', ['PR-21', 'PR-32', 'PR-40', 'PR-51'])
-                ->get(['id', 'request_number', 'land_plot_number', 'region', 'status']);
+                ->get();
 
             $info['pos'] = DB::table('purchase_orders')
                 ->whereIn('po_number', ['PO-58', 'PO-70'])
                 ->orWhereIn('purchase_request_id', [21, 32, 40, 51])
-                ->get(['id', 'po_number', 'purchase_request_id', 'status', 'delivery_status', 'supplier_id']);
+                ->get();
 
             $allPoIds = $info['pos']->pluck('id')->all();
 
             $info['po_items'] = DB::table('purchase_order_items')
                 ->whereIn('purchase_order_id', $allPoIds)
-                ->get(['id', 'purchase_order_id', 'item_description', 'quantity', 'uom', 'unit_price', 'line_total', 'item_reference', 'specifications']);
+                ->get();
 
             $youssefIds = $info['users_youssef']->pluck('id')->all();
 
             $info['youssef_receipts'] = DB::table('purchase_receipts')
                 ->whereIn('site_engineer_user_id', $youssefIds)
                 ->orWhereIn('purchase_order_id', $allPoIds)
-                ->get(['id', 'receipt_number', 'purchase_order_id', 'status', 'site_engineer_user_id']);
+                ->get();
 
             // 2. Identify the exact POs for PO-58 and PO-70
             $po58 = DB::table('purchase_orders')->where('po_number', 'PO-58')->first()
