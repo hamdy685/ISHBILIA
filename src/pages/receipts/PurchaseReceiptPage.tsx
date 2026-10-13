@@ -11,6 +11,7 @@ import { getDefaultDateFrom, getTodayInputDate, isDefaultTodayRange } from '../.
 import {
   approvePurchaseReceiptApi,
   createPurchaseReceiptApi,
+  cancelPurchaseReceiptApi,
   getAssignedReceiptsApi,
   getPurchaseReceiptArchiveApi,
   getPurchaseReceiptByIdApi,
@@ -452,6 +453,21 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
         items,
       });
       setSuccessMessage(`تم اعتماد إذن الاستلام ${receipt.receipt_number} وإرساله للمشتريات لإصدار أمر الشراء الفعلي.`);
+      await load();
+    } catch (err) {
+      setError(parseApiError(err).message);
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handleCancelReceipt = async (receipt: ReceiptRecord) => {
+    if (!confirm(`هل أنت متأكد من إلغاء إذن الاستلام ${receipt.receipt_number} وإعادة أمر الشراء ${receipt.purchase_order?.po_number || ''} للمخزن لإعادة الاستلام كوزنة مجمعة جديدة؟`)) return;
+    setSaving(receipt.id);
+    setError(null);
+    try {
+      await cancelPurchaseReceiptApi(receipt.id);
+      setSuccessMessage(`تم إلغاء إذن الاستلام ${receipt.receipt_number} بنجاح وإعادة أمر الشراء لطابور التوريد بالمخزن.`);
       await load();
     } catch (err) {
       setError(parseApiError(err).message);
@@ -1636,13 +1652,13 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                         </div>
 
                         {/* Big Submit Button */}
-                        <div className="pt-3 border-t border-slate-800 space-y-2">
+                        <div className="pt-3 border-t border-slate-800 flex flex-col sm:flex-row items-center gap-3">
                           <Button
                             variant="success"
                             size="lg"
                             isLoading={isSavingThis}
                             onClick={() => approveReceipt(receipt)}
-                            className="w-full font-black text-base sm:text-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 py-3.5 rounded-2xl shadow-xl shadow-emerald-950/60 flex items-center justify-center gap-2"
+                            className="flex-1 w-full font-black text-base sm:text-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 py-3.5 rounded-2xl shadow-xl shadow-emerald-950/60 flex items-center justify-center gap-2 cursor-pointer"
                           >
                             <span>✓</span>{' '}
                             {receipt.receipt_type === 'REQUESTER_OFFICE'
@@ -1650,6 +1666,17 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                               : isReviewer
                               ? 'اعتماد ومطابقة إذن الاستلام وإرساله للمشتريات لإصدار أمر الشراء الفعلي'
                               : 'اعتماد مطابق للموقع وإرسال للمشتريات لإصدار أمر الشراء الفعلي'}
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="lg"
+                            isLoading={isSavingThis}
+                            onClick={() => handleCancelReceipt(receipt)}
+                            className="w-full sm:w-auto font-bold text-xs sm:text-sm border border-red-500/50 hover:bg-red-950/50 text-red-300 py-3.5 px-5 rounded-2xl flex items-center justify-center gap-1.5 cursor-pointer"
+                            title="إلغاء هذا الإذن المعلق وإعادة أمر الشراء للمخزن لإعادة استلامه كوزنة مجمعة"
+                          >
+                            <span>↩️</span>
+                            <span>إلغاء وإعادة للمخزن</span>
                           </Button>
                         </div>
                       </div>

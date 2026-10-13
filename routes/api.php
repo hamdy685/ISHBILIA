@@ -444,6 +444,8 @@ Route::middleware('auth:sanctum')->prefix('purchase-receipts')->group(function (
         ->middleware('permission:purchase_receipt.edit|purchase_request.review');
     Route::post('/{id}/approve', [PurchaseReceiptController::class, 'approve'])
         ->middleware('permission:purchase_receipt.approve|purchase_request.review');
+    Route::post('/{id}/cancel', [PurchaseReceiptController::class, 'cancelPending'])
+        ->middleware('permission:purchase_receipt.edit|purchase_order.create|purchase_request.review');
 });
 
 // Steel Weighing Groups (تجميع وزنة الحديد)

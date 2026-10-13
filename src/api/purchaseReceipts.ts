@@ -175,3 +175,6 @@ export const confirmOfficeReceiptApi = async (
   payload?: { notes?: string; items?: Array<{ purchase_order_item_id: number; received_quantity: number; notes?: string }> },
 ): Promise<{ message: string; data: ReceiptRecord }> =>
   (await apiClient.post<{ message: string; data: ReceiptRecord }>(`/purchase-receipts/purchase-orders/${purchaseOrderId}/confirm-office`, payload || {})).data;
+
+export const cancelPurchaseReceiptApi = async (receiptId: number): Promise<{ message: string }> =>
+  (await apiClient.post<{ message: string }>(`/purchase-receipts/${receiptId}/cancel`)).data;

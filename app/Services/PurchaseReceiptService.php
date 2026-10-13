@@ -1037,6 +1037,41 @@ class PurchaseReceiptService
             $this->createOfficeReceipt($po, $requesterId);
         }
     }
+
+    public function cancelPendingReceipt(User $user, PurchaseReceipt $receipt): void
+    {
+        if (! $user->hasAnyRole(['admin', 'general_manager', 'procurement_manager', 'warehouse_keeper', 'site_engineer'])) {
+            throw new \Illuminate\Auth\Access\AuthorizationException('غير مصرح لك بإلغاء إذن الاستلام.');
+        }
+
+        if ($receipt->status === 'APPROVED') {
+            throw new \RuntimeException('لا يمكن إلغاء إذن استلام تم اعتماده نهائياً.');
+        }
+
+        DB::transaction(function () use ($receipt, $user) {
+            $po = $receipt->purchaseOrder;
+            if ($receipt->weighing_group_id) {
+                $wg = \App\Models\WeighingGroup::find($receipt->weighing_group_id);
+                if ($wg && $wg->status === 'RECEIVED') {
+                    $wg->update([
+                        'status' => 'PENDING_RECEIPT',
+                        'received_at' => null,
+                        'received_by_user_id' => null,
+                        'total_received_weight' => null,
+                        'weight_difference' => null,
+                    ]);
+                }
+            }
+
+            $receipt->items()->delete();
+            ApprovalHistory::where('target_type', PurchaseReceipt::class)->where('target_id', $receipt->id)->delete();
+            $receipt->delete();
+
+            if ($po) {
+                $po->update(['delivery_status' => 'PENDING']);
+            }
+        });
+    }
 }
 
 

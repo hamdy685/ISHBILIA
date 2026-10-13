@@ -351,4 +351,18 @@ class PurchaseReceiptController extends Controller
             abort(404, 'الصورة غير موجودة أو تعذر تحميلها.');
         }
     }
+
+    public function cancelPending(Request $request, int $receiptId)
+    {
+        $receipt = PurchaseReceipt::findOrFail($receiptId);
+        try {
+            $this->service->cancelPendingReceipt($request->user(), $receipt);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\Illuminate\Auth\Access\AuthorizationException $e) {
+            return response()->json(['message' => $e->getMessage()], 403);
+        }
+
+        return response()->json(['message' => 'تم إلغاء إذن الاستلام بنجاح وإعادة أمر الشراء لطابور التوريد.']);
+    }
 }
