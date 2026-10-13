@@ -6,8 +6,8 @@ import { ProcurementAnalyticsResponse } from './procurement';
 const BASE = '/general-manager/purchase-orders';
 const REQUESTS_BASE = '/general-manager/purchase-requests';
 
-export const getGeneralManagerPurchaseOrdersApi = async (): Promise<PurchaseOrder[]> =>
-  (await apiClient.get<{ data: PurchaseOrder[] }>(BASE)).data.data;
+export const getGeneralManagerPurchaseOrdersApi = async (params?: { per_page?: number | string; all?: boolean }): Promise<PurchaseOrder[]> =>
+  (await apiClient.get<{ data: PurchaseOrder[] }>(BASE, { params: { per_page: 'all', all: true, ...params } })).data.data;
 
 export const getGeneralManagerPurchaseOrderApi = async (id: number): Promise<PurchaseOrder> =>
   (await apiClient.get<{ data: PurchaseOrder }>(`${BASE}/${id}`)).data.data;

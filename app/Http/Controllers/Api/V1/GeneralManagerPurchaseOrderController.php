@@ -20,7 +20,11 @@ class GeneralManagerPurchaseOrderController extends Controller
      */
     public function index(Request $request): AnonymousResourceCollection
     {
-        $perPage = min((int) $request->query('per_page', 15), 100);
+        $perPageParam = $request->query('per_page');
+        $perPage = ($perPageParam === 'all' || $request->boolean('all'))
+            ? 'all'
+            : (int) ($perPageParam ?: 100);
+
         $pos = $this->gmService->getGmPurchaseOrders($perPage, $request->user());
         return PurchaseOrderResource::collection($pos);
     }

@@ -281,7 +281,7 @@ class ProcurementAnalyticsController extends Controller
             ->leftJoin('users as creator', 'creator.id', '=', 'po.created_by_user_id')
             ->where(function ($q) {
                 $q->whereNotNull('po.finalized_at')
-                  ->orWhereIn('po.status', ['APPROVED_BY_ACCOUNTING', 'FINAL_APPROVED'])
+                  ->orWhereIn('po.status', ['ISSUED', 'APPROVED_BY_ACCOUNTING', 'FINAL_APPROVED'])
                   ->orWhereExists(function ($sub) {
                       $sub->select(DB::raw(1))
                           ->from('supplier_invoices as si')

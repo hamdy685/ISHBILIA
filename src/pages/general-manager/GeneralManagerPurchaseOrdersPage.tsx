@@ -45,15 +45,19 @@ export const GeneralManagerPurchaseOrdersPage: React.FC = () => {
     return <div className="text-cyan-400 animate-pulse text-xs" dir="rtl">جاري تحميل البيانات...</div>;
   }
 
-  const departmentOptions = Array.from(new Map(pos.map((po) => [po.purchase_request?.department?.id, po.purchase_request?.department?.name]).filter(([id, name]) => id && name) as Array<[number, string]>));
+  const departmentOptions = Array.from(new Map(pos.map((po) => {
+    const id = po.department?.id ?? po.purchase_request?.target_department?.id ?? po.purchase_request?.department?.id;
+    const name = po.purchase_request?.target_department?.name || po.department?.name || po.purchase_request?.department?.name;
+    return [id, name];
+  }).filter(([id, name]) => id && name) as Array<[number, string]>));
   const supplierOptions = Array.from(new Map(pos.map((po) => [po.supplier?.id || po.supplier_id, po.supplier?.company_name]).filter(([id, name]) => id && name) as Array<[number, string]>));
   const normalizedSearch = searchTerm.trim().toLowerCase();
   const filteredPos = pos.filter((po) => {
     const supplier = po.supplier?.company_name || '';
-    const department = po.purchase_request?.department?.name || '';
+    const department = po.purchase_request?.target_department?.name || po.purchase_request?.department?.name || po.department?.name || '';
     const date = po.created_at ? po.created_at.slice(0, 10) : '';
     const searchText = [po.po_number, supplier, department].filter(Boolean).join(' ').toLocaleLowerCase('ar-EG');
-    const departmentId = po.purchase_request?.department?.id;
+    const departmentId = po.department?.id ?? po.purchase_request?.target_department?.id ?? po.purchase_request?.department?.id;
     const supplierId = po.supplier?.id || po.supplier_id;
     const ignoreDefaultDateRangeForSearch = Boolean(normalizedSearch) && isDefaultTodayRange(dateFrom, dateTo);
     const matchesDate = ignoreDefaultDateRangeForSearch || ((!dateFrom || date >= dateFrom) && (!dateTo || date <= dateTo));

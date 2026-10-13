@@ -97,8 +97,7 @@ export const GeneralManagerDashboardPage: React.FC = () => {
 
   const isActualPo = (p: any) =>
     Boolean(p.finalized_at) ||
-    ['APPROVED_BY_ACCOUNTING', 'FINAL_APPROVED'].includes(p.status) ||
-    (p.status === 'ISSUED' && Boolean(p.finalized_at));
+    ['ISSUED', 'APPROVED_BY_ACCOUNTING', 'FINAL_APPROVED'].includes(p.status);
 
   const actualPos = filteredPos.filter(isActualPo);
   const totalValue = actualPos.reduce((acc, x) => acc + Number(x.grand_total || 0), 0);
