@@ -13,6 +13,7 @@ class GeneralManagerPurchaseOrderService
         $query = PurchaseOrder::with([
             'purchaseRequest.requester',
             'purchaseRequest.department',
+            'purchaseRequest.targetDepartment',
             'supplier',
             'createdBy',
             'accountingReviewer',
@@ -35,6 +36,7 @@ class GeneralManagerPurchaseOrderService
         $po = PurchaseOrder::with([
             'purchaseRequest.requester',
             'purchaseRequest.department',
+            'purchaseRequest.targetDepartment',
             'purchaseRequest.assignedReviewer',
             'purchaseRequest.approvalHistory.actor',
             'supplier',

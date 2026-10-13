@@ -61,7 +61,7 @@ export const GeneralManagerDashboardPage: React.FC = () => {
 
     return pos.filter((po) => {
       const createdAt = po.created_at ? new Date(po.created_at) : null;
-      const currentDepartmentId = po.department?.id ?? po.purchase_request?.department?.id;
+      const currentDepartmentId = po.department?.id ?? po.purchase_request?.target_department?.id ?? po.purchase_request?.department?.id;
       const currentSupplierId = po.supplier_id ?? po.supplier?.id;
       const matchesFrom = !from || (!!createdAt && createdAt >= from);
       const matchesTo = !to || (!!createdAt && createdAt <= to);
@@ -74,8 +74,8 @@ export const GeneralManagerDashboardPage: React.FC = () => {
   const departmentOptions = useMemo(() => {
     const options = new Map<string, string>();
     pos.forEach((po) => {
-      const id = po.department?.id ?? po.purchase_request?.department?.id;
-      const name = po.department?.name || po.purchase_request?.department?.name;
+      const id = po.department?.id ?? po.purchase_request?.target_department?.id ?? po.purchase_request?.department?.id;
+      const name = po.purchase_request?.target_department?.name || po.department?.name || po.purchase_request?.department?.name;
       if (id && name) options.set(String(id), name);
     });
     return Array.from(options, ([id, name]) => ({ id, name }));
@@ -106,7 +106,7 @@ export const GeneralManagerDashboardPage: React.FC = () => {
 
   // القسم Spend Breakdown (Actual POs only to prevent inflated numbers)
   const deptSpendMap = actualPos.reduce((acc: Record<string, number>, p) => {
-    const deptName = p.purchase_request?.department?.name || 'عام';
+    const deptName = p.purchase_request?.target_department?.name || p.purchase_request?.department?.name || p.department?.name || 'عام';
     acc[deptName] = (acc[deptName] || 0) + Number(p.grand_total || 0);
     return acc;
   }, {});

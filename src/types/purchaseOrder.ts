@@ -128,6 +128,11 @@ export interface PurchaseOrder {
       name: string;
       code?: string;
     };
+    target_department?: {
+      id: number;
+      name: string;
+      code?: string;
+    } | null;
     items?: Array<{
       id: number;
       item_description: string;

@@ -74,8 +74,12 @@ class ProcurementAnalyticsController extends Controller
                 }
             })
             ->when($allowedDepartmentCodes !== null, function ($q) use ($allowedDepartmentCodes) {
-                $q->whereHas('purchaseRequest.department', function ($dq) use ($allowedDepartmentCodes) {
-                    $dq->whereIn('code', $allowedDepartmentCodes);
+                $q->where(function ($subQ) use ($allowedDepartmentCodes) {
+                    $subQ->whereHas('purchaseRequest.targetDepartment', function ($dq) use ($allowedDepartmentCodes) {
+                        $dq->whereIn('code', $allowedDepartmentCodes);
+                    })->orWhereHas('purchaseRequest.department', function ($dq) use ($allowedDepartmentCodes) {
+                        $dq->whereIn('code', $allowedDepartmentCodes);
+                    });
                 });
             })
             ->when($user->hasRole('execution_manager'), function ($q) use ($user) {
@@ -120,8 +124,12 @@ class ProcurementAnalyticsController extends Controller
             ->actualPo()
             ->whereNotIn('status', ['REJECTED', 'PO_DRAFT', 'PENDING_ACTUAL_PO'])
             ->when($allowedDepartmentCodes !== null, function ($q) use ($allowedDepartmentCodes) {
-                $q->whereHas('purchaseRequest.department', function ($dq) use ($allowedDepartmentCodes) {
-                    $dq->whereIn('code', $allowedDepartmentCodes);
+                $q->where(function ($subQ) use ($allowedDepartmentCodes) {
+                    $subQ->whereHas('purchaseRequest.targetDepartment', function ($dq) use ($allowedDepartmentCodes) {
+                        $dq->whereIn('code', $allowedDepartmentCodes);
+                    })->orWhereHas('purchaseRequest.department', function ($dq) use ($allowedDepartmentCodes) {
+                        $dq->whereIn('code', $allowedDepartmentCodes);
+                    });
                 });
             })
             ->when($user->hasRole('execution_manager'), function ($q) use ($user) {
@@ -135,13 +143,13 @@ class ProcurementAnalyticsController extends Controller
             : ($actualOnly ? (clone $actualPurchaseOrderQuery) : (clone $basePurchaseOrderQuery));
 
         $filteredPurchaseOrders = $filteredPurchaseOrderQuery
-            ->with(['purchaseRequest.department', 'supplier', 'createdBy.department', 'items', 'purchaseReceipts.items', 'supplierInvoices'])
+            ->with(['purchaseRequest.department', 'purchaseRequest.targetDepartment', 'supplier', 'createdBy.department', 'items', 'purchaseReceipts.items', 'supplierInvoices'])
             ->orderByDesc('created_at')
             ->limit(500)
             ->get();
 
         $approvedRequestQuery = PurchaseRequest::query()
-            ->with(['requester', 'department'])
+            ->with(['requester', 'department', 'targetDepartment'])
             ->whereIn('status', ['PENDING_PROCUREMENT_APPROVAL', 'APPROVED_BY_PROCUREMENT'])
             ->whereDoesntHave('purchaseOrders', function ($query): void {
                 $query->whereNotIn('status', ['REJECTED']);
@@ -149,8 +157,12 @@ class ProcurementAnalyticsController extends Controller
             ->when($startDate !== null, fn ($query) => $query->where('created_at', '>=', $startDate))
             ->when($endDate !== null, fn ($query) => $query->where('created_at', '<=', $endDate))
             ->when($allowedDepartmentCodes !== null, function ($q) use ($allowedDepartmentCodes) {
-                $q->whereHas('department', function ($dq) use ($allowedDepartmentCodes) {
-                    $dq->whereIn('code', $allowedDepartmentCodes);
+                $q->where(function ($subQ) use ($allowedDepartmentCodes) {
+                    $subQ->whereHas('targetDepartment', function ($dq) use ($allowedDepartmentCodes) {
+                        $dq->whereIn('code', $allowedDepartmentCodes);
+                    })->orWhereHas('department', function ($dq) use ($allowedDepartmentCodes) {
+                        $dq->whereIn('code', $allowedDepartmentCodes);
+                    });
                 });
             });
 
@@ -173,7 +185,7 @@ class ProcurementAnalyticsController extends Controller
         $totalInvoicedAmount = (float) DB::table('supplier_invoices as si')
             ->join('purchase_orders as po', 'po.id', '=', 'si.purchase_order_id')
             ->leftJoin('purchase_requests as pr', 'pr.id', '=', 'po.purchase_request_id')
-            ->leftJoin('departments as d', 'd.id', '=', 'pr.department_id')
+            ->leftJoin('departments as d', 'd.id', '=', DB::raw('COALESCE(pr.target_department_id, pr.department_id)'))
             ->whereNotIn('si.status', ['VOIDED', 'CANCELLED'])
             ->whereNotIn('po.status', ['REJECTED', 'PO_DRAFT', 'PENDING_ACTUAL_PO'])
             ->when($startDate !== null, function ($q) use ($startDate) {
@@ -265,7 +277,7 @@ class ProcurementAnalyticsController extends Controller
         // توزيع المشتريات على الأقسام يقتصر على أوامر الشراء الفعلية المعتمدة
         $departmentMetrics = DB::table('purchase_orders as po')
             ->leftJoin('purchase_requests as pr', 'pr.id', '=', 'po.purchase_request_id')
-            ->leftJoin('departments as d', 'd.id', '=', 'pr.department_id')
+            ->leftJoin('departments as d', 'd.id', '=', DB::raw('COALESCE(pr.target_department_id, pr.department_id)'))
             ->leftJoin('users as creator', 'creator.id', '=', 'po.created_by_user_id')
             ->where(function ($q) {
                 $q->whereNotNull('po.finalized_at')
@@ -285,8 +297,8 @@ class ProcurementAnalyticsController extends Controller
                 $q->where('po.created_at', '<=', $endDate);
             })
             ->when($allowedDepartmentCodes !== null, fn ($query) => $query->whereIn('d.code', $allowedDepartmentCodes))
-            ->selectRaw('COALESCE(pr.department_id, creator.department_id, 0) as department_id, COUNT(DISTINCT po.id) as row_count, COALESCE(SUM(po.grand_total), 0) as total_value')
-            ->groupByRaw('COALESCE(pr.department_id, creator.department_id, 0)')
+            ->selectRaw('COALESCE(pr.target_department_id, pr.department_id, creator.department_id, 0) as department_id, COUNT(DISTINCT po.id) as row_count, COALESCE(SUM(po.grand_total), 0) as total_value')
+            ->groupByRaw('COALESCE(pr.target_department_id, pr.department_id, creator.department_id, 0)')
             ->get();
         $departmentLookup = Department::query()
             ->whereIn('id', $departmentMetrics->pluck('department_id')->filter(fn ($id) => (int) $id > 0)->unique()->values())
@@ -403,7 +415,7 @@ class ProcurementAnalyticsController extends Controller
                     'supplier_phone' => $po->supplier?->phone ?? null,
                     'payment_terms' => $po->supplier?->payment_terms ?? null,
                     'request_number' => $po->purchaseRequest?->request_number ?? 'مباشر',
-                    'department_name' => $po->purchaseRequest?->department?->name ?? $po->createdBy?->department?->name ?? 'غير محدد',
+                    'department_name' => $po->purchaseRequest?->targetDepartment?->name ?? $po->purchaseRequest?->department?->name ?? $po->createdBy?->department?->name ?? 'غير محدد',
                     'created_at' => $po->created_at?->toIso8601String(),
                     'updated_at' => $po->updated_at?->toIso8601String(),
                     'items' => $po->items->map(function ($item) {
@@ -434,7 +446,7 @@ class ProcurementAnalyticsController extends Controller
                     'request_number' => $requestModel->request_number,
                     'status' => $requestModel->status,
                     'requester_name' => $requestModel->requester?->name,
-                    'department_name' => $requestModel->department?->name,
+                    'department_name' => $requestModel->targetDepartment?->name ?? $requestModel->department?->name,
                     'updated_at' => $requestModel->updated_at?->toIso8601String(),
                 ];
             })->values(),
