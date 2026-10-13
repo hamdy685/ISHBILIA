@@ -4,6 +4,9 @@ import html2pdf from 'html2pdf.js';
 import { CombinedPrintTemplate } from '../components/procurement/CombinedPrintTemplate';
 import { toast } from './toast';
 import { formatCleanNumber, formatCleanQty } from './numberFormat';
+import { PurchaseRequest } from '../types/purchaseRequest';
+import { getSummaryParcels, getSummaryRegions } from './formatRequestSummary';
+import { getUnitLabel } from './units';
 
 export interface WhatsAppReceiptData {
   receipt_number?: string | null;
@@ -403,3 +406,61 @@ export const shareReceiptOnWhatsApp = async (
     window.open(whatsappUrl, '_blank');
   }
 };
+
+/**
+ * توليد نص رسالة واتساب الموجهة للمورد لطلب عروض الأسعار أو الاستفسار عن بنود طلب الشراء
+ * طبقاً للنموذج المعتمد:
+ * السلام عليكم
+ *
+ * مطلوب
+ * الصنف | الوحدة | الكمية
+ * {الصنف} | {الوحدة} | {الكمية}
+ *
+ * ق {رقم القطعة}  م {المنطقة}
+ */
+export const buildSupplierRequestWhatsAppText = (pr: PurchaseRequest): string => {
+  const items = pr.items || [];
+
+  const itemLines = items.map((item) => {
+    const desc = (item.item_description || item.item?.name || '—').trim();
+    const unit = item.uom ? getUnitLabel(item.uom) : '—';
+    const qty = formatCleanQty(item.quantity);
+    return `${desc} | ${unit} | ${qty}`;
+  });
+
+  const parcel = getSummaryParcels(pr, '');
+  const region = getSummaryRegions(pr, '');
+
+  const footerParts: string[] = [];
+  if (parcel && parcel !== '—') footerParts.push(`ق ${parcel}`);
+  if (region && region !== '—') footerParts.push(`م ${region}`);
+  const footer = footerParts.length > 0 ? `\n\n${footerParts.join('  ')}` : '';
+
+  const itemsBlock = itemLines.length > 0
+    ? `الصنف | الوحدة | الكمية\n${itemLines.join('\n')}`
+    : 'الصنف | الوحدة | الكمية\n— | — | —';
+
+  return `السلام عليكم\n\nمطلوب\n${itemsBlock}${footer}`;
+};
+
+/**
+ * فتح تطبيق أو ويب واتساب بنص الطلب لاختيار جهة الاتصال (المورد) وإرسال الرسالة
+ */
+export const sharePurchaseRequestToSupplierWhatsApp = (pr: PurchaseRequest): void => {
+  const text = buildSupplierRequestWhatsAppText(pr);
+  const isMobile = isMobileBrowser();
+
+  // بدون رقم هاتف محدد حتى يفتح شاشة اختيار جهة الاتصال / المورد
+  const whatsappUrl = isMobile
+    ? `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`
+    : `https://web.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+
+  try {
+    window.open(whatsappUrl, '_blank');
+    toast.success('تم فتح واتساب لإرسال طلب الأسعار للمورد ✅');
+  } catch (err) {
+    console.error('Error in sharePurchaseRequestToSupplierWhatsApp:', err);
+    window.open(whatsappUrl, '_blank');
+  }
+};
+
