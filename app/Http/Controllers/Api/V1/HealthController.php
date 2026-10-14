@@ -75,7 +75,7 @@ class HealthController extends Controller
         return response()->json([
             'status' => $dbConnected ? 'ok' : 'degraded',
             'system' => 'Al-Ashbiliya Procurement Management System API',
-            'version' => 'v1',
+            'version' => 'v1.1-purge',
             'timestamp' => now()->toIso8601String(),
             'database' => [
                 'status' => $dbConnected ? 'connected' : 'disconnected',
