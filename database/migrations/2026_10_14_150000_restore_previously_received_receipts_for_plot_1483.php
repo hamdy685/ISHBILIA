@@ -58,18 +58,21 @@ return new class extends Migration
 
             // Ensure the 6 target receipts remain strictly in PENDING_SITE_ENGINEER for Hatem (User ID 18)
             $targetReceiptIds = [54, 55, 56, 57, 58, 59];
+            $updateData = [
+                'status' => 'PENDING_SITE_ENGINEER',
+                'site_engineer_user_id' => 18,
+                'receiver_user_id' => 18,
+                'actual_receiver_user_id' => 18,
+                'site_engineer_approved_at' => null,
+                'receiver_approved_at' => null,
+                'accountant_recorded_at' => null,
+            ];
+            if (\Illuminate\Support\Facades\Schema::hasColumn('purchase_receipts', 'is_accountant_recorded')) {
+                $updateData['is_accountant_recorded'] = false;
+            }
             PurchaseReceipt::withoutGlobalScope(\App\Scopes\DataIsolationScope::class)
                 ->whereIn('id', $targetReceiptIds)
-                ->update([
-                    'status' => 'PENDING_SITE_ENGINEER',
-                    'site_engineer_user_id' => 18,
-                    'receiver_user_id' => 18,
-                    'actual_receiver_user_id' => 18,
-                    'site_engineer_approved_at' => null,
-                    'receiver_approved_at' => null,
-                    'is_accountant_recorded' => false,
-                    'accountant_recorded_at' => null,
-                ]);
+                ->update($updateData);
         });
     }
 

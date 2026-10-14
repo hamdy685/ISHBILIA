@@ -112,24 +112,6 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
 
   const handleScaleWeightChange = (order: ReceiptPurchaseOrder, totalWeightStr: string) => {
     setScaleTicketWeights((prev) => ({ ...prev, [order.id]: totalWeightStr }));
-    const totalWeight = parseFloat(totalWeightStr);
-    const activeWg = order.weighing_groups?.find((wg) => wg.status === 'PENDING_RECEIPT');
-    if (!activeWg || isNaN(totalWeight) || totalWeight <= 0) return;
-
-    const orderedTotal = Number(activeWg.total_ordered_weight) || 0;
-    if (orderedTotal <= 0) return;
-
-    // Distribute total scale weight proportionally across individual rebar items
-    setQuantities((prev) => {
-      const next = { ...prev };
-      activeWg.items?.forEach((wgItem) => {
-        const itemOrdered = Number(wgItem.ordered_weight) || 0;
-        const ratio = itemOrdered / orderedTotal;
-        const distributed = Math.round(totalWeight * ratio * 1000) / 1000;
-        next[`${order.id}-${wgItem.purchase_order_item_id}`] = String(distributed);
-      });
-      return next;
-    });
   };
 
   const today = getTodayInputDate();
@@ -386,6 +368,8 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
 
   const submitWarehouseReceipt = async (order: ReceiptPurchaseOrder) => {
     const activeWg = order.weighing_groups?.find((wg) => wg.status === 'PENDING_RECEIPT');
+    let scaleWeightVal: number | undefined;
+
     if (activeWg) {
       const rawScaleVal = scaleTicketWeights[order.id];
       const scaleWeight = parseFloat(rawScaleVal !== undefined && rawScaleVal.trim() !== '' ? rawScaleVal : String(activeWg.total_ordered_weight));
@@ -393,30 +377,26 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
         setError('يرجى إدخال وزن ميزان البسكول بالطن في المربع الإجمالي (أكبر من صفر).');
         return;
       }
-      const orderedTotal = Number(activeWg.total_ordered_weight) || 1;
+      scaleWeightVal = scaleWeight;
       (order.items || []).forEach((item) => {
-        const key = `${order.id}-${item.id}`;
-        const itemOrdered = Number(item.quantity) || 0;
-        const ratio = orderedTotal > 0 ? itemOrdered / orderedTotal : 1 / (order.items?.length || 1);
-        const distributed = Math.round(scaleWeight * ratio * 1000) / 1000;
-        quantities[key] = String(distributed);
+        quantities[`${order.id}-${item.id}`] = String(item.quantity || 0);
       });
       scaleTicketWeights[order.id] = String(scaleWeight);
-    }
+    } else {
+      const hasUnentered = (order.items || []).some((item) => {
+        const q = quantities[`${order.id}-${item.id}`];
+        return q === undefined || q === null || q.trim() === '';
+      });
 
-    const hasUnentered = (order.items || []).some((item) => {
-      const q = quantities[`${order.id}-${item.id}`];
-      return q === undefined || q === null || q.trim() === '';
-    });
-
-    if (hasUnentered) {
-      setError('يرجى إدخال الكميات المستلمة فعلياً لجميع الأصناف قبل تأكيد الاستلام.');
-      return;
+      if (hasUnentered) {
+        setError('يرجى إدخال الكميات المستلمة فعلياً لجميع الأصناف قبل تأكيد الاستلام.');
+        return;
+      }
     }
 
     const items = (order.items || []).map((item) => ({
       purchase_order_item_id: item.id,
-      received_quantity: Number(quantities[`${order.id}-${item.id}`]),
+      received_quantity: Number(quantities[`${order.id}-${item.id}`] ?? item.quantity ?? 0),
       notes: itemNotes[`${order.id}-${item.id}`] || undefined,
     }));
 
@@ -431,8 +411,6 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
     try {
       const photo = receiptPhotos[order.id];
       const actualReceiverName = actualReceivers[order.id]?.trim() || undefined;
-      const activeWg = order.weighing_groups?.find((wg) => wg.status === 'PENDING_RECEIPT');
-      const scaleWeightVal = activeWg && scaleTicketWeights[order.id] ? parseFloat(scaleTicketWeights[order.id]) : undefined;
 
       await createPurchaseReceiptApi(order.id, { 
         items, 
@@ -441,7 +419,7 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
         photo_name: photo?.name,
         actual_receiver_name: actualReceiverName,
         weighing_group_id: activeWg?.id,
-        scale_ticket_weight: scaleWeightVal && !isNaN(scaleWeightVal) ? scaleWeightVal : undefined,
+        scale_ticket_weight: scaleWeightVal,
       });
       setSuccessMessage(`تم تسجيل استلام أمر الشراء ${order.po_number} وإرساله للمستلم/مهندس الموقع للفحص والاعتماد.`);
       await load();
@@ -453,9 +431,12 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
   };
 
   const approveReceipt = async (receipt: ReceiptRecord) => {
+    const isWeighing = Boolean(receipt.weighing_group || receipt.receipt_type === 'STEEL_WEIGHING_GROUP');
     const items = (receipt.items || []).map((item) => ({
       id: item.id,
-      received_quantity: Number(quantities[`receipt-${receipt.id}-${item.id}`] ?? item.received_quantity),
+      received_quantity: isWeighing
+        ? Number(item.received_quantity ?? item.ordered_quantity ?? 0)
+        : Number(quantities[`receipt-${receipt.id}-${item.id}`] ?? item.received_quantity),
       notes: itemNotes[`receipt-${receipt.id}-${item.id}`] || undefined,
     }));
 
@@ -820,6 +801,9 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                         const isMatch = hasEntered && Math.abs(diff) < 0.001;
                         const isShortage = hasEntered && diff < -0.001;
 
+                        const unitPrice = Number(activeWeighingGroup.unit_price || activeWeighingGroup.items?.[0]?.unit_price || 0);
+                        const totalCalculatedValue = hasEntered ? Math.round(enteredWeight * unitPrice * 100) / 100 : Math.round(orderedWeight * unitPrice * 100) / 100;
+
                         return (
                           <div className="rounded-3xl border-2 border-indigo-500/80 bg-gradient-to-br from-indigo-950/70 via-slate-950 to-slate-900 p-5 sm:p-6 shadow-2xl space-y-4">
                             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-indigo-500/30 pb-3">
@@ -833,26 +817,32 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                       وزنة حديد مجمعة (ميزان بسكول) — {activeWeighingGroup.group_number}
                                     </h4>
                                     <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-indigo-500/20 text-indigo-300 border border-indigo-500/50">
-                                      {activeWeighingGroup.items?.length || 0} أقطار مجمعة
+                                      {activeWeighingGroup.items?.length || 0} بنود مجمعة
                                     </span>
                                   </div>
                                   <p className="text-xs text-indigo-200/80 mt-0.5">
-                                    تم تجميع بنود الحديد من نفس المورد لتسجيل وزن ميزان البسكول بدقة في مربع واحد وتوزيعه تلقائياً مع الاحتفاظ بكافة المقاسات وقطع الأراضي.
+                                    المورد: <strong className="text-white">{order.supplier?.company_name || '—'}</strong> | يتم استلام الشحنة كوزنة واحدة وإجمالي كمية واحدة دون توزيع نسبي.
                                   </p>
                                 </div>
                               </div>
-                              <div className="bg-slate-900/90 border border-indigo-500/40 px-3.5 py-1.5 rounded-xl font-mono text-xs sm:text-sm">
-                                <span className="text-slate-400">إجمالي الطلب: </span>
-                                <strong className="text-indigo-300 font-black">{activeWeighingGroup.total_ordered_weight} طن</strong>
+                              <div className="flex items-center gap-3 flex-wrap">
+                                <div className="bg-slate-900/90 border border-indigo-500/40 px-3.5 py-1.5 rounded-xl font-mono text-xs sm:text-sm">
+                                  <span className="text-slate-400">سعر الطن الموحد: </span>
+                                  <strong className="text-amber-300 font-black">{unitPrice.toLocaleString('en-US')} ج.م</strong>
+                                </div>
+                                <div className="bg-slate-900/90 border border-indigo-500/40 px-3.5 py-1.5 rounded-xl font-mono text-xs sm:text-sm">
+                                  <span className="text-slate-400">إجمالي الطلب: </span>
+                                  <strong className="text-indigo-300 font-black">{activeWeighingGroup.total_ordered_weight} طن</strong>
+                                </div>
                               </div>
                             </div>
 
-                            {/* Scale Weight Input, Difference, and Auto Distribute */}
+                            {/* Scale Weight Input, Total Financial Value, and Difference */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
                               <div className="space-y-1.5">
                                 <label className="text-xs sm:text-sm font-black text-indigo-200 flex items-center gap-1.5">
                                   <span>🚚</span>
-                                  <span>إجمالي وزن ميزان البسكول (طن):</span>
+                                  <span>الكمية المستلمة فعلياً (ميزان بسكول):</span>
                                 </label>
                                 <div className="relative">
                                   <input
@@ -870,9 +860,24 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                 </div>
                               </div>
 
+                              {/* Real-time Calculated Total Financial Value */}
+                              <div className="space-y-1.5">
+                                <label className="text-xs sm:text-sm font-black text-emerald-300 block">
+                                  إجمالي قيمة الشحنة الفعلية:
+                                </label>
+                                <div className="h-12 flex items-center justify-between px-4 rounded-xl border-2 border-emerald-500/60 bg-emerald-950/50 font-black text-emerald-200">
+                                  <span className="text-xs font-mono text-emerald-300/80">
+                                    {hasEntered ? enteredWeight : orderedWeight} طن × {unitPrice.toLocaleString('en-US')}
+                                  </span>
+                                  <span className="font-mono text-base text-emerald-300 font-black">
+                                    {totalCalculatedValue.toLocaleString('en-US')} ج.م
+                                  </span>
+                                </div>
+                              </div>
+
                               {/* Difference Indicator */}
-                              <div>
-                                <label className="text-xs sm:text-sm font-black text-slate-300 block mb-1.5">
+                              <div className="space-y-1.5">
+                                <label className="text-xs sm:text-sm font-black text-slate-300 block">
                                   حالة المطابقة مع أمر الشراء:
                                 </label>
                                 {!hasEntered ? (
@@ -898,62 +903,6 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                   </div>
                                 )}
                               </div>
-
-                              {/* Proportional Distribute Button */}
-                              <div className="flex flex-col justify-end pt-5">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const w = scaleTicketWeights[order.id] || String(activeWeighingGroup.total_ordered_weight);
-                                    handleScaleWeightChange(order, w);
-                                  }}
-                                  className="h-12 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg hover:shadow-indigo-500/20 transition-all cursor-pointer"
-                                >
-                                  <span>🔄</span>
-                                  <span>توزيع الوزن تناسبياً على الأقطار</span>
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Breakdown Sub-table */}
-                            <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950/80 mt-2">
-                              <table className="w-full text-right text-xs">
-                                <thead className="bg-slate-900/90 text-slate-300 border-b border-slate-800 font-bold">
-                                  <tr>
-                                    <th className="p-2.5">المقاس / القطر</th>
-                                    <th className="p-2.5">رقم قطعة الأرض</th>
-                                    <th className="p-2.5">المنطقة</th>
-                                    <th className="p-2.5 text-center">الوزن المطلوب</th>
-                                    <th className="p-2.5 text-center">الوزن المستلم الفعلي</th>
-                                    <th className="p-2.5 text-left">سعر الطن</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-800/60">
-                                  {activeWeighingGroup.items?.map((wgItem) => {
-                                    const currentVal = quantities[`${order.id}-${wgItem.purchase_order_item_id}`] ?? String(wgItem.ordered_weight);
-                                    return (
-                                      <tr key={wgItem.id} className="hover:bg-slate-900/50">
-                                        <td className="p-2.5 font-black text-white">
-                                          {wgItem.size_or_diameter || wgItem.item_description}
-                                        </td>
-                                        <td className="p-2.5 font-mono text-cyan-300">
-                                          {wgItem.land_plot_number || '—'}
-                                        </td>
-                                        <td className="p-2.5 text-amber-300">{wgItem.region || '—'}</td>
-                                        <td className="p-2.5 text-center font-mono text-slate-300">
-                                          {wgItem.ordered_weight} طن
-                                        </td>
-                                        <td className="p-2.5 text-center font-mono font-black text-emerald-400">
-                                          {currentVal ? `${currentVal} طن` : <span className="text-slate-500">—</span>}
-                                        </td>
-                                        <td className="p-2.5 text-left font-mono text-slate-400">
-                                          {Number(wgItem.unit_price).toLocaleString('en-US')} ج.م
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
                             </div>
                           </div>
                         );
@@ -1536,14 +1485,75 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
 
                       {/* Items Cards */}
                       <div className="space-y-4">
-                        <h4 className="text-xs sm:text-sm font-black text-emerald-300 flex items-center gap-2">
-                          <span>{receipt.receipt_type === 'REQUESTER_OFFICE' ? '🏢' : '🏗️'}</span>
-                          <span>
-                            {receipt.receipt_type === 'REQUESTER_OFFICE'
-                              ? `بنود المستلزمات المكتبية المطلوب استلامها وفحصها (${receipt.items?.length || 0} صنف):`
-                              : `بنود الاستلام المطلوب فحصها هندسياً (${receipt.items?.length || 0} بنود):`}
-                          </span>
-                        </h4>
+                        {receipt.weighing_group || receipt.receipt_type === 'STEEL_WEIGHING_GROUP' ? (
+                          (() => {
+                            const wg = receipt.weighing_group;
+                            const totalOrd = Number(wg?.total_ordered_weight || receipt.items?.reduce((s, i) => s + Number(i.ordered_quantity || 0), 0) || 0);
+                            const totalRec = Number(wg?.total_received_weight || receipt.items?.reduce((s, i) => s + Number(i.received_quantity || 0), 0) || 0);
+                            const unitPrice = Number(wg?.unit_price || wg?.items?.[0]?.unit_price || receipt.items?.[0]?.purchase_order_item?.unit_price || 0);
+                            const totalVal = Math.round(totalRec * unitPrice * 100) / 100;
+                            const diff = Math.round((totalRec - totalOrd) * 1000) / 1000;
+
+                            return (
+                              <div className="rounded-2xl border-2 border-indigo-500/80 bg-slate-950/95 p-5 sm:p-6 space-y-4 shadow-xl">
+                                <div className="flex items-center justify-between gap-3 flex-wrap border-b border-indigo-500/30 pb-3">
+                                  <div className="flex items-center gap-3">
+                                    <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-500/20 text-indigo-300 text-2xl border border-indigo-500/40 shrink-0">
+                                      ⚖️
+                                    </span>
+                                    <div>
+                                      <h4 className="text-base sm:text-lg font-black text-white">
+                                        وزنة حديد مجمعة (ميزان بسكول) — {wg?.group_number || 'شحنة موحدة'}
+                                      </h4>
+                                      <p className="text-xs text-indigo-200/80 mt-0.5">
+                                        تم استلام الشحنة كوزنة واحدة وإجمالي كمية واحدة دون توزيع نسبي.
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className={`px-3 py-1 rounded-xl text-xs font-black border ${
+                                      Math.abs(diff) < 0.001
+                                        ? 'bg-emerald-950/80 border-emerald-500/70 text-emerald-300'
+                                        : diff > 0
+                                        ? 'bg-cyan-950/80 border-cyan-500/70 text-cyan-300'
+                                        : 'bg-amber-950/80 border-amber-500/70 text-amber-300'
+                                    }`}>
+                                      {Math.abs(diff) < 0.001 ? '✅ مطابق تماماً' : diff > 0 ? `📈 زيادة توريد (+${diff} طن)` : `⚠️ عجز توريد (${diff} طن)`}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs sm:text-sm">
+                                  <div className="rounded-xl border border-slate-800 bg-slate-900/90 p-3.5 space-y-1">
+                                    <span className="text-slate-400 block text-xs">إجمالي الكمية المطلوبة:</span>
+                                    <strong className="text-base font-black text-indigo-300">{totalOrd} طن</strong>
+                                  </div>
+                                  <div className="rounded-xl border border-emerald-500/50 bg-emerald-950/40 p-3.5 space-y-1">
+                                    <span className="text-emerald-400 block text-xs">إجمالي الكمية المستلمة (بسكول):</span>
+                                    <strong className="text-base font-black text-emerald-300">{totalRec} طن</strong>
+                                  </div>
+                                  <div className="rounded-xl border border-slate-800 bg-slate-900/90 p-3.5 space-y-1">
+                                    <span className="text-slate-400 block text-xs">سعر طن الفاتورة الموحد:</span>
+                                    <strong className="text-base font-black text-amber-300">{unitPrice.toLocaleString('en-US')} ج.م</strong>
+                                  </div>
+                                  <div className="rounded-xl border border-cyan-500/50 bg-cyan-950/40 p-3.5 space-y-1">
+                                    <span className="text-cyan-400 block text-xs">إجمالي القيمة المالية المستلمة:</span>
+                                    <strong className="text-base font-black text-cyan-300">{totalVal.toLocaleString('en-US')} ج.م</strong>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })()
+                        ) : (
+                          <>
+                            <h4 className="text-xs sm:text-sm font-black text-emerald-300 flex items-center gap-2">
+                              <span>{receipt.receipt_type === 'REQUESTER_OFFICE' ? '🏢' : '🏗️'}</span>
+                              <span>
+                                {receipt.receipt_type === 'REQUESTER_OFFICE'
+                                  ? `بنود المستلزمات المكتبية المطلوب استلامها وفحصها (${receipt.items?.length || 0} صنف):`
+                                  : `بنود الاستلام المطلوب فحصها هندسياً (${receipt.items?.length || 0} بنود):`}
+                              </span>
+                            </h4>
 
                         <div className="space-y-3.5">
                           {(receipt.items || []).map((item, idx) => {
@@ -1665,6 +1675,8 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                             );
                           })}
                         </div>
+                      </>
+                    )}
 
                         {/* General Site Notes */}
                         <div className="space-y-1.5 pt-2">
@@ -1933,7 +1945,47 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                   {/* Expanded Items Cards in Archive */}
                   {isExpanded && (
                     <div className="space-y-3 pt-3 border-t border-slate-800 animate-fade-in">
-                      <h4 className="text-xs sm:text-sm font-bold text-slate-300">تفاصيل البنود والكميات المسجلة في هذا الإذن:</h4>
+                      {receipt.weighing_group || receipt.receipt_type === 'STEEL_WEIGHING_GROUP' ? (
+                        (() => {
+                          const wg = receipt.weighing_group;
+                          const totalOrd = Number(wg?.total_ordered_weight || receipt.items?.reduce((s, i) => s + Number(i.ordered_quantity || 0), 0) || 0);
+                          const totalRec = Number(wg?.total_received_weight || receipt.items?.reduce((s, i) => s + Number(i.received_quantity || 0), 0) || 0);
+                          const unitPrice = Number(wg?.unit_price || wg?.items?.[0]?.unit_price || receipt.items?.[0]?.purchase_order_item?.unit_price || 0);
+                          const totalVal = Math.round(totalRec * unitPrice * 100) / 100;
+
+                          return (
+                            <div className="rounded-2xl border-2 border-indigo-500/80 bg-slate-950/90 p-4 sm:p-5 space-y-3">
+                              <div className="flex items-center justify-between flex-wrap gap-2 border-b border-indigo-500/30 pb-2.5">
+                                <span className="font-black text-sm text-white flex items-center gap-2">
+                                  <span>⚖️</span>
+                                  <span>وزنة حديد مجمعة (ميزان بسكول) — {wg?.group_number || 'شحنة موحدة'}</span>
+                                </span>
+                                <span className="text-xs font-mono font-bold text-indigo-300 bg-indigo-950/80 px-2.5 py-0.5 rounded-lg border border-indigo-700/60">
+                                  بند استلام موحد
+                                </span>
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs sm:text-sm">
+                                <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+                                  <span className="text-slate-400 block text-xs">إجمالي الكمية المطلوبة:</span>
+                                  <strong className="text-indigo-300 font-black text-sm">{totalOrd} طن</strong>
+                                </div>
+                                <div className="bg-emerald-950/40 p-3 rounded-xl border border-emerald-500/40">
+                                  <span className="text-emerald-400 block text-xs">إجمالي الكمية المستلمة (بسكول):</span>
+                                  <strong className="text-emerald-300 font-black text-sm">{totalRec} طن</strong>
+                                </div>
+                                <div className="bg-cyan-950/40 p-3 rounded-xl border border-cyan-500/40">
+                                  <span className="text-cyan-400 block text-xs">سعر طن الفاتورة والإجمالي:</span>
+                                  <strong className="text-cyan-300 font-black text-sm">
+                                    {unitPrice.toLocaleString('en-US')} ج.م / طن = {totalVal.toLocaleString('en-US')} ج.م
+                                  </strong>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()
+                      ) : (
+                        <>
+                          <h4 className="text-xs sm:text-sm font-bold text-slate-300">تفاصيل البنود والكميات المسجلة في هذا الإذن:</h4>
                       <div className="space-y-2.5">
                         {(receipt.items || []).map((item, idx) => (
                           <div key={item.id} className="rounded-xl border border-slate-800 bg-slate-950/80 p-3.5 space-y-2">
@@ -2013,8 +2065,10 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                           </div>
                         ))}
                       </div>
-                    </div>
+                    </>
                   )}
+                </div>
+              )}
                 </Card>
               );
             })

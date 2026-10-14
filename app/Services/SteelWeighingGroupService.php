@@ -295,6 +295,15 @@ class SteelWeighingGroupService
                 ]);
             }
 
+            // 3.5. Validate uniform unit_price rule: ALL items must share the exact same unit_price
+            $unitPrices = $selectedItems->map(fn ($it) => round((float) $it->unit_price, 2))->unique();
+            if ($unitPrices->count() > 1) {
+                throw ValidationException::withMessages([
+                    'items' => ['لا يمكن تجميع البنود لأن سعر الطن مختلف بين البنود.'],
+                ]);
+            }
+            $unifiedUnitPrice = (float) ($unitPrices->first() ?? 0);
+
             // 4. Validate no prior active weighing group for these items
             $alreadyGroupedIds = DB::table('weighing_group_items')
                 ->join('weighing_groups', 'weighing_group_items.weighing_group_id', '=', 'weighing_groups.id')
@@ -344,6 +353,8 @@ class SteelWeighingGroupService
                 'status'               => 'PENDING_RECEIPT',
                 'total_ordered_weight' => round($totalOrderedWeight, 3),
                 'uom'                  => 'TON',
+                'unit_price'           => $unifiedUnitPrice,
+                'total_amount'         => round($totalOrderedWeight * $unifiedUnitPrice, 2),
                 'notes'                => $notes,
                 'created_by_user_id'   => $user->id,
             ]);
@@ -433,38 +444,21 @@ class SteelWeighingGroupService
 
             $orderedTotal = (float) $group->total_ordered_weight;
             $diff = round($receivedTotalWeight - $orderedTotal, 3);
+            $unitPrice = (float) ($group->unit_price ?: ($group->items->first()?->unit_price ?? 0));
+            $receivedTotalAmount = round($receivedTotalWeight * $unitPrice, 2);
 
-            // Determine distribution across items
-            $totalDistributed = 0.0;
-            $itemsCount = $group->items->count();
-
-            foreach ($group->items as $idx => $wgItem) {
-                $itemReceived = null;
-                if (! empty($itemDistributions) && isset($itemDistributions[$wgItem->id])) {
-                    $itemReceived = round((float) $itemDistributions[$wgItem->id], 3);
-                } elseif (! empty($itemDistributions) && isset($itemDistributions[$wgItem->purchase_order_item_id])) {
-                    $itemReceived = round((float) $itemDistributions[$wgItem->purchase_order_item_id], 3);
-                } else {
-                    // Proportional distribution rule
-                    if ($orderedTotal > 0) {
-                        $ratio = (float) $wgItem->ordered_weight / $orderedTotal;
-                        $itemReceived = round($receivedTotalWeight * $ratio, 3);
-                    } else {
-                        $itemReceived = round($receivedTotalWeight / max(1, $itemsCount), 3);
-                    }
-                }
-
+            // Maintain internal items for tracking without proportional distortion
+            foreach ($group->items as $wgItem) {
                 $wgItem->update([
-                    'received_weight' => $itemReceived,
+                    'received_weight' => $wgItem->ordered_weight,
                 ]);
-
-                $totalDistributed += $itemReceived;
             }
 
-            // Update weighing group record
+            // Update weighing group record with received scale weight and exact total value
             $group->update([
                 'status'                => 'RECEIVED',
                 'total_received_weight' => round($receivedTotalWeight, 3),
+                'total_amount'          => $receivedTotalAmount,
                 'weight_difference'     => $diff,
                 'scale_ticket_photo'    => $scaleTicketPhoto ?: $group->scale_ticket_photo,
                 'receiver_notes'        => $receiverNotes,

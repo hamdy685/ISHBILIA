@@ -378,11 +378,15 @@ class PurchaseReceiptService
                     : round($totalReceivedWeight, 3);
 
                 $diff = round($finalTotalWeight - (float) $weighingGroup->total_ordered_weight, 3);
+                $unitPrice = (float) ($weighingGroup->unit_price ?: ($weighingGroup->items->first()?->unit_price ?? 0));
+                $receivedTotalAmount = round($finalTotalWeight * $unitPrice, 2);
+
                 $weighingGroup->update([
                     'status' => 'RECEIVED',
                     'received_at' => now(),
                     'received_by_user_id' => $warehouseKeeper->id,
                     'total_received_weight' => $finalTotalWeight,
+                    'total_amount' => $receivedTotalAmount,
                     'weight_difference' => $diff,
                     'scale_ticket_photo' => $photoData['path'] ?? $weighingGroup->scale_ticket_photo,
                     'receiver_notes' => $notes ?: $weighingGroup->receiver_notes,

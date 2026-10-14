@@ -26,6 +26,8 @@ export interface WeighingGroup {
   total_received_weight?: number | null;
   weight_difference?: number | null;
   uom: string;
+  unit_price?: number | null;
+  total_amount?: number | null;
   scale_ticket_photo?: string | null;
   notes?: string | null;
   receiver_notes?: string | null;

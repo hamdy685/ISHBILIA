@@ -127,6 +127,8 @@ class PurchasesReportController extends Controller
                 'supplierInvoices.purchaseReceipt.items.purchaseOrderItem.item',
                 'supplierInvoices.purchaseReceipt.items.purchaseOrderItem.prItem',
                 'supplierInvoices.createdBy',
+                'weighingGroups.items',
+                'purchaseReceipts.weighingGroup.items',
             ])
             ->when($actualOnly, function ($q) {
                 $q->actualPo();
@@ -289,8 +291,75 @@ class PurchasesReportController extends Controller
                 $poItems = $requestModel->items;
             }
 
+            // ── Consolidated Steel Weighing Groups (ميزان بسكول - وزنة حديد موحدة) ──
+            $activeWgs = ($order->weighingGroups ?? collect())->where('status', '!=', 'CANCELLED');
+            $groupedPoItemIds = $activeWgs->flatMap(fn ($wg) => $wg->items->pluck('purchase_order_item_id'))->all();
+
+            foreach ($activeWgs as $wg) {
+                $wgUnitPrice = (float) ($wg->unit_price ?: ($wg->items->first()?->unit_price ?? 0));
+                $wgOrderedQty = (float) $wg->total_ordered_weight;
+                $wgReceivedQty = $wg->total_received_weight !== null ? (float) $wg->total_received_weight : null;
+                $effectiveQty = $wgReceivedQty !== null ? $wgReceivedQty : $wgOrderedQty;
+                $wgLineTotal = round($effectiveQty * $wgUnitPrice, 2);
+
+                $wgPlots = $wg->items->pluck('land_plot_number')->filter()->unique()->implode(', ');
+                $wgRegions = $wg->items->pluck('region')->filter()->unique()->implode(', ');
+
+                $reportRows[] = [
+                    'id' => "PO-{$order->id}-WG-{$wg->id}",
+                    'invoice_id' => $primaryInvoice?->id,
+                    'receipt_id' => $targetReceipt?->id ?? $approvedReceipt?->id,
+                    'receipt_number' => $targetReceipt?->receipt_number ?? $approvedReceipt?->receipt_number,
+                    'photo_url' => $targetReceipt?->photo_url ?? $approvedReceipt?->photo_url ?? $wg->scale_ticket_photo,
+                    'has_receipt_attachment' => $hasReceiptAttachment || ! empty($wg->scale_ticket_photo),
+                    'receipt_view_allowed' => true,
+                    'purchase_order_id' => $order->id,
+                    'grand_total' => (float) $order->grand_total,
+                    // التواريخ
+                    'date_basis' => $dateBasis,
+                    'primary_date' => $primaryDate,
+                    'primary_date_formatted' => $primaryDate ? Carbon::parse($primaryDate)->format('d/m/Y') : '—',
+                    'po_date' => $poDate,
+                    'po_date_formatted' => $poDate ? Carbon::parse($poDate)->format('d/m/Y') : '—',
+                    'pr_date' => $prDate,
+                    'pr_date_formatted' => $prDate ? Carbon::parse($prDate)->format('d/m/Y') : '—',
+                    'delivery_date' => $deliveryDate,
+                    'delivery_date_formatted' => $deliveryDate ? Carbon::parse($deliveryDate)->format('d/m/Y') : '—',
+                    // الأرقام المرجعية
+                    'po_number' => $order->po_number,
+                    'po_number_short' => preg_replace('/^PO-\d{4}-0*/', '', $order->po_number) ?: $order->po_number,
+                    'pr_number' => $requestModel?->request_number,
+                    // تفاصيل الوزنة الموحدة
+                    'item_name' => "وزنة حديد مجمعة ({$wg->group_number})",
+                    'uom' => 'طن',
+                    'quantity' => $wgOrderedQty,
+                    'unit_price' => $wgUnitPrice,
+                    'total_price' => $wgLineTotal,
+                    'received_quantity' => $wgReceivedQty,
+                    'receipt_status' => $targetReceipt?->status ?? $approvedReceipt?->status,
+                    'supplier_name' => $order->supplier?->company_name ?? '—',
+                    'supplier_id' => $order->supplier_id,
+                    'parcel_reference' => $wgPlots ?: $defaultParcelRef,
+                    'region' => $wgRegions ?: $defaultRegion,
+                    'department_id' => $deptId,
+                    'department_name' => $deptName,
+                    'department_code' => $defaultDept?->code,
+                    'works' => $requestModel?->notes ?: 'وزنة حديد مجمعة (ميزان بسكول)',
+                    'invoice_number' => $primaryInvoice?->invoice_number,
+                    'accounting_status' => $primaryInvoice ? 'VERIFIED' : 'PENDING',
+                    'accounting_status_label' => $primaryInvoice ? 'مسجل ومطابق بالحسابات' : 'بانتظار التسجيل المحاسبي',
+                    'matching_status' => $primaryInvoice?->matching_status,
+                    'accountant_name' => $primaryInvoice?->createdBy?->name ?? null,
+                    'order_status' => $order->status,
+                    'created_at' => $order->created_at?->toIso8601String(),
+                ];
+            }
+
             if ($poItems->isNotEmpty()) {
                 foreach ($poItems as $poItem) {
+                    if (in_array($poItem->id, $groupedPoItemIds, true)) {
+                        continue; // تم إدراجه أعلاه في سطر الوزنة المجمعة الموحدة
+                    }
                     $prItem = $poItem->prItem ?? (property_exists($poItem, 'prItem') ? null : $poItem);
 
                     // الاستلام الفعلي بالموقع كمعلومة استرشادية للحسابات

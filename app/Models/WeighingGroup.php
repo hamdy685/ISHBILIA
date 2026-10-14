@@ -24,6 +24,8 @@ class WeighingGroup extends Model
         'total_received_weight',
         'weight_difference',
         'uom',
+        'unit_price',
+        'total_amount',
         'scale_ticket_photo',
         'notes',
         'receiver_notes',
@@ -38,6 +40,8 @@ class WeighingGroup extends Model
             'total_ordered_weight'  => 'decimal:3',
             'total_received_weight' => 'decimal:3',
             'weight_difference'     => 'decimal:3',
+            'unit_price'            => 'decimal:2',
+            'total_amount'          => 'decimal:2',
             'received_at'           => 'datetime',
         ];
     }

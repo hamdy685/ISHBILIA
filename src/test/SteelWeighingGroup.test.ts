@@ -26,11 +26,27 @@ describe('Steel Weighing Group (تجميع الوزنة) - Business Rules & Vali
     size_or_diameter: '16 مم',
     ordered_weight: 2.5,
     uom: 'TON',
-    unit_price: 38500,
-    line_total: 96250,
+    unit_price: 38000,
+    line_total: 95000,
     region: 'المنطقة الأولى',
     land_plot_number: 'قطعة 29',
     purpose: 'سقف الدور الثالث',
+    supplier_id: 10,
+    supplier_name: 'شركة حديد عز',
+  };
+
+  const mockRebarDifferentPrice: EligibleSteelItem = {
+    id: 106,
+    purchase_order_id: 50,
+    item_description: 'حديد تسليح قطر 10 مم',
+    size_or_diameter: '10 مم',
+    ordered_weight: 1.0,
+    uom: 'TON',
+    unit_price: 39500, // Different unit price!
+    line_total: 39500,
+    region: 'المنطقة الأولى',
+    land_plot_number: 'قطعة 29',
+    purpose: 'كمرات الدور الثالث',
     supplier_id: 10,
     supplier_name: 'شركة حديد عز',
   };
@@ -125,6 +141,12 @@ describe('Steel Weighing Group (تجميع الوزنة) - Business Rules & Vali
       return { valid: false, error: 'لا يمكن تجميع البنود لأن المورد مختلف.' };
     }
 
+    // 5. Strict Identical Unit Price Rule
+    const unitPrices = new Set(items.map((i) => Math.round(Number(i.unit_price) * 100) / 100));
+    if (unitPrices.size > 1) {
+      return { valid: false, error: 'لا يمكن تجميع البنود لأن سعر الطن مختلف بين البنود.' };
+    }
+
     const totalWeight = items.reduce((sum, it) => sum + Number(it.ordered_weight || 0), 0);
     return { valid: true, totalWeight: Math.round(totalWeight * 1000) / 1000 };
   };
@@ -201,8 +223,8 @@ describe('Steel Weighing Group (تجميع الوزنة) - Business Rules & Vali
     expect(mockRebar16.size_or_diameter).toBe('16 مم');
     expect(mockRebar16.land_plot_number).toBe('قطعة 29');
     expect(mockRebar16.region).toBe('المنطقة الأولى');
-    expect(mockRebar16.unit_price).toBe(38500);
-    expect(mockRebar16.line_total).toBe(96250);
+    expect(mockRebar16.unit_price).toBe(38000);
+    expect(mockRebar16.line_total).toBe(95000);
   });
 
   // Scenario 5: Single Receipt & Single Actual PO reference
@@ -256,31 +278,36 @@ describe('Steel Weighing Group (تجميع الوزنة) - Business Rules & Vali
     expect(diffSurplus > 0).toBe(true);
   });
 
-  // Scenario 7: Proportional Weight Distribution
-  it('Scenario 7: distributes scale ticket weight proportionally across individual rebar items', () => {
-    // 3 items with equal ordered weights: 2.0t each (total = 6.0t)
-    const items = [
-      { id: 1, ordered_weight: 2.0 },
-      { id: 2, ordered_weight: 2.0 },
-      { id: 3, ordered_weight: 2.0 },
+  // Scenario 7: Unified Financial Calculation (إجمالي قيمة الوزنة = إجمالي الكمية الكلية المستلمة × سعر الطن الموحد)
+  it('Scenario 7: calculates unified weighment total value as (total received weight * unified ton price) with NO proportional distribution', () => {
+    // User rule:
+    // حديد 3 مم: 2 طن
+    // حديد 5 مم: 1.5 طن
+    // كانات: 0.8 طن
+    // حديد 8 مم: 0.7 طن
+    // إجمالي الكمية المطلوبة = 5 طن
+    // الكمية المستلمة فعلياً = 5.8 طن
+    // سعر الطن في الفاتورة = 41,500 جنيه
+    // الحساب: 5.8 * 41,500 = 240,700 جنيه
+    const orderedItems = [
+      { name: 'حديد 3 مم', ordered_weight: 2.0 },
+      { name: 'حديد 5 مم', ordered_weight: 1.5 },
+      { name: 'كانات', ordered_weight: 0.8 },
+      { name: 'حديد 8 مم', ordered_weight: 0.7 },
     ];
+    const totalOrderedWeight = orderedItems.reduce((sum, i) => sum + i.ordered_weight, 0);
+    expect(totalOrderedWeight).toBe(5.0);
 
-    // Scale ticket received 5.8t instead of 6.0t
-    const distributed = distributeScaleWeightProportionally(5.8, items);
+    const receivedTotalWeight = 5.8;
+    const unifiedTonPrice = 41500;
+    const totalWeighingAmount = Math.round(receivedTotalWeight * unifiedTonPrice * 100) / 100;
 
-    // Each gets 5.8 * (2/6) = 1.933t
-    expect(distributed[1]).toBe(1.933);
-    expect(distributed[2]).toBe(1.933);
-    expect(distributed[3]).toBe(1.933);
+    // Strict rule: 5.8 * 41,500 = 240,700
+    expect(totalWeighingAmount).toBe(240700);
 
-    // Unequal weights: 1.0t, 3.0t (total = 4.0t), scale ticket is 4.2t
-    const unequalItems = [
-      { id: 10, ordered_weight: 1.0 },
-      { id: 20, ordered_weight: 3.0 },
-    ];
-    const unequalDistributed = distributeScaleWeightProportionally(4.2, unequalItems);
-    expect(unequalDistributed[10]).toBe(1.05); // 4.2 * 0.25
-    expect(unequalDistributed[20]).toBe(3.15); // 4.2 * 0.75
+    // Operational rule: no distribution per diameter is required for receiver
+    const singleOperationalWeightEntered = receivedTotalWeight;
+    expect(singleOperationalWeightEntered).toBe(5.8);
   });
 
   // Scenario 8: Role Authorization
@@ -306,5 +333,15 @@ describe('Steel Weighing Group (تجميع الوزنة) - Business Rules & Vali
     const result = validateWeighingGroupCreation([mockRebar12, mockRebar16], 'procurement_manager', existingActiveGroupedIds);
     expect(result.valid).toBe(false);
     expect(result.error).toContain('مجمع بالفعل في وزنة نشطة سابقة');
+  });
+
+  // Scenario 10: Strict Identical Unit Price Rule (شرط حماية مهم)
+  it('Scenario 10: strictly rejects grouping items when ton unit prices differ between items', () => {
+    const result = validateWeighingGroupCreation(
+      [mockRebar12, mockRebarDifferentPrice],
+      'procurement_manager'
+    );
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('لا يمكن تجميع البنود لأن سعر الطن مختلف بين البنود.');
   });
 });
