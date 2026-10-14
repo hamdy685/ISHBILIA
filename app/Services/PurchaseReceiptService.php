@@ -562,14 +562,16 @@ class PurchaseReceiptService
 
             // Regardless of whether it is an internal warehouse order or an external supplier,
             // once the Site Engineer approves the GRN, the order moves to PENDING_ACTUAL_PO waiting for Actual PO!
-            $receipt->purchaseOrder->update([
+            $receipt->purchaseOrder?->update([
                 'delivery_status' => 'DELIVERED',
                 'actual_delivery_date' => $receipt->received_at ?: now()->toDateString(),
                 'status' => 'PENDING_ACTUAL_PO',
             ]);
 
             app(NotificationService::class)->markEntityNotificationsAsRead($receipt);
-            app(NotificationService::class)->markEntityNotificationsAsRead($receipt->purchaseOrder);
+            if ($receipt->purchaseOrder) {
+                app(NotificationService::class)->markEntityNotificationsAsRead($receipt->purchaseOrder);
+            }
 
             $itemDescriptions = $receipt->items->map(function ($item) {
                 return $item->item_description ?: ($item->purchaseOrderItem?->item_description ?: null);
