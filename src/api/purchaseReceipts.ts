@@ -110,6 +110,12 @@ export const getReceiptPhotoUrl = (receipt: { id?: number; photo_url?: string | 
     if (receipt.photo_url.startsWith('data:') || receipt.photo_url.startsWith('blob:')) {
       return receipt.photo_url;
     }
+    if (receipt.photo_url.includes('drive.google.com/file/d/')) {
+      const match = receipt.photo_url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+      if (match && match[1]) {
+        return `https://lh3.googleusercontent.com/d/${match[1]}=w1000`;
+      }
+    }
     if (receipt.photo_url.startsWith('http://') || receipt.photo_url.startsWith('https://')) {
       return receipt.photo_url;
     }

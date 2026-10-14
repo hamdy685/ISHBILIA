@@ -12,6 +12,7 @@ import {
   LandParcel,
 } from '../../api/supplierFinance';
 import { LandAllocationEditor, LandAllocationDraft } from '../../components/accounting/LandAllocationEditor';
+import { getReceiptPhotoUrl } from '../../api/purchaseReceipts';
 import { getTodayInputDate } from '../../utils/dateFilters';
 import { parseApiError } from '../../utils/apiError';
 import { getUnitLabel } from '../../utils/units';
@@ -1774,7 +1775,7 @@ export const PurchasesReportView: React.FC = () => {
                 <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-3.5 flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
                     <img
-                      src={selectedRowForInvoice.photo_url}
+                      src={getReceiptPhotoUrl({ photo_url: selectedRowForInvoice.photo_url })}
                       alt="إيصال الميزان البسكول"
                       className="h-14 w-20 object-cover rounded-lg border border-emerald-500/40 cursor-pointer shadow-sm hover:opacity-90 transition"
                       onClick={() => setPhotoZoomUrl(selectedRowForInvoice.photo_url || null)}
@@ -1784,13 +1785,25 @@ export const PurchasesReportView: React.FC = () => {
                       <div className="text-[11px] text-slate-400">تم التقاطها أثناء الاستلام وتأكيد الكميات الفعلية</div>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setPhotoZoomUrl(selectedRowForInvoice.photo_url || null)}
-                    className="px-3 py-1.5 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 text-xs font-bold border border-emerald-500/30 transition shrink-0"
-                  >
-                    🔍 تكبير الصورة
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {selectedRowForInvoice.photo_url.includes('drive.google.com') && (
+                      <a
+                        href={selectedRowForInvoice.photo_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1.5 rounded-lg bg-emerald-700/40 hover:bg-emerald-700/60 text-emerald-200 text-xs font-bold border border-emerald-500/30 transition flex items-center gap-1"
+                      >
+                        <span>📁</span> Drive ↗
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setPhotoZoomUrl(selectedRowForInvoice.photo_url || null)}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 text-xs font-bold border border-emerald-500/30 transition shrink-0"
+                    >
+                      🔍 تكبير الصورة
+                    </button>
+                  </div>
                 </div>
               )}
 

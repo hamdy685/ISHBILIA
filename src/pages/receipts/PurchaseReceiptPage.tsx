@@ -1480,13 +1480,25 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                               <span className="text-xs sm:text-sm font-black text-cyan-200 flex items-center gap-2">
                                 <span>📷</span> صورة فحص واستلام المخزن (بون الميزان / وزنة الحديد المرفقة):
                               </span>
-                              <button
-                                type="button"
-                                onClick={() => setPreviewPhotoUrl(getReceiptPhotoUrl(receipt))}
-                                className="text-xs font-bold text-cyan-400 hover:text-cyan-300 underline inline-flex items-center gap-1 cursor-pointer"
-                              >
-                                <span>🔍</span> عرض بالحجم الكامل
-                              </button>
+                              <div className="flex items-center gap-3">
+                                {Boolean(receipt.photo_path?.includes('drive.google.com') || receipt.photo_url?.includes('drive.google.com')) && (
+                                  <a
+                                    href={receipt.photo_path?.includes('drive.google.com') ? receipt.photo_path : receipt.photo_url!}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs font-bold text-emerald-400 hover:text-emerald-300 underline inline-flex items-center gap-1"
+                                  >
+                                    <span>📁</span> فتح في Google Drive ↗
+                                  </a>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewPhotoUrl(getReceiptPhotoUrl(receipt))}
+                                  className="text-xs font-bold text-cyan-400 hover:text-cyan-300 underline inline-flex items-center gap-1 cursor-pointer"
+                                >
+                                  <span>🔍</span> عرض بالحجم الكامل
+                                </button>
+                              </div>
                             </div>
                             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3.5 bg-slate-950/90 p-3 rounded-xl border border-slate-800">
                               <div

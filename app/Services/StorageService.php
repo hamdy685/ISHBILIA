@@ -30,14 +30,41 @@ class StorageService
     }
 
     /**
-     * Store an uploaded file to the active disk.
+     * Store an uploaded file to the active disk (prefers Google Drive for receipts when configured).
      */
     public static function storeUploadedFile(UploadedFile $file, string $directory = 'attachments'): array
     {
-        $disk = self::disk();
         $extension = $file->getClientOriginalExtension() ?: 'bin';
         $fileName = Str::slug(pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)) . '_' . time() . '_' . Str::random(6) . '.' . $extension;
-        
+        $mimeType = $file->getClientMimeType() ?: $file->getMimeType();
+
+        // 1. Upload to Google Drive for receipts or if configured
+        if (($directory === 'receipts' || GoogleDriveService::isConfigured()) && config('google_drive.enabled', true)) {
+            try {
+                $content = $file->getContent();
+                $driveData = GoogleDriveService::upload($content, $fileName, $mimeType);
+                if ($driveData && ! empty($driveData['path'])) {
+                    // Save backup copy to local disk
+                    try {
+                        Storage::disk('public')->put(rtrim($directory, '/') . '/' . $fileName, $content);
+                    } catch (\Throwable) {}
+
+                    return [
+                        'disk' => 'google_drive',
+                        'path' => $driveData['path'],
+                        'name' => $file->getClientOriginalName(),
+                        'size' => $file->getSize(),
+                        'mime_type' => $mimeType,
+                        'url' => $driveData['url'],
+                        'drive_id' => $driveData['id'] ?? null,
+                    ];
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Google Drive file upload fallback: ' . $e->getMessage());
+            }
+        }
+
+        $disk = self::disk();
         $path = $file->storeAs($directory, $fileName, $disk);
 
         return [
@@ -45,13 +72,13 @@ class StorageService
             'path' => $path,
             'name' => $file->getClientOriginalName(),
             'size' => $file->getSize(),
-            'mime_type' => $file->getClientMimeType() ?: $file->getMimeType(),
+            'mime_type' => $mimeType,
             'url' => self::url($path, $disk),
         ];
     }
 
     /**
-     * Store base64 data to the active disk.
+     * Store base64 data to the active disk (prefers Google Drive for receipts when configured).
      */
     public static function storeBase64(string $base64Data, string $directory = 'receipts', ?string $customName = null): ?array
     {
@@ -87,8 +114,34 @@ class StorageService
             return null;
         }
 
+        $fileName = ($customName ? Str::slug(pathinfo($customName, PATHINFO_FILENAME)) . '_' : 'receipt_') . time() . '_' . Str::random(8) . '.' . $extension;
+
+        // 1. Upload to Google Drive for receipts
+        if (($directory === 'receipts' || GoogleDriveService::isConfigured()) && config('google_drive.enabled', true)) {
+            try {
+                $driveData = GoogleDriveService::upload($decoded, $fileName, $mimeType);
+                if ($driveData && ! empty($driveData['path'])) {
+                    // Save backup copy to local disk
+                    try {
+                        Storage::disk('public')->put(rtrim($directory, '/') . '/' . $fileName, $decoded);
+                    } catch (\Throwable) {}
+
+                    return [
+                        'disk' => 'google_drive',
+                        'path' => $driveData['path'],
+                        'name' => $customName ?: $fileName,
+                        'size' => strlen($decoded),
+                        'mime_type' => $mimeType,
+                        'url' => $driveData['url'],
+                        'drive_id' => $driveData['id'] ?? null,
+                    ];
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Google Drive base64 upload fallback: ' . $e->getMessage());
+            }
+        }
+
         $disk = self::disk();
-        $fileName = 'receipt_' . time() . '_' . Str::random(8) . '.' . $extension;
         $path = rtrim($directory, '/') . '/' . $fileName;
 
         Storage::disk($disk)->put($path, $decoded);
