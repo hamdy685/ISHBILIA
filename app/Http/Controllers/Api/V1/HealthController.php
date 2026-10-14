@@ -21,22 +21,6 @@ class HealthController extends Controller
             DB::connection()->getPdo();
             $dbConnected = true;
             $info['database'] = 'connected';
-
-            // Restore already-received receipts (84, 66, 65, 64, 63) to APPROVED
-            DB::table('purchase_receipts')->whereIn('id', [84, 66, 65, 64, 63])->update([
-                'status' => 'APPROVED',
-                'site_engineer_approved_at' => now(),
-                'receiver_approved_at' => now(),
-            ]);
-
-            DB::table('purchase_orders')->whereIn('id', [73, 78, 79, 80, 81])->update([
-                'delivery_status' => 'DELIVERED',
-            ]);
-
-            $info['pending_site_receipts'] = DB::table('purchase_receipts')
-                ->where('site_engineer_user_id', 18)
-                ->whereIn('status', ['PENDING_SITE_ENGINEER', 'WAREHOUSE_RECEIPT_SUBMITTED'])
-                ->get(['id', 'receipt_number', 'status', 'site_engineer_user_id']);
         } catch (Throwable $e) {
             $dbConnected = false;
             $info['error'] = $e->getMessage();
