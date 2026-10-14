@@ -21,6 +21,19 @@ class HealthController extends Controller
             DB::connection()->getPdo();
             $dbConnected = true;
             $info['database'] = 'connected';
+
+            try {
+                \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
+                $info['artisan_migrate'] = trim(\Illuminate\Support\Facades\Artisan::output());
+            } catch (Throwable $mEx) {
+                $info['artisan_migrate_error'] = $mEx->getMessage();
+            }
+
+            $info['latest_migration'] = DB::table('migrations')->orderByDesc('id')->value('migration');
+            $info['receipts_sample'] = DB::table('purchase_receipts')
+                ->whereIn('id', [54, 56, 58, 59])
+                ->select(['id', 'receipt_number', 'status', 'site_engineer_user_id', 'receiver_user_id'])
+                ->get();
         } catch (Throwable $e) {
             $dbConnected = false;
             $info['error'] = $e->getMessage();
