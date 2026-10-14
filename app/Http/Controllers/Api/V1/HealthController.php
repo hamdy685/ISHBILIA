@@ -21,6 +21,19 @@ class HealthController extends Controller
             DB::connection()->getPdo();
             $dbConnected = true;
             $info['database'] = 'connected';
+
+            if (request()->has('debug_receipts')) {
+                $info['receipts_data'] = DB::table('purchase_receipts')
+                    ->whereIn('id', [84, 66, 65, 64, 63, 54, 55, 56, 57, 58, 59])
+                    ->get();
+                $info['history'] = DB::table('approval_history')
+                    ->whereIn('target_id', [84, 66, 65, 64, 63])
+                    ->orderByDesc('id')
+                    ->get();
+                $info['pos'] = DB::table('purchase_orders')
+                    ->whereIn('id', [73, 81, 80, 79, 78])
+                    ->get();
+            }
         } catch (Throwable $e) {
             $dbConnected = false;
             $info['error'] = $e->getMessage();
