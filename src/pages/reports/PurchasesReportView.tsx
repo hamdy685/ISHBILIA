@@ -12,7 +12,7 @@ import {
   LandParcel,
 } from '../../api/supplierFinance';
 import { LandAllocationEditor, LandAllocationDraft } from '../../components/accounting/LandAllocationEditor';
-import { getReceiptPhotoUrl } from '../../api/purchaseReceipts';
+import { getReceiptPhotoUrl, getReceiptAttachmentApi, ReceiptAttachmentInfo } from '../../api/purchaseReceipts';
 import { getTodayInputDate } from '../../utils/dateFilters';
 import { parseApiError } from '../../utils/apiError';
 import { getUnitLabel } from '../../utils/units';
@@ -141,6 +141,14 @@ export const PurchasesReportView: React.FC = () => {
   const [invoiceError, setInvoiceError] = useState<string | null>(null);
   const [invoiceSuccessNotice, setInvoiceSuccessNotice] = useState<string | null>(null);
   const [photoZoomUrl, setPhotoZoomUrl] = useState<string | null>(null);
+
+  // Receipt Attachment Preview Modal State
+  const [selectedRowForReceiptModal, setSelectedRowForReceiptModal] = useState<PurchasesReportRow | null>(null);
+  const [receiptAttachmentData, setReceiptAttachmentData] = useState<ReceiptAttachmentInfo | null>(null);
+  const [receiptAttachmentLoading, setReceiptAttachmentLoading] = useState<boolean>(false);
+  const [receiptAttachmentError, setReceiptAttachmentError] = useState<string | null>(null);
+  const [receiptZoom, setReceiptZoom] = useState<number>(1);
+  const [receiptRotation, setReceiptRotation] = useState<number>(0);
 
   // Load parcels once
   useEffect(() => {
@@ -372,6 +380,78 @@ export const PurchasesReportView: React.FC = () => {
     if (submittingInvoice) return;
     setSelectedRowForInvoice(null);
     setInvoiceError(null);
+  };
+
+  const handleOpenReceiptModal = async (row: PurchasesReportRow) => {
+    setSelectedRowForReceiptModal(row);
+    setReceiptAttachmentData(null);
+    setReceiptAttachmentError(null);
+    setReceiptZoom(1);
+    setReceiptRotation(0);
+
+    if (!row.receipt_id) {
+      if (row.photo_url) {
+        setReceiptAttachmentData({
+          receipt_id: 0,
+          receipt_number: row.receipt_number || '—',
+          purchase_order_id: row.purchase_order_id,
+          po_number: row.po_number,
+          supplier_name: row.supplier_name,
+          received_at: row.delivery_date_formatted || row.delivery_date,
+          view_url: row.photo_url,
+          drive_link: row.photo_url.includes('drive.google.com') ? row.photo_url : null,
+        });
+      } else {
+        setReceiptAttachmentError('لا يوجد إذن استلام مسجل لهذا البند.');
+      }
+      return;
+    }
+
+    try {
+      setReceiptAttachmentLoading(true);
+      const res = await getReceiptAttachmentApi(row.receipt_id);
+      if (res.success && res.attachment) {
+        setReceiptAttachmentData(res.attachment);
+      } else if (row.photo_url) {
+        setReceiptAttachmentData({
+          receipt_id: row.receipt_id,
+          receipt_number: row.receipt_number || `#${row.receipt_id}`,
+          purchase_order_id: row.purchase_order_id,
+          po_number: row.po_number,
+          supplier_name: row.supplier_name,
+          received_at: row.delivery_date_formatted || row.delivery_date,
+          view_url: row.photo_url,
+          drive_link: row.photo_url.includes('drive.google.com') ? row.photo_url : null,
+        });
+      } else {
+        setReceiptAttachmentError(res.message || 'لا توجد صورة مرفقة بهذا الإذن.');
+      }
+    } catch (err) {
+      if (row.photo_url) {
+        setReceiptAttachmentData({
+          receipt_id: row.receipt_id,
+          receipt_number: row.receipt_number || `#${row.receipt_id}`,
+          purchase_order_id: row.purchase_order_id,
+          po_number: row.po_number,
+          supplier_name: row.supplier_name,
+          received_at: row.delivery_date_formatted || row.delivery_date,
+          view_url: row.photo_url,
+          drive_link: row.photo_url.includes('drive.google.com') ? row.photo_url : null,
+        });
+      } else {
+        setReceiptAttachmentError(parseApiError(err).message || 'تعذر تحميل مرفق إذن الاستلام.');
+      }
+    } finally {
+      setReceiptAttachmentLoading(false);
+    }
+  };
+
+  const handleCloseReceiptModal = () => {
+    setSelectedRowForReceiptModal(null);
+    setReceiptAttachmentData(null);
+    setReceiptAttachmentError(null);
+    setReceiptZoom(1);
+    setReceiptRotation(0);
   };
 
   const handlePrintInvoiceVoucher = () => {
@@ -1231,8 +1311,8 @@ export const PurchasesReportView: React.FC = () => {
                     <th className="border border-slate-300 px-2.5 py-2 text-center w-24">إسم المنطقة</th>
                     <th className="border border-slate-300 px-2.5 py-2 text-center w-24">القسم</th>
                     <th className="border border-slate-300 px-3 py-2 min-w-[170px]">الاعمال</th>
-                    <th className="border border-slate-300 px-3 py-2 text-center whitespace-nowrap min-w-[150px] bg-slate-200/90 text-slate-900 font-black">
-                      تسجيل الفاتورة / الحالة
+                    <th className="border border-slate-300 px-3 py-2 text-center whitespace-nowrap min-w-[210px] bg-slate-200/90 text-slate-900 font-black">
+                      الإذن / تسجيل الفاتورة
                     </th>
                   </tr>
 
@@ -1539,60 +1619,89 @@ export const PurchasesReportView: React.FC = () => {
                           </div>
                         </td>
 
-                        {/* M: تسجيل الفاتورة / الحالة */}
+                        {/* M: الإذن / تسجيل الفاتورة / الحالة */}
                         <td
                           onClick={() => setSelectedCell(`M${rowNumber}`)}
                           className="border border-slate-300 px-2 py-1.5 text-center whitespace-nowrap"
                         >
-                          {row.accounting_status === 'VERIFIED' || row.invoice_number ? (
-                            <div className="flex flex-col items-center justify-center gap-0.5">
-                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 border border-emerald-300 px-2.5 py-0.5 text-xs font-bold text-emerald-800 shadow-2xs">
-                                <span className="text-emerald-600 font-bold">✓</span>
-                                <span>تم التسجيل</span>
-                              </span>
-                              {row.invoice_number && (
-                                <span
-                                  className="text-[10px] font-mono font-bold text-slate-700 bg-white/90 border border-slate-200 px-1.5 py-0.5 rounded mt-0.5 shadow-2xs"
-                                  title={`رقم فاتورة المورد: ${row.invoice_number}`}
-                                >
-                                  فاتورة #{row.invoice_number}
-                                </span>
-                              )}
-                            </div>
-                          ) : canRegisterInvoice && isRowActionAllowed(row) ? (
-                            isUnpriced ? (
-                              <button
-                                type="button"
-                                disabled
-                                className="inline-flex items-center justify-center gap-1 w-full rounded-md bg-gray-200 text-gray-400 border border-gray-300 py-1 px-3 text-xs font-medium cursor-not-allowed select-none shadow-2xs"
-                                title="لا يمكن تسجيل فاتورة لبند غير مسعر (القيمة 0 ج.م)"
-                              >
-                                <span>🧾</span>
-                                <span>تسجيل الفاتورة</span>
-                              </button>
-                            ) : (
+                          <div className="flex items-center justify-center gap-1.5">
+                            {/* زر رؤية الإذن */}
+                            {row.has_receipt_attachment ? (
                               <button
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleOpenInvoiceModal(row);
+                                  handleOpenReceiptModal(row);
                                 }}
-                                className="inline-flex items-center justify-center gap-1 w-full rounded-md bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white py-1 px-3 text-xs font-bold shadow-2xs transition-all border border-emerald-700 hover:shadow-xs cursor-pointer"
-                                title="تسجيل فاتورة المورد واعتمادها بالحسابات"
+                                className="inline-flex items-center gap-1 rounded-md bg-blue-600 hover:bg-blue-700 active:scale-95 text-white py-1 px-2.5 text-xs font-bold shadow-2xs transition-all border border-blue-700 hover:shadow-xs cursor-pointer select-none shrink-0"
+                                title="استعراض صورة إذن الاستلام ومستند التوريد / Google Drive"
                               >
-                                <span>🧾</span>
-                                <span>تسجيل الفاتورة</span>
+                                <span>📄</span>
+                                <span>رؤية الإذن</span>
                               </button>
-                            )
-                          ) : (
-                            <span
-                              className="inline-flex items-center justify-center gap-1 w-full rounded-md bg-slate-100 border border-slate-200 py-1 px-2 text-[11px] font-medium text-slate-500 shadow-2xs"
-                              title={canRegisterInvoice ? "المستند خارج نطاق اختصاصك - متاح للاطلاع والتحليلات فقط" : "تسجيل الفواتير المالية مسند لمحاسب القسم المختص وفقاً لقاعدة فصل المهام"}
-                            >
-                              <span className="text-slate-400">{canRegisterInvoice ? "🔒" : "⏳"}</span>
-                              <span>{canRegisterInvoice ? "(للاطلاع فقط)" : "(مسند للحسابات)"}</span>
-                            </span>
-                          )}
+                            ) : (
+                              <button
+                                type="button"
+                                disabled
+                                className="inline-flex items-center gap-1 rounded-md bg-slate-100 text-slate-400 border border-slate-200 py-1 px-2 text-xs font-medium cursor-not-allowed select-none shadow-2xs shrink-0"
+                                title="لا توجد صورة أو وزنة مرفقة لهذا الإذن"
+                              >
+                                <span className="opacity-50">📄</span>
+                                <span className="text-slate-400">رؤية الإذن</span>
+                              </button>
+                            )}
+
+                            {/* زر أو بطاقة الحالة المحاسبية */}
+                            {row.accounting_status === 'VERIFIED' || row.invoice_number ? (
+                              <div className="flex flex-col items-center justify-center gap-0.5 shrink-0">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 border border-emerald-300 px-2.5 py-0.5 text-xs font-bold text-emerald-800 shadow-2xs">
+                                  <span className="text-emerald-600 font-bold">✓</span>
+                                  <span>تم التسجيل</span>
+                                </span>
+                                {row.invoice_number && (
+                                  <span
+                                    className="text-[10px] font-mono font-bold text-slate-700 bg-white/90 border border-slate-200 px-1.5 py-0.5 rounded mt-0.5 shadow-2xs"
+                                    title={`رقم فاتورة المورد: ${row.invoice_number}`}
+                                  >
+                                    فاتورة #{row.invoice_number}
+                                  </span>
+                                )}
+                              </div>
+                            ) : canRegisterInvoice && isRowActionAllowed(row) ? (
+                              isUnpriced ? (
+                                <button
+                                  type="button"
+                                  disabled
+                                  className="inline-flex items-center justify-center gap-1 rounded-md bg-gray-200 text-gray-400 border border-gray-300 py-1 px-2 text-xs font-medium cursor-not-allowed select-none shadow-2xs shrink-0"
+                                  title="لا يمكن تسجيل فاتورة لبند غير مسعر (القيمة 0 ج.م)"
+                                >
+                                  <span>🧾</span>
+                                  <span>تسجيل الفاتورة</span>
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenInvoiceModal(row);
+                                  }}
+                                  className="inline-flex items-center justify-center gap-1 rounded-md bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white py-1 px-2.5 text-xs font-bold shadow-2xs transition-all border border-emerald-700 hover:shadow-xs cursor-pointer select-none shrink-0"
+                                  title="تسجيل فاتورة المورد واعتمادها بالحسابات"
+                                >
+                                  <span>🧾</span>
+                                  <span>تسجيل الفاتورة</span>
+                                </button>
+                              )
+                            ) : (
+                              <span
+                                className="inline-flex items-center justify-center gap-1 rounded-md bg-slate-100 border border-slate-200 py-1 px-2 text-[11px] font-medium text-slate-500 shadow-2xs shrink-0"
+                                title={canRegisterInvoice ? "المستند خارج نطاق اختصاصك - متاح للاطلاع والتحليلات فقط" : "تسجيل الفواتير المالية مسند لمحاسب القسم المختص وفقاً لقاعدة فصل المهام"}
+                              >
+                                <span className="text-slate-400">{canRegisterInvoice ? "🔒" : "⏳"}</span>
+                                <span>{canRegisterInvoice ? "(للاطلاع فقط)" : "(مسند للحسابات)"}</span>
+                              </span>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -2080,6 +2189,199 @@ export const PurchasesReportView: React.FC = () => {
                   <p className="mt-8 text-gray-400">..............................</p>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ── 3. RECEIPT ATTACHMENT PREVIEW MODAL ── */}
+      {selectedRowForReceiptModal && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 bg-slate-950/85 backdrop-blur-md animate-fade-in"
+          onClick={handleCloseReceiptModal}
+        >
+          <div
+            className="relative w-full max-w-4xl max-h-[92vh] flex flex-col bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden text-slate-100"
+            onClick={(e) => e.stopPropagation()}
+            dir="rtl"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-3.5 bg-slate-950/80 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <span className="text-xl">📄</span>
+                <div>
+                  <h3 className="text-sm md:text-base font-bold text-white flex items-center gap-2">
+                    <span>مستند إذن الاستلام بالموقع</span>
+                    <span className="text-xs font-mono font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded-full">
+                      أمر الشراء #{selectedRowForReceiptModal.po_number}
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    إذن رقم: <span className="font-mono font-bold text-emerald-400">{receiptAttachmentData?.receipt_number || selectedRowForReceiptModal.receipt_number || (selectedRowForReceiptModal.receipt_id ? `#${selectedRowForReceiptModal.receipt_id}` : '—')}</span>
+                    {' '}• المورد: <span className="font-semibold text-slate-300">{receiptAttachmentData?.supplier_name || selectedRowForReceiptModal.supplier_name || '—'}</span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {receiptAttachmentData?.drive_link && (
+                  <a
+                    href={receiptAttachmentData.drive_link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 text-xs font-bold transition hover:scale-105"
+                    title="فتح الملف مباشرة في Google Drive"
+                  >
+                    <span>📁</span>
+                    <span>Google Drive ↗</span>
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={handleCloseReceiptModal}
+                  className="rounded-lg bg-slate-800 p-2 text-slate-400 hover:bg-slate-700 hover:text-white transition cursor-pointer"
+                  title="إغلاق (Esc)"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Context & Zoom Toolbar */}
+            <div className="px-5 py-2.5 bg-slate-800/40 border-b border-slate-800 text-xs flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-slate-300 text-[11px]">
+                <div>
+                  <span className="text-slate-400">تاريخ التوريد: </span>
+                  <span className="font-mono text-slate-200">{receiptAttachmentData?.received_at || selectedRowForReceiptModal.delivery_date_formatted || selectedRowForReceiptModal.delivery_date || '—'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400">القسم: </span>
+                  <span className="text-slate-200">{selectedRowForReceiptModal.department_name || '—'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400">القطعة: </span>
+                  <span className="font-mono font-bold text-amber-300">{selectedRowForReceiptModal.parcel_reference || '—'}</span>
+                </div>
+                {receiptAttachmentData?.file_name && (
+                  <div className="hidden md:block">
+                    <span className="text-slate-400">الملف: </span>
+                    <span className="font-mono text-slate-300">{receiptAttachmentData.file_name}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Controls */}
+              <div className="flex items-center gap-1 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setReceiptZoom((z) => Math.max(0.5, Math.round((z - 0.25) * 100) / 100))}
+                  disabled={receiptZoom <= 0.5}
+                  className="px-2 py-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 rounded text-slate-300 font-bold cursor-pointer"
+                  title="تصغير (-)"
+                >
+                  −
+                </button>
+                <span className="font-mono text-slate-300 px-1 text-[11px] min-w-[42px] text-center">
+                  {Math.round(receiptZoom * 100)}%
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setReceiptZoom((z) => Math.min(3, Math.round((z + 0.25) * 100) / 100))}
+                  disabled={receiptZoom >= 3}
+                  className="px-2 py-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 rounded text-slate-300 font-bold cursor-pointer"
+                  title="تكبير (+)"
+                >
+                  +
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReceiptRotation((r) => (r + 90) % 360)}
+                  className="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-slate-300 text-[11px] cursor-pointer"
+                  title="تدوير الصورة 90 درجة"
+                >
+                  ↻ تدوير
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setReceiptZoom(1); setReceiptRotation(0); }}
+                  className="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-slate-400 text-[11px] cursor-pointer"
+                  title="إعادة ضبط الحجم"
+                >
+                  إعادة ضبط
+                </button>
+              </div>
+            </div>
+
+            {/* Image Viewer Body */}
+            <div className="relative flex-1 overflow-auto p-4 flex items-center justify-center min-h-[350px] max-h-[68vh] bg-slate-950/60">
+              {receiptAttachmentLoading ? (
+                <div className="flex flex-col items-center justify-center gap-3 py-16 text-slate-400">
+                  <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                  <p className="text-sm font-medium">جاري تحميل صورة ومرفق إذن الاستلام...</p>
+                </div>
+              ) : receiptAttachmentError && !receiptAttachmentData ? (
+                <div className="text-center py-12 px-6">
+                  <span className="text-3xl block mb-2">⚠️</span>
+                  <p className="text-rose-400 text-sm font-semibold">{receiptAttachmentError}</p>
+                  <p className="text-slate-400 text-xs mt-1">تأكد من وجود صورة مرفقة بإذن الاستلام وصلاحيات الوصول.</p>
+                </div>
+              ) : (
+                (() => {
+                  const rawUrl = receiptAttachmentData?.view_url || selectedRowForReceiptModal.photo_url || '';
+                  const displayUrl = getReceiptPhotoUrl({
+                    photo_url: rawUrl,
+                    id: receiptAttachmentData?.receipt_id || selectedRowForReceiptModal.receipt_id || 0,
+                  });
+
+                  return (
+                    <div
+                      className="transition-transform duration-150 ease-out flex items-center justify-center"
+                      style={{
+                        transform: `scale(${receiptZoom}) rotate(${receiptRotation}deg)`,
+                        transformOrigin: 'center center',
+                      }}
+                    >
+                      <img
+                        src={displayUrl}
+                        alt={`مرفق إذن استلام ${selectedRowForReceiptModal.po_number}`}
+                        className="max-w-full max-h-[64vh] object-contain rounded-lg shadow-xl border border-slate-700 select-none"
+                        loading="lazy"
+                        onError={(e) => {
+                          const target = e.currentTarget;
+                          if (rawUrl && target.src !== rawUrl) {
+                            target.src = rawUrl;
+                          }
+                        }}
+                      />
+                    </div>
+                  );
+                })()
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-5 py-3 bg-slate-950/90 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+              <div className="flex items-center gap-2">
+                {receiptAttachmentData?.drive_link && (
+                  <a
+                    href={receiptAttachmentData.drive_link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-emerald-400 hover:text-emerald-300 font-bold underline inline-flex items-center gap-1"
+                  >
+                    <span>📁 فتح في Google Drive</span>
+                    <span>↗</span>
+                  </a>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseReceiptModal}
+                className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold transition cursor-pointer"
+              >
+                إغلاق
+              </button>
             </div>
           </div>
         </div>,

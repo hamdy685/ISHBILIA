@@ -40,6 +40,8 @@ export interface PurchasesReportRow {
   accountant_name?: string;
   photo_url?: string | null;
   receipt_number?: string | null;
+  has_receipt_attachment?: boolean;
+  receipt_view_allowed?: boolean;
   grand_total?: number;
   created_at?: string;
 }

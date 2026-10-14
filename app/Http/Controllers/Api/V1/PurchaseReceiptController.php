@@ -344,6 +344,87 @@ class PurchaseReceiptController extends Controller
         }
     }
 
+    public function getAttachment(Request $request, string|int $id)
+    {
+        $user = $request->user() ?: auth('sanctum')->user();
+        if (! $user && $request->filled('token')) {
+            $tokenModel = \Laravel\Sanctum\PersonalAccessToken::findToken($request->query('token'));
+            if ($tokenModel) {
+                $user = $tokenModel->tokenable;
+            }
+        }
+
+        if (! $user) {
+            return response()->json(['success' => false, 'message' => 'انتهت جلسة الدخول. يرجى تسجيل الدخول أولاً.'], 401);
+        }
+
+        $receipt = PurchaseReceipt::withoutGlobalScopes()
+            ->with([
+                'supplier',
+                'purchaseOrder.supplier',
+                'purchaseOrder.purchaseRequest.department',
+                'purchaseOrder.purchaseRequest.targetDepartment',
+                'purchaseRequest.department',
+                'purchaseRequest.targetDepartment'
+            ])
+            ->findOrFail((int) $id);
+
+        // Security Authorization Check:
+        $isGlobalRole = $user->hasAnyRole(['admin', 'general_manager', 'procurement_manager', 'accountant', 'general_accountant', 'warehouse_keeper']) || $user->isGeneralAccountant();
+
+        $isAuthorized = $isGlobalRole;
+
+        if (! $isAuthorized) {
+            $po = $receipt->purchaseOrder;
+            $pr = $po?->purchaseRequest ?: $receipt->purchaseRequest;
+
+            if ($user->hasRole('site_engineer')) {
+                $isAuthorized = ($receipt->site_engineer_user_id === $user->id || $receipt->receiver_user_id === $user->id);
+            } elseif ($user->hasRole('reviewer') && $pr) {
+                $isAuthorized = ($user->department_id === $pr->department_id || $user->department_id === $pr->target_department_id);
+            } elseif ($pr && $pr->user_id === $user->id) {
+                $isAuthorized = true;
+            }
+        }
+
+        if (! $isAuthorized) {
+            return response()->json([
+                'success' => false,
+                'message' => 'غير مصرح لك بالاطلاع على مرفق هذا الإذن.'
+            ], 403);
+        }
+
+        if (! $receipt->photo_path) {
+            return response()->json([
+                'success' => false,
+                'has_attachment' => false,
+                'message' => 'لا توجد صورة مرفقة بهذا الإذن.'
+            ], 404);
+        }
+
+        $supplierName = $receipt->supplier?->name ?: ($receipt->purchaseOrder?->supplier?->name ?: '—');
+        $poNumber = $receipt->purchaseOrder?->po_number ?: '—';
+
+        return response()->json([
+            'success' => true,
+            'has_attachment' => true,
+            'attachment' => [
+                'receipt_id' => $receipt->id,
+                'receipt_number' => $receipt->receipt_number,
+                'purchase_order_id' => $receipt->purchase_order_id,
+                'po_number' => $poNumber,
+                'supplier_name' => $supplierName,
+                'received_at' => $receipt->received_at ? $receipt->received_at->format('Y-m-d') : null,
+                'file_name' => $receipt->photo_name ?: "receipt_{$receipt->id}.jpg",
+                'mime_type' => $receipt->photo_mime_type ?: 'image/jpeg',
+                'file_size' => $receipt->photo_size,
+                'view_url' => $receipt->photo_url,
+                'drive_link' => filter_var($receipt->photo_path, FILTER_VALIDATE_URL) ? $receipt->photo_path : null,
+                'uploaded_at' => $receipt->warehouse_submitted_at?->toIso8601String() ?: $receipt->created_at?->toIso8601String(),
+            ]
+        ]);
+    }
+
     public function cancelPending(Request $request, int $receiptId)
     {
         $receipt = PurchaseReceipt::findOrFail($receiptId);

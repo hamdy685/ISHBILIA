@@ -184,3 +184,30 @@ export const confirmOfficeReceiptApi = async (
 
 export const cancelPurchaseReceiptApi = async (receiptId: number): Promise<{ message: string }> =>
   (await apiClient.post<{ message: string }>(`/purchase-receipts/${receiptId}/cancel`)).data;
+
+export interface ReceiptAttachmentInfo {
+  receipt_id: number;
+  receipt_number: string;
+  purchase_order_id: number;
+  po_number: string;
+  supplier_name: string;
+  received_at?: string | null;
+  file_name?: string | null;
+  mime_type?: string | null;
+  file_size?: number | null;
+  view_url: string;
+  drive_link?: string | null;
+  uploaded_at?: string | null;
+}
+
+export interface ReceiptAttachmentResponse {
+  success: boolean;
+  has_attachment: boolean;
+  message?: string;
+  attachment?: ReceiptAttachmentInfo;
+}
+
+export const getReceiptAttachmentApi = async (receiptId: number): Promise<ReceiptAttachmentResponse> => {
+  const res = await apiClient.get<ReceiptAttachmentResponse>(`/purchase-receipts/${receiptId}/attachment`);
+  return res.data;
+};

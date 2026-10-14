@@ -460,6 +460,7 @@ Route::middleware('auth:sanctum')->prefix('weighing-groups')->group(function () 
 
 // Receipt direct photo stream (authenticated & permission-checked)
 Route::middleware(['auth:sanctum', 'permission:purchase_receipt.view_assigned|accounting.invoice.view'])->get('/purchase-receipts/{id}/photo', [PurchaseReceiptController::class, 'viewPhoto']);
+Route::middleware(['auth:sanctum', 'permission:purchase_receipt.view_assigned|accounting.invoice.view|purchase_order.view'])->get('/purchase-receipts/{id}/attachment', [PurchaseReceiptController::class, 'getAttachment']);
 
 // Quote direct file stream (authenticated & permission-checked)
 Route::middleware(['auth:sanctum', 'permission:purchase_quote.view|purchase_request.view_own'])->get('/purchase-quotes/{id}/file', [PurchaseQuoteController::class, 'viewFile']);

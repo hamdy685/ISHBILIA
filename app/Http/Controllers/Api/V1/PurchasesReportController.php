@@ -263,6 +263,10 @@ class PurchasesReportController extends Controller
 
             $primaryInvoice = $activeInvoices->first();
             $approvedReceipt = $order->purchaseReceipts->where('status', 'APPROVED')->first();
+            $latestReceipt = $order->purchaseReceipts->sortByDesc('id')->first();
+            $receiptWithPhoto = $order->purchaseReceipts->filter(fn ($r) => ! empty($r->photo_path))->sortByDesc('id')->first();
+            $targetReceipt = $receiptWithPhoto ?: $latestReceipt ?: $approvedReceipt;
+            $hasReceiptAttachment = (bool) ($targetReceipt && ! empty($targetReceipt->photo_path));
 
             // Order dates
             $poDate = $order->created_at?->format('Y-m-d');
@@ -342,9 +346,11 @@ class PurchasesReportController extends Controller
                     $reportRows[] = [
                         'id' => "PO-{$order->id}-ITEM-{$poItem->id}",
                         'invoice_id' => $primaryInvoice?->id,
-                        'receipt_id' => $approvedReceipt?->id,
-                        'receipt_number' => $approvedReceipt?->receipt_number,
-                        'photo_url' => $approvedReceipt?->photo_url,
+                        'receipt_id' => $targetReceipt?->id ?? $approvedReceipt?->id,
+                        'receipt_number' => $targetReceipt?->receipt_number ?? $approvedReceipt?->receipt_number,
+                        'photo_url' => $targetReceipt?->photo_url ?? $approvedReceipt?->photo_url,
+                        'has_receipt_attachment' => $hasReceiptAttachment,
+                        'receipt_view_allowed' => true,
                         'purchase_order_id' => $order->id,
                         'grand_total' => $effectiveGrandTotal,
                         // التواريخ حسب الفلترة
@@ -395,9 +401,11 @@ class PurchasesReportController extends Controller
                 $reportRows[] = [
                     'id' => "PO-{$order->id}",
                     'invoice_id' => $primaryInvoice?->id,
-                    'receipt_id' => $approvedReceipt?->id,
-                    'receipt_number' => $approvedReceipt?->receipt_number,
-                    'photo_url' => $approvedReceipt?->photo_url,
+                    'receipt_id' => $targetReceipt?->id ?? $approvedReceipt?->id,
+                    'receipt_number' => $targetReceipt?->receipt_number ?? $approvedReceipt?->receipt_number,
+                    'photo_url' => $targetReceipt?->photo_url ?? $approvedReceipt?->photo_url,
+                    'has_receipt_attachment' => $hasReceiptAttachment,
+                    'receipt_view_allowed' => true,
                     'purchase_order_id' => $order->id,
                     'grand_total' => (float) $order->grand_total,
                     'date_basis' => $dateBasis,
