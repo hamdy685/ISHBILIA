@@ -30,6 +30,17 @@ class HealthController extends Controller
             }
 
             $info['latest_migration'] = DB::table('migrations')->orderByDesc('id')->value('migration');
+            $info['steel_groups'] = DB::table('weighing_groups')
+                ->select(['id', 'group_number', 'purchase_order_id', 'status', 'total_ordered_weight', 'unit_price', 'total_amount'])
+                ->get();
+            $info['orders_sample'] = DB::table('purchase_orders')
+                ->where('po_number', 'like', '%PO-99%')
+                ->orWhere('po_number', 'like', '%PO-100%')
+                ->orWhere('po_number', 'like', '%PO-105%')
+                ->orWhere('po_number', 'like', '%PO-106%')
+                ->orWhereIn('id', [99, 100, 105, 106])
+                ->select(['id', 'po_number', 'status', 'grand_total'])
+                ->get();
             $info['receipts_sample'] = DB::table('purchase_receipts')
                 ->whereIn('id', [54, 56, 58, 59])
                 ->select(['id', 'receipt_number', 'status', 'site_engineer_user_id', 'receiver_user_id'])

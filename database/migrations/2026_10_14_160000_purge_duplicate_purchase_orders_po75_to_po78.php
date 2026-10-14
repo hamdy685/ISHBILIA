@@ -38,11 +38,20 @@ return new class extends Migration
                     $q->whereIn('purchase_order_id', $poIds)
                       ->orWhereIn('purchase_receipt_id', $receiptIds);
 
-                    foreach ($poNumbers as $poNum) {
-                        $q->orWhere('data', 'like', "%{$poNum}%");
-                    }
-                    foreach ($receiptNumbers as $recNum) {
-                        $q->orWhere('data', 'like', "%{$recNum}%");
+                    if (Schema::hasColumn('notifications', 'data')) {
+                        foreach ($poNumbers as $poNum) {
+                            $q->orWhere('data', 'like', "%{$poNum}%");
+                        }
+                        foreach ($receiptNumbers as $recNum) {
+                            $q->orWhere('data', 'like', "%{$recNum}%");
+                        }
+                    } else {
+                        foreach ($poNumbers as $poNum) {
+                            $q->orWhere('message', 'like', "%{$poNum}%");
+                        }
+                        foreach ($receiptNumbers as $recNum) {
+                            $q->orWhere('message', 'like', "%{$recNum}%");
+                        }
                     }
                 })
                 ->delete();
