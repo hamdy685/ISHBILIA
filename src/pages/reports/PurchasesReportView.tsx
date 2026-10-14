@@ -149,6 +149,7 @@ export const PurchasesReportView: React.FC = () => {
   const [receiptAttachmentError, setReceiptAttachmentError] = useState<string | null>(null);
   const [receiptZoom, setReceiptZoom] = useState<number>(1);
   const [receiptRotation, setReceiptRotation] = useState<number>(0);
+  const [receiptImgFailed, setReceiptImgFailed] = useState<boolean>(false);
 
   // Load parcels once
   useEffect(() => {
@@ -388,6 +389,7 @@ export const PurchasesReportView: React.FC = () => {
     setReceiptAttachmentError(null);
     setReceiptZoom(1);
     setReceiptRotation(0);
+    setReceiptImgFailed(false);
 
     if (!row.receipt_id) {
       if (row.photo_url) {
@@ -452,6 +454,7 @@ export const PurchasesReportView: React.FC = () => {
     setReceiptAttachmentError(null);
     setReceiptZoom(1);
     setReceiptRotation(0);
+    setReceiptImgFailed(false);
   };
 
   const handlePrintInvoiceVoucher = () => {
@@ -2334,7 +2337,24 @@ export const PurchasesReportView: React.FC = () => {
                     id: receiptAttachmentData?.receipt_id || selectedRowForReceiptModal.receipt_id || 0,
                   });
 
-                  return (
+                  return receiptImgFailed ? (
+                    <div className="flex flex-col items-center justify-center p-8 text-center text-slate-400 gap-3">
+                      <span className="text-4xl">📁</span>
+                      <p className="text-sm font-bold text-slate-200">مستند إذن الاستلام مؤرشف على الخادم</p>
+                      <p className="text-xs text-slate-400 max-w-md">تم تسجيل هذا الإذن قبل التحديث، المستندات الجديدة تُحفظ وتُعرض تلقائياً عبر سحابة Google Drive المشتركة.</p>
+                      {receiptAttachmentData?.drive_link && (
+                        <a
+                          href={receiptAttachmentData.drive_link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-md"
+                        >
+                          <span>📁 فتح في Google Drive</span>
+                          <span>↗</span>
+                        </a>
+                      )}
+                    </div>
+                  ) : (
                     <div
                       className="transition-transform duration-150 ease-out flex items-center justify-center"
                       style={{
@@ -2347,12 +2367,7 @@ export const PurchasesReportView: React.FC = () => {
                         alt={`مرفق إذن استلام ${selectedRowForReceiptModal.po_number}`}
                         className="max-w-full max-h-[64vh] object-contain rounded-lg shadow-xl border border-slate-700 select-none"
                         loading="lazy"
-                        onError={(e) => {
-                          const target = e.currentTarget;
-                          if (rawUrl && target.src !== rawUrl) {
-                            target.src = rawUrl;
-                          }
-                        }}
+                        onError={() => setReceiptImgFailed(true)}
                       />
                     </div>
                   );
