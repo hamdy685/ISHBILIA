@@ -443,19 +443,18 @@ class PurchaseReceiptService
         $receipt->loadMissing(['items.purchaseOrderItem.prItem', 'purchaseOrder.purchaseRequest.department', 'purchaseRequest.department']);
         $assignedSiteId = (int) ($receipt->site_engineer_user_id ?: $receipt->purchaseOrder?->purchaseRequest?->site_engineer_user_id ?: $receipt->purchaseRequest?->site_engineer_user_id);
         $pr = $receipt->purchaseOrder?->purchaseRequest ?: $receipt->purchaseRequest;
-        $isReviewerAuthorized = ($siteEngineer->hasRole('reviewer') || $siteEngineer->hasPermission('purchase_request.review')) && (
-            ($pr && (int) $pr->reviewer_user_id === (int) $siteEngineer->id) ||
-            ($pr && $siteEngineer->department_id && ((int) $pr->department_id === (int) $siteEngineer->department_id || (int) $pr->target_department_id === (int) $siteEngineer->department_id))
-        );
+        $isOfficeReceipt = $receipt->receipt_type === 'REQUESTER_OFFICE';
 
         $isAuthorized = $siteEngineer->hasAnyRole(['admin', 'general_manager'])
             || $assignedSiteId === (int) $siteEngineer->id
             || (int) $receipt->receiver_user_id === (int) $siteEngineer->id
-            || (int) ($pr?->user_id) === (int) $siteEngineer->id
-            || $isReviewerAuthorized;
+            || ($isOfficeReceipt && (
+                (int) $receipt->actual_receiver_user_id === (int) $siteEngineer->id
+                || (int) ($pr?->user_id) === (int) $siteEngineer->id
+            ));
 
         if (! $isAuthorized) {
-            throw new \Illuminate\Auth\Access\AuthorizationException('هذا الإذن غير مخصص لمهندس الموقع أو المراجع الحالي.');
+            throw new \Illuminate\Auth\Access\AuthorizationException('هذا الإذن غير مسند إليك.');
         }
         if ($receipt->status !== 'PENDING_SITE_ENGINEER') {
             throw new \RuntimeException('لا يمكن تعديل إذن الاستلام بعد اعتماده أو إرساله للحسابات.');
@@ -519,19 +518,18 @@ class PurchaseReceiptService
         $receipt->loadMissing(['purchaseOrder.purchaseRequest.department', 'purchaseRequest.department', 'items']);
         $assignedSiteId = (int) ($receipt->site_engineer_user_id ?: $receipt->purchaseOrder?->purchaseRequest?->site_engineer_user_id ?: $receipt->purchaseRequest?->site_engineer_user_id);
         $pr = $receipt->purchaseOrder?->purchaseRequest ?: $receipt->purchaseRequest;
-        $isReviewerAuthorized = ($siteEngineer->hasRole('reviewer') || $siteEngineer->hasPermission('purchase_request.review')) && (
-            ($pr && (int) $pr->reviewer_user_id === (int) $siteEngineer->id) ||
-            ($pr && $siteEngineer->department_id && ((int) $pr->department_id === (int) $siteEngineer->department_id || (int) $pr->target_department_id === (int) $siteEngineer->department_id))
-        );
+        $isOfficeReceipt = $receipt->receipt_type === 'REQUESTER_OFFICE';
 
         $isAuthorized = $siteEngineer->hasAnyRole(['admin', 'general_manager'])
             || $assignedSiteId === (int) $siteEngineer->id
             || (int) $receipt->receiver_user_id === (int) $siteEngineer->id
-            || (int) ($pr?->user_id) === (int) $siteEngineer->id
-            || $isReviewerAuthorized;
+            || ($isOfficeReceipt && (
+                (int) $receipt->actual_receiver_user_id === (int) $siteEngineer->id
+                || (int) ($pr?->user_id) === (int) $siteEngineer->id
+            ));
 
         if (! $isAuthorized) {
-            throw new \Illuminate\Auth\Access\AuthorizationException('هذا الإذن غير مخصص لمهندس الموقع أو المراجع الحالي.');
+            throw new \Illuminate\Auth\Access\AuthorizationException('هذا الإذن غير مسند إليك.');
         }
 
         if ($receipt->status === 'APPROVED') {

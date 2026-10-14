@@ -248,8 +248,8 @@ export const ReviewerDashboardPage: React.FC = () => {
         if (!r || (r.status !== 'WAREHOUSE_RECEIPT_SUBMITTED' && r.status !== 'PENDING_SITE_ENGINEER')) return false;
         const siteEngId = r.site_engineer_user_id || (r.site_engineer as any)?.id || r.purchase_order?.purchase_request?.site_engineer_user_id;
         const receiverId = r.receiver_user_id || (r.receiver as any)?.id || r.actual_receiver_user_id;
-        // Only show if user himself was selected as the receiver, or if completely unassigned
-        return (siteEngId === user?.id) || (receiverId === user?.id) || (!siteEngId && !receiverId);
+        // Only show if user himself was explicitly selected as the site engineer or receiver
+        return (siteEngId === user?.id) || (receiverId === user?.id);
       })
       .map((r) => ({
         id: `receipt-${r.id}`,

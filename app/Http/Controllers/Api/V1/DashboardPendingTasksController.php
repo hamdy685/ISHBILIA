@@ -158,33 +158,25 @@ class DashboardPendingTasksController extends Controller
                 'items.purchaseOrderItem.item',
             ])
             ->where(function ($q) use ($user) {
-                $q->where('site_engineer_user_id', $user->id)
-                  ->orWhere('receiver_user_id', $user->id)
-                  ->orWhere('actual_receiver_user_id', $user->id)
-                  ->orWhereHas('purchaseOrder.purchaseRequest', function ($prQ) use ($user) {
-                      $prQ->where('site_engineer_user_id', $user->id)
-                          ->orWhere('user_id', $user->id);
-                  })
-                  ->orWhereHas('purchaseRequest', function ($prQ) use ($user) {
-                      $prQ->where('site_engineer_user_id', $user->id)
-                          ->orWhere('user_id', $user->id);
-                  });
-
-                // Only if no site engineer was designated on the receipt or request, fallback to the designated reviewer
-                if ($user->hasRole('reviewer') || $user->hasPermission('purchase_request.review')) {
-                    $q->orWhere(function ($fallbackQ) use ($user) {
-                        $fallbackQ->whereNull('site_engineer_user_id')
-                            ->where(function ($sub) use ($user) {
-                                $sub->whereHas('purchaseOrder.purchaseRequest', function ($prQ) use ($user) {
-                                    $prQ->where('reviewer_user_id', $user->id)
-                                        ->whereNull('site_engineer_user_id');
-                                })->orWhereHas('purchaseRequest', function ($prQ) use ($user) {
-                                    $prQ->where('reviewer_user_id', $user->id)
-                                        ->whereNull('site_engineer_user_id');
-                                });
-                            });
-                    });
-                }
+                // Strict Action Ownership:
+                // 1) Office supplies receipts: confirmed by requester / actual receiver
+                $q->where(function ($officeQ) use ($user) {
+                    $officeQ->where('receipt_type', 'REQUESTER_OFFICE')
+                        ->where(function ($sub) use ($user) {
+                            $sub->where('receiver_user_id', $user->id)
+                                ->orWhere('actual_receiver_user_id', $user->id)
+                                ->orWhereHas('purchaseRequest', fn ($prQ) => $prQ->where('user_id', $user->id))
+                                ->orWhereHas('purchaseOrder.purchaseRequest', fn ($prQ) => $prQ->where('user_id', $user->id));
+                        });
+                })
+                // 2) Field/site receipts: strictly the assigned site engineer or receiver
+                ->orWhere(function ($siteQ) use ($user) {
+                    $siteQ->where('receipt_type', '!=', 'REQUESTER_OFFICE')
+                        ->where(function ($sub) use ($user) {
+                            $sub->where('site_engineer_user_id', $user->id)
+                                ->orWhere('receiver_user_id', $user->id);
+                        });
+                });
             })
             ->whereIn('status', ['PENDING_SITE_ENGINEER', 'WAREHOUSE_RECEIPT_SUBMITTED'])
             ->orderByDesc('created_at')
