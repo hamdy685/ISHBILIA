@@ -71,7 +71,7 @@ return new class extends Migration
                     'target_type' => PurchaseReceipt::class,
                     'target_id' => $receipt->id,
                     'actor_user_id' => $actorId,
-                    'action' => 'RECEIPT_ROLLED_BACK_AND_REASSIGNED_TO_SITE_ENGINEER',
+                    'action' => 'RECEIPT_REASSIGNED_TO_SITE_ENGINEER',
                     'from_state' => $oldStatus,
                     'to_state' => 'PENDING_SITE_ENGINEER',
                     'comments' => "إلغاء التسجيل المحاسبي وفك قفل أمر الشراء الفعلي وإعادة توجيه إذن الاستلام {$receipt->receipt_number} إلى م. حاتم لإدخال الكميات المستلمة فعلياً لكل بند.",
