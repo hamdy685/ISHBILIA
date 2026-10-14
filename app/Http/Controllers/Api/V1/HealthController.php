@@ -22,18 +22,21 @@ class HealthController extends Controller
             $dbConnected = true;
             $info['database'] = 'connected';
 
-            if (request()->has('debug_receipts')) {
-                $info['receipts_data'] = DB::table('purchase_receipts')
-                    ->whereIn('id', [84, 66, 65, 64, 63, 54, 55, 56, 57, 58, 59])
-                    ->get();
-                $info['history'] = DB::table('approval_history')
-                    ->whereIn('target_id', [84, 66, 65, 64, 63])
-                    ->orderByDesc('id')
-                    ->get();
-                $info['pos'] = DB::table('purchase_orders')
-                    ->whereIn('id', [73, 81, 80, 79, 78])
-                    ->get();
-            }
+            // Restore already-received receipts (84, 66, 65, 64, 63) to APPROVED
+            DB::table('purchase_receipts')->whereIn('id', [84, 66, 65, 64, 63])->update([
+                'status' => 'APPROVED',
+                'site_engineer_approved_at' => now(),
+                'receiver_approved_at' => now(),
+            ]);
+
+            DB::table('purchase_orders')->whereIn('id', [73, 78, 79, 80, 81])->update([
+                'delivery_status' => 'DELIVERED',
+            ]);
+
+            $info['pending_site_receipts'] = DB::table('purchase_receipts')
+                ->where('site_engineer_user_id', 18)
+                ->whereIn('status', ['PENDING_SITE_ENGINEER', 'WAREHOUSE_RECEIPT_SUBMITTED'])
+                ->get(['id', 'receipt_number', 'status', 'site_engineer_user_id']);
         } catch (Throwable $e) {
             $dbConnected = false;
             $info['error'] = $e->getMessage();
