@@ -21,6 +21,7 @@ class HealthController extends Controller
             DB::connection()->getPdo();
             $dbConnected = true;
             $info['database'] = 'connected';
+            $info['latest_migration'] = DB::table('migrations')->orderByDesc('id')->value('migration');
         } catch (Throwable $e) {
             $dbConnected = false;
             $info['error'] = $e->getMessage();
