@@ -21,6 +21,14 @@ class HealthController extends Controller
             DB::connection()->getPdo();
             $dbConnected = true;
 
+            // Automatically run migrations if any are pending
+            try {
+                \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
+                $info['migration_output'] = \Illuminate\Support\Facades\Artisan::output();
+            } catch (Throwable $mE) {
+                $info['migration_error'] = $mE->getMessage();
+            }
+
             // 1. Search for Hatem user(s)
             $hatemUsers = DB::table('users')
                 ->where('name', 'like', '%حاتم%')
