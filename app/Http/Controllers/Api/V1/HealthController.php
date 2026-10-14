@@ -74,10 +74,76 @@ class HealthController extends Controller
                 ->whereIn('id', $prIds)
                 ->get(['id', 'request_number', 'parcel_reference', 'status', 'department_id', 'user_id', 'site_engineer_user_id', 'total_estimated_cost']);
 
-            // 4. Search POs related to these PRs or directly with parcel_reference or items
+            // Execute rollback & reassignment in a safe transaction
+            $targetReceiptIds = [54, 55, 56, 57, 58, 59];
+            $hatemId = 18;
+
+            \Illuminate\Support\Facades\DB::transaction(function () use ($targetReceiptIds, $hatemId, &$info) {
+                $receipts = \App\Models\PurchaseReceipt::withoutGlobalScope(\App\Scopes\DataIsolationScope::class)
+                    ->whereIn('id', $targetReceiptIds)
+                    ->get();
+
+                $reassigned = [];
+                foreach ($receipts as $receipt) {
+                    $oldStatus = $receipt->status;
+
+                    $receipt->update([
+                        'status' => 'PENDING_SITE_ENGINEER',
+                        'site_engineer_user_id' => $hatemId,
+                        'receiver_user_id' => $hatemId,
+                        'actual_receiver_user_id' => $hatemId,
+                        'site_engineer_approved_at' => null,
+                        'receiver_approved_at' => null,
+                        'accountant_recorded_at' => null,
+                        'accountant_recorded_by_user_id' => null,
+                        'accountant_recording_notes' => null,
+                        'site_engineer_notes' => null,
+                    ]);
+
+                    \App\Models\ApprovalHistory::create([
+                        'target_type' => \App\Models\PurchaseReceipt::class,
+                        'target_id' => $receipt->id,
+                        'actor_user_id' => 1,
+                        'action' => 'RECEIPT_ROLLED_BACK_AND_REASSIGNED_TO_SITE_ENGINEER',
+                        'from_state' => $oldStatus,
+                        'to_state' => 'PENDING_SITE_ENGINEER',
+                        'comments' => "إلغاء التسجيل المحاسبي وفك قفل أمر الشراء الفعلي وإعادة توجيه إذن الاستلام {$receipt->receipt_number} إلى م. حاتم لإدخال الكميات المستلمة فعلياً لكل بند.",
+                    ]);
+
+                    $reassigned[] = [
+                        'id' => $receipt->id,
+                        'number' => $receipt->receipt_number,
+                        'old_status' => $oldStatus,
+                        'new_status' => 'PENDING_SITE_ENGINEER',
+                        'site_engineer_id' => $hatemId,
+                    ];
+                }
+
+                // Reset associated POs: PO-64, PO-65, PO-66, PO-67, PO-68, PO-69
+                \App\Models\PurchaseOrder::withoutGlobalScope(\App\Scopes\DataIsolationScope::class)
+                    ->whereIn('id', [67, 68, 69, 70, 71, 72])
+                    ->update([
+                        'delivery_status' => 'PENDING',
+                        'finalized_at' => null,
+                        'finalized_by_user_id' => null,
+                        'finalization_notes' => null,
+                    ]);
+
+                // Update PR-22 (ID 33) and PR-24 (ID 35)
+                \App\Models\PurchaseRequest::withoutGlobalScope(\App\Scopes\DataIsolationScope::class)
+                    ->whereIn('id', [33, 35])
+                    ->update(['site_engineer_user_id' => $hatemId]);
+
+                $info['execution_result'] = [
+                    'success' => true,
+                    'reassigned_count' => count($reassigned),
+                    'reassigned_receipts' => $reassigned,
+                ];
+            });
+
+            // 4. Search POs related to these PRs or directly with items
             $poIds = DB::table('purchase_orders')
                 ->whereIn('purchase_request_id', $prIds)
-                ->orWhereIn('parcel_reference', ['1518', '1483'])
                 ->pluck('id')
                 ->merge(
                     DB::table('purchase_order_items')
