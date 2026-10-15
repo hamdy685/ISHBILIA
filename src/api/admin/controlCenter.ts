@@ -14,6 +14,10 @@ export interface AdminControlSearchResult {
   date: string;
   items_count?: number;
   weighing_group_id?: number | null;
+  project_site?: string;
+  pending_with?: string;
+  fulfillment_status?: string;
+  days_elapsed?: number;
 }
 
 export interface ImpactPreview {

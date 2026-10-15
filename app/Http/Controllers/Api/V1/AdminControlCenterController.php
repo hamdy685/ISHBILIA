@@ -48,7 +48,7 @@ class AdminControlCenterController extends Controller
             // 1. Search Purchase Requests
             if (in_array($entityType, ['ALL', 'PURCHASE_REQUEST'], true)) {
                 $prQuery = PurchaseRequest::withoutGlobalScopes()
-                    ->with(['department', 'user', 'items.item'])
+                    ->with(['department', 'user', 'assignedReviewer', 'items', 'purchaseOrders.receipts'])
                     ->when($q, function ($query, $term) {
                         $query->where(function ($sub) use ($term) {
                             $sub->where('request_number', 'like', "%{$term}%")
@@ -67,6 +67,31 @@ class AdminControlCenterController extends Controller
                     ->get();
 
                 foreach ($prQuery as $pr) {
+                    $hasApprovedReceipt = $pr->purchaseOrders->flatMap->receipts->contains(fn ($r) => $r->status === 'APPROVED');
+                    $hasPendingReceipt = $pr->purchaseOrders->flatMap->receipts->contains(fn ($r) => $r->status === 'PENDING_SITE_ENGINEER');
+                    $hasPo = $pr->purchaseOrders->isNotEmpty();
+
+                    $fulfillmentStatus = $hasApprovedReceipt
+                        ? 'تم الاستلام بالموقع'
+                        : ($hasPendingReceipt
+                            ? 'بالموقع قيد الفحص'
+                            : ($hasPo
+                                ? 'أمر شراء قيد التوريد'
+                                : 'قيد دورة الاعتماد'));
+
+                    $pendingWith = match ($pr->status) {
+                        'DRAFT' => $pr->user?->name ?: 'مقدم الطلب',
+                        'SUBMITTED', 'UNDER_REVIEW' => $pr->assignedReviewer?->name ? "المراجع: {$pr->assignedReviewer->name}" : 'المراجع المختص',
+                        'PENDING_EXECUTIVE_APPROVAL', 'PENDING_EXECUTIVE_QUOTE_DECISION' => 'المدير التنفيذي',
+                        'PENDING_PROCUREMENT_APPROVAL', 'PENDING_QUOTE_RECOMMENDATIONS' => 'إدارة المشتريات',
+                        'PENDING_ACCOUNTING_APPROVAL' => 'الحسابات المالية',
+                        'APPROVED_BY_ACCOUNTING' => 'المشتريات (جاهز للتعميد)',
+                        'ISSUED', 'PO_ISSUED' => 'المورد / قيد التوريد',
+                        'REJECTED' => 'مرفوض نهائياً',
+                        'CANCELLED' => 'ملغي',
+                        default => '—',
+                    };
+
                     $results->push([
                         'entity_type' => 'PURCHASE_REQUEST',
                         'id' => $pr->id,
@@ -78,6 +103,10 @@ class AdminControlCenterController extends Controller
                         'amount' => (float) ($pr->total_estimated_cost ?? ($pr->items->sum('estimated_line_total') ?: 0)),
                         'date' => $pr->created_at?->format('Y-m-d H:i'),
                         'items_count' => $pr->items->count(),
+                        'project_site' => $pr->project_site ?: ($pr->items->first()?->item_reference ?: '—'),
+                        'pending_with' => $pendingWith,
+                        'fulfillment_status' => $fulfillmentStatus,
+                        'days_elapsed' => $pr->created_at ? (int) $pr->created_at->diffInDays(now()) : 0,
                     ]);
                 }
             }
@@ -85,7 +114,7 @@ class AdminControlCenterController extends Controller
             // 2. Search Purchase Orders
             if (in_array($entityType, ['ALL', 'PURCHASE_ORDER'], true)) {
                 $poQuery = PurchaseOrder::withoutGlobalScopes()
-                    ->with(['supplier', 'purchaseRequest.department', 'items'])
+                    ->with(['supplier', 'purchaseRequest.department', 'purchaseRequest.assignedReviewer', 'items', 'receipts.siteEngineer'])
                     ->when($q, function ($query, $term) {
                         $query->where(function ($sub) use ($term) {
                             $sub->where('po_number', 'like', "%{$term}%")
@@ -104,6 +133,34 @@ class AdminControlCenterController extends Controller
                     ->get();
 
                 foreach ($poQuery as $po) {
+                    $pendingReceipt = $po->receipts->first(fn ($r) => $r->status === 'PENDING_SITE_ENGINEER');
+                    $approvedReceipts = $po->receipts->filter(fn ($r) => $r->status === 'APPROVED');
+                    $totalOrderedQty = (float) $po->items->sum('quantity');
+                    $totalReceivedQty = (float) $po->items->sum('received_quantity');
+
+                    if ($po->receipts->isEmpty()) {
+                        $fulfillmentStatus = 'لم يتم التوريد (0%)';
+                    } elseif ($pendingReceipt && $approvedReceipts->isEmpty()) {
+                        $fulfillmentStatus = 'بالموقع قيد الفحص';
+                    } elseif ($totalReceivedQty >= $totalOrderedQty && $totalOrderedQty > 0) {
+                        $fulfillmentStatus = 'استلام تام (100%)';
+                    } elseif ($totalReceivedQty > 0) {
+                        $fulfillmentStatus = 'استلام جزئي';
+                    } else {
+                        $fulfillmentStatus = 'شحنة مسجلة بالموقع';
+                    }
+
+                    $pendingWith = match ($po->status) {
+                        'DRAFT' => 'منشئ أمر الشراء',
+                        'PENDING_ACCOUNTING_REVIEW' => 'الإدارة المالية / الحسابات',
+                        'PENDING_ACTUAL_PO' => 'مهندس الموقع / بانتظار الأمر الفعلي',
+                        'APPROVED_BY_ACCOUNTING', 'FINAL_APPROVED' => 'مكتمل ومعتمد ماليًا',
+                        'CANCELLED', 'VOIDED' => 'ملغي بأمر إداري',
+                        default => $pendingReceipt
+                            ? ('مهندس الموقع: ' . ($pendingReceipt->actual_receiver_name ?: ($pendingReceipt->siteEngineer?->name ?: 'الموقع')))
+                            : ($po->supplier?->company_name ? "المورد: {$po->supplier->company_name}" : 'المورد'),
+                    };
+
                     $results->push([
                         'entity_type' => 'PURCHASE_ORDER',
                         'id' => $po->id,
@@ -115,6 +172,10 @@ class AdminControlCenterController extends Controller
                         'amount' => (float) ($po->grand_total ?? ($po->total_amount ?? 0)),
                         'date' => $po->created_at?->format('Y-m-d H:i'),
                         'items_count' => $po->items->count(),
+                        'project_site' => $po->purchaseRequest?->project_site ?: ($po->items->first()?->item_reference ?: '—'),
+                        'pending_with' => $pendingWith,
+                        'fulfillment_status' => $fulfillmentStatus,
+                        'days_elapsed' => $po->created_at ? (int) $po->created_at->diffInDays(now()) : 0,
                     ]);
                 }
             }
@@ -122,7 +183,7 @@ class AdminControlCenterController extends Controller
             // 3. Search Purchase Receipts
             if (in_array($entityType, ['ALL', 'PURCHASE_RECEIPT'], true)) {
                 $recQuery = PurchaseReceipt::withoutGlobalScopes()
-                    ->with(['supplier', 'purchaseOrder', 'purchaseRequest.department', 'siteEngineer'])
+                    ->with(['supplier', 'purchaseOrder.purchaseRequest', 'purchaseRequest.department', 'siteEngineer'])
                     ->when($q, function ($query, $term) {
                         $query->where(function ($sub) use ($term) {
                             $sub->where('receipt_number', 'like', "%{$term}%")
@@ -140,6 +201,19 @@ class AdminControlCenterController extends Controller
                     ->get();
 
                 foreach ($recQuery as $rec) {
+                    $pendingWith = match ($rec->status) {
+                        'PENDING_SITE_ENGINEER' => 'مهندس الموقع: ' . ($rec->actual_receiver_name ?: ($rec->siteEngineer?->name ?? 'الموقع')),
+                        'APPROVED' => 'الإدارة المالية (للمطابقة والفوترة)',
+                        'CANCELLED' => 'ملغي',
+                        default => '—',
+                    };
+
+                    $fulfillmentStatus = match ($rec->status) {
+                        'APPROVED' => 'مستلم ومطابق بالموقع',
+                        'PENDING_SITE_ENGINEER' => 'بانتظار فحص مهندس الموقع',
+                        default => 'إذن استلام مسجل',
+                    };
+
                     $results->push([
                         'entity_type' => 'PURCHASE_RECEIPT',
                         'id' => $rec->id,
@@ -151,6 +225,10 @@ class AdminControlCenterController extends Controller
                         'receiver' => $rec->actual_receiver_name ?: ($rec->siteEngineer?->name ?? 'غير محدد'),
                         'date' => $rec->created_at?->format('Y-m-d H:i'),
                         'weighing_group_id' => $rec->weighing_group_id,
+                        'project_site' => $rec->purchaseRequest?->project_site ?: ($rec->purchaseOrder?->purchaseRequest?->project_site ?? '—'),
+                        'pending_with' => $pendingWith,
+                        'fulfillment_status' => $fulfillmentStatus,
+                        'days_elapsed' => $rec->created_at ? (int) $rec->created_at->diffInDays(now()) : 0,
                     ]);
                 }
             }

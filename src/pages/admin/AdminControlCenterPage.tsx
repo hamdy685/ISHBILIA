@@ -69,6 +69,33 @@ export const AdminControlCenterPage: React.FC = () => {
     allowedTransitions?: WorkflowTransitionRule[];
   } | null>(null);
 
+  // Decision Columns Visibility Controls
+  const [visibleCols, setVisibleCols] = useState<{
+    code: boolean;
+    title: boolean;
+    site: boolean;
+    department: boolean;
+    supplier: boolean;
+    amount: boolean;
+    status: boolean;
+    pendingWith: boolean;
+    fulfillment: boolean;
+    elapsed: boolean;
+  }>({
+    code: true,
+    title: true,
+    site: true,
+    department: true,
+    supplier: true,
+    amount: true,
+    status: true,
+    pendingWith: true,
+    fulfillment: true,
+    elapsed: true,
+  });
+
+  const [showColMenu, setShowColMenu] = useState<boolean>(false);
+
   const fetchSearchData = async () => {
     setLoading(true);
     setError(null);
@@ -362,9 +389,55 @@ export const AdminControlCenterPage: React.FC = () => {
       </div>
 
       {/* ── Tab Content ── */}
+      {/* ── Tab Content ── */}
       {activeTab === 'WORKFLOW' && (
         <div className="space-y-3">
           <div className="border border-slate-800 bg-slate-900/70 rounded-2xl overflow-hidden backdrop-blur-md">
+            {/* Table Action Bar with Column Customizer */}
+            <div className="p-3 border-b border-slate-800 bg-slate-950/60 flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-300">📊 معاملات مسار المشتريات ({results.length})</span>
+                <span className="text-[11px] text-slate-500 font-medium">· كشف رقابي واتخاذ قرار فوري</span>
+              </div>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowColMenu(!showColMenu)}
+                  className="px-3 py-1.5 rounded-xl border border-slate-700 bg-slate-900 hover:bg-slate-850 text-slate-300 hover:text-white text-xs font-bold flex items-center gap-1.5 transition-colors"
+                >
+                  <span>⚙️ تخصيص الأعمدة</span>
+                  <span className="text-[10px]">{showColMenu ? '▲' : '▼'}</span>
+                </button>
+                {showColMenu && (
+                  <div className="absolute left-0 mt-2 w-64 bg-slate-900 border border-slate-700 rounded-2xl p-3 shadow-2xl z-30 space-y-2 text-xs animate-scale-in">
+                    <span className="font-black text-gold-300 block border-b border-slate-800 pb-1.5">
+                      إظهار / إخفاء أعمدة القرار:
+                    </span>
+                    {[
+                      { key: 'site', label: '📍 موقع المشروع / القطعة' },
+                      { key: 'department', label: '🏢 القسم' },
+                      { key: 'supplier', label: '🤝 المورد' },
+                      { key: 'amount', label: '💰 القيمة الإجمالية' },
+                      { key: 'status', label: '🏷️ الحالة الحالية' },
+                      { key: 'pendingWith', label: '👤 المسؤول الحالي (Pending With)' },
+                      { key: 'fulfillment', label: '🚚 حالة الاستلام والتوريد' },
+                      { key: 'elapsed', label: '⏳ عمر المعاملة (SLA)' },
+                    ].map((col) => (
+                      <label key={col.key} className="flex items-center gap-2 text-slate-300 hover:text-white cursor-pointer select-none py-0.5">
+                        <input
+                          type="checkbox"
+                          checked={visibleCols[col.key as keyof typeof visibleCols]}
+                          onChange={(e) => setVisibleCols(prev => ({ ...prev, [col.key]: e.target.checked }))}
+                          className="rounded bg-slate-950 border-slate-700 text-gold-500 focus:ring-0"
+                        />
+                        <span>{col.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
             {loading ? (
               <div className="flex flex-col items-center justify-center p-12 space-y-3">
                 <LoadingSpinner size="lg" />
@@ -379,52 +452,139 @@ export const AdminControlCenterPage: React.FC = () => {
                 <table className="w-full text-right text-xs">
                   <thead className="bg-slate-950/80 text-slate-300 border-b border-slate-800 font-black">
                     <tr>
-                      <th className="p-3.5">النوع والكود</th>
-                      <th className="p-3.5">البيان / المبرر</th>
-                      <th className="p-3.5">القسم</th>
-                      <th className="p-3.5">المورد</th>
-                      <th className="p-3.5">القيمة الإجمالية</th>
-                      <th className="p-3.5">الحالة الحالية</th>
-                      <th className="p-3.5">التاريخ</th>
+                      {visibleCols.code && <th className="p-3.5">النوع والكود</th>}
+                      {visibleCols.title && <th className="p-3.5">البيان / المبرر</th>}
+                      {visibleCols.site && <th className="p-3.5">الموقع / القطعة</th>}
+                      {visibleCols.department && <th className="p-3.5">القسم</th>}
+                      {visibleCols.supplier && <th className="p-3.5">المورد</th>}
+                      {visibleCols.amount && <th className="p-3.5">القيمة الإجمالية</th>}
+                      {visibleCols.status && <th className="p-3.5">الحالة الحالية</th>}
+                      {visibleCols.pendingWith && <th className="p-3.5">المسؤول الحالي (Pending With)</th>}
+                      {visibleCols.fulfillment && <th className="p-3.5">حالة التوريد والاستلام</th>}
+                      {visibleCols.elapsed && <th className="p-3.5 text-center">عمر المعاملة (SLA)</th>}
                       <th className="p-3.5 text-center">إجراءات التحكم الآمن</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/50 text-slate-300">
                     {results.map((row) => (
                       <tr key={`${row.entity_type}-${row.id}`} className="hover:bg-slate-800/40 transition-colors">
-                        <td className="p-3.5 whitespace-nowrap">
-                          <span className="font-mono font-black text-cyan-300 bg-cyan-950/60 border border-cyan-800/40 px-2 py-0.5 rounded-md">
-                            {row.code}
-                          </span>
-                        </td>
-                        <td className="p-3.5 max-w-xs truncate font-medium text-slate-200">
-                          {row.title}
-                        </td>
-                        <td className="p-3.5 whitespace-nowrap text-slate-400">
-                          {row.department || '—'}
-                        </td>
-                        <td className="p-3.5 whitespace-nowrap font-medium text-amber-300">
-                          {row.supplier || '—'}
-                        </td>
-                        <td className="p-3.5 whitespace-nowrap font-mono font-bold text-emerald-400">
-                          {row.amount ? `${formatCleanNumber(row.amount, 2)} ج.م` : '—'}
-                        </td>
-                        <td className="p-3.5 whitespace-nowrap">
-                          {(() => {
-                            const badge = getWorkflowStatusBadge(row.status);
-                            return (
-                              <span
-                                className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold inline-flex items-center gap-1.5 ${badge.bgClass} ${badge.borderClass} ${badge.textClass}`}
-                              >
-                                {badge.icon && <span>{badge.icon}</span>}
-                                <span>{badge.label}</span>
-                              </span>
-                            );
-                          })()}
-                        </td>
-                        <td className="p-3.5 whitespace-nowrap font-mono text-slate-400 text-[11px]">
-                          {row.date}
-                        </td>
+                        {visibleCols.code && (
+                          <td className="p-3.5 whitespace-nowrap">
+                            <span className="font-mono font-black text-cyan-300 bg-cyan-950/60 border border-cyan-800/40 px-2 py-0.5 rounded-md">
+                              {row.code}
+                            </span>
+                          </td>
+                        )}
+
+                        {visibleCols.title && (
+                          <td className="p-3.5 max-w-xs truncate font-medium text-slate-200">
+                            {row.title}
+                          </td>
+                        )}
+
+                        {visibleCols.site && (
+                          <td className="p-3.5 whitespace-nowrap">
+                            <span className="bg-slate-950/80 px-2 py-0.5 rounded border border-slate-800 text-[11px] text-cyan-200 font-bold inline-flex items-center gap-1">
+                              <span>📍</span>
+                              <span>{row.project_site || '—'}</span>
+                            </span>
+                          </td>
+                        )}
+
+                        {visibleCols.department && (
+                          <td className="p-3.5 whitespace-nowrap text-slate-400">
+                            {row.department || '—'}
+                          </td>
+                        )}
+
+                        {visibleCols.supplier && (
+                          <td className="p-3.5 whitespace-nowrap font-medium text-amber-300">
+                            {row.supplier || '—'}
+                          </td>
+                        )}
+
+                        {visibleCols.amount && (
+                          <td className="p-3.5 whitespace-nowrap font-mono font-bold text-emerald-400">
+                            {row.amount ? `${formatCleanNumber(row.amount, 2)} ج.م` : '—'}
+                          </td>
+                        )}
+
+                        {visibleCols.status && (
+                          <td className="p-3.5 whitespace-nowrap">
+                            {(() => {
+                              const badge = getWorkflowStatusBadge(row.status);
+                              return (
+                                <span
+                                  className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold inline-flex items-center gap-1.5 ${badge.bgClass} ${badge.borderClass} ${badge.textClass}`}
+                                >
+                                  {badge.icon && <span>{badge.icon}</span>}
+                                  <span>{badge.label}</span>
+                                </span>
+                              );
+                            })()}
+                          </td>
+                        )}
+
+                        {visibleCols.pendingWith && (
+                          <td className="p-3.5 whitespace-nowrap">
+                            <span className="px-2.5 py-1 rounded-lg border border-amber-800/40 bg-amber-950/40 text-amber-200 text-[11px] font-bold inline-flex items-center gap-1.5 shadow-sm">
+                              <span>👤</span>
+                              <span>{row.pending_with || '—'}</span>
+                            </span>
+                          </td>
+                        )}
+
+                        {visibleCols.fulfillment && (
+                          <td className="p-3.5 whitespace-nowrap">
+                            {(() => {
+                              const f = row.fulfillment_status || '—';
+                              const isComplete = f.includes('تام') || f.includes('مستلم');
+                              const isPartial = f.includes('جزئي') || f.includes('فحص');
+                              return (
+                                <span
+                                  className={`px-2 py-0.5 rounded-lg border text-[11px] font-bold inline-flex items-center gap-1.5 ${
+                                    isComplete
+                                      ? 'bg-emerald-950/60 border-emerald-600/50 text-emerald-300'
+                                      : isPartial
+                                      ? 'bg-amber-950/60 border-amber-600/50 text-amber-300'
+                                      : 'bg-slate-950 border-slate-700 text-slate-400'
+                                  }`}
+                                >
+                                  <span>{isComplete ? '🚚' : isPartial ? '📦' : '⏳'}</span>
+                                  <span>{f}</span>
+                                </span>
+                              );
+                            })()}
+                          </td>
+                        )}
+
+                        {visibleCols.elapsed && (
+                          <td className="p-3.5 whitespace-nowrap text-center">
+                            {(() => {
+                              const days = row.days_elapsed ?? 0;
+                              const isDelayed = days >= 5;
+                              return (
+                                <div className="flex flex-col items-center">
+                                  <span
+                                    className={`font-mono font-bold text-[11px] px-2.5 py-0.5 rounded-md border ${
+                                      isDelayed
+                                        ? 'bg-rose-950/70 border-rose-600/60 text-rose-300 animate-pulse'
+                                        : days > 2
+                                        ? 'bg-amber-950/50 border-amber-700/50 text-amber-300'
+                                        : 'bg-slate-950 border-slate-800 text-slate-400'
+                                    }`}
+                                  >
+                                    {days === 0 ? 'اليوم' : `منذ ${days} ${days === 1 ? 'يوم' : days === 2 ? 'يومين' : 'أيام'}`}
+                                  </span>
+                                  {isDelayed && (
+                                    <span className="text-[10px] text-rose-400 font-bold mt-0.5">⚠️ متأخر</span>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </td>
+                        )}
+
                         <td className="p-3.5 whitespace-nowrap">
                           <div className="flex items-center justify-center gap-1.5">
                             {/* Rollback Button */}
@@ -494,12 +654,13 @@ export const AdminControlCenterPage: React.FC = () => {
                 <thead className="bg-slate-950/80 text-slate-300 border-b border-slate-800 font-black">
                   <tr>
                     <th className="p-3.5">رقم الإذن REC</th>
+                    <th className="p-3.5">الموقع والقطعة</th>
                     <th className="p-3.5">النوع والحماية</th>
                     <th className="p-3.5">المورد</th>
                     <th className="p-3.5">القسم</th>
                     <th className="p-3.5">المستلم الميداني الحالي</th>
                     <th className="p-3.5">الحالة</th>
-                    <th className="p-3.5">التاريخ</th>
+                    <th className="p-3.5 text-center">عمر الإذن</th>
                     <th className="p-3.5 text-center">إجراءات المستلم</th>
                   </tr>
                 </thead>
@@ -509,6 +670,12 @@ export const AdminControlCenterPage: React.FC = () => {
                       <td className="p-3.5 whitespace-nowrap">
                         <span className="font-mono font-black text-cyan-300 bg-cyan-950/60 border border-cyan-800/40 px-2 py-0.5 rounded-md">
                           {row.code}
+                        </span>
+                      </td>
+                      <td className="p-3.5 whitespace-nowrap">
+                        <span className="bg-slate-950/80 px-2 py-0.5 rounded border border-slate-800 text-[11px] text-cyan-200 font-bold inline-flex items-center gap-1">
+                          <span>📍</span>
+                          <span>{row.project_site || '—'}</span>
                         </span>
                       </td>
                       <td className="p-3.5 whitespace-nowrap">
@@ -542,8 +709,22 @@ export const AdminControlCenterPage: React.FC = () => {
                           );
                         })()}
                       </td>
-                      <td className="p-3.5 whitespace-nowrap font-mono text-slate-400 text-[11px]">
-                        {row.date}
+                      <td className="p-3.5 whitespace-nowrap text-center">
+                        {(() => {
+                          const days = row.days_elapsed ?? 0;
+                          const isDelayed = days >= 3 && row.status === 'PENDING_SITE_ENGINEER';
+                          return (
+                            <span
+                              className={`font-mono font-bold text-[11px] px-2 py-0.5 rounded-md border ${
+                                isDelayed
+                                  ? 'bg-rose-950/70 border-rose-600/60 text-rose-300 animate-pulse'
+                                  : 'bg-slate-950 border-slate-800 text-slate-400'
+                              }`}
+                            >
+                              {days === 0 ? 'اليوم' : `منذ ${days} ${days === 1 ? 'يوم' : days === 2 ? 'يومين' : 'أيام'}`}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="p-3.5 whitespace-nowrap text-center">
                         <Button
