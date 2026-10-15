@@ -27,7 +27,7 @@ export const AdminForceDeleteModal: React.FC<AdminForceDeleteModalProps> = ({
 
   if (!isOpen || !order) return null;
 
-  const isConfirmed = confirmInput.trim() === 'حذف';
+  const isConfirmed = confirmInput.trim() === 'إلغاء' || confirmInput.trim().toUpperCase() === 'CONFIRM';
   const targetId = order.order_id ?? order.request_id;
   const entityType = order.order_id ? 'order' : 'request';
 
@@ -39,14 +39,14 @@ export const AdminForceDeleteModal: React.FC<AdminForceDeleteModalProps> = ({
 
     try {
       const res = await forceDeleteMasterOrderApi(targetId, {
-        reason: reason.trim() || 'حذف نهائي سيادي بواسطة مدير النظام',
+        reason: reason.trim() || 'إلغاء إداري سيادي من لوحة التحكم مع الاحتفاظ بالسجل التاريخي',
         entity_type: entityType,
       });
 
-      onSuccess(order.unique_key, res.message || 'تم حذف المعاملة ودورتها المستندية نهائياً بنجاح.');
+      onSuccess(order.unique_key, res.message || 'تم إلغاء المعاملة ودورتها المستندية بأمان وتوثيقها في سجل التدقيق.');
       onClose();
     } catch (err: unknown) {
-      console.error('[AdminForceDeleteModal] Error executing force delete:', err);
+      console.error('[AdminForceDeleteModal] Error executing safe cancel:', err);
       const parsed = parseApiError(err);
       const anyErr = err as any;
       const detailed = anyErr?.response?.data?.message || anyErr?.response?.data?.error || parsed.message;
@@ -61,18 +61,18 @@ export const AdminForceDeleteModal: React.FC<AdminForceDeleteModalProps> = ({
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto"
       dir="rtl"
     >
-      <div className="relative w-full max-w-lg bg-slate-900 border-2 border-rose-500/70 rounded-2xl shadow-2xl shadow-rose-950/80 p-6 text-slate-100 space-y-5 animate-scale-in">
+      <div className="relative w-full max-w-lg bg-slate-900 border-2 border-amber-500/70 rounded-2xl shadow-2xl shadow-amber-950/80 p-6 text-slate-100 space-y-5 animate-scale-in">
         {/* ── Header ── */}
         <div className="flex items-start gap-4 pb-4 border-b border-slate-800">
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-rose-500/50 bg-rose-950/60 text-2xl shadow-inner text-rose-300">
-            🚨
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-amber-500/50 bg-amber-950/60 text-2xl shadow-inner text-amber-300">
+            🛡️
           </span>
           <div className="flex-1 min-w-0">
-            <h3 className="text-lg font-black text-rose-300 flex items-center gap-2">
-              الحذف النهائي للطلب والمعاملة (Force Delete)
+            <h3 className="text-lg font-black text-amber-300 flex items-center gap-2">
+              الإلغاء الإداري الآمن للمعاملة (Safe Cancellation)
             </h3>
             <p className="text-xs text-slate-400 font-medium mt-0.5">
-              صلاحية سيادية استثنائية لمدير النظام — حذف قطعي ودائم من قاعدة البيانات
+              حظر الحذف الفيزيائي — تحويل لحالة ملغاة مع الاحتفاظ الكامل بالسجل والتدقيق التاريخي
             </p>
           </div>
           <button
@@ -85,14 +85,14 @@ export const AdminForceDeleteModal: React.FC<AdminForceDeleteModalProps> = ({
           </button>
         </div>
 
-        {/* ── Severe Warning Alert ── */}
-        <div className="rounded-xl border border-rose-500/60 bg-rose-950/40 p-4 space-y-2">
-          <div className="flex items-center gap-2 text-rose-300 font-black text-sm">
-            <span>⚠️</span>
-            <span>تحذير سيادي صارم وغير قابل للتراجع:</span>
+        {/* ── Warning Alert ── */}
+        <div className="rounded-xl border border-amber-500/60 bg-amber-950/40 p-4 space-y-2">
+          <div className="flex items-center gap-2 text-amber-300 font-black text-sm">
+            <span>🔒</span>
+            <span>سياسة حظر الحذف الفيزيائي والنزاهة التاريخية:</span>
           </div>
-          <p className="text-xs text-rose-200/90 leading-relaxed font-medium">
-            سيتم حذف هذا الطلب وكل دورته المستندية (بنود الطلب، أمر الشراء المبدئي والفعلي ومرفقاته، إذن الاستلام بالموقع GRN، الفواتير المرتبطة، وسجل الموافقات) بشكل نهائي من قاعدة البيانات ولا يمكن التراجع عن هذا الإجراء إطلاقاً.
+          <p className="text-xs text-amber-200/90 leading-relaxed font-medium">
+            تطبيقاً لقواعد الرقابة الإدارية والمالية، <strong>لن يتم حذف أي سجل من قاعدة البيانات</strong>. سيتم تحويل حالة هذه المعاملة والمستندات المرتبطة بها غير المكتملة إلى حالة (ملغاة CANCELLED / VOIDED)، مع إغلاق المهام المفتوحة وتوثيق الإجراء بالكامل باسمك في سجل الرقابة والتدقيق غير القابل للتعديل.
           </p>
         </div>
 
@@ -132,30 +132,30 @@ export const AdminForceDeleteModal: React.FC<AdminForceDeleteModalProps> = ({
         <div className="space-y-1.5">
           <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
             <span>سبب الحذف (يُسجل إلزامياً في سجل الرقابة الأمني Audit Log):</span>
-            <span className="text-[10px] text-amber-400 font-medium">إلزامي للمساءلة</span>
+            <span className="text-[10px] text-amber-400 font-medium">إلزامي للتوثيق في Audit Log</span>
           </label>
           <input
             type="text"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             disabled={submitting}
-            placeholder="مثال: طلب خاطئ / توريد تجريبي تم إلغاؤه"
-            className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200 focus:border-rose-500 focus:outline-none focus:ring-1 focus:ring-rose-500"
+            placeholder="مثال: طلب خاطئ / توريد تم إلغاؤه إدارياً"
+            className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
           />
         </div>
 
         {/* ── Security Confirm Input ── */}
-        <div className="space-y-1.5 rounded-xl border border-rose-900/60 bg-rose-950/20 p-3">
-          <label className="text-xs font-bold text-rose-300 block">
-            لتأكيد الحذف النهائي، يرجى كتابة كلمة <strong className="text-white bg-rose-900/80 px-1.5 py-0.5 rounded font-mono">حذف</strong> أدناه:
+        <div className="space-y-1.5 rounded-xl border border-amber-900/60 bg-amber-950/20 p-3">
+          <label className="text-xs font-bold text-amber-300 block">
+            لتأكيد الإلغاء الآمن، يرجى كتابة كلمة <strong className="text-white bg-amber-900/80 px-1.5 py-0.5 rounded font-mono">إلغاء</strong> أو <strong className="text-white bg-amber-900/80 px-1.5 py-0.5 rounded font-mono">CONFIRM</strong> أدناه:
           </label>
           <input
             type="text"
             value={confirmInput}
             onChange={(e) => setConfirmInput(e.target.value)}
             disabled={submitting}
-            placeholder='اكتب كلمة: حذف'
-            className="w-full rounded-xl border border-rose-500/50 bg-slate-950 px-3 py-2 text-xs font-bold text-rose-200 placeholder-slate-600 focus:border-rose-400 focus:outline-none focus:ring-1 focus:ring-rose-400"
+            placeholder='اكتب: إلغاء أو CONFIRM'
+            className="w-full rounded-xl border border-amber-500/50 bg-slate-950 px-3 py-2 text-xs font-bold text-amber-200 placeholder-slate-600 focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
           />
         </div>
 
@@ -171,7 +171,7 @@ export const AdminForceDeleteModal: React.FC<AdminForceDeleteModalProps> = ({
             disabled={submitting}
             className="text-xs h-9 px-4 font-bold"
           >
-            إلغاء التراجع
+            إغلاق وتراجع
           </Button>
 
           <Button
@@ -179,17 +179,17 @@ export const AdminForceDeleteModal: React.FC<AdminForceDeleteModalProps> = ({
             variant="danger"
             onClick={handleConfirmDelete}
             disabled={!isConfirmed || submitting}
-            className="text-xs h-9 px-5 font-black bg-rose-600 hover:bg-rose-500 text-white border-rose-500 shadow-lg shadow-rose-950/60 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+            className="text-xs h-9 px-5 font-black bg-amber-600 hover:bg-amber-500 text-white border-amber-500 shadow-lg shadow-amber-950/60 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
           >
             {submitting ? (
               <>
                 <LoadingSpinner size="sm" />
-                <span>جارٍ الحذف النهائي...</span>
+                <span>جارٍ الإلغاء الآمن...</span>
               </>
             ) : (
               <>
-                <span>🗑️</span>
-                <span>تأكيد الحذف النهائي القطعي</span>
+                <span>🛡️</span>
+                <span>تأكيد الإلغاء وتحديث السجل</span>
               </>
             )}
           </Button>

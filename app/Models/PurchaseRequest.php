@@ -293,9 +293,19 @@ class PurchaseRequest extends Model
         return true;
     }
 
+    public function creator(): BelongsTo
+    {
+        return $this->user();
+    }
+
     public function approvalHistory(): MorphMany
     {
         return $this->morphMany(ApprovalHistory::class, 'target');
+    }
+
+    public function approvalHistories(): MorphMany
+    {
+        return $this->approvalHistory();
     }
 
     public function attachments(): MorphMany

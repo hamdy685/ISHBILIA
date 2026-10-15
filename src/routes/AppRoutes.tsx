@@ -62,6 +62,7 @@ const SuppliersPage = lazyImportWithRetry(() => import("../pages/admin/Suppliers
 const AdminRequestTrackerPage = lazyImportWithRetry(() => import("../pages/admin/AdminRequestTrackerPage"), "AdminRequestTrackerPage");
 const AdminRequestDetailsPage = lazyImportWithRetry(() => import("../pages/admin/AdminRequestDetailsPage"), "AdminRequestDetailsPage");
 const AdminMasterOrdersPage = lazyImportWithRetry(() => import("../pages/admin/AdminMasterOrdersPage"), "AdminMasterOrdersPage");
+const AdminControlCenterPage = lazyImportWithRetry(() => import("../pages/admin/AdminControlCenterPage"), "AdminControlCenterPage");
 import RoleHomeRedirect from "./RoleHomeRedirect";
 import { ForbiddenPage, NotFoundPage, ServerErrorPage } from "../pages/ErrorPages";
 
@@ -112,6 +113,7 @@ export const AppRoutes: React.FC = () => {
                 {/* ── Admin Routes ─────────────────────────────────────────── */}
                 <Route element={<RoleRoute allowedRoles={["admin"]} />}>
                     <Route path="/admin" element={<AdminDashboardPage />} />
+                    <Route path="/admin/control-center" element={<AdminControlCenterPage />} />
                     <Route path="/admin/master-orders" element={<AdminMasterOrdersPage />} />
                     <Route path="/admin/request-tracker" element={<AdminRequestTrackerPage />} />
                     <Route path="/admin/request-tracker/:id" element={<AdminRequestDetailsPage />} />

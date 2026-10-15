@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\V1\AccountingPurchaseOrderController;
 use App\Http\Controllers\Api\V1\AccountingPurchaseRequestController;
 use App\Http\Controllers\Api\V1\SupplierInvoiceController;
 use App\Http\Controllers\Api\V1\AdminController;
+use App\Http\Controllers\Api\V1\AdminControlCenterController;
 use App\Http\Controllers\Api\V1\AdminMasterOrdersController;
 use App\Http\Controllers\Api\V1\AdminRequestTrackerController;
 use App\Http\Controllers\Api\V1\AdminSystemMonitoringController;
@@ -502,6 +503,22 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(functi
     Route::get('/orders/{id}/details', [AdminMasterOrdersController::class, 'showOrder']);
     Route::put('/orders/{id}/force-update', [AdminMasterOrdersController::class, 'forceUpdateOrder']);
     Route::delete('/orders/{id}/force-delete', [AdminMasterOrdersController::class, 'forceDeleteOrder']);
+});
+
+// Admin Control Center (Sovereign Workflow & Lifecycle Control)
+Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin/control')->group(function () {
+    Route::get('/search', [AdminControlCenterController::class, 'search']);
+    Route::get('/documents/{type}/{id}', [AdminControlCenterController::class, 'showDocument'])->whereNumber('id');
+    Route::post('/preview', [AdminControlCenterController::class, 'previewImpact']);
+    Route::post('/requests/{id}/edit', [AdminControlCenterController::class, 'editRequest'])->whereNumber('id');
+    Route::post('/requests/{id}/cancel', [AdminControlCenterController::class, 'cancelDocument']);
+    Route::post('/receipts/{id}/reassign', [AdminControlCenterController::class, 'reassignReceipt'])->whereNumber('id');
+    Route::post('/documents/rollback', [AdminControlCenterController::class, 'rollbackDocument']);
+    Route::post('/documents/forward', [AdminControlCenterController::class, 'forwardDocument']);
+    Route::post('/assignments/manage', [AdminControlCenterController::class, 'manageAssignment']);
+    Route::post('/notifications/{id}/resend', [AdminControlCenterController::class, 'resendNotification'])->whereNumber('id');
+    Route::get('/audit-log', [AdminControlCenterController::class, 'getAuditLogs']);
+    Route::get('/reports/grid', [AdminControlCenterController::class, 'getExcelReportsGrid']);
 });
 
 // Admin System Management Routes

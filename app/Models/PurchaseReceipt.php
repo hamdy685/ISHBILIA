@@ -304,4 +304,24 @@ class PurchaseReceipt extends Model
     {
         return $this->hasMany(SupplierInvoice::class, 'purchase_receipt_id');
     }
+
+    public function invoices(): HasMany
+    {
+        return $this->supplierInvoices();
+    }
+
+    public function creator(): BelongsTo
+    {
+        return $this->receiver();
+    }
+
+    public function approvalHistory(): \Illuminate\Database\Eloquent\Relations\MorphMany
+    {
+        return $this->morphMany(ApprovalHistory::class, 'target');
+    }
+
+    public function approvalHistories(): \Illuminate\Database\Eloquent\Relations\MorphMany
+    {
+        return $this->approvalHistory();
+    }
 }

@@ -218,14 +218,29 @@ class PurchaseOrder extends Model
         return $this->receipts();
     }
 
+    public function creator(): BelongsTo
+    {
+        return $this->createdBy();
+    }
+
     public function supplierInvoices(): HasMany
     {
         return $this->hasMany(SupplierInvoice::class, 'purchase_order_id');
     }
 
+    public function invoices(): HasMany
+    {
+        return $this->supplierInvoices();
+    }
+
     public function approvalHistory(): MorphMany
     {
         return $this->morphMany(ApprovalHistory::class, 'target');
+    }
+
+    public function approvalHistories(): MorphMany
+    {
+        return $this->approvalHistory();
     }
 
     public function attachments(): MorphMany
