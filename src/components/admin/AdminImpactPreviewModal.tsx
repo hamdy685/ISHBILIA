@@ -4,6 +4,7 @@ import { Button } from '../ui/Button';
 import LoadingSpinner from '../LoadingSpinner';
 import ErrorMessage from '../ErrorMessage';
 import { ImpactPreview } from '../../api/admin/controlCenter';
+import { getWorkflowStatusLabel } from '../../utils/statusLabels';
 
 interface AdminImpactPreviewModalProps {
   isOpen: boolean;
@@ -95,12 +96,12 @@ export const AdminImpactPreviewModal: React.FC<AdminImpactPreviewModalProps> = (
           <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-3.5 space-y-1.5">
             <span className="text-[11px] font-bold text-slate-400 block">انتقال حالة المستند:</span>
             <div className="flex items-center gap-2">
-              <span className="font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-                {impact.current_status}
+              <span className="font-bold text-xs px-2.5 py-1 rounded bg-slate-800 text-slate-200 border border-slate-700">
+                {getWorkflowStatusLabel(impact.current_status)}
               </span>
               <span className="text-gold-400 font-bold">⬅️</span>
-              <span className="font-mono px-2 py-0.5 rounded bg-gold-950 text-gold-300 border border-gold-700">
-                {impact.proposed_status || 'نفس الحالة'}
+              <span className="font-bold text-xs px-2.5 py-1 rounded bg-gold-950 text-gold-300 border border-gold-700">
+                {impact.proposed_status ? getWorkflowStatusLabel(impact.proposed_status) : 'نفس الحالة'}
               </span>
             </div>
           </div>

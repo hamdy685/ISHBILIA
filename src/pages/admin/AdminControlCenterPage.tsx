@@ -17,6 +17,7 @@ import { Button } from '../../components/ui/Button';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import ErrorMessage from '../../components/ErrorMessage';
 import { formatCleanNumber } from '../../utils/numberFormat';
+import { getWorkflowStatusBadge } from '../../utils/statusLabels';
 
 type ActiveTab = 'WORKFLOW' | 'RECEIPTS' | 'EXCEL_GRID' | 'AUDIT_LOG';
 
@@ -409,9 +410,17 @@ export const AdminControlCenterPage: React.FC = () => {
                           {row.amount ? `${formatCleanNumber(row.amount, 2)} ج.م` : '—'}
                         </td>
                         <td className="p-3.5 whitespace-nowrap">
-                          <span className="px-2.5 py-1 rounded-lg border border-slate-700 bg-slate-950 text-[11px] font-bold text-slate-300">
-                            {row.status}
-                          </span>
+                          {(() => {
+                            const badge = getWorkflowStatusBadge(row.status);
+                            return (
+                              <span
+                                className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold inline-flex items-center gap-1.5 ${badge.bgClass} ${badge.borderClass} ${badge.textClass}`}
+                              >
+                                {badge.icon && <span>{badge.icon}</span>}
+                                <span>{badge.label}</span>
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td className="p-3.5 whitespace-nowrap font-mono text-slate-400 text-[11px]">
                           {row.date}
@@ -521,9 +530,17 @@ export const AdminControlCenterPage: React.FC = () => {
                         👷 {row.receiver || 'غير محدد'}
                       </td>
                       <td className="p-3.5 whitespace-nowrap">
-                        <span className="px-2.5 py-1 rounded-lg border border-slate-700 bg-slate-950 text-[11px] font-bold text-slate-300">
-                          {row.status}
-                        </span>
+                        {(() => {
+                          const badge = getWorkflowStatusBadge(row.status);
+                          return (
+                            <span
+                              className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold inline-flex items-center gap-1.5 ${badge.bgClass} ${badge.borderClass} ${badge.textClass}`}
+                            >
+                              {badge.icon && <span>{badge.icon}</span>}
+                              <span>{badge.label}</span>
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="p-3.5 whitespace-nowrap font-mono text-slate-400 text-[11px]">
                         {row.date}

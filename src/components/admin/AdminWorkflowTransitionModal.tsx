@@ -4,6 +4,7 @@ import { Button } from '../ui/Button';
 import LoadingSpinner from '../LoadingSpinner';
 import ErrorMessage from '../ErrorMessage';
 import { rollbackWorkflowApi, forwardWorkflowApi, WorkflowTransitionRule } from '../../api/admin/controlCenter';
+import { getWorkflowStatusLabel } from '../../utils/statusLabels';
 
 interface AdminWorkflowTransitionModalProps {
   isOpen: boolean;
@@ -108,8 +109,9 @@ export const AdminWorkflowTransitionModal: React.FC<AdminWorkflowTransitionModal
         {/* ── Current Status Display ── */}
         <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-3.5 flex items-center justify-between text-xs">
           <span className="text-slate-400 font-medium">المرحلة / الحالة الحالية:</span>
-          <span className="font-mono font-bold text-amber-300 bg-amber-950/70 px-2.5 py-1 rounded-lg border border-amber-800/60">
-            {currentStatus}
+          <span className="font-bold text-amber-300 bg-amber-950/70 px-2.5 py-1 rounded-lg border border-amber-800/60 flex items-center gap-1.5">
+            <span>{getWorkflowStatusLabel(currentStatus)}</span>
+            <span className="font-mono text-[10px] text-amber-500/80">({currentStatus})</span>
           </span>
         </div>
 
@@ -127,7 +129,7 @@ export const AdminWorkflowTransitionModal: React.FC<AdminWorkflowTransitionModal
             <option value="">-- اضغط لاختيار الحالة المستهدفة --</option>
             {allowedTransitions.map((t) => (
               <option key={t.id} value={t.to_status}>
-                {t.to_status} {t.description ? `(${t.description})` : ''} {t.requires_exception ? '⚠️ [استثنائي]' : ''}
+                {getWorkflowStatusLabel(t.to_status)} ({t.to_status}) {t.description ? `— ${t.description}` : ''} {t.requires_exception ? '⚠️ [استثنائي]' : ''}
               </option>
             ))}
             {/* Common fallback options */}

@@ -4,6 +4,7 @@ import { Button } from '../ui/Button';
 import LoadingSpinner from '../LoadingSpinner';
 import ErrorMessage from '../ErrorMessage';
 import { formatCleanNumber, formatCleanQty } from '../../utils/numberFormat';
+import { getWorkflowStatusLabel } from '../../utils/statusLabels';
 
 interface ColumnDef {
   key: keyof ExcelGridRow;
@@ -32,9 +33,9 @@ const ALL_COLUMNS: ColumnDef[] = [
   { key: 'purpose', label: 'الغرض / المبرر', defaultVisible: false },
   { key: 'requester_name', label: 'مقدم الطلب', defaultVisible: true },
   { key: 'actual_receiver', label: 'المستلم الفعلي', defaultVisible: true },
-  { key: 'po_status', label: 'حالة أمر الشراء', defaultVisible: true },
-  { key: 'receipt_status', label: 'حالة الاستلام', defaultVisible: true },
-  { key: 'invoice_status', label: 'حالة الفاتورة', defaultVisible: false },
+  { key: 'po_status', label: 'حالة أمر الشراء', defaultVisible: true, format: (v) => getWorkflowStatusLabel(v) },
+  { key: 'receipt_status', label: 'حالة الاستلام', defaultVisible: true, format: (v) => getWorkflowStatusLabel(v) },
+  { key: 'invoice_status', label: 'حالة الفاتورة', defaultVisible: false, format: (v) => getWorkflowStatusLabel(v) },
   { key: 'created_at', label: 'التاريخ', defaultVisible: true },
 ];
 
