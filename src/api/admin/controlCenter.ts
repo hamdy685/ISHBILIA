@@ -142,7 +142,7 @@ export const searchAdminControlApi = async (params: {
     suppliers: Array<{ id: number; company_name: string; name: string }>;
   };
 }> => {
-  const res = await apiClient.get('/api/v1/admin/control/search', { params });
+  const res = await apiClient.get('/admin/control/search', { params });
   return res.data;
 };
 
@@ -151,7 +151,7 @@ export const getAdminControlDocumentApi = async (
   type: string,
   id: number
 ): Promise<DocumentDetailsResponse> => {
-  const res = await apiClient.get(`/api/v1/admin/control/documents/${type}/${id}`);
+  const res = await apiClient.get(`/admin/control/documents/${type}/${id}`);
   return res.data;
 };
 
@@ -162,7 +162,7 @@ export const previewImpactApi = async (payload: {
   action: string;
   payload?: any;
 }): Promise<{ success: boolean; impact: ImpactPreview }> => {
-  const res = await apiClient.post('/api/v1/admin/control/preview', payload);
+  const res = await apiClient.post('/admin/control/preview', payload);
   return res.data;
 };
 
@@ -172,7 +172,7 @@ export const cancelDocumentSafelyApi = async (payload: {
   entity_id: number;
   reason: string;
 }): Promise<{ success: boolean; message: string; document?: any }> => {
-  const res = await apiClient.post('/api/v1/admin/control/requests/' + payload.entity_id + '/cancel', payload);
+  const res = await apiClient.post('/admin/control/requests/' + payload.entity_id + '/cancel', payload);
   return res.data;
 };
 
@@ -184,7 +184,7 @@ export const reassignReceiptRecipientApi = async (
     reason: string;
   }
 ): Promise<{ success: boolean; message: string; receipt?: any }> => {
-  const res = await apiClient.post(`/api/v1/admin/control/receipts/${receiptId}/reassign`, payload);
+  const res = await apiClient.post(`/admin/control/receipts/${receiptId}/reassign`, payload);
   return res.data;
 };
 
@@ -196,7 +196,7 @@ export const rollbackWorkflowApi = async (payload: {
   reason: string;
   is_exceptional?: boolean;
 }): Promise<{ success: boolean; message: string; document?: any }> => {
-  const res = await apiClient.post('/api/v1/admin/control/documents/rollback', payload);
+  const res = await apiClient.post('/admin/control/documents/rollback', payload);
   return res.data;
 };
 
@@ -208,7 +208,7 @@ export const forwardWorkflowApi = async (payload: {
   reason: string;
   is_exceptional?: boolean;
 }): Promise<{ success: boolean; message: string; document?: any }> => {
-  const res = await apiClient.post('/api/v1/admin/control/documents/forward', payload);
+  const res = await apiClient.post('/admin/control/documents/forward', payload);
   return res.data;
 };
 
@@ -217,7 +217,7 @@ export const editRequestSafelyApi = async (
   prId: number,
   payload: any
 ): Promise<{ success: boolean; message: string; request?: any }> => {
-  const res = await apiClient.post(`/api/v1/admin/control/requests/${prId}/edit`, payload);
+  const res = await apiClient.post(`/admin/control/requests/${prId}/edit`, payload);
   return res.data;
 };
 
@@ -229,7 +229,7 @@ export const manageAssignmentApi = async (payload: {
   assignment_type: 'PRIMARY_ACTION_OWNER' | 'PARALLEL_ACTION_OWNER' | 'VIEW_ONLY_USER';
   notes?: string;
 }): Promise<{ success: boolean; message: string; assignment?: any }> => {
-  const res = await apiClient.post('/api/v1/admin/control/assignments/manage', payload);
+  const res = await apiClient.post('/admin/control/assignments/manage', payload);
   return res.data;
 };
 
@@ -238,7 +238,7 @@ export const resendNotificationApi = async (
   notificationId: number,
   reason: string
 ): Promise<{ success: boolean; message: string }> => {
-  const res = await apiClient.post(`/api/v1/admin/control/notifications/${notificationId}/resend`, { reason });
+  const res = await apiClient.post(`/admin/control/notifications/${notificationId}/resend`, { reason });
   return res.data;
 };
 
@@ -262,7 +262,7 @@ export const getAdminAuditLogsApi = async (params?: {
     per_page: number;
   };
 }> => {
-  const res = await apiClient.get('/api/v1/admin/control/audit-log', { params });
+  const res = await apiClient.get('/admin/control/audit-log', { params });
   return res.data;
 };
 
@@ -274,6 +274,6 @@ export const getExcelReportsGridApi = async (params?: {
   date_to?: string;
   search?: string;
 }): Promise<ExcelGridResponse> => {
-  const res = await apiClient.get('/api/v1/admin/control/reports/grid', { params });
+  const res = await apiClient.get('/admin/control/reports/grid', { params });
   return res.data;
 };

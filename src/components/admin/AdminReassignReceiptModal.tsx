@@ -32,7 +32,7 @@ export const AdminReassignReceiptModal: React.FC<AdminReassignReceiptModalProps>
     setLoadingUsers(true);
     // Fetch site engineers and operational users
     apiClient
-      .get('/api/v1/procurement/site-engineers')
+      .get('/procurement/site-engineers')
       .then((res) => {
         const users = res.data?.data || res.data || [];
         setSiteEngineers(users);
