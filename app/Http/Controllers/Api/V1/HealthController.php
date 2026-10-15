@@ -41,10 +41,12 @@ class HealthController extends Controller
                 ->orWhereIn('id', [99, 100, 105, 106])
                 ->select(['id', 'po_number', 'status', 'grand_total'])
                 ->get();
-            $info['receipts_sample'] = DB::table('purchase_receipts')
-                ->whereIn('id', [54, 56, 58, 59])
-                ->select(['id', 'receipt_number', 'status', 'site_engineer_user_id', 'receiver_user_id'])
-                ->get();
+            if (file_exists(storage_path('logs/laravel.log'))) {
+                $lines = @file(storage_path('logs/laravel.log'));
+                if (is_array($lines)) {
+                    $info['latest_log'] = array_slice($lines, -30);
+                }
+            }
         } catch (Throwable $e) {
             $dbConnected = false;
             $info['error'] = $e->getMessage();

@@ -33,136 +33,154 @@ class AdminControlCenterController extends Controller
      */
     public function search(Request $request): JsonResponse
     {
-        $q = trim((string) $request->query('q', ''));
-        $entityType = strtoupper((string) $request->query('entity_type', 'ALL'));
-        $deptId = $request->filled('department_id') ? (int) $request->query('department_id') : null;
-        $supplierId = $request->filled('supplier_id') ? (int) $request->query('supplier_id') : null;
-        $status = $request->query('status');
-        $dateFrom = $request->query('date_from');
-        $dateTo = $request->query('date_to');
-        $perPage = min(max((int) $request->query('per_page', 20), 5), 100);
+        try {
+            $q = trim((string) $request->query('q', ''));
+            $entityType = strtoupper((string) $request->query('entity_type', 'ALL'));
+            $deptId = $request->filled('department_id') ? (int) $request->query('department_id') : null;
+            $supplierId = $request->filled('supplier_id') ? (int) $request->query('supplier_id') : null;
+            $status = $request->query('status');
+            $dateFrom = $request->query('date_from');
+            $dateTo = $request->query('date_to');
+            $perPage = min(max((int) $request->query('per_page', 20), 5), 100);
 
-        $results = collect();
+            $results = collect();
 
-        // 1. Search Purchase Requests
-        if (in_array($entityType, ['ALL', 'PURCHASE_REQUEST'], true)) {
-            $prQuery = PurchaseRequest::withoutGlobalScopes()
-                ->with(['department', 'user', 'items.item'])
-                ->when($q, function ($query, $term) {
-                    $query->where(function ($sub) use ($term) {
-                        $sub->where('request_number', 'like', "%{$term}%")
-                            ->orWhere('justification', 'like', "%{$term}%")
-                            ->orWhere('project_site', 'like', "%{$term}%")
-                            ->orWhereHas('user', fn ($u) => $u->where('name', 'like', "%{$term}%"))
-                            ->orWhereHas('department', fn ($d) => $d->where('name', 'like', "%{$term}%"));
-                    });
-                })
-                ->when($deptId, fn ($query) => $query->where('department_id', $deptId))
-                ->when($status, fn ($query) => $query->where('status', $status))
-                ->when($dateFrom, fn ($query) => $query->whereDate('created_at', '>=', $dateFrom))
-                ->when($dateTo, fn ($query) => $query->whereDate('created_at', '<=', $dateTo))
-                ->orderByDesc('id')
-                ->limit($perPage)
-                ->get();
+            // 1. Search Purchase Requests
+            if (in_array($entityType, ['ALL', 'PURCHASE_REQUEST'], true)) {
+                $prQuery = PurchaseRequest::withoutGlobalScopes()
+                    ->with(['department', 'user', 'items.item'])
+                    ->when($q, function ($query, $term) {
+                        $query->where(function ($sub) use ($term) {
+                            $sub->where('request_number', 'like', "%{$term}%")
+                                ->orWhere('justification', 'like', "%{$term}%")
+                                ->orWhere('project_site', 'like', "%{$term}%")
+                                ->orWhereHas('user', fn ($u) => $u->where('name', 'like', "%{$term}%"))
+                                ->orWhereHas('department', fn ($d) => $d->where('name', 'like', "%{$term}%"));
+                        });
+                    })
+                    ->when($deptId, fn ($query) => $query->where('department_id', $deptId))
+                    ->when($status, fn ($query) => $query->where('status', $status))
+                    ->when($dateFrom, fn ($query) => $query->whereDate('created_at', '>=', $dateFrom))
+                    ->when($dateTo, fn ($query) => $query->whereDate('created_at', '<=', $dateTo))
+                    ->orderByDesc('id')
+                    ->limit($perPage)
+                    ->get();
 
-            foreach ($prQuery as $pr) {
-                $results->push([
-                    'entity_type' => 'PURCHASE_REQUEST',
-                    'id' => $pr->id,
-                    'code' => $pr->request_number,
-                    'title' => $pr->justification ?: 'طلب شراء بدون مبرر',
-                    'status' => $pr->status,
-                    'department' => $pr->department?->name,
-                    'creator' => $pr->user?->name,
-                    'amount' => (float) ($pr->total_estimated_cost ?? 0),
-                    'date' => $pr->created_at?->format('Y-m-d H:i'),
-                    'items_count' => $pr->items->count(),
-                ]);
+                foreach ($prQuery as $pr) {
+                    $results->push([
+                        'entity_type' => 'PURCHASE_REQUEST',
+                        'id' => $pr->id,
+                        'code' => $pr->request_number,
+                        'title' => $pr->justification ?: 'طلب شراء بدون مبرر',
+                        'status' => $pr->status,
+                        'department' => $pr->department?->name,
+                        'creator' => $pr->user?->name,
+                        'amount' => (float) ($pr->total_estimated_cost ?? ($pr->items->sum('estimated_line_total') ?: 0)),
+                        'date' => $pr->created_at?->format('Y-m-d H:i'),
+                        'items_count' => $pr->items->count(),
+                    ]);
+                }
             }
-        }
 
-        // 2. Search Purchase Orders
-        if (in_array($entityType, ['ALL', 'PURCHASE_ORDER'], true)) {
-            $poQuery = PurchaseOrder::withoutGlobalScopes()
-                ->with(['supplier', 'purchaseRequest.department', 'items'])
-                ->when($q, function ($query, $term) {
-                    $query->where(function ($sub) use ($term) {
-                        $sub->where('po_number', 'like', "%{$term}%")
-                            ->orWhere('manual_po_number', 'like', "%{$term}%")
-                            ->orWhereHas('supplier', fn ($s) => $s->where('company_name', 'like', "%{$term}%")->orWhere('name', 'like', "%{$term}%"))
-                            ->orWhereHas('purchaseRequest', fn ($pr) => $pr->where('request_number', 'like', "%{$term}%"));
-                    });
-                })
-                ->when($supplierId, fn ($query) => $query->where('supplier_id', $supplierId))
-                ->when($deptId, fn ($query) => $query->whereHas('purchaseRequest', fn ($pr) => $pr->where('department_id', $deptId)))
-                ->when($status, fn ($query) => $query->where('status', $status))
-                ->when($dateFrom, fn ($query) => $query->whereDate('created_at', '>=', $dateFrom))
-                ->when($dateTo, fn ($query) => $query->whereDate('created_at', '<=', $dateTo))
-                ->orderByDesc('id')
-                ->limit($perPage)
-                ->get();
+            // 2. Search Purchase Orders
+            if (in_array($entityType, ['ALL', 'PURCHASE_ORDER'], true)) {
+                $poQuery = PurchaseOrder::withoutGlobalScopes()
+                    ->with(['supplier', 'purchaseRequest.department', 'items'])
+                    ->when($q, function ($query, $term) {
+                        $query->where(function ($sub) use ($term) {
+                            $sub->where('po_number', 'like', "%{$term}%")
+                                ->orWhere('manual_po_number', 'like', "%{$term}%")
+                                ->orWhereHas('supplier', fn ($s) => $s->where('company_name', 'like', "%{$term}%")->orWhere('contact_name', 'like', "%{$term}%"))
+                                ->orWhereHas('purchaseRequest', fn ($pr) => $pr->where('request_number', 'like', "%{$term}%"));
+                        });
+                    })
+                    ->when($supplierId, fn ($query) => $query->where('supplier_id', $supplierId))
+                    ->when($deptId, fn ($query) => $query->whereHas('purchaseRequest', fn ($pr) => $pr->where('department_id', $deptId)))
+                    ->when($status, fn ($query) => $query->where('status', $status))
+                    ->when($dateFrom, fn ($query) => $query->whereDate('created_at', '>=', $dateFrom))
+                    ->when($dateTo, fn ($query) => $query->whereDate('created_at', '<=', $dateTo))
+                    ->orderByDesc('id')
+                    ->limit($perPage)
+                    ->get();
 
-            foreach ($poQuery as $po) {
-                $results->push([
-                    'entity_type' => 'PURCHASE_ORDER',
-                    'id' => $po->id,
-                    'code' => $po->po_number,
-                    'title' => "أمر شراء لمورد: " . ($po->supplier?->company_name ?? 'غير محدد'),
-                    'status' => $po->status,
-                    'department' => $po->purchaseRequest?->department?->name,
-                    'supplier' => $po->supplier?->company_name,
-                    'amount' => (float) ($po->total_amount ?? 0),
-                    'date' => $po->created_at?->format('Y-m-d H:i'),
-                    'items_count' => $po->items->count(),
-                ]);
+                foreach ($poQuery as $po) {
+                    $results->push([
+                        'entity_type' => 'PURCHASE_ORDER',
+                        'id' => $po->id,
+                        'code' => $po->po_number,
+                        'title' => "أمر شراء لمورد: " . ($po->supplier?->company_name ?? 'غير محدد'),
+                        'status' => $po->status,
+                        'department' => $po->purchaseRequest?->department?->name,
+                        'supplier' => $po->supplier?->company_name,
+                        'amount' => (float) ($po->grand_total ?? ($po->total_amount ?? 0)),
+                        'date' => $po->created_at?->format('Y-m-d H:i'),
+                        'items_count' => $po->items->count(),
+                    ]);
+                }
             }
-        }
 
-        // 3. Search Purchase Receipts
-        if (in_array($entityType, ['ALL', 'PURCHASE_RECEIPT'], true)) {
-            $recQuery = PurchaseReceipt::withoutGlobalScopes()
-                ->with(['supplier', 'purchaseOrder', 'purchaseRequest.department'])
-                ->when($q, function ($query, $term) {
-                    $query->where(function ($sub) use ($term) {
-                        $sub->where('receipt_number', 'like', "%{$term}%")
-                            ->orWhere('actual_receiver_name', 'like', "%{$term}%")
-                            ->orWhereHas('supplier', fn ($s) => $s->where('company_name', 'like', "%{$term}%"))
-                            ->orWhereHas('purchaseOrder', fn ($po) => $po->where('po_number', 'like', "%{$term}%"));
-                    });
-                })
-                ->when($supplierId, fn ($query) => $query->where('supplier_id', $supplierId))
-                ->when($status, fn ($query) => $query->where('status', $status))
-                ->when($dateFrom, fn ($query) => $query->whereDate('created_at', '>=', $dateFrom))
-                ->when($dateTo, fn ($query) => $query->whereDate('created_at', '<=', $dateTo))
-                ->orderByDesc('id')
-                ->limit($perPage)
-                ->get();
+            // 3. Search Purchase Receipts
+            if (in_array($entityType, ['ALL', 'PURCHASE_RECEIPT'], true)) {
+                $recQuery = PurchaseReceipt::withoutGlobalScopes()
+                    ->with(['supplier', 'purchaseOrder', 'purchaseRequest.department', 'siteEngineer'])
+                    ->when($q, function ($query, $term) {
+                        $query->where(function ($sub) use ($term) {
+                            $sub->where('receipt_number', 'like', "%{$term}%")
+                                ->orWhere('actual_receiver_name', 'like', "%{$term}%")
+                                ->orWhereHas('supplier', fn ($s) => $s->where('company_name', 'like', "%{$term}%"))
+                                ->orWhereHas('purchaseOrder', fn ($po) => $po->where('po_number', 'like', "%{$term}%"));
+                        });
+                    })
+                    ->when($supplierId, fn ($query) => $query->where('supplier_id', $supplierId))
+                    ->when($status, fn ($query) => $query->where('status', $status))
+                    ->when($dateFrom, fn ($query) => $query->whereDate('created_at', '>=', $dateFrom))
+                    ->when($dateTo, fn ($query) => $query->whereDate('created_at', '<=', $dateTo))
+                    ->orderByDesc('id')
+                    ->limit($perPage)
+                    ->get();
 
-            foreach ($recQuery as $rec) {
-                $results->push([
-                    'entity_type' => 'PURCHASE_RECEIPT',
-                    'id' => $rec->id,
-                    'code' => $rec->receipt_number,
-                    'title' => "إذن استلام مواد: " . ($rec->receipt_number ?: "REC-{$rec->id}"),
-                    'status' => $rec->status,
-                    'department' => $rec->purchaseRequest?->department?->name,
-                    'supplier' => $rec->supplier?->company_name,
-                    'receiver' => $rec->actual_receiver_name ?: ($rec->siteEngineer?->name ?? 'غير محدد'),
-                    'date' => $rec->created_at?->format('Y-m-d H:i'),
-                    'weighing_group_id' => $rec->weighing_group_id,
-                ]);
+                foreach ($recQuery as $rec) {
+                    $results->push([
+                        'entity_type' => 'PURCHASE_RECEIPT',
+                        'id' => $rec->id,
+                        'code' => $rec->receipt_number,
+                        'title' => "إذن استلام مواد: " . ($rec->receipt_number ?: "REC-{$rec->id}"),
+                        'status' => $rec->status,
+                        'department' => $rec->purchaseRequest?->department?->name,
+                        'supplier' => $rec->supplier?->company_name,
+                        'receiver' => $rec->actual_receiver_name ?: ($rec->siteEngineer?->name ?? 'غير محدد'),
+                        'date' => $rec->created_at?->format('Y-m-d H:i'),
+                        'weighing_group_id' => $rec->weighing_group_id,
+                    ]);
+                }
             }
-        }
 
-        return response()->json([
-            'success' => true,
-            'count' => $results->count(),
-            'data' => $results->sortByDesc('date')->values()->all(),
-            'lookups' => [
-                'departments' => Department::select('id', 'name', 'code')->get(),
-                'suppliers' => Supplier::select('id', 'company_name', 'name')->get(),
-            ],
-        ]);
+            $suppliers = Supplier::select('id', 'company_name', 'contact_name')->get()->map(function ($s) {
+                return [
+                    'id' => $s->id,
+                    'company_name' => $s->company_name,
+                    'name' => $s->company_name ?: ($s->contact_name ?: "مورد #{$s->id}"),
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'count' => $results->count(),
+                'data' => $results->sortByDesc('date')->values()->all(),
+                'lookups' => [
+                    'departments' => Department::select('id', 'name', 'code')->get(),
+                    'suppliers' => $suppliers,
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('AdminControlCenter search failed: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'تعذر إتمام البحث: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 
     /**
