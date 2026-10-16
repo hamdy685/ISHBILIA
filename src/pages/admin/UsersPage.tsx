@@ -130,11 +130,11 @@ export const UsersPage: React.FC = () => {
         email: resetPasswordUser.email,
         password: tempPassword,
       });
-      setResetSuccessMessage(`تمت إعادة تعيين كلمة المرور للمستخدم ${resetPasswordUser.name} بنجاح!`);
+      setResetSuccessMessage(`تمت إعادة تعيين كلمة المرور للمستخدم ${resetPasswordUser.name} بنجاح! تم إنهاء كافة جلساته النشطة وتسجيل خروجه تلقائياً من جميع الأجهزة.`);
       setTimeout(() => {
         setResetPasswordUser(null);
         setResetSuccessMessage(null);
-      }, 3500);
+      }, 4000);
     } catch (err: unknown) {
       const parsed = parseApiError(err);
       setError(parsed.message);
@@ -579,9 +579,17 @@ export const UsersPage: React.FC = () => {
                 </div>
               </FormField>
 
-              <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 text-[11px] text-slate-400 space-y-1">
-                <span className="font-bold text-slate-300 block">📌 نصيحة أمنية:</span>
-                <p>انسخ كلمة المرور وزوّد بها الموظف لتسجيل الدخول، واطلب منه تغييرها عند أول تسجيل دخول.</p>
+              <div className="rounded-xl border border-amber-500/40 bg-amber-950/30 p-3 text-[11px] text-amber-200 space-y-1.5">
+                <span className="font-bold text-amber-300 flex items-center gap-1.5">
+                  <span>🔒</span>
+                  <span>أمان الحساب وإنهاء الجلسات فوراً:</span>
+                </span>
+                <p className="text-slate-300 leading-relaxed">
+                  بمجرد تأكيد التغيير، سيتم فوراً إبطال وإنهاء كافة الجلسات المفتوحة للمستخدم على جميع الأجهزة وطرده إلى شاشة الدخول، ولن يستطيع الدخول مجدداً إلا بكلمة المرور الجديدة.
+                </p>
+                <p className="text-slate-400">
+                  📌 انسخ كلمة المرور وزوّد بها الموظف لتسجيل الدخول، واطلب منه تغييرها عند أول تسجيل دخول.
+                </p>
               </div>
             </>
           )}
@@ -625,7 +633,11 @@ export const UsersPage: React.FC = () => {
             />
           </FormField>
 
-          <FormField label={editingUser ? 'كلمة المرور (اختياري للتغيير)' : 'كلمة المرور'} required={!editingUser}>
+          <FormField
+            label={editingUser ? 'كلمة المرور (اختياري - تغييرها ينهي جلسات المستخدم الحالية فوراً)' : 'كلمة المرور'}
+            required={!editingUser}
+            helperText={editingUser ? 'إذا أدخلت كلمة مرور جديدة هنا، سيتم تسجيل خروج المستخدم وإنهاء جلسته تلقائياً على كافة الأجهزة فور الحفظ.' : undefined}
+          >
             <Input
               type="password"
               required={!editingUser}

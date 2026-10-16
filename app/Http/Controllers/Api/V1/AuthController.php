@@ -298,6 +298,12 @@ class AuthController extends Controller
         $user->password = $validated['new_password'];
         $user->save();
 
+        // Revoke all other active tokens for this user except the current session
+        $currentTokenId = $request->user()->currentAccessToken()?->id;
+        if ($currentTokenId) {
+            $user->tokens()->where('id', '!=', $currentTokenId)->delete();
+        }
+
         return response()->json([
             'message' => 'تم تغيير كلمة المرور بنجاح.',
         ], 200);

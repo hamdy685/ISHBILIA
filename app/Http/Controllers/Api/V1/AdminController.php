@@ -131,11 +131,21 @@ class AdminController extends Controller
 
         if (isset($validated['name'])) $user->name = $validated['name'];
         if (isset($validated['email'])) $user->email = $validated['email'];
-        if (!empty($validated['password'])) $user->password = Hash::make($validated['password']);
+        if (!empty($validated['password'])) {
+            $user->password = Hash::make($validated['password']);
+            // Immediately revoke all existing tokens so the user is logged out on all devices
+            $user->tokens()->delete();
+        }
         if (array_key_exists('phone', $validated)) $user->phone = $validated['phone'];
         if (array_key_exists('department_id', $validated)) $user->department_id = $validated['department_id'];
         if (array_key_exists('manager_id', $validated)) $user->manager_id = $validated['manager_id'];
-        if (isset($validated['is_active'])) $user->is_active = $validated['is_active'];
+        if (isset($validated['is_active'])) {
+            $user->is_active = $validated['is_active'];
+            if (!$validated['is_active']) {
+                // Also revoke all tokens immediately if user is deactivated
+                $user->tokens()->delete();
+            }
+        }
 
         $user->save();
 
@@ -154,6 +164,11 @@ class AdminController extends Controller
         $user = User::findOrFail($id);
         $user->is_active = !$user->is_active;
         $user->save();
+
+        if (!$user->is_active) {
+            // Revoke all tokens immediately when user is deactivated
+            $user->tokens()->delete();
+        }
 
         return response()->json([
             'message' => 'User status updated successfully',
