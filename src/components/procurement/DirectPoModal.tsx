@@ -59,9 +59,15 @@ export const DirectPoModal: React.FC<DirectPoModalProps> = ({ isOpen, onClose, o
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [unbundledSteelItems, setUnbundledSteelItems] = useState<ItemRow[] | null>(null);
+  const [steelBundleMessage, setSteelBundleMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      setUnbundledSteelItems(null);
+      setSteelBundleMessage(null);
+      return;
+    }
     Promise.all([
       getSuppliersApi().catch(() => []),
       getProcurementDepartmentsApi().catch(() => []),
@@ -163,17 +169,128 @@ export const DirectPoModal: React.FC<DirectPoModalProps> = ({ isOpen, onClose, o
     setItems(current => current.filter((_, itemIndex) => itemIndex !== index));
   };
 
+  const isSteel = (item: ItemRow) => {
+    const desc = (item.item_description || '').toLowerCase();
+    const uomUpper = (item.uom || '').trim().toUpperCase();
+    return (
+      isRebarUnit(item.uom) ||
+      uomUpper === 'PARCEL' ||
+      desc.includes('حديد') ||
+      desc.includes('تسليح') ||
+      desc.includes('rebar') ||
+      desc.includes('كانات') ||
+      desc.includes('لنية') ||
+      desc.includes('لينية')
+    );
+  };
+
+  const hasMultipleSteelItems = useMemo(() => {
+    return items.filter(isSteel).length >= 2;
+  }, [items]);
+
+  const handleBundleSteel = () => {
+    setError(null);
+    setSteelBundleMessage(null);
+
+    const steelItems = items.filter(isSteel);
+    const nonSteelItems = items.filter(it => !isSteel(it));
+
+    if (steelItems.length < 2) {
+      setError('يجب إدخال بندين على الأقل من حديد التسليح لتجميع وزنتهم في بند استلام ومحاسبة موحد.');
+      return;
+    }
+
+    const invalidSteel = steelItems.some(
+      it => !it.item_description.trim() || Number(it.quantity) <= 0 || Number(it.unit_price) <= 0
+    );
+    if (invalidSteel) {
+      setError('يرجى التأكد من كتابة اسم الصنف وتحديد الكمية وسعر الوحدة لجميع بنود الحديد قبل تجميع الوزنة.');
+      return;
+    }
+
+    // Calculate weights in tons
+    let totalTons = 0;
+    let totalAmount = 0;
+    const breakdownList: string[] = [];
+
+    steelItems.forEach(it => {
+      const qty = Number(it.quantity) || 0;
+      const price = Number(it.unit_price) || 0;
+      const uomUpper = (it.uom || '').trim().toUpperCase();
+      let tons = 0;
+
+      if (isRebarUnit(it.uom)) {
+        tons = calculateRebarTons(qty, it.uom);
+      } else if (uomUpper === 'PARCEL' || (it.uom || '').includes('طرد')) {
+        tons = qty * 1.940;
+      } else if (uomUpper === 'TON' || (it.uom || '').includes('طن')) {
+        tons = qty;
+      } else if (uomUpper === 'KG' || (it.uom || '').includes('كجم') || (it.uom || '').includes('كيلو')) {
+        tons = qty / 1000;
+      } else {
+        tons = qty;
+      }
+
+      totalTons += tons;
+      const lineVal = qty * price;
+      totalAmount += lineVal;
+
+      const originalUnitLabel = getUnitLabel(it.uom);
+      breakdownList.push(
+        `${it.item_description.trim()} (${formatCleanQty(qty)} ${originalUnitLabel}${tons !== qty ? ` ≈ ${formatCleanQty(tons)} طن` : ''})`
+      );
+    });
+
+    if (totalTons <= 0) {
+      setError('تعذر احتساب إجمالي وزن الحديد بالطن. يرجى مراجعة الكميات والوحدات.');
+      return;
+    }
+
+    const uniformPrice = Math.round((totalAmount / totalTons) * 100) / 100;
+    const commonRef = steelItems.find(it => it.item_reference.trim())?.item_reference || items[0]?.item_reference || '';
+    const commonReg = steelItems.find(it => it.region.trim())?.region || items[0]?.region || '';
+
+    const bundledItem: ItemRow = {
+      item_id: null,
+      item_description: 'وزنة حديد تسليح مجمعة (ميزان بسكول)',
+      item_reference: commonRef,
+      region: commonReg,
+      quantity: Number(totalTons.toFixed(3)),
+      uom: 'TON',
+      unit_price: uniformPrice,
+      specifications: `وزنة حديد مجمعة لميزان البسكول (إجمالي ${formatCleanQty(totalTons)} طن) — تشمل تفصيلياً: [${breakdownList.join(' + ')}]`,
+    };
+
+    setUnbundledSteelItems([...items]);
+    setItems([...nonSteelItems, bundledItem]);
+    setSteelBundleMessage(
+      `✅ تم بنجاح تجميع (${steelItems.length}) بنود حديد تسليح في وزنة واحدة بإجمالي (${formatCleanQty(totalTons)} طن) بسعر موحد (${formatCleanNumber(uniformPrice, 2)} ج.م/طن). ستصل للمخزن والمستلم والمشتريات والحسابات كبند واحد مع الحفاظ على تفاصيل الأقطار في المواصفات.`
+    );
+  };
+
+  const handleUnbundleSteel = () => {
+    if (unbundledSteelItems) {
+      setItems(unbundledSteelItems);
+      setUnbundledSteelItems(null);
+      setSteelBundleMessage('تم فك تجميع الوزنة وإعادة بنود الحديد كأصناف منفصلة.');
+    }
+  };
+
   if (!isOpen) return null;
 
   const confirmationAlerts = useMemo(() => {
     const alerts: ConfirmationAlert[] = [];
-    const rebarItems = items.filter(item => {
-      const desc = (item.item_description || '').toLowerCase();
-      const uomUpper = (item.uom || '').trim().toUpperCase();
-      return isRebarUnit(item.uom) || uomUpper === 'PARCEL' || desc.includes('حديد') || desc.includes('تسليح') || desc.includes('rebar');
-    });
+    const isBundled = items.some(it => it.item_description.includes('وزنة حديد') || it.specifications.includes('وزنة حديد مجمعة'));
+    const rebarItems = items.filter(isSteel);
 
-    if (rebarItems.length > 0) {
+    if (isBundled) {
+      alerts.push({
+        type: 'rebar',
+        title: '🏗️ تنبيه وزنة حديد مجمعة موحدة (بند واحد للاستلام والمشتريات والحسابات)',
+        message: 'تم تجميع بنود الحديد في وزنة واحدة كبند موحد لميزان البسكول، وستسجل لدى مهندس الموقع والمخزن وتعود للمشتريات وتُقيد في الحسابات كبند واحد مطابق لكارتة القبان.',
+        badge: 'وزنة حديد موحدة',
+      });
+    } else if (rebarItems.length > 0) {
       alerts.push({
         type: 'rebar',
         title: '🏗️ تنبيه وزنة حديد كاملة (مسار مستقل ومطابقة قبان)',
@@ -361,12 +478,73 @@ export const DirectPoModal: React.FC<DirectPoModalProps> = ({ isOpen, onClose, o
           </div>
 
           <div className="px-3 pb-4 pt-5 sm:px-5 sm:pb-5 sm:pt-6">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-black text-slate-300">أصناف وتفاصيل طلب الشراء المباشر</h3>
-              <button type="button" onClick={addItem} className="rounded-md border border-slate-500 px-3 py-2 text-xs font-bold text-slate-200 transition-colors hover:border-cyan-400 hover:text-cyan-300">＋ إضافة صنف آخر</button>
+            <div className="mb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div>
+                <h3 className="text-sm font-black text-slate-200 flex items-center gap-2">
+                  <span>أصناف وتفاصيل طلب الشراء المباشر</span>
+                  {unbundledSteelItems && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/50">
+                      ⚖️ وزنة حديد مجمعة نشطة
+                    </span>
+                  )}
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  أدخل الأصناف، ويمكنك تجميع كافة بنود الحديد في وزنة واحدة لتستلم وتُحاسب كبند واحد
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                {unbundledSteelItems ? (
+                  <button
+                    type="button"
+                    onClick={handleUnbundleSteel}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-amber-500/80 bg-amber-950/70 hover:bg-amber-900/90 px-3.5 py-2 text-xs font-bold text-amber-200 transition-all shadow-md shadow-amber-950/40 cursor-pointer"
+                    title="فك تجميع الوزنة واستعادة بنود الحديد الفردية بأقطارها المنفصلة"
+                  >
+                    <span>↩️</span>
+                    <span>فك تجميع الوزنة (استعادة الأصناف)</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleBundleSteel}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-amber-500/80 bg-gradient-to-r from-amber-600 via-amber-500 to-amber-600 hover:from-amber-500 hover:to-amber-400 px-4 py-2 text-xs font-black text-slate-950 transition-all shadow-lg shadow-amber-950/50 hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
+                    title="تجميع كافة بنود حديد التسليح في وزنة واحدة إجمالية لميزان البسكول (تستلم وتسجل كبند واحد للمخزن والمشتريات والحسابات)"
+                  >
+                    <span>⚖️</span>
+                    <span>تجميع الوزنة (لبنود الحديد)</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={addItem}
+                  className="rounded-xl border border-slate-600 bg-slate-800/80 hover:bg-slate-700 px-3.5 py-2 text-xs font-bold text-slate-200 transition-colors hover:border-cyan-400 hover:text-cyan-300 cursor-pointer"
+                >
+                  ＋ إضافة صنف آخر
+                </button>
+              </div>
             </div>
 
-              <div className="hidden rounded border border-cyan-500/70 sm:block">
+            {/* Glowing notification message banner for bundle */}
+            {steelBundleMessage && (
+              <div className="mb-3 rounded-2xl border border-amber-500/50 bg-gradient-to-r from-amber-950/70 via-slate-900 to-amber-950/40 p-3 text-xs font-bold text-amber-200 flex items-center justify-between gap-2 shadow-lg animate-fade-in">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-xl shrink-0">⚖️</span>
+                  <span className="leading-relaxed">{steelBundleMessage}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSteelBundleMessage(null)}
+                  className="text-slate-400 hover:text-white text-base px-2 cursor-pointer shrink-0"
+                  title="إخفاء التنبيه"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+
+            <div className="hidden rounded border border-cyan-500/70 sm:block">
               <table className="w-full border-collapse text-right text-[11px]">
                 <thead className="bg-[#0c1728] text-cyan-400">
                   <tr>
@@ -383,20 +561,32 @@ export const DirectPoModal: React.FC<DirectPoModalProps> = ({ isOpen, onClose, o
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((item, index) => (
-                    <tr key={index} className="bg-[#172337] align-middle">
-                      <td className="border-t border-slate-700 px-2 py-3 text-center font-mono text-slate-400">{index + 1}</td>
+                  {items.map((item, index) => {
+                    const isBundledRow = item.specifications?.includes('وزنة حديد مجمعة') || item.item_description.includes('وزنة حديد');
+                    return (
+                    <tr key={index} className={`${isBundledRow ? 'bg-amber-950/30 border-l-4 border-l-amber-500' : 'bg-[#172337]'} align-middle transition-colors`}>
+                      <td className="border-t border-slate-700 px-2 py-3 text-center font-mono text-slate-400">
+                        {index + 1}
+                        {isBundledRow && <span className="block text-[9px] text-amber-400">⚖️ مجمع</span>}
+                      </td>
                       <td className="border-t border-slate-700 px-2 py-2"><input required value={item.item_reference} onChange={event => updateItem(index, 'item_reference', event.target.value)} placeholder="رقم قطعة الأرض" dir="ltr" className="h-9 w-32 rounded border border-slate-600 bg-[#0b1424] px-2 text-xs text-slate-100 outline-none focus:border-cyan-400" /></td>
-                      <td className="border-t border-slate-700 px-2 py-2"><input required value={item.item_description} onChange={event => updateItem(index, 'item_description', event.target.value)} placeholder="اسم الصنف" className="h-9 w-40 rounded border border-slate-600 bg-[#0b1424] px-2 text-xs text-slate-100 outline-none focus:border-cyan-400" /></td>
+                      <td className="border-t border-slate-700 px-2 py-2">
+                        <input required value={item.item_description} onChange={event => updateItem(index, 'item_description', event.target.value)} placeholder="اسم الصنف" className={`h-9 w-40 rounded border ${isBundledRow ? 'border-amber-500/80 font-bold text-amber-200' : 'border-slate-600 text-slate-100'} bg-[#0b1424] px-2 text-xs outline-none focus:border-cyan-400`} />
+                        {isBundledRow && (
+                          <span className="mt-1 block text-[9px] font-black text-amber-300">
+                            بند وزنة موحد (استلام ومحاسبة)
+                          </span>
+                        )}
+                      </td>
                       <td className="border-t border-slate-700 px-2 py-2"><select required value={item.uom} onChange={event => updateItem(index, 'uom', event.target.value)} className="h-9 w-24 rounded border border-slate-600 bg-[#0b1424] px-2 text-xs text-slate-100 outline-none focus:border-cyan-400">{UNIT_OPTIONS.map(unit => <option key={unit.value} value={unit.value}>{unit.label}</option>)}</select></td>
-                      <td className="border-t border-slate-700 px-2 py-2"><input required type="number" min="0.01" step="0.01" value={item.quantity ?? ''} onFocus={e => e.target.select()} onChange={event => updateItem(index, 'quantity', event.target.value === '' ? '' : Number(event.target.value))} className="h-9 w-20 rounded border border-slate-600 bg-[#0b1424] px-2 text-center font-mono text-xs text-slate-100 outline-none focus:border-cyan-400" /></td>
-                      <td className="border-t border-slate-700 px-2 py-2"><input required type="number" min="0" step="0.01" value={item.unit_price ?? ''} onFocus={e => e.target.select()} onChange={event => updateItem(index, 'unit_price', event.target.value === '' ? '' : Number(event.target.value))} className="h-9 w-24 rounded border border-slate-600 bg-[#0b1424] px-2 text-center font-mono text-xs text-slate-100 outline-none focus:border-cyan-400" /></td>
+                      <td className="border-t border-slate-700 px-2 py-2"><input required type="number" min="0.01" step="0.01" aria-label="كمية البند" value={item.quantity ?? ''} onFocus={e => e.target.select()} onChange={event => updateItem(index, 'quantity', event.target.value === '' ? '' : Number(event.target.value))} className="h-9 w-20 rounded border border-slate-600 bg-[#0b1424] px-2 text-center font-mono text-xs text-slate-100 outline-none focus:border-cyan-400" /></td>
+                      <td className="border-t border-slate-700 px-2 py-2"><input required type="number" min="0" step="0.01" aria-label="سعر الوحدة" value={item.unit_price ?? ''} onFocus={e => e.target.select()} onChange={event => updateItem(index, 'unit_price', event.target.value === '' ? '' : Number(event.target.value))} className="h-9 w-24 rounded border border-slate-600 bg-[#0b1424] px-2 text-center font-mono text-xs text-slate-100 outline-none focus:border-cyan-400" /></td>
                       <td className="border-t border-slate-700 px-2 py-2 text-center font-mono font-black text-emerald-300">{formatCleanNumber((Number(item.quantity) || 0) * (Number(item.unit_price) || 0))} ج.م</td>
                       <td className="border-t border-slate-700 px-2 py-2"><input required value={item.region} onChange={event => updateItem(index, 'region', event.target.value)} placeholder="المنطقة" className="h-9 w-28 rounded border border-slate-600 bg-[#0b1424] px-2 text-xs text-slate-100 outline-none focus:border-cyan-400" /></td>
                       <td className="border-t border-slate-700 px-2 py-2"><input value={item.specifications} onChange={event => updateItem(index, 'specifications', event.target.value)} placeholder="المواصفات" className="h-9 w-36 rounded border border-slate-600 bg-[#0b1424] px-2 text-xs text-slate-100 outline-none focus:border-cyan-400" /></td>
                       <td className="border-t border-slate-700 px-2 py-2 text-center"><button type="button" onClick={() => removeItem(index)} disabled={items.length <= 1} className="rounded border border-rose-500/70 px-2 py-1 text-sm text-rose-300 disabled:cursor-not-allowed disabled:opacity-30" aria-label="حذف البند">▥</button></td>
                     </tr>
-                  ))}
+                  );})}
                 </tbody>
                 <tfoot>
                   <tr className="bg-[#0c1728]">
@@ -409,14 +599,23 @@ export const DirectPoModal: React.FC<DirectPoModalProps> = ({ isOpen, onClose, o
             </div>
 
             <div className="space-y-3 sm:hidden">
-              {items.map((item, index) => (
-                <article key={`mobile-item-${index}`} className="rounded-lg border border-slate-700 bg-[#172337] p-3">
-                  <div className="flex items-start justify-between gap-3 border-b border-slate-700 pb-3">
+              {items.map((item, index) => {
+                const isBundledRow = item.specifications?.includes('وزنة حديد مجمعة') || item.item_description.includes('وزنة حديد');
+                return (
+                <article key={`mobile-item-${index}`} className={`rounded-xl border ${isBundledRow ? 'border-amber-500/80 bg-gradient-to-br from-amber-950/40 via-slate-900 to-slate-900 shadow-md shadow-amber-950/30' : 'border-slate-700 bg-[#172337]'} p-3.5 transition-all`}>
+                  <div className="flex items-start justify-between gap-3 border-b border-slate-700/80 pb-2.5">
                     <div className="min-w-0">
-                      <p className="text-[10px] font-bold text-cyan-300">بند #{index + 1}</p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[10px] font-bold text-cyan-300">بند #{index + 1}</span>
+                        {isBundledRow && (
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                            ⚖️ وزنة مجمعة (استلام ومحاسبة)
+                          </span>
+                        )}
+                      </div>
                       <p className="mt-1 break-words text-sm font-black text-slate-100">{item.item_description || 'اسم الصنف غير مكتوب'}</p>
                     </div>
-                    <button type="button" onClick={() => removeItem(index)} disabled={items.length <= 1} className="h-9 w-9 shrink-0 rounded border border-rose-500/70 text-sm text-rose-300 disabled:cursor-not-allowed disabled:opacity-30" aria-label="حذف البند">×</button>
+                    <button type="button" onClick={() => removeItem(index)} disabled={items.length <= 1} className="h-9 w-9 shrink-0 rounded border border-rose-500/70 text-sm text-rose-300 disabled:cursor-not-allowed disabled:opacity-30 cursor-pointer" aria-label="حذف البند">×</button>
                   </div>
                   <div className="mt-3 space-y-3">
                     <label className="block text-[11px] font-bold text-slate-300">رقم قطعة الأرض <span className="text-rose-400">*</span><input required value={item.item_reference} onChange={event => updateItem(index, 'item_reference', event.target.value)} placeholder="رقم قطعة الأرض" dir="ltr" className="mt-1.5 h-11 w-full rounded border border-slate-600 bg-[#0b1424] px-3 text-sm text-slate-100 outline-none focus:border-cyan-400" /></label>
@@ -431,7 +630,8 @@ export const DirectPoModal: React.FC<DirectPoModalProps> = ({ isOpen, onClose, o
                     <label className="block text-[11px] font-bold text-slate-300">المواصفات والتفاصيل<input value={item.specifications} onChange={event => updateItem(index, 'specifications', event.target.value)} placeholder="المواصفات" className="mt-1.5 h-11 w-full rounded border border-slate-600 bg-[#0b1424] px-3 text-sm text-slate-100 outline-none focus:border-cyan-400" /></label>
                   </div>
                 </article>
-              ))}
+              );
+            })}
             </div>
           </div>
         </form>
