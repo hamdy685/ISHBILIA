@@ -114,7 +114,7 @@ class AdminControlCenterController extends Controller
             // 2. Search Purchase Orders
             if (in_array($entityType, ['ALL', 'PURCHASE_ORDER'], true)) {
                 $poQuery = PurchaseOrder::withoutGlobalScopes()
-                    ->with(['supplier', 'purchaseRequest.department', 'purchaseRequest.assignedReviewer', 'items', 'receipts.siteEngineer'])
+                    ->with(['supplier', 'purchaseRequest.department', 'purchaseRequest.assignedReviewer', 'items', 'receipts.siteEngineer', 'receipts.items'])
                     ->when($q, function ($query, $term) {
                         $query->where(function ($sub) use ($term) {
                             $sub->where('po_number', 'like', "%{$term}%")
@@ -136,7 +136,15 @@ class AdminControlCenterController extends Controller
                     $pendingReceipt = $po->receipts->first(fn ($r) => $r->status === 'PENDING_SITE_ENGINEER');
                     $approvedReceipts = $po->receipts->filter(fn ($r) => $r->status === 'APPROVED');
                     $totalOrderedQty = (float) $po->items->sum('quantity');
-                    $totalReceivedQty = (float) $po->items->sum('received_quantity');
+                    
+                    $validReceiptItems = $po->receipts
+                        ->filter(fn ($r) => in_array($r->status, ['APPROVED', 'PENDING_SITE_ENGINEER', 'DELIVERED', 'COMPLETED', 'RECEIVED'], true))
+                        ->flatMap->items;
+                    $totalReceivedQty = (float) $validReceiptItems->sum('received_quantity');
+
+                    if ($totalReceivedQty <= 0 && $approvedReceipts->isNotEmpty()) {
+                        $totalReceivedQty = $totalOrderedQty;
+                    }
 
                     if ($po->receipts->isEmpty()) {
                         $fulfillmentStatus = 'لم يتم التوريد (0%)';
@@ -698,12 +706,26 @@ class AdminControlCenterController extends Controller
 
         foreach ($orders as $po) {
             $pr = $po->purchaseRequest;
-            $receipt = $po->receipts->first();
+            $receipt = $po->receipts->firstWhere('status', 'APPROVED')
+                ?? $po->receipts->firstWhere('status', 'PENDING_SITE_ENGINEER')
+                ?? $po->receipts->sortByDesc('id')->first();
             $invoice = $po->invoices->first();
+
+            $validReceipts = $po->receipts->filter(fn ($r) => in_array($r->status, ['APPROVED', 'PENDING_SITE_ENGINEER', 'DELIVERED', 'COMPLETED', 'RECEIVED'], true));
+            $allReceiptItems = $validReceipts->flatMap->items;
 
             foreach ($po->items as $item) {
                 $qtyRequested = (float) ($item->quantity ?? 0);
-                $qtyReceived = (float) ($item->received_quantity ?? 0);
+                
+                $matchingReceiptItems = $allReceiptItems->where('purchase_order_item_id', $item->id);
+                if ($matchingReceiptItems->isNotEmpty()) {
+                    $qtyReceived = (float) $matchingReceiptItems->sum('received_quantity');
+                } elseif ($receipt && in_array($receipt->status, ['APPROVED', 'DELIVERED'], true)) {
+                    $qtyReceived = $qtyRequested;
+                } else {
+                    $qtyReceived = 0.0;
+                }
+
                 $unitPrice = (float) ($item->unit_price ?? 0);
                 $totalPrice = (float) ($item->total_price ?? ($qtyRequested * $unitPrice));
 

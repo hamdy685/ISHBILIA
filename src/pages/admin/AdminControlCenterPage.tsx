@@ -216,9 +216,9 @@ export const AdminControlCenterPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 p-4 md:p-8 max-w-7xl mx-auto" dir="rtl">
+    <div className="space-y-6 p-4 md:p-8 max-w-7xl mx-auto print:p-0 print:m-0 print:max-w-none" dir="rtl">
       {/* ── Sovereign Page Header ── */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-2 border-gold-500/40 p-6 md:p-8 shadow-2xl shadow-gold-950/40">
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-2 border-gold-500/40 p-6 md:p-8 shadow-2xl shadow-gold-950/40 print:hidden">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="space-y-2">
             <div className="flex items-center gap-3">
@@ -331,7 +331,7 @@ export const AdminControlCenterPage: React.FC = () => {
       {error && <ErrorMessage error={error} />}
 
       {/* ── Tabs Navigation Header ── */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 pb-3">
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 pb-3 print:hidden">
         <button
           type="button"
           onClick={() => setActiveTab('WORKFLOW')}

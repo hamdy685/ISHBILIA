@@ -166,87 +166,248 @@ export const AdminExcelGrid: React.FC = () => {
 
   return (
     <div className="space-y-4 text-slate-100" dir="rtl">
-      {/* ── Excel Control Toolbar ── */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 border border-slate-800 p-4 rounded-2xl backdrop-blur-md">
-        {/* Search */}
-        <div className="flex items-center gap-2 flex-1 min-w-[240px] max-w-md">
-          <span className="text-slate-400">🔍</span>
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="بحث فوري في كل الحقول (أمر، طلب، صنف، مورد، قطعة أرض)..."
-            className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-gold-500"
-          />
+      {/* ── Official Print Layout (Visible ONLY during window.print()) ── */}
+      <div className="hidden print:block font-sans text-black bg-white p-0 m-0">
+        <style>{`
+          @media print {
+            @page {
+              size: A4 landscape;
+              margin: 6mm 5mm 6mm 5mm;
+            }
+            body {
+              background: #ffffff !important;
+              color: #000000 !important;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            .print-hidden-element {
+              display: none !important;
+            }
+            table {
+              width: 100% !important;
+              border-collapse: collapse !important;
+              font-size: 7.5px !important;
+            }
+            th, td {
+              border: 1px solid #334155 !important;
+              padding: 2.5px 3.5px !important;
+              color: #000000 !important;
+              text-align: right !important;
+            }
+            thead {
+              display: table-header-group !important;
+            }
+            tr {
+              page-break-inside: avoid !important;
+            }
+          }
+        `}</style>
+
+        {/* Official Letterhead */}
+        <div className="border-b-2 border-black pb-2 mb-2.5 flex items-start justify-between">
+          <div>
+            <h1 className="text-base font-black text-black">شركة اشبيلية للتطوير العقاري والمقاولات</h1>
+            <h2 className="text-xs font-bold text-slate-800">
+              مركز تحكم دورة المشتريات — مصفوفة تقارير العمليات والأصناف والمطابقات
+            </h2>
+            <div className="text-[9px] text-slate-600 mt-0.5">
+              نمط العرض:{' '}
+              {groupBy === 'none'
+                ? 'مسرد مسطح شامل'
+                : groupBy === 'department'
+                ? 'مجمع حسب القسم / الإدارة'
+                : groupBy === 'supplier'
+                ? 'مجمع حسب المورد'
+                : 'مجمع حسب رقم قطعة الأرض'}
+              {search && ` | تصفية البحث: "${search}"`}
+            </div>
+          </div>
+          <div className="text-left text-[9px] font-mono border border-black p-1.5 rounded bg-slate-50">
+            <div>تاريخ الطباعة: {new Date().toLocaleDateString('ar-EG')}</div>
+            <div>وقت الطباعة: {new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</div>
+            <div>الجهة: الإدارة العليا / مدير النظام</div>
+          </div>
         </div>
 
-        {/* Group By Selector */}
-        <div className="flex items-center gap-2 text-xs">
-          <span className="text-slate-400 font-bold">تجميع حسب:</span>
-          <select
-            value={groupBy}
-            onChange={(e) => setGroupBy(e.target.value as any)}
-            className="bg-slate-950 border border-slate-700 text-slate-200 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-gold-500 font-medium"
-          >
-            <option value="none">بدون تجميع (مسطح)</option>
-            <option value="department">القسم / الإدارة</option>
-            <option value="supplier">المورد</option>
-            <option value="parcel_reference">رقم قطعة الأرض</option>
-          </select>
-        </div>
+        {/* Summary Metadata Strip */}
+        {summary && (
+          <div className="grid grid-cols-4 gap-2 mb-2.5 text-[10px] border border-black bg-slate-100 p-2 font-bold text-black">
+            <div className="border-l border-slate-400 pl-2">
+              <span className="text-slate-600 block text-[8px]">إجمالي السجلات:</span>
+              <span className="font-mono text-xs">{filteredRows.length} سجل</span>
+            </div>
+            <div className="border-l border-slate-400 pl-2">
+              <span className="text-slate-600 block text-[8px]">إجمالي الكميات المطلوبة:</span>
+              <span className="font-mono text-xs">{formatCleanQty(summary.total_requested_quantity)}</span>
+            </div>
+            <div className="border-l border-slate-400 pl-2">
+              <span className="text-slate-600 block text-[8px]">إجمالي الكميات المستلمة:</span>
+              <span className="font-mono text-xs text-emerald-800">{formatCleanQty(summary.total_received_quantity)}</span>
+            </div>
+            <div>
+              <span className="text-slate-600 block text-[8px]">إجمالي القيمة المالية:</span>
+              <span className="font-mono text-xs">{formatCleanNumber(summary.total_amount, 2)} ج.م</span>
+            </div>
+          </div>
+        )}
 
-        {/* Action Buttons */}
-        <div className="flex items-center gap-2">
-          {/* Column Pinning Toggle */}
-          <button
-            type="button"
-            onClick={() => setIsFrozen(!isFrozen)}
-            className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-colors ${
-              isFrozen
-                ? 'bg-gold-500/20 border-gold-500/50 text-gold-300'
-                : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
-            }`}
-            title="تثبيت الأعمدة الأساسية (PR & PO) أثناء التمرير الأفقي"
-          >
-            📌 {isFrozen ? 'الأعمدة مثبتة' : 'تثبيت الأعمدة'}
-          </button>
+        {/* Printable Table */}
+        <table className="w-full border-collapse border border-black text-[7.5px] text-right">
+          <thead>
+            <tr className="bg-slate-200 border-b border-black font-black text-black">
+              <th className="p-1 text-center w-5">#</th>
+              {activeColumnsList.map((col) => (
+                <th key={col.key} className="p-1 border border-black font-black">
+                  {col.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {groupBy === 'none'
+              ? filteredRows.map((row, idx) => (
+                  <tr key={`print-${row.po_id}-${idx}`} className={idx % 2 === 1 ? 'bg-slate-50' : ''}>
+                    <td className="p-1 text-center font-mono font-bold text-slate-700">{idx + 1}</td>
+                    {activeColumnsList.map((col) => {
+                      const val = row[col.key];
+                      const formatted = col.format ? col.format(val) : (val ?? '—');
+                      return (
+                        <td key={col.key} className="p-1 border border-black">
+                          {String(formatted)}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))
+              : (Object.entries(groupedData) as [string, ExcelGridRow[]][]).map(([groupTitle, rows]) => (
+                  <React.Fragment key={`print-group-${groupTitle}`}>
+                    <tr className="bg-slate-300 font-black text-black">
+                      <td colSpan={activeColumnsList.length + 1} className="p-1 font-bold border border-black text-[8.5px]">
+                        📁 {groupTitle} ({rows.length} سجل)
+                      </td>
+                    </tr>
+                    {rows.map((row, idx) => (
+                      <tr key={`print-${groupTitle}-${row.po_id}-${idx}`} className={idx % 2 === 1 ? 'bg-slate-50' : ''}>
+                        <td className="p-1 text-center font-mono font-bold text-slate-700">{idx + 1}</td>
+                        {activeColumnsList.map((col) => {
+                          const val = row[col.key];
+                          const formatted = col.format ? col.format(val) : (val ?? '—');
+                          return (
+                            <td key={col.key} className="p-1 border border-black">
+                              {String(formatted)}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                ))}
+          </tbody>
+        </table>
 
-          {/* Columns Selector */}
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => setShowColumnModal(true)}
-            className="font-bold text-xs"
-          >
-            ⚙️ الأعمدة ({activeColumnsList.length})
-          </Button>
-
-          {/* Export CSV */}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleExportCsv}
-            disabled={!filteredRows.length}
-            className="font-bold text-xs border-emerald-500/40 text-emerald-300 hover:bg-emerald-950/40"
-          >
-            📊 تصدير Excel / CSV
-          </Button>
-
-          {/* Refresh */}
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={loadGridData}
-            isLoading={loading}
-            className="font-bold text-xs"
-          >
-            🔄 تحديث
-          </Button>
+        {/* Print Footer */}
+        <div className="mt-2.5 pt-2 border-t border-black flex items-center justify-between text-[8px] text-slate-600">
+          <div>شركة اشبيلية للتطوير العقاري والمقاولات — مستخرج رسمي لمدير النظام</div>
+          <div>تقرير الرقابة الإدارية والمشتريات — طُبع آلياً من النظام</div>
         </div>
       </div>
+
+      {/* ── Screen Interactive UI (Hidden during window.print()) ── */}
+      <div className="print:hidden space-y-4">
+        {/* ── Excel Control Toolbar ── */}
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 border border-slate-800 p-4 rounded-2xl backdrop-blur-md">
+          {/* Search */}
+          <div className="flex items-center gap-2 flex-1 min-w-[240px] max-w-md">
+            <span className="text-slate-400">🔍</span>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="بحث فوري في كل الحقول (أمر، طلب، صنف، مورد، قطعة أرض)..."
+              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-gold-500"
+            />
+          </div>
+
+          {/* Group By Selector */}
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-slate-400 font-bold">تجميع حسب:</span>
+            <select
+              value={groupBy}
+              onChange={(e) => setGroupBy(e.target.value as any)}
+              className="bg-slate-950 border border-slate-700 text-slate-200 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-gold-500 font-medium"
+            >
+              <option value="none">بدون تجميع (مسطح)</option>
+              <option value="department">القسم / الإدارة</option>
+              <option value="supplier">المورد</option>
+              <option value="parcel_reference">رقم قطعة الأرض</option>
+            </select>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2">
+            {/* Column Pinning Toggle */}
+            <button
+              type="button"
+              onClick={() => setIsFrozen(!isFrozen)}
+              className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-colors ${
+                isFrozen
+                  ? 'bg-gold-500/20 border-gold-500/50 text-gold-300'
+                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+              }`}
+              title="تثبيت الأعمدة الأساسية (PR & PO) أثناء التمرير الأفقي"
+            >
+              📌 {isFrozen ? 'الأعمدة مثبتة' : 'تثبيت الأعمدة'}
+            </button>
+
+            {/* Columns Selector */}
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setShowColumnModal(true)}
+              className="font-bold text-xs"
+            >
+              ⚙️ الأعمدة ({activeColumnsList.length})
+            </Button>
+
+            {/* Print Button */}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => window.print()}
+              disabled={!filteredRows.length}
+              className="font-bold text-xs border-sky-500/40 text-sky-300 hover:bg-sky-950/40 flex items-center gap-1.5"
+              title="طباعة التقرير أو حفظه بصيغة PDF معتمدة"
+            >
+              <span>🖨️ طباعة التقرير</span>
+            </Button>
+
+            {/* Export CSV */}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleExportCsv}
+              disabled={!filteredRows.length}
+              className="font-bold text-xs border-emerald-500/40 text-emerald-300 hover:bg-emerald-950/40"
+            >
+              📊 تصدير Excel / CSV
+            </Button>
+
+            {/* Refresh */}
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={loadGridData}
+              isLoading={loading}
+              className="font-bold text-xs"
+            >
+              🔄 تحديث
+            </Button>
+          </div>
+        </div>
 
       {error && <ErrorMessage error={error} />}
 
@@ -406,6 +567,7 @@ export const AdminExcelGrid: React.FC = () => {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 };
