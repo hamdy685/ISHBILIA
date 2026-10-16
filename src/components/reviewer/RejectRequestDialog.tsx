@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { FormField, Textarea } from '../ui/FormField';
+import { ActionConfirmationModal } from '../common/ActionConfirmationModal';
 
 interface Props {
   isOpen: boolean;
@@ -20,17 +21,20 @@ export const RejectRequestDialog: React.FC<Props> = ({
 }) => {
   const [comment, setComment] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
 
   React.useEffect(() => {
     if (!isOpen) {
       setComment('');
       setValidationError(null);
+      setIsConfirmModalOpen(false);
     }
   }, [isOpen]);
 
   const handleCancel = () => {
     setComment('');
     setValidationError(null);
+    setIsConfirmModalOpen(false);
     onCancel();
   };
 
@@ -42,11 +46,17 @@ export const RejectRequestDialog: React.FC<Props> = ({
       return;
     }
     setValidationError(null);
+    setIsConfirmModalOpen(true);
+  };
+
+  const handleFinalConfirm = () => {
+    setIsConfirmModalOpen(false);
     onConfirm(comment.trim());
   };
 
   return (
-    <Modal
+    <>
+      <Modal
       isOpen={isOpen}
       onClose={handleCancel}
       title="رفض طلب الشراء"
@@ -91,6 +101,33 @@ export const RejectRequestDialog: React.FC<Props> = ({
         </FormField>
       </form>
     </Modal>
+
+    <ActionConfirmationModal
+      isOpen={isConfirmModalOpen}
+      onClose={() => setIsConfirmModalOpen(false)}
+      onConfirm={handleFinalConfirm}
+      isLoading={isRejecting}
+      title="مراجعة وتأكيد رفض طلب الشراء"
+      subtitle={`طلب شراء رقم ${requestNumber}`}
+      confirmLabel="حسناً، تأكيد الرفض نهائياً"
+      cancelLabel="رجوع للتعديل"
+      confirmVariant="danger"
+      documentType="PURCHASE_REQUEST"
+      documentCode={requestNumber}
+      customRows={[
+        { label: 'القرار المتخذ:', value: 'رفض طلب الشراء وإعادته لصاحب الطلب', highlight: true },
+        { label: 'سبب الرفض المسجل:', value: comment },
+      ]}
+      alerts={[
+        {
+          type: 'warning',
+          title: 'تنبيه إيقاف إجراءات الشراء',
+          message: 'سيتم تغيير حالة الطلب إلى (مرفوض) وإرسال إشعار لصاحب الطلب بسبب الرفض، ولن يتم استكمال دورة الشراء.'
+        }
+      ]}
+      promptQuestion={`أنت على وشك رفض طلب الشراء رقم (${requestNumber}) نهائياً، هل أنت متأكد من المتابعة؟`}
+    />
+  </>
   );
 };
 

@@ -43,6 +43,7 @@ import TableFilterBar from '../../components/ui/TableFilterBar';
 import PaginationControls from '../../components/ui/PaginationControls';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import { Button } from '../../components/ui/Button';
+import { ActionConfirmationModal } from '../../components/common/ActionConfirmationModal';
 import { Card, KpiCard } from '../../components/ui/Card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/ui/Table';
 import { getDefaultDateFrom, getTodayInputDate, isDefaultTodayRange } from '../../utils/dateFilters';
@@ -176,6 +177,11 @@ export const ProcurementManagerPage: React.FC = () => {
   const [supplementModalData, setSupplementModalData] = useState<PurchaseRequestSupplement | null>(null);
   const [supplementLoading, setSupplementLoading] = useState(false);
   const [finalizePoId, setFinalizePoId] = useState<number | null>(null);
+  const [procurementActionModal, setProcurementActionModal] = useState<{
+    isOpen: boolean;
+    type: 'reject' | 'revert';
+    request: PurchaseRequest;
+  } | null>(null);
 
   useEffect(() => {
     const stateObj = location.state as { successMessage?: string; successMsg?: string } | null;
@@ -356,25 +362,35 @@ export const ProcurementManagerPage: React.FC = () => {
     }
   };
 
-  const handleReject = async (id: number) => {
-    if (!window.confirm('هل أنت متأكد من رفض هذا الطلب؟')) return;
-    setRefreshing(true);
-    try {
-      await rejectProcurementPrApi(id, 'تم الرفض بواسطة مدير المشتريات');
-      await loadData();
-    } catch (error) {
-      setPageError(parseApiError(error).message);
-    } finally {
-      setRefreshing(false);
-    }
+  const handleReject = (request: PurchaseRequest) => {
+    setProcurementActionModal({
+      isOpen: true,
+      type: 'reject',
+      request,
+    });
   };
 
-  const handleRevertRoute = async (request: PurchaseRequest) => {
-    if (!window.confirm(`هل أنت متأكد من التراجع عن مسار عروض الأسعار للطلب ${request.request_number} وإعادته إلى قسم اختيار المسار وتحديد الأسعار المباشرة؟`)) return;
+  const handleRevertRoute = (request: PurchaseRequest) => {
+    setProcurementActionModal({
+      isOpen: true,
+      type: 'revert',
+      request,
+    });
+  };
+
+  const handleExecuteProcurementAction = async () => {
+    if (!procurementActionModal) return;
+    const { type, request } = procurementActionModal;
+    setProcurementActionModal(null);
     setRefreshing(true);
     try {
-      const response = await resetProcurementPrRouteApi(request.id);
-      setSuccessBanner(response.message || 'تم التراجع عن مسار عروض الأسعار وإعادة الطلب لقسم اختيار المسار بنجاح.');
+      if (type === 'reject') {
+        await rejectProcurementPrApi(request.id, 'تم الرفض بواسطة مدير المشتريات');
+        setSuccessBanner(`تم رفض طلب الشراء ${request.request_number} بنجاح.`);
+      } else {
+        const response = await resetProcurementPrRouteApi(request.id);
+        setSuccessBanner(response.message || 'تم التراجع عن مسار عروض الأسعار وإعادة الطلب لقسم اختيار المسار بنجاح.');
+      }
       await loadData();
     } catch (error) {
       setPageError(parseApiError(error).message);
@@ -1588,7 +1604,7 @@ export const ProcurementManagerPage: React.FC = () => {
                             <Button
                               variant="danger"
                               size="sm"
-                              onClick={() => void handleReject(request.id)}
+                              onClick={() => handleReject(request)}
                             >
                               رفض
                             </Button>
@@ -1606,7 +1622,7 @@ export const ProcurementManagerPage: React.FC = () => {
                             <Button
                               variant="danger"
                               size="sm"
-                              onClick={() => void handleReject(request.id)}
+                              onClick={() => handleReject(request)}
                             >
                               رفض
                             </Button>
@@ -1637,7 +1653,7 @@ export const ProcurementManagerPage: React.FC = () => {
                                 <Button
                                   variant="danger"
                                   size="sm"
-                                  onClick={() => void handleReject(request.id)}
+                                  onClick={() => handleReject(request)}
                                 >
                                   رفض
                                 </Button>
@@ -2091,6 +2107,39 @@ export const ProcurementManagerPage: React.FC = () => {
           void loadData();
         }}
       />
+
+      {/* Sovereign Action Confirmation Modal */}
+      {procurementActionModal && (
+        <ActionConfirmationModal
+          isOpen={procurementActionModal.isOpen}
+          onClose={() => setProcurementActionModal(null)}
+          onConfirm={() => void handleExecuteProcurementAction()}
+          isLoading={refreshing}
+          title={procurementActionModal.type === 'reject' ? 'تأكيد رفض طلب الشراء' : 'تأكيد التراجع عن مسار عروض الأسعار'}
+          subtitle={`طلب شراء رقم ${procurementActionModal.request.request_number}`}
+          confirmLabel={procurementActionModal.type === 'reject' ? 'حسناً، تأكيد الرفض' : 'حسناً، تراجع وإعادة للمسار'}
+          cancelLabel="رجوع"
+          confirmVariant={procurementActionModal.type === 'reject' ? 'danger' : 'warning'}
+          documentType="PURCHASE_REQUEST"
+          documentCode={procurementActionModal.request.request_number}
+          department={procurementActionModal.request.department?.name}
+          itemsCount={procurementActionModal.request.items?.length}
+          alerts={[
+            {
+              type: 'warning',
+              title: procurementActionModal.type === 'reject' ? 'إيقاف إجراءات الشراء للطلب' : 'إعادة تعيين مسار الشراء',
+              message: procurementActionModal.type === 'reject'
+                ? 'سيتم رفض الطلب نهائياً وإخطار صاحب الطلب بسبب الرفض.'
+                : 'سيتم إلغاء حالة عروض الأسعار وإعادة الطلب لمرحلة تحديد المسار المباشر أو التوجيه من جديد.',
+            }
+          ]}
+          promptQuestion={
+            procurementActionModal.type === 'reject'
+              ? `أنت على وشك رفض طلب الشراء رقم (${procurementActionModal.request.request_number})، هل ترغب في المتابعة؟`
+              : `أنت على وشك التراجع عن مسار عروض الأسعار للطلب (${procurementActionModal.request.request_number}) وإعادته لاختيار المسار، هل ترغب في المتابعة؟`
+          }
+        />
+      )}
     </div>
   );
 };

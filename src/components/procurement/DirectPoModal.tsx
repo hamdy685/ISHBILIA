@@ -9,6 +9,8 @@ import { SearchableSelect } from '../ui/FormField';
 import { SupplierSelectWithQuickAdd } from '../common/SupplierSelectWithQuickAdd';
 import { formatCleanNumber, formatCleanQty } from '../../utils/numberFormat';
 import { isRebarUnit, calculateRebarTons } from '../../utils/rebar';
+import { ActionConfirmationModal, ConfirmationAlert } from '../common/ActionConfirmationModal';
+import { tafqeetCurrency } from '../../utils/tafqeet';
 
 interface ItemRow {
   item_id?: number | null;
@@ -56,6 +58,7 @@ export const DirectPoModal: React.FC<DirectPoModalProps> = ({ isOpen, onClose, o
   const [requiresWarehouseReceipt, setRequiresWarehouseReceipt] = useState<boolean>(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -162,7 +165,27 @@ export const DirectPoModal: React.FC<DirectPoModalProps> = ({ isOpen, onClose, o
 
   if (!isOpen) return null;
 
-  const handleSubmit = async (event: React.FormEvent) => {
+  const confirmationAlerts = useMemo(() => {
+    const alerts: ConfirmationAlert[] = [];
+    const rebarItems = items.filter(item => {
+      const desc = (item.item_description || '').toLowerCase();
+      const uomUpper = (item.uom || '').trim().toUpperCase();
+      return isRebarUnit(item.uom) || uomUpper === 'PARCEL' || desc.includes('حديد') || desc.includes('تسليح') || desc.includes('rebar');
+    });
+
+    if (rebarItems.length > 0) {
+      alerts.push({
+        type: 'rebar',
+        title: '🏗️ تنبيه وزنة حديد كاملة (مسار مستقل ومطابقة قبان)',
+        message: 'يحتوي هذا الطلب المباشر على بنود حديد تسليح، وسيتم توجيهه كوزنة حديد مستقلة وكاملة تخضع لإجراءات وتصاريح وزن القبان ومطابقة مهندس الموقع بالمشروع.',
+        badge: 'وزنة حديد',
+      });
+    }
+
+    return alerts;
+  }, [items]);
+
+  const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     if ((!supplierId && !oneTimeSupplierName.trim()) || !departmentId || !siteEngineerId) {
       setError('يرجى ملء كافة الحقول الإلزامية واختيار المورد والقسم ومهندس الموقع / المستلم.');
@@ -174,6 +197,12 @@ export const DirectPoModal: React.FC<DirectPoModalProps> = ({ isOpen, onClose, o
       return;
     }
 
+    setError(null);
+    setIsConfirmModalOpen(true);
+  };
+
+  const executeDirectPo = async () => {
+    setIsConfirmModalOpen(false);
     setLoading(true);
     setError(null);
     try {
@@ -429,6 +458,27 @@ export const DirectPoModal: React.FC<DirectPoModalProps> = ({ isOpen, onClose, o
           </div>
         </div>
       </div>
+
+      <ActionConfirmationModal
+        isOpen={isConfirmModalOpen}
+        onClose={() => setIsConfirmModalOpen(false)}
+        onConfirm={executeDirectPo}
+        isLoading={loading}
+        title="مراجعة وتأكيد طلب الشراء المباشر"
+        subtitle="أمر شراء مباشر"
+        confirmLabel="حسناً، إرسال الطلب المباشر"
+        cancelLabel="رجوع للتعديل"
+        confirmVariant="success"
+        documentType="DIRECT_PO"
+        department={departments.find(d => String(d.id) === String(departmentId))?.name || '—'}
+        supplierName={suppliers.find(s => String(s.id) === String(supplierId))?.company_name || oneTimeSupplierName.trim() || '—'}
+        receiverName={siteEngineers.find(e => String(e.id) === String(siteEngineerId))?.name || '—'}
+        totalAmount={grandTotal}
+        tafqeetText={grandTotal > 0 ? tafqeetCurrency(grandTotal) : undefined}
+        itemsCount={items.length}
+        alerts={confirmationAlerts}
+        promptQuestion="أنت على وشك إنشاء طلب شراء مباشر وإرساله إلى المدير التنفيذي والحسابات بالبيانات الموضحة أعلاه، هل ترغب في الاستمرار؟"
+      />
     </div>
   ), document.body);
 };

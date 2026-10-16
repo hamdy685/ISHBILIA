@@ -22,6 +22,7 @@ import { SupplierSelectWithQuickAdd } from '../../components/common/SupplierSele
 import { formatCleanNumber, formatCleanQty } from '../../utils/numberFormat';
 import { CombinedPoPrPrintModal, CombinedPrintData } from '../../components/procurement/CombinedPoPrPrintModal';
 import { isRebarUnit, calculateRebarTons } from '../../utils/rebar';
+import { ActionConfirmationModal, ConfirmationAlert } from '../../components/common/ActionConfirmationModal';
 
 const getLocalDateIso = () => {
   const now = new Date();
@@ -79,6 +80,7 @@ export const CreatePurchaseOrderPage: React.FC = () => {
 
   const [isDirectPoModalOpen, setIsDirectPoModalOpen] = useState<boolean>(false);
   const [isSupplementModalOpen, setIsSupplementModalOpen] = useState<boolean>(false);
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState<boolean>(false);
 
   const pendingSupplement = useMemo(() => {
     return Array.isArray(pr?.supplements)
@@ -425,7 +427,93 @@ export const CreatePurchaseOrderPage: React.FC = () => {
     oneTimeSupplierName.trim()
   );
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const selectedSupplier = useMemo(() => {
+    const sId = supplierId || effectiveSupplierId;
+    return suppliers.find((s) => String(s.id) === String(sId));
+  }, [suppliers, supplierId, effectiveSupplierId]);
+
+  const supplierDisplayName = useMemo(() => {
+    return selectedSupplier?.company_name || oneTimeSupplierName.trim() || 'مورد غير محدد';
+  }, [selectedSupplier, oneTimeSupplierName]);
+
+  // Computed data for the action confirmation modal
+  const confirmationData = useMemo(() => {
+    const finalSupplierId = supplierId || effectiveSupplierId;
+    const itemsWithQtyChange = poItems.filter(item => item.quantity !== item.original_quantity);
+    const finalGroups = resolvedGroups.filter((g) => g.items.length > 0);
+    const grandTotal = poItems.reduce(
+      (sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.unit_price) || 0),
+      0
+    );
+
+    // Rebar / Steel detection
+    const rebarItems = poItems.filter((item) => {
+      const desc = (item.item_description || '').toLowerCase();
+      const uom = (item.uom || '').toLowerCase();
+      return (
+        isRebarUnit(item.uom) ||
+        desc.includes('حديد') ||
+        desc.includes('تسليح') ||
+        desc.includes('rebar') ||
+        desc.includes('كانات') ||
+        desc.includes('لنية') ||
+        desc.includes('لينية') ||
+        uom.includes('ton') ||
+        uom.includes('طن')
+      );
+    });
+
+    let totalRebarTons = 0;
+    rebarItems.forEach((it) => {
+      const qty = Number(it.quantity) || 0;
+      if (isRebarUnit(it.uom)) {
+        totalRebarTons += calculateRebarTons(qty, it.uom);
+      } else if ((it.uom || '').toLowerCase().includes('ton') || (it.uom || '').includes('طن')) {
+        totalRebarTons += qty;
+      }
+    });
+
+    const alerts: ConfirmationAlert[] = [];
+
+    if (rebarItems.length > 0) {
+      alerts.push({
+        type: 'rebar',
+        title: '🏗️ تنبيه وزنة حديد كاملة (مسار مستقل ومطابقة قبان)',
+        message: `يحتوي هذا الأمر على بنود حديد تسليح (${rebarItems.map(i => i.item_description).slice(0, 3).join('، ')}${totalRebarTons > 0 ? ` بإجمالي تقديري ${formatCleanQty(totalRebarTons)} طن` : ''})، وسيتم توجيهها كوزنة حديد مستقلة وكاملة تخضع لإجراءات وتصاريح وزن القبان ومطابقة مهندس الموقع بالمشروع.`,
+        badge: totalRebarTons > 0 ? `${formatCleanQty(totalRebarTons)} طن حديد` : 'وزنة حديد',
+      });
+    }
+
+    if (finalGroups.length > 1) {
+      alerts.push({
+        type: 'grouped',
+        title: '📋 تنبيه أوامر شراء مجمعة / متعددة الموردين',
+        message: `سيتم تقسيم هذا الطلب وإصدار (${finalGroups.length}) أوامر شراء مستقلة ومجمعة وفق توزيع الموردين والمجموعات المحدد في الجدول أدناه.`,
+        badge: `${finalGroups.length} أوامر شراء`,
+      });
+    }
+
+    if (itemsWithQtyChange.length > 0) {
+      alerts.push({
+        type: 'warning',
+        title: 'تعديل في كميات الأصناف عن الطلب الأصلي',
+        message: `تم تعديل كميات (${itemsWithQtyChange.length}) صنف عن طلب الشراء الأصلي. الملاحظات المسجلة: "${notes || 'بدون ملاحظات'}".`,
+      });
+    }
+
+    return {
+      documentCode: pr?.request_number || (prId ? `#${prId}` : '—'),
+      department: pr?.department?.name || '—',
+      projectSite: poItems[0]?.item_reference ? `قطعة ${poItems[0]?.item_reference} - ${poItems[0]?.region}` : (pr?.project_name || pr?.parcel_reference || '—'),
+      supplierName: supplierDisplayName,
+      totalAmount: grandTotal,
+      tafqeetText: grandTotal > 0 ? tafqeetCurrency(grandTotal) : undefined,
+      itemsCount: poItems.length,
+      alerts,
+    };
+  }, [supplierId, effectiveSupplierId, poItems, resolvedGroups, notes, pr, prId, supplierDisplayName]);
+
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!prId) {
       setError('لا يوجد طلب شراء معتمد محدد. يمكنك اختيار أمر شراء مباشر.');
@@ -453,8 +541,17 @@ export const CreatePurchaseOrderPage: React.FC = () => {
       return;
     }
 
+    setError(null);
+    setIsConfirmModalOpen(true);
+  };
+
+  const executeCreateOrders = async () => {
+    setIsConfirmModalOpen(false);
     setLoading(true);
     setError(null);
+
+    const finalSupplierId = supplierId || effectiveSupplierId;
+    const finalGroups = resolvedGroups.filter((g) => g.items.length > 0);
 
     try {
       if (finalGroups.length === 1 && orderMode === 'COMBINED_SINGLE') {
@@ -537,14 +634,7 @@ export const CreatePurchaseOrderPage: React.FC = () => {
     }
   };
 
-  const selectedSupplier = useMemo(() => {
-    const sId = supplierId || effectiveSupplierId;
-    return suppliers.find((s) => String(s.id) === String(sId));
-  }, [suppliers, supplierId, effectiveSupplierId]);
 
-  const supplierDisplayName = useMemo(() => {
-    return selectedSupplier?.company_name || oneTimeSupplierName.trim() || 'مورد غير محدد';
-  }, [selectedSupplier, oneTimeSupplierName]);
 
   const combinedPrintData: CombinedPrintData = useMemo(() => {
     return {
@@ -1561,6 +1651,29 @@ export const CreatePurchaseOrderPage: React.FC = () => {
           }}
         />
       )}
+
+      {/* Sovereign Action Confirmation Modal */}
+      <ActionConfirmationModal
+        isOpen={isConfirmModalOpen}
+        onClose={() => setIsConfirmModalOpen(false)}
+        onConfirm={executeCreateOrders}
+        isLoading={loading}
+        title="مراجعة وتأكيد إصدار أمر الشراء"
+        subtitle={`طلب شراء رقم ${confirmationData.documentCode}`}
+        confirmLabel={resolvedGroups.length > 1 ? `حسناً، إصدار (${resolvedGroups.length}) أوامر شراء` : 'حسناً، إصدار أمر الشراء'}
+        cancelLabel="رجوع للتعديل"
+        confirmVariant="primary"
+        documentType="PURCHASE_ORDER"
+        documentCode={confirmationData.documentCode}
+        department={confirmationData.department}
+        projectSite={confirmationData.projectSite}
+        supplierName={confirmationData.supplierName}
+        totalAmount={confirmationData.totalAmount}
+        tafqeetText={confirmationData.tafqeetText}
+        itemsCount={confirmationData.itemsCount}
+        alerts={confirmationData.alerts}
+        promptQuestion="أنت على وشك إصدار وتعميد أمر الشراء النهائي ونقله لمرحلة التوريد والاستلام بالموقع، هل ترغب في الاستمرار؟"
+      />
     </div>
   );
 };

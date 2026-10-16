@@ -9,6 +9,9 @@ import { SupplierSelectWithQuickAdd } from '../common/SupplierSelectWithQuickAdd
 import { SupplementItemBadge } from '../common/SupplementItemBadge';
 import { SmartKgPricingInput } from '../common/SmartKgPricingInput';
 import { useOptionalAuth } from '../../context/AuthContext';
+import { ActionConfirmationModal, ConfirmationAlert } from '../common/ActionConfirmationModal';
+import { isRebarUnit } from '../../utils/rebar';
+import { tafqeetCurrency } from '../../utils/tafqeet';
 
 interface DirectAccountingReviewModalProps {
   request: PurchaseRequest | null;
@@ -96,6 +99,7 @@ export const DirectAccountingReviewModal: React.FC<DirectAccountingReviewModalPr
   const [validationError, setValidationError] = useState<string | null>(null);
   const [globalSupplierId, setGlobalSupplierId] = useState<string>('');
   const [globalOneTimeName, setGlobalOneTimeName] = useState<string>('');
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
 
   const safeSuppliers = Array.isArray(suppliers) ? suppliers : [];
 
@@ -128,6 +132,7 @@ export const DirectAccountingReviewModal: React.FC<DirectAccountingReviewModalPr
     setValidationError(null);
     setGlobalSupplierId('');
     setGlobalOneTimeName('');
+    setIsConfirmModalOpen(false);
   }, [isOpen, request?.id]);
 
   const grandTotal = useMemo(
@@ -191,6 +196,35 @@ export const DirectAccountingReviewModal: React.FC<DirectAccountingReviewModalPr
     applySupplierToAll(globalSupplierId ? Number(globalSupplierId) : '', globalOneTimeName.trim());
   };
 
+  const confirmationAlerts = useMemo(() => {
+    const alerts: ConfirmationAlert[] = [];
+    const rebarItems = items.filter((item) => {
+      const desc = (item.item_description || '').toLowerCase();
+      const uomUpper = (item.uom || '').trim().toUpperCase();
+      return isRebarUnit(item.uom) || uomUpper === 'PARCEL' || desc.includes('حديد') || desc.includes('تسليح') || desc.includes('rebar');
+    });
+
+    if (rebarItems.length > 0) {
+      alerts.push({
+        type: 'rebar',
+        title: '🏗️ تنبيه وزنة حديد كاملة (مسار مستقل ومطابقة قبان)',
+        message: 'يحتوي هذا الطلب على بنود حديد تسليح، وسيتم توجيهها كوزنة حديد مستقلة وكاملة تخضع لإجراءات وتصاريح وزن القبان ومطابقة مهندس الموقع بالمشروع.',
+        badge: 'وزنة حديد',
+      });
+    }
+
+    if (supplierGroupSummary.length > 1) {
+      alerts.push({
+        type: 'grouped',
+        title: '📋 تنبيه توزيع الأصناف على أكثر من مورد',
+        message: `تم توزيع بنود هذا الطلب على (${supplierGroupSummary.length}) موردين مختلفين بإجمالي (${formatAmount(grandTotal)} ج.م).`,
+        badge: `${supplierGroupSummary.length} موردين`,
+      });
+    }
+
+    return alerts;
+  }, [items, supplierGroupSummary, grandTotal]);
+
   const handleConfirm = () => {
     if (items.length === 0) {
       setValidationError('لا توجد بنود مالية مرتبطة بهذا الطلب.');
@@ -198,14 +232,7 @@ export const DirectAccountingReviewModal: React.FC<DirectAccountingReviewModalPr
     }
 
     if (isFinancialDirector) {
-      onConfirm({
-        notes: notes.trim() || null,
-        items: items.map((item) => ({
-          pr_item_id: item.pr_item_id,
-          quantity: Number(item.quantity) || 1,
-          unit_price: Number(item.unit_price) || 0,
-        })),
-      });
+      setIsConfirmModalOpen(true);
       return;
     }
 
@@ -219,6 +246,23 @@ export const DirectAccountingReviewModal: React.FC<DirectAccountingReviewModalPr
     }
     if (items.some((item) => !Number.isFinite(Number(item.unit_price)) || Number(item.unit_price) < 0)) {
       setValidationError('يجب إدخال سعر وحدة صحيح لا يقل عن صفر في جميع البنود.');
+      return;
+    }
+
+    setIsConfirmModalOpen(true);
+  };
+
+  const executeFinalConfirm = () => {
+    setIsConfirmModalOpen(false);
+    if (isFinancialDirector) {
+      onConfirm({
+        notes: notes.trim() || null,
+        items: items.map((item) => ({
+          pr_item_id: item.pr_item_id,
+          quantity: Number(item.quantity) || 1,
+          unit_price: Number(item.unit_price) || 0,
+        })),
+      });
       return;
     }
 
@@ -240,7 +284,8 @@ export const DirectAccountingReviewModal: React.FC<DirectAccountingReviewModalPr
   if (!isOpen || !request) return null;
 
   return (
-    <Modal
+    <>
+      <Modal
       isOpen={isOpen}
       onClose={onClose}
       closeOnBackdrop={!isSubmitting}
@@ -658,6 +703,29 @@ export const DirectAccountingReviewModal: React.FC<DirectAccountingReviewModalPr
         </label>
       </div>
     </Modal>
+
+    <ActionConfirmationModal
+      isOpen={isConfirmModalOpen}
+      onClose={() => setIsConfirmModalOpen(false)}
+      onConfirm={executeFinalConfirm}
+      isLoading={isSubmitting}
+      title={isFinancialDirector ? 'مراجعة وتأكيد الاعتماد المالي' : 'مراجعة وتأكيد البيانات المالية'}
+      subtitle={`طلب شراء رقم ${request.request_number}`}
+      confirmLabel={confirmButtonLabel}
+      cancelLabel="رجوع للتعديل"
+      confirmVariant="success"
+      documentType="PURCHASE_REQUEST"
+      documentCode={request.request_number}
+      department={request.department?.name}
+      projectSite={request.parcel_reference ? `قطعة ${request.parcel_reference}` : request.project_name || undefined}
+      supplierName={supplierGroupSummary.map((s) => s.name).join('، ')}
+      totalAmount={grandTotal}
+      tafqeetText={grandTotal > 0 ? tafqeetCurrency(grandTotal) : undefined}
+      itemsCount={items.length}
+      alerts={confirmationAlerts}
+      promptQuestion={`أنت على وشك اعتماد وإرسال البيانات المالية لطلب الشراء رقم (${request.request_number}) بإجمالي (${formatAmount(grandTotal)} ج.م)، هل ترغب في الاستمرار؟`}
+    />
+  </>
   );
 };
 

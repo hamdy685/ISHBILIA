@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { FormField, Textarea, Select } from '../ui/FormField';
 import { getSiteEngineerReceiverOptionsApi } from '../../api/purchaseRequests';
 import { SiteEngineerReceiverOption } from '../../types/purchaseRequest';
 import { useAuth } from '../../context/AuthContext';
+import { ActionConfirmationModal } from '../common/ActionConfirmationModal';
 
 interface Props {
   isOpen: boolean;
@@ -46,6 +47,17 @@ export const ApproveRequestDialog: React.FC<Props> = ({
   const [otherUsers, setOtherUsers] = useState<SiteEngineerReceiverOption[]>([]);
   const [isLoadingOptions, setIsLoadingOptions] = useState(false);
   const [selectionError, setSelectionError] = useState<string | null>(null);
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+
+  const selectedReceiverName = useMemo(() => {
+    const sId = Number(selectedEngineerId);
+    return (
+      siteEngineers.find(e => e.id === sId)?.name ||
+      warehouseKeepers.find(w => w.id === sId)?.name ||
+      otherUsers.find(u => u.id === sId)?.name ||
+      'المسؤول المحدد'
+    );
+  }, [selectedEngineerId, siteEngineers, warehouseKeepers, otherUsers]);
 
   useEffect(() => {
     if (isOpen) {
@@ -70,6 +82,7 @@ export const ApproveRequestDialog: React.FC<Props> = ({
       setSelectedEngineerId('');
       setRequiresWarehouseReceipt(true);
       setSelectionError(null);
+      setIsConfirmModalOpen(false);
     }
   }, [isOpen, initialSiteEngineerId, initialRequiresWarehouseReceipt]);
 
@@ -81,11 +94,17 @@ export const ApproveRequestDialog: React.FC<Props> = ({
       return;
     }
     setSelectionError(null);
+    setIsConfirmModalOpen(true);
+  };
+
+  const handleFinalConfirm = () => {
+    setIsConfirmModalOpen(false);
     onConfirm(comment || undefined, Number(selectedEngineerId), requiresWarehouseReceipt);
   };
 
   return (
-    <Modal
+    <>
+      <Modal
       isOpen={isOpen}
       onClose={onCancel}
       title={title || "اعتماد طلب الشراء وتحديد مسؤول الاستلام"}
@@ -240,6 +259,29 @@ export const ApproveRequestDialog: React.FC<Props> = ({
         </FormField>
       </form>
     </Modal>
+
+    {/* Reviewer Final Action Confirmation Modal */}
+    <ActionConfirmationModal
+      isOpen={isConfirmModalOpen}
+      onClose={() => setIsConfirmModalOpen(false)}
+      onConfirm={handleFinalConfirm}
+      isLoading={isApproving}
+      title="مراجعة وتأكيد اعتماد طلب الشراء"
+      subtitle={`طلب شراء رقم ${requestNumber}`}
+      confirmLabel="حسناً، تأكيد الاعتماد"
+      cancelLabel="رجوع للتعديل"
+      confirmVariant="success"
+      documentType="PURCHASE_REQUEST"
+      documentCode={requestNumber}
+      receiverName={selectedReceiverName}
+      customRows={[
+        { label: 'المسؤول المعين للاستلام بالموقع:', value: selectedReceiverName, highlight: true },
+        { label: 'مسار الفحص المخزني:', value: requiresWarehouseReceipt ? 'يمر على فحص أمين المخزن أولاً' : 'توريد مباشر للموقع (تخطي المخزن)' },
+        ...(comment ? [{ label: 'ملاحظات الاعتماد:', value: comment }] : []),
+      ]}
+      promptQuestion={`أنت على وشك اعتماد طلب الشراء رقم (${requestNumber}) وتعيين (${selectedReceiverName}) كمسؤول استلام المواد بالموقع، هل ترغب في الاستمرار؟`}
+    />
+  </>
   );
 };
 
