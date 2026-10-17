@@ -150,7 +150,17 @@ class AdminController extends Controller
         $user->save();
 
         if (isset($validated['role_ids'])) {
+            // Detect if roles actually changed
+            $oldRoleIds = $user->roles()->pluck('roles.id')->sort()->values()->toArray();
+            $newRoleIds = collect($validated['role_ids'])->map(fn ($v) => (int) $v)->sort()->values()->toArray();
+            $rolesChanged = $oldRoleIds !== $newRoleIds;
+
             $user->roles()->sync($validated['role_ids']);
+
+            // If roles changed, immediately revoke all tokens to force re-login with new permissions
+            if ($rolesChanged) {
+                $user->tokens()->delete();
+            }
         }
 
         return response()->json([
