@@ -179,7 +179,7 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
 
   const allSuppliers = useMemo(() => {
     const list = [...suppliers];
-    if (po?.supplier && !list.some((s) => s.id === po.supplier.id)) {
+    if (po?.supplier && !list.some((s) => s.id === po.supplier?.id)) {
       list.unshift(po.supplier);
     }
     return list;
