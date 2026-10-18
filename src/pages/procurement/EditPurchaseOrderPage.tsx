@@ -68,6 +68,7 @@ export const EditPurchaseOrderPage: React.FC = () => {
   const [newItemPrice, setNewItemPrice] = useState<number>(0);
   const [newItemUom, setNewItemUom] = useState<string>('PCS');
   const [newItemSpecs, setNewItemSpecs] = useState<string>('');
+  const [newItemSupplierId, setNewItemSupplierId] = useState<string>('');
 
   const [loading, setLoading] = useState<boolean>(true);
   const [busy, setBusy] = useState<boolean>(false);
@@ -261,6 +262,7 @@ export const EditPurchaseOrderPage: React.FC = () => {
       uom: newItemUom.trim() || 'PCS',
       unit_price: newItemPrice,
       line_total: lineTotal,
+      supplier_id: newItemSupplierId ? Number(newItemSupplierId) : (supplierId ? Number(supplierId) : (po?.supplier_id ?? undefined)),
       specifications: newItemSpecs.trim() || undefined,
     };
     setItems((prev) => [...prev, newItem]);
@@ -270,6 +272,7 @@ export const EditPurchaseOrderPage: React.FC = () => {
     setNewItemQty(1);
     setNewItemPrice(0);
     setNewItemSpecs('');
+    setNewItemSupplierId('');
     setError(null);
   };
 
@@ -695,6 +698,20 @@ export const EditPurchaseOrderPage: React.FC = () => {
               label="المورد المعتمد"
               required
             />
+            {isEditable && supplierId && (
+              <button
+                type="button"
+                onClick={() => {
+                  const sNum = Number(supplierId);
+                  setItems((prev) => prev.map((it) => ({ ...it, supplier_id: sNum })));
+                  toast.info('تم تطبيق هذا المورد على كافة البنود أدناه');
+                }}
+                className="mt-1.5 text-[11px] text-cyan-400 hover:text-cyan-300 font-semibold flex items-center gap-1 cursor-pointer"
+                title="تطبيق هذا المورد المعتمد على جميع بنود الطلب في الجدول"
+              >
+                <span>⚡ تطبيق هذا المورد على كافة بنود الطلب أدناه</span>
+              </button>
+            )}
           </div>
 
           <div>
@@ -754,6 +771,7 @@ export const EditPurchaseOrderPage: React.FC = () => {
                 <th className="p-3">رقم قطعة الأرض *</th>
                 <th className="p-3">المنطقة *</th>
                 <th className="p-3">الوصف والمواصفات</th>
+                <th className="p-3 w-40 text-center">المورد الفعلي</th>
                 {isPendingActualPo && <th className="p-3 text-center">المستلم في GRN</th>}
                 <th className="p-3 w-28">الكمية الفعلية *</th>
                 <th className="p-3 w-20">الوحدة</th>
@@ -817,6 +835,29 @@ export const EditPurchaseOrderPage: React.FC = () => {
                           <p className="text-[10px] text-slate-400 mt-1">{item.specifications}</p>
                         )}
                       </div>
+                    </td>
+
+                    {/* Supplier Selector */}
+                    <td className="p-3 text-center">
+                      {isEditable ? (
+                        <select
+                          disabled={busy}
+                          value={item.supplier_id || supplierId || po?.supplier_id || ''}
+                          onChange={(e) => handleItemFieldChange(idx, 'supplier_id', e.target.value ? Number(e.target.value) : null)}
+                          className="w-36 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:border-cyan-500 font-medium cursor-pointer truncate"
+                          title="تحديد المورد الفعلي لهذا البند"
+                        >
+                          {suppliers.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.company_name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="text-xs text-slate-300 font-semibold truncate block max-w-[140px]">
+                          {suppliers.find((s) => s.id === (item.supplier_id || po?.supplier_id))?.company_name || po?.supplier?.company_name || '—'}
+                        </span>
+                      )}
                     </td>
 
                     {/* GRN Received Quantity Hint */}
@@ -1108,6 +1149,22 @@ export const EditPurchaseOrderPage: React.FC = () => {
               </div>
 
               <div className="md:col-span-2">
+                <label className="block text-[11px] font-semibold text-slate-400 mb-1">المورد</label>
+                <select
+                  value={newItemSupplierId || supplierId || ''}
+                  onChange={(e) => setNewItemSupplierId(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 cursor-pointer truncate"
+                >
+                  <option value="">{supplierId ? '(المورد المعتمد)' : 'اختر المورد'}</option>
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.company_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="md:col-span-2">
                 <label className="block text-[11px] font-semibold text-slate-400 mb-1">رقم قطعة الأرض *</label>
                 <input
                   type="text"
@@ -1120,7 +1177,7 @@ export const EditPurchaseOrderPage: React.FC = () => {
                 />
               </div>
 
-              <div className="md:col-span-2">
+              <div className="md:col-span-1">
                 <label className="block text-[11px] font-semibold text-slate-400 mb-1">المنطقة *</label>
                 <input
                   type="text"
@@ -1144,7 +1201,7 @@ export const EditPurchaseOrderPage: React.FC = () => {
                 />
               </div>
 
-              <div className="md:col-span-2">
+              <div className="md:col-span-1">
                 <label className="block text-[11px] font-semibold text-slate-400 mb-1">السعر (ج.م)</label>
                 <input
                   type="number"
@@ -1156,7 +1213,7 @@ export const EditPurchaseOrderPage: React.FC = () => {
                 />
               </div>
 
-              <div className="md:col-span-2">
+              <div className="md:col-span-1">
                 <label className="block text-[11px] font-semibold text-slate-400 mb-1">الوحدة</label>
                 <select
                   value={newItemUom}
@@ -1174,13 +1231,13 @@ export const EditPurchaseOrderPage: React.FC = () => {
                 </select>
               </div>
 
-              <div className="sm:col-span-2 md:col-span-12 flex justify-end">
+              <div className="sm:col-span-2 md:col-span-1 flex justify-end">
                 <button
                   type="submit"
                   disabled={busy}
-                  className="bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs px-4 py-2 rounded-lg cursor-pointer"
+                  className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs px-2 py-2 rounded-lg cursor-pointer"
                 >
-                  + إضافة البند
+                  + إضافة
                 </button>
               </div>
             </div>
