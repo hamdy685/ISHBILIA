@@ -1,15 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import {
   PurchaseOrder,
   FinalizeActualPoItemPayload,
+  المورد,
 } from '../../types/purchaseOrder';
 import {
   getPurchaseOrderApi,
   updatePurchaseOrderApi,
   finalizeActualPurchaseOrderApi,
 } from '../../api/purchaseOrders';
+import { getSuppliersApi } from '../../api/suppliers';
 import { LoadingSpinner } from '../LoadingSpinner';
 import { SmartKgPricingInput } from '../common/SmartKgPricingInput';
 import { SupplementItemBadge } from '../common/SupplementItemBadge';
@@ -50,6 +52,7 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
   onSuccess,
 }) => {
   const [po, setPo] = useState<PurchaseOrder | null>(null);
+  const [suppliers, setSuppliers] = useState<المورد[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<EditableModalItem[]>([]);
@@ -60,6 +63,7 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
   useEffect(() => {
     if (!isOpen || !poId) {
       setPo(null);
+      setSuppliers([]);
       setItems([]);
       setFinalizationNotes('');
       setError(null);
@@ -70,10 +74,15 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
     setLoading(true);
     setError(null);
 
-    getPurchaseOrderApi(poId)
-      .then((data) => {
+    Promise.all([
+      getPurchaseOrderApi(poId),
+      getSuppliersApi().catch(() => [] as المورد[]),
+    ])
+      .then(([data, sups]) => {
         if (!isMounted) return;
         setPo(data);
+        const loadedSuppliers = Array.isArray(sups) ? sups : ((sups as any)?.data || []);
+        setSuppliers(loadedSuppliers);
         setFinalizationNotes(data.finalization_notes || '');
 
         const receipts = data.receipts || [];
@@ -167,6 +176,31 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
     (acc, it) => acc + (Number(it.quantity || 0) * Number(it.unit_price || 0)),
     0
   );
+
+  const allSuppliers = useMemo(() => {
+    const list = [...suppliers];
+    if (po?.supplier && !list.some((s) => s.id === po.supplier.id)) {
+      list.unshift(po.supplier);
+    }
+    return list;
+  }, [suppliers, po]);
+
+  const distinctSupplierIds = useMemo(() => {
+    return Array.from(new Set(items.map((it) => it.supplier_id || po?.supplier_id).filter(Boolean)));
+  }, [items, po]);
+
+  const unifiedSupplierValue = distinctSupplierIds.length === 1 ? String(distinctSupplierIds[0]) : '';
+
+  const handleApplyUnifiedSupplier = (newSupplierId: number | null) => {
+    if (!newSupplierId) return;
+    setItems((prev) =>
+      prev.map((it) => ({
+        ...it,
+        supplier_id: newSupplierId,
+      }))
+    );
+    toast.info('تم تطبيق المورد على كافة البنود');
+  };
 
   const handleItemFieldChange = (index: number, field: keyof EditableModalItem, value: any) => {
     setItems((prev) => {
@@ -352,10 +386,31 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
               </div>
 
               <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-3">
-                <span className="text-emerald-400 block text-[11px] font-semibold">المورد المعني</span>
-                <span className="font-bold text-slate-100 text-sm mt-0.5 block truncate">
-                  🏢 {po.supplier?.company_name || '—'}
-                </span>
+                <div className="flex items-center justify-between gap-1 mb-1">
+                  <span className="text-emerald-400 block text-[11px] font-semibold">المورد المعني</span>
+                  {distinctSupplierIds.length > 1 && (
+                    <span className="text-[10px] font-bold text-amber-300 bg-amber-950/60 border border-amber-800 px-1.5 py-0.5 rounded">
+                      متعدد ({distinctSupplierIds.length})
+                    </span>
+                  )}
+                </div>
+                <select
+                  value={unifiedSupplierValue}
+                  onChange={(e) => {
+                    const val = e.target.value ? Number(e.target.value) : null;
+                    if (val) handleApplyUnifiedSupplier(val);
+                  }}
+                  disabled={busy || saveBusy}
+                  className="w-full bg-[#0b1424] border border-emerald-500/40 rounded-lg px-2 py-1 text-xs text-slate-100 font-bold focus:border-emerald-300 outline-none truncate cursor-pointer"
+                  title="تطبيق مورد موحد على كافة البنود دفعة واحدة"
+                >
+                  <option value="">🏢 {distinctSupplierIds.length > 1 ? 'موردون متعددون (اضغط للتوحيد)' : (po.supplier?.company_name || 'اختر مورد موحد...')}</option>
+                  {allSuppliers.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.company_name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-3">
@@ -383,9 +438,11 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
                   تم توريد البضاعة واعتماد إذن الاستلام في الموقع:
                 </p>
                 <p className="mt-0.5 text-[11px] text-slate-300">
-                  راجِع الكميات الفعلية والأسعار وقم بتعديلها عند الحاجة، ثم اضغط على زر
+                  راجِع الكميات الفعلية والأسعار وقم بتعديلها عند الحاجة، مع إمكانية
+                  <strong className="text-cyan-300 mx-1 font-bold">تحديد المورد الفعلي لكل بند</strong>
+                  ثم اضغط على زر
                   <strong className="text-emerald-300 mx-1 font-bold">«اعتماد وإرسال للإدارة المالية»</strong>
-                  لإغلاق النافذة وتحويل الملف مباشرة إلى الحسابات.
+                  لتحويل الملف مباشرة إلى الحسابات.
                 </p>
               </div>
             </div>
@@ -397,6 +454,7 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
                   <tr>
                     <th className="p-3 text-center w-10">#</th>
                     <th className="p-3">اسم الصنف والمواصفات</th>
+                    <th className="p-3 text-center w-44">المورد الفعلي</th>
                     <th className="p-3 text-center w-28">الكمية المستلمة</th>
                     <th className="p-3 text-center w-44">سعر الوحدة</th>
                     <th className="p-3 text-center w-32">الإجمالي</th>
@@ -405,7 +463,7 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
                 <tbody className="divide-y divide-slate-800/80">
                   {items.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="p-8 text-center text-rose-300 font-bold">
+                      <td colSpan={6} className="p-8 text-center text-rose-300 font-bold">
                         لا توجد بنود متاحة للإصدار الفعلي.
                       </td>
                     </tr>
@@ -435,6 +493,22 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
                               )}
                             </div>
                           )}
+                        </td>
+
+                        <td className="p-3 text-center">
+                          <select
+                            value={item.supplier_id || po.supplier_id || ''}
+                            onChange={(e) => handleItemFieldChange(idx, 'supplier_id', e.target.value ? Number(e.target.value) : null)}
+                            disabled={busy || saveBusy}
+                            className="w-full min-w-[130px] max-w-[160px] h-9 rounded-lg border border-cyan-500/60 bg-[#0b1424] px-2 text-xs text-slate-100 font-medium outline-none focus:border-cyan-300 disabled:opacity-60 truncate cursor-pointer"
+                            title="تحديد المورد الفعلي لهذا البند"
+                          >
+                            {allSuppliers.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.company_name}
+                              </option>
+                            ))}
+                          </select>
                         </td>
 
                         <td className="p-3 text-center">
@@ -501,6 +575,22 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
                     <span className="text-[11px] font-bold bg-amber-950/50 text-amber-300 border border-amber-800/50 px-2 py-0.5 rounded shrink-0">
                       {getUnitLabel(item.uom)}
                     </span>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] text-slate-400 block mb-1">المورد الفعلي للبند:</label>
+                    <select
+                      value={item.supplier_id || po.supplier_id || ''}
+                      onChange={(e) => handleItemFieldChange(idx, 'supplier_id', e.target.value ? Number(e.target.value) : null)}
+                      disabled={busy || saveBusy}
+                      className="h-9 w-full rounded-lg border border-cyan-500/60 bg-[#0b1424] px-2 text-xs text-slate-100 outline-none focus:border-cyan-300"
+                    >
+                      {allSuppliers.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.company_name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">

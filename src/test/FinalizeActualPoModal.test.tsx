@@ -11,6 +11,21 @@ vi.mock('../api/purchaseOrders', () => ({
   finalizeActualPurchaseOrderApi: vi.fn(),
 }));
 
+vi.mock('../api/suppliers', () => ({
+  getSuppliersApi: vi.fn().mockResolvedValue([
+    {
+      id: 12,
+      company_name: 'شركة الأمل لمواد البناء',
+      is_active: true,
+    },
+    {
+      id: 99,
+      company_name: 'شركة النور للتوريدات',
+      is_active: true,
+    },
+  ]),
+}));
+
 vi.mock('../utils/toast', () => ({
   toast: {
     success: vi.fn(),
@@ -89,7 +104,7 @@ describe('FinalizeActualPoModal', () => {
 
     await waitFor(() => {
       expect(screen.getAllByText(/PO-2026-00101/).length).toBeGreaterThanOrEqual(1);
-      expect(screen.getByText(/شركة الأمل لمواد البناء/)).toBeInTheDocument();
+      expect(screen.getAllByText(/شركة الأمل لمواد البناء/).length).toBeGreaterThanOrEqual(1);
       expect(screen.getAllByText('حديد تسليح 12 مم').length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText('💰 اعتماد وإرسال للإدارة المالية')).toBeInTheDocument();
       expect(screen.getByText('💾 حفظ كافة التعديلات')).toBeInTheDocument();
@@ -267,6 +282,51 @@ describe('FinalizeActualPoModal', () => {
             expect.objectContaining({
               id: 502,
               quantity: 0,
+            }),
+          ]),
+        })
+      );
+    });
+  });
+
+  it('allows changing supplier per item and sends the updated supplier_id in the payload', async () => {
+    vi.mocked(purchaseOrdersApi.getPurchaseOrderApi).mockResolvedValueOnce(mockPo);
+    vi.mocked(purchaseOrdersApi.finalizeActualPurchaseOrderApi).mockResolvedValueOnce({
+      ...mockPo,
+      status: 'ISSUED',
+    });
+
+    render(
+      <FinalizeActualPoModal
+        isOpen={true}
+        poId={101}
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText('حديد تسليح 12 مم').length).toBeGreaterThanOrEqual(1);
+    });
+
+    // Find the supplier select for the item
+    const selects = screen.getAllByTitle('تحديد المورد الفعلي لهذا البند');
+    expect(selects.length).toBeGreaterThanOrEqual(1);
+
+    // Change supplier to 99
+    fireEvent.change(selects[0], { target: { value: '99' } });
+
+    const finalizeBtn = screen.getByText('💰 اعتماد وإرسال للإدارة المالية');
+    fireEvent.click(finalizeBtn);
+
+    await waitFor(() => {
+      expect(purchaseOrdersApi.finalizeActualPurchaseOrderApi).toHaveBeenCalledWith(
+        101,
+        expect.objectContaining({
+          items: expect.arrayContaining([
+            expect.objectContaining({
+              id: 501,
+              supplier_id: 99,
             }),
           ]),
         })

@@ -1012,7 +1012,28 @@ export const EditPurchaseOrderPage: React.FC = () => {
                   </div>
                 )}
 
-                <div className="grid grid-cols-3 gap-2 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs">
+                  <div>
+                    <label className="block text-[10px] text-slate-500 mb-0.5">المورد</label>
+                    {isEditable ? (
+                      <select
+                        disabled={busy}
+                        value={item.supplier_id || supplierId || po?.supplier_id || ''}
+                        onChange={(e) => handleItemFieldChange(idx, 'supplier_id', e.target.value ? Number(e.target.value) : null)}
+                        className="w-full bg-slate-950 border border-slate-700 rounded px-1.5 py-1 text-xs text-slate-200 truncate cursor-pointer"
+                      >
+                        {suppliers.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.company_name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="p-1 text-xs text-slate-300 font-mono truncate">
+                        {suppliers.find((s) => s.id === (item.supplier_id || po?.supplier_id))?.company_name || po?.supplier?.company_name || '—'}
+                      </div>
+                    )}
+                  </div>
                   <div>
                     <label className="block text-[10px] text-slate-500 mb-0.5">الكمية الفعلية</label>
                     <input

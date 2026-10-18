@@ -637,6 +637,7 @@ class PurchaseOrderService
                     'uom'              => $input['uom'] ?? $existingItem->uom,
                     'unit_price'       => $unitPrice,
                     'line_total'       => $lineTotal,
+                    'supplier_id'      => !empty($input['supplier_id']) ? (int) $input['supplier_id'] : ($existingItem->supplier_id ?? $lockedPo->supplier_id),
                     'specifications'   => array_key_exists('specifications', $input) ? $input['specifications'] : $existingItem->specifications,
                     'is_supplementary' => isset($input['is_supplementary']) ? (bool) $input['is_supplementary'] : $existingItem->is_supplementary,
                     'supplement_batch' => isset($input['supplement_batch']) ? $input['supplement_batch'] : $existingItem->supplement_batch,
@@ -766,6 +767,13 @@ class PurchaseOrderService
                     $unitPrice = max(0.0, (float) ($input['unit_price'] ?? $existingPoItem->unit_price));
                     $input['quantity'] = $qty;
                     $input['unit_price'] = $unitPrice;
+                    if (!empty($input['supplier_id'])) {
+                        $input['supplier_id'] = (int) $input['supplier_id'];
+                    } elseif ($existingPoItem->supplier_id) {
+                        $input['supplier_id'] = (int) $existingPoItem->supplier_id;
+                    } elseif ($lockedPo->supplier_id) {
+                        $input['supplier_id'] = (int) $lockedPo->supplier_id;
+                    }
                     $finalizedItems[] = $input;
                 } else {
                     // Item was in Master PO but omitted from input: preserve it with actual received quantity or 0
@@ -781,7 +789,7 @@ class PurchaseOrderService
                         'uom' => $existingPoItem->uom,
                         'unit_price' => (float) $existingPoItem->unit_price,
                         'specifications' => $existingPoItem->specifications,
-                        'supplier_id' => $existingPoItem->supplier_id,
+                        'supplier_id' => $existingPoItem->supplier_id ?? $lockedPo->supplier_id,
                         'is_supplementary' => $existingPoItem->is_supplementary,
                         'supplement_batch' => $existingPoItem->supplement_batch,
                     ];
@@ -791,6 +799,9 @@ class PurchaseOrderService
             // Include any additional new items added by procurement manager
             foreach ($inputCollection as $key => $newItem) {
                 if (! $matchedInputKeys->contains($key)) {
+                    if (empty($newItem['supplier_id']) && $lockedPo->supplier_id) {
+                        $newItem['supplier_id'] = (int) $lockedPo->supplier_id;
+                    }
                     $finalizedItems[] = $newItem;
                 }
             }
@@ -804,8 +815,16 @@ class PurchaseOrderService
             // ── Full items sync (preserves all items, sets actual quantities including 0) ──
             $grandTotal = $this->syncPoItems($user, $lockedPo, $finalizedItems);
 
+            // Determine effective PO header supplier: if all items share the same supplier, update header
+            $allItemSuppliers = $lockedPo->items()->pluck('supplier_id')->filter()->unique();
+            $newHeaderSupplierId = $lockedPo->supplier_id;
+            if ($allItemSuppliers->count() === 1) {
+                $newHeaderSupplierId = (int) $allItemSuppliers->first();
+            }
+
             // Update PO totals and transition to ISSUED so accounting can see it
             $lockedPo->update([
+                'supplier_id'          => $newHeaderSupplierId,
                 'status'               => 'ISSUED',
                 'subtotal'             => round($grandTotal, 2),
                 'grand_total'          => round($grandTotal, 2),
@@ -821,6 +840,9 @@ class PurchaseOrderService
                 $poItemIds = $poItems->pluck('id')->all();
 
                 foreach ($approvedReceipts as $receipt) {
+                    if ($newHeaderSupplierId && (int) $receipt->supplier_id !== (int) $newHeaderSupplierId) {
+                        $receipt->update(['supplier_id' => $newHeaderSupplierId]);
+                    }
                     $receipt->items()->whereNotIn('purchase_order_item_id', $poItemIds)->delete();
 
                     foreach ($poItems as $poItem) {

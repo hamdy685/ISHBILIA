@@ -205,13 +205,19 @@ export const PurchaseOrderPrintModal: React.FC<PurchaseOrderPrintModalProps> = (
                           <td className="border border-black p-1.5 text-center font-mono font-bold">{price > 0 ? formatCleanNumber(price) : ''}</td>
                           <td className="border border-black p-1.5 text-center font-mono font-black">{lineTotal > 0 ? formatCleanNumber(lineTotal) : '0'}</td>
                           <td className="border border-black p-1.5 text-xs font-semibold">
-                            {isFirstRow ? (
-                              <div className="font-bold text-slate-900">
+                            {isFirstRow && (
+                              <div className="font-bold text-slate-900 mb-0.5">
                                 مورد / {po.supplier?.company_name || '—'}
                               </div>
-                            ) : (
-                              <div className="text-slate-700 text-[11px]">{item.item_reference ? `قطعة ${item.item_reference}` : ''}</div>
                             )}
+                            {item.supplier && item.supplier.id !== po.supplier_id && (
+                              <div className="text-cyan-900 font-bold text-[11px]">
+                                مورد البند: {item.supplier.company_name}
+                              </div>
+                            )}
+                            {item.item_reference ? (
+                              <div className="text-slate-700 text-[11px]">قطعة {item.item_reference}</div>
+                            ) : null}
                           </td>
                         </tr>
                       );
