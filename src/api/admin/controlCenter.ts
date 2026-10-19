@@ -1,5 +1,17 @@
 import apiClient from '../client';
 
+export interface ReceiptItemSummary {
+  id: number;
+  item_description: string;
+  ordered_quantity: number;
+  received_quantity: number;
+  uom: string;
+  unit_price?: number;
+  line_total?: number;
+  item_reference?: string | null;
+  region?: string | null;
+}
+
 export interface AdminControlSearchResult {
   entity_type: 'PURCHASE_REQUEST' | 'PURCHASE_ORDER' | 'PURCHASE_RECEIPT';
   id: number;
@@ -18,6 +30,25 @@ export interface AdminControlSearchResult {
   pending_with?: string;
   fulfillment_status?: string;
   days_elapsed?: number;
+
+  // Rich decision-making context
+  po_id?: number | null;
+  po_number?: string | null;
+  pr_id?: number | null;
+  pr_number?: string | null;
+  requester_name?: string | null;
+  parcel_reference?: string | null;
+  region?: string | null;
+  items_summary?: string | null;
+  total_quantity?: number | null;
+  has_photo?: boolean;
+  photo_url?: string | null;
+  invoice_status?: 'RECORDED' | 'VERIFIED' | 'INVOICED' | 'PENDING_INVOICE' | string;
+  invoice_status_label?: string | null;
+  received_at?: string | null;
+  site_engineer_notes?: string | null;
+  warehouse_notes?: string | null;
+  items_list?: ReceiptItemSummary[];
 }
 
 export interface ImpactPreview {

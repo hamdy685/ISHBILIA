@@ -191,13 +191,31 @@ class AdminControlCenterController extends Controller
             // 3. Search Purchase Receipts
             if (in_array($entityType, ['ALL', 'PURCHASE_RECEIPT'], true)) {
                 $recQuery = PurchaseReceipt::withoutGlobalScopes()
-                    ->with(['supplier', 'purchaseOrder.purchaseRequest', 'purchaseRequest.department', 'siteEngineer'])
+                    ->with([
+                        'supplier',
+                        'purchaseOrder.items',
+                        'purchaseOrder.purchaseRequest.department',
+                        'purchaseOrder.purchaseRequest.landParcel',
+                        'purchaseOrder.purchaseRequest.requester',
+                        'purchaseRequest.department',
+                        'purchaseRequest.landParcel',
+                        'purchaseRequest.requester',
+                        'items.purchaseOrderItem',
+                        'items.item',
+                        'siteEngineer',
+                        'actualReceiver',
+                        'receiver',
+                        'weighingGroup.items',
+                        'supplierInvoices',
+                    ])
                     ->when($q, function ($query, $term) {
                         $query->where(function ($sub) use ($term) {
                             $sub->where('receipt_number', 'like', "%{$term}%")
                                 ->orWhere('actual_receiver_name', 'like', "%{$term}%")
                                 ->orWhereHas('supplier', fn ($s) => $s->where('company_name', 'like', "%{$term}%"))
-                                ->orWhereHas('purchaseOrder', fn ($po) => $po->where('po_number', 'like', "%{$term}%"));
+                                ->orWhereHas('purchaseOrder', fn ($po) => $po->where('po_number', 'like', "%{$term}%"))
+                                ->orWhereHas('items.purchaseOrderItem', fn ($poi) => $poi->where('item_description', 'like', "%{$term}%")
+                                    ->orWhere('item_reference', 'like', "%{$term}%"));
                         });
                     })
                     ->when($supplierId, fn ($query) => $query->where('supplier_id', $supplierId))
@@ -219,8 +237,107 @@ class AdminControlCenterController extends Controller
                     $fulfillmentStatus = match ($rec->status) {
                         'APPROVED' => 'مستلم ومطابق بالموقع',
                         'PENDING_SITE_ENGINEER' => 'بانتظار فحص مهندس الموقع',
+                        'CANCELLED' => 'ملغي',
                         default => 'إذن استلام مسجل',
                     };
+
+                    $po = $rec->purchaseOrder;
+                    $pr = $rec->purchaseRequest ?: $po?->purchaseRequest;
+
+                    // Items list and financial amount
+                    $itemsList = [];
+                    $calculatedAmount = 0;
+                    $totalQty = 0;
+
+                    foreach ($rec->items as $ri) {
+                        $poi = $ri->purchaseOrderItem;
+                        $desc = $poi?->item_description ?: ($ri->item?->name ?: "بند #{$ri->id}");
+                        $ordered = (float) $ri->ordered_quantity;
+                        $received = (float) $ri->received_quantity;
+                        $uom = $poi?->uom ?: 'PCS';
+                        $unitPrice = (float) ($poi?->unit_price ?: 0);
+                        $lineTotal = round($received * $unitPrice, 2);
+
+                        $calculatedAmount += $lineTotal;
+                        $totalQty += $received;
+
+                        $itemsList[] = [
+                            'id' => $ri->id,
+                            'item_description' => $desc,
+                            'ordered_quantity' => $ordered,
+                            'received_quantity' => $received,
+                            'uom' => $uom,
+                            'unit_price' => $unitPrice,
+                            'line_total' => $lineTotal,
+                            'item_reference' => $poi?->item_reference,
+                            'region' => $poi?->region,
+                        ];
+                    }
+
+                    $finalAmount = $calculatedAmount > 0
+                        ? $calculatedAmount
+                        : (float) ($po?->grand_total ?? ($po?->total_amount ?? 0));
+
+                    // Items summary string
+                    if (count($itemsList) === 1) {
+                        $itemsSummary = $itemsList[0]['item_description'] . ' (' . (float) $itemsList[0]['received_quantity'] . ' ' . $itemsList[0]['uom'] . ')';
+                    } elseif (count($itemsList) > 1) {
+                        $itemsSummary = $itemsList[0]['item_description'] . ' (' . (float) $itemsList[0]['received_quantity'] . ' ' . $itemsList[0]['uom'] . ') + ' . (count($itemsList) - 1) . ' آخرين';
+                    } else {
+                        $itemsSummary = $po?->items->first()?->item_description ?: '—';
+                    }
+
+                    // Location / parcel resolution
+                    $parcelRef = $rec->items->first()?->purchaseOrderItem?->item_reference
+                        ?: ($po?->items->first()?->item_reference
+                        ?: ($pr?->landParcel?->parcel_reference
+                        ?: ($pr?->landParcel?->parcel_number
+                        ?: null)));
+
+                    $region = $rec->items->first()?->purchaseOrderItem?->region
+                        ?: ($po?->items->first()?->region
+                        ?: ($pr?->landParcel?->region
+                        ?: ($pr?->landParcel?->zone
+                        ?: null)));
+
+                    $projectSiteRaw = $pr?->project_site ?: ($po?->purchaseRequest?->project_site ?: null);
+
+                    $plotDisplay = '';
+                    if ($parcelRef) {
+                        $plotDisplay = 'قطعة ' . $parcelRef;
+                    }
+                    if ($region) {
+                        $plotDisplay .= ($plotDisplay ? ' - ' : '') . 'منطقة ' . $region;
+                    }
+                    if ($projectSiteRaw) {
+                        $plotDisplay = $projectSiteRaw . ($plotDisplay ? " ({$plotDisplay})" : '');
+                    }
+                    if (empty($plotDisplay)) {
+                        $plotDisplay = '—';
+                    }
+
+                    // Invoicing & accounting status
+                    $invoiceStatus = 'PENDING_INVOICE';
+                    $invoiceStatusLabel = 'بانتظار الفاتورة والتسجيل المحاسبي';
+
+                    if ($rec->accountant_recorded_at) {
+                        $invoiceStatus = 'RECORDED';
+                        $invoiceStatusLabel = 'مسقط ومسجل بالحسابات';
+                    } elseif ($rec->supplierInvoices && $rec->supplierInvoices->isNotEmpty()) {
+                        $latestInv = $rec->supplierInvoices->first();
+                        if ($latestInv->status === 'VERIFIED') {
+                            $invoiceStatus = 'VERIFIED';
+                            $invoiceStatusLabel = 'مطابق ومسجل بالحسابات';
+                        } else {
+                            $invoiceStatus = 'INVOICED';
+                            $invoiceStatusLabel = 'له فاتورة جارية بالقسم المالي';
+                        }
+                    }
+
+                    $receiverName = $rec->actual_receiver_name
+                        ?: ($rec->actualReceiver?->name
+                        ?: ($rec->siteEngineer?->name
+                        ?: ($rec->receiver?->name ?? 'غير محدد')));
 
                     $results->push([
                         'entity_type' => 'PURCHASE_RECEIPT',
@@ -228,15 +345,36 @@ class AdminControlCenterController extends Controller
                         'code' => $rec->receipt_number,
                         'title' => "إذن استلام مواد: " . ($rec->receipt_number ?: "REC-{$rec->id}"),
                         'status' => $rec->status,
-                        'department' => $rec->purchaseRequest?->department?->name,
-                        'supplier' => $rec->supplier?->company_name,
-                        'receiver' => $rec->actual_receiver_name ?: ($rec->siteEngineer?->name ?? 'غير محدد'),
+                        'department' => $pr?->department?->name ?: ($rec->purchaseRequest?->department?->name ?? '—'),
+                        'supplier' => $rec->supplier?->company_name ?: ($po?->supplier?->company_name ?? '—'),
+                        'receiver' => $receiverName,
                         'date' => $rec->created_at?->format('Y-m-d H:i'),
                         'weighing_group_id' => $rec->weighing_group_id,
-                        'project_site' => $rec->purchaseRequest?->project_site ?: ($rec->purchaseOrder?->purchaseRequest?->project_site ?? '—'),
+                        'project_site' => $plotDisplay,
                         'pending_with' => $pendingWith,
                         'fulfillment_status' => $fulfillmentStatus,
                         'days_elapsed' => $rec->created_at ? (int) $rec->created_at->diffInDays(now()) : 0,
+
+                        // Rich decision-making context
+                        'po_id' => $po?->id,
+                        'po_number' => $po?->po_number,
+                        'pr_id' => $pr?->id,
+                        'pr_number' => $pr?->request_number,
+                        'requester_name' => $pr?->requester?->name ?: '—',
+                        'parcel_reference' => $parcelRef,
+                        'region' => $region,
+                        'items_summary' => $itemsSummary,
+                        'items_count' => $rec->items->count(),
+                        'total_quantity' => round($totalQty, 3),
+                        'amount' => $finalAmount,
+                        'has_photo' => ! empty($rec->photo_path),
+                        'photo_url' => $rec->photo_url,
+                        'invoice_status' => $invoiceStatus,
+                        'invoice_status_label' => $invoiceStatusLabel,
+                        'received_at' => $rec->received_at?->format('Y-m-d') ?: $rec->created_at?->format('Y-m-d'),
+                        'site_engineer_notes' => $rec->site_engineer_notes,
+                        'warehouse_notes' => $rec->warehouse_notes,
+                        'items_list' => $itemsList,
                     ]);
                 }
             }
