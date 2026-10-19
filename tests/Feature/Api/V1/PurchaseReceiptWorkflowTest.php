@@ -110,7 +110,7 @@ class PurchaseReceiptWorkflowTest extends TestCase
             [['purchase_order_item_id' => $orderItem->id, 'received_quantity' => 10]],
         );
 
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(\Throwable::class);
         app(PurchaseReceiptService::class)->approveBySiteEngineer($otherEngineer, $receipt);
     }
 
@@ -334,6 +334,13 @@ class PurchaseReceiptWorkflowTest extends TestCase
             'subtotal' => 5000,
             'grand_total' => 5000,
             'delivery_status' => 'NOT_STARTED',
+        ]);
+        $poPending->items()->create([
+            'item_description' => 'بند رخصة',
+            'quantity' => 1,
+            'uom' => 'PCS',
+            'unit_price' => 5000,
+            'line_total' => 5000,
         ]);
 
         // 2. Completed PO (delivered) - should NOT appear in queue

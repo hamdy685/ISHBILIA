@@ -96,6 +96,8 @@ class PurchaseReceiptService
                 ->orWhere('status', 'like', '%APPROVED%');
             })
             ->whereNotIn('status', ['PO_DRAFT', 'REJECTED', 'CANCELLED', 'VOIDED', 'PENDING_ACTUAL_PO'])
+            // Must contain items to be eligible for warehouse receiving
+            ->whereHas('items')
             // 2. Delivery status means delivery is not completed (pending, partial, not_started, null, not delivered/completed)
             ->where(function ($q) {
                 $q->whereNull('delivery_status')

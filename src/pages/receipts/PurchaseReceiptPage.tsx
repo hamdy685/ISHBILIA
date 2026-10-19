@@ -133,7 +133,10 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
           getWarehouseReceiptQueueApi(),
           getPurchaseReceiptArchiveApi().catch(() => []),
         ]);
-        setOrders(queueData || []);
+        const validOrders = (queueData || []).filter(
+          (o) => (o.items && o.items.length > 0) || (o.weighing_groups && o.weighing_groups.length > 0)
+        );
+        setOrders(validOrders);
         setArchiveReceipts(archiveData || []);
       } else {
         const [assignedData, archiveData] = await Promise.all([
@@ -261,8 +264,15 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
     return ignoreDefaultDateForSearch || ((!dateFrom || value >= dateFrom) && (!dateTo || value <= dateTo));
   };
 
-  const visibleOrders = orders.filter((order) =>
-    matchesFilter(
+  const visibleOrders = orders.filter((order) => {
+    // Hide empty orders with 0 items and no weighing groups
+    const hasItems = order.items && order.items.length > 0;
+    const hasWeighing = order.weighing_groups && order.weighing_groups.length > 0;
+    if (!hasItems && !hasWeighing) {
+      return false;
+    }
+
+    return matchesFilter(
       [
         String(order.id),
         order.po_number,
@@ -278,8 +288,8 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
       true,
       undefined,
       order.id,
-    ),
-  );
+    );
+  });
 
   const visibleReceipts = receipts.filter((receipt) =>
     matchesFilter(
