@@ -725,6 +725,7 @@ class ProcurementPurchaseOrderController extends Controller
      */
     public function finalizeActualPo(Request $request, string|int $id): JsonResponse
     {
+        $validated = $request->validate([
             'supplier_id'              => ['nullable', 'integer', 'exists:suppliers,id'],
             'items'                    => ['required', 'array', 'min:1'],
             'items.*.id'               => ['nullable', 'integer'],
