@@ -1,0 +1,15 @@
+node_modules/
+vendor/
+php_bin/
+.git/
+dist/
+bootstrap/cache/*.php
+storage/
+audit_screenshots/
+test-results/
+laravel_temp/
+scratch/
+e2e/
+database/*.sqlite
+*.zip
+*.log
