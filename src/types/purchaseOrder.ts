@@ -279,6 +279,8 @@ export interface PurchaseOrderPayload {
   financial_notes?: string;
   notes?: string;
   finalization_notes?: string;
+  parcel_reference?: string;
+  region?: string;
   items?: Array<{
     id?: number;
     pr_item_id?: number | null;
@@ -344,6 +346,8 @@ export interface FinalizeActualPoItemPayload {
 
 export interface FinalizeActualPoPayload {
   supplier_id?: number | null;
+  parcel_reference?: string;
+  region?: string;
   items: FinalizeActualPoItemPayload[];
   notes?: string;
 }

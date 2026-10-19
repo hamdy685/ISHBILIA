@@ -237,9 +237,10 @@ class SupplierInvoiceService
         ?string $dueDate = null,
         array $landAllocations = [],
         ?string $notes = null,
+        ?int $supplierId = null
     ): SupplierInvoice {
         $receipt->loadMissing(['purchaseOrder', 'items.purchaseOrderItem']);
-        $purchaseOrder->loadMissing('supplier');
+        $purchaseOrder->loadMissing(['supplier', 'items']);
 
         if ($receipt->purchase_order_id !== $purchaseOrder->id) {
             throw new \RuntimeException('إذن الاستلام غير مرتبط بأمر الشراء المحدد.');
@@ -296,9 +297,15 @@ class SupplierInvoiceService
             throw ValidationException::withMessages(['invoice_number' => ['رقم الفاتورة مستخدم من قبل. أدخل رقمًا مختلفًا أو راجع أرشيف فواتير المورد.']]);
         }
 
-        return DB::transaction(function () use ($accountant, $purchaseOrder, $receipt, $amount, $normalizedInvoiceNumber, $invoiceDate, $dueDate, $landAllocations, $notes): SupplierInvoice {
+        $targetSupplierId = $supplierId ?: $purchaseOrder->supplier_id;
+        if (! $targetSupplierId) {
+            $firstItemSupplier = $purchaseOrder->items()->pluck('supplier_id')->filter()->first();
+            $targetSupplierId = $firstItemSupplier ?: null;
+        }
+
+        return DB::transaction(function () use ($accountant, $purchaseOrder, $receipt, $amount, $normalizedInvoiceNumber, $invoiceDate, $dueDate, $landAllocations, $notes, $targetSupplierId): SupplierInvoice {
             $invoice = SupplierInvoice::create([
-                'supplier_id' => $purchaseOrder->supplier_id,
+                'supplier_id' => $targetSupplierId,
                 'purchase_order_id' => $purchaseOrder->id,
                 'purchase_receipt_id' => $receipt->id,
                 'created_by_user_id' => $accountant->id,
@@ -314,7 +321,9 @@ class SupplierInvoiceService
             ]);
 
             app(LandParcelService::class)->recordInvoiceAllocations($accountant, $invoice, $landAllocations);
-            $this->refreshSupplierBalance($invoice->supplier_id);
+            if ($invoice->supplier_id) {
+                $this->refreshSupplierBalance($invoice->supplier_id);
+            }
 
             // Auto-resolve / mark read all notifications related to this PO and Receipt
             app(NotificationService::class)->markOrderAndReceiptNotificationsAsRead($purchaseOrder, $receipt);
@@ -340,8 +349,9 @@ class SupplierInvoiceService
         if ($invoice->purchaseReceipt->purchase_order_id !== $invoice->purchase_order_id) {
             throw new \RuntimeException('المستندات الثلاثة غير مرتبطة بنفس أمر الشراء.');
         }
-        if ($invoice->supplier_id !== $invoice->purchaseOrder->supplier_id) {
-            throw new \RuntimeException('المورد في الفاتورة لا يطابق المورد في أمر الشراء.');
+        $validSupplierIds = $invoice->purchaseOrder->items->pluck('supplier_id')->filter()->push($invoice->purchaseOrder->supplier_id)->unique()->map(fn ($v) => (int) $v)->all();
+        if (!in_array((int) $invoice->supplier_id, $validSupplierIds, true)) {
+            throw new \RuntimeException('المورد في الفاتورة لا يطابق المورد في أمر الشراء أو أي من بنوده.');
         }
 
         $receivedValue = $this->calculateReceiptValue($invoice->purchaseReceipt);

@@ -510,4 +510,100 @@ class ActualPoAllItemsPreservedTest extends TestCase
         $this->assertEquals(2500.0, (float) $freshItem->line_total);
         $this->assertEquals(2500.0, (float) $finalizedPo->grand_total);
     }
+
+    public function test_procurement_manager_can_edit_supplier_parcel_and_region_in_actual_po(): void
+    {
+        $po = $this->createPoWithPr('PO-TEST808', 'PENDING_ACTUAL_PO', 10000);
+
+        $initialSupplier = $this->supplier;
+        $newSupplier = Supplier::create([
+            'company_name' => 'شركة التوريدات الحديثة المعدلة',
+            'is_active' => true,
+        ]);
+
+        $item1 = $po->items()->create([
+            'item_description' => 'إسمنت بورتلاندي',
+            'item_reference' => 'OLD-PARCEL-1',
+            'region' => 'المنطقة القديمة',
+            'quantity' => 10,
+            'unit_price' => 500,
+            'line_total' => 5000,
+            'supplier_id' => $initialSupplier->id,
+        ]);
+
+        $item2 = $po->items()->create([
+            'item_description' => 'رمل حرش',
+            'item_reference' => 'OLD-PARCEL-1',
+            'region' => 'المنطقة القديمة',
+            'quantity' => 50,
+            'unit_price' => 100,
+            'line_total' => 5000,
+            'supplier_id' => $initialSupplier->id,
+        ]);
+
+        $receipt = $po->receipts()->create([
+            'receipt_number' => 'REC-TEST-808',
+            'status' => 'APPROVED',
+            'supplier_id' => $initialSupplier->id,
+            'received_at' => now()->toDateString(),
+        ]);
+
+        $receipt->items()->createMany([
+            ['purchase_order_item_id' => $item1->id, 'ordered_quantity' => 10, 'received_quantity' => 10],
+            ['purchase_order_item_id' => $item2->id, 'ordered_quantity' => 50, 'received_quantity' => 50],
+        ]);
+
+        // Procurement Manager changes:
+        // 1. Overall parcel to 'PARCEL-NEW-999' and region to 'المنطقة العاشرة الجديدة'
+        // 2. Item 1 supplier to $newSupplier
+        // 3. Item 1 description to 'إسمنت بورتلاندي فاخر ممتاز'
+        $finalizedPo = app(PurchaseOrderService::class)->finalizeActualPo(
+            $this->procurementManager,
+            $po,
+            [
+                [
+                    'id' => $item1->id,
+                    'item_description' => 'إسمنت بورتلاندي فاخر ممتاز',
+                    'item_reference' => 'PARCEL-NEW-999',
+                    'region' => 'المنطقة العاشرة الجديدة',
+                    'quantity' => 10,
+                    'unit_price' => 520,
+                    'supplier_id' => $newSupplier->id,
+                ],
+                [
+                    'id' => $item2->id,
+                    'item_description' => 'رمل حرش مغسول',
+                    'item_reference' => 'PARCEL-NEW-999',
+                    'region' => 'المنطقة العاشرة الجديدة',
+                    'quantity' => 50,
+                    'unit_price' => 100,
+                    'supplier_id' => $newSupplier->id,
+                ],
+            ],
+            'تعديل المورد الفعلي إلى المورد الحديث وتحديث رقم القطعة والمنطقة',
+            $newSupplier->id,
+            'PARCEL-NEW-999',
+            'المنطقة العاشرة الجديدة'
+        );
+
+        // Check PO header
+        $this->assertEquals($newSupplier->id, $finalizedPo->supplier_id);
+        $this->assertEquals('ISSUED', $finalizedPo->status);
+
+        // Check Purchase Request
+        $pr = $finalizedPo->purchaseRequest->fresh();
+        $this->assertEquals('PARCEL-NEW-999', $pr->parcel_reference);
+        $this->assertEquals('المنطقة العاشرة الجديدة', $pr->region);
+
+        // Check line items
+        $freshItem1 = $finalizedPo->items()->where('id', $item1->id)->first();
+        $this->assertEquals($newSupplier->id, $freshItem1->supplier_id);
+        $this->assertEquals('إسمنت بورتلاندي فاخر ممتاز', $freshItem1->item_description);
+        $this->assertEquals('PARCEL-NEW-999', $freshItem1->item_reference);
+        $this->assertEquals('المنطقة العاشرة الجديدة', $freshItem1->region);
+
+        // Check receipt supplier updated
+        $freshReceipt = $receipt->fresh();
+        $this->assertEquals($newSupplier->id, $freshReceipt->supplier_id);
+    }
 }

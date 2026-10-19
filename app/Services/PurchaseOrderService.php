@@ -431,6 +431,19 @@ class PurchaseOrderService
                 }
             }
 
+            if ($lockedPo->purchaseRequest) {
+                $prUpdates = [];
+                if (!empty($data['parcel_reference'])) {
+                    $prUpdates['parcel_reference'] = trim((string) $data['parcel_reference']);
+                }
+                if (!empty($data['region'])) {
+                    $prUpdates['region'] = trim((string) $data['region']);
+                }
+                if (!empty($prUpdates)) {
+                    $lockedPo->purchaseRequest->update($prUpdates);
+                }
+            }
+
             if (! empty($data['items']) && is_array($data['items'])) {
                 $this->syncPoItems($user, $lockedPo, $data['items']);
             }
@@ -723,7 +736,9 @@ class PurchaseOrderService
         PurchaseOrder $po,
         array $items,
         ?string $notes = null,
-        ?int $headerSupplierId = null
+        ?int $headerSupplierId = null,
+        ?string $parcelReference = null,
+        ?string $region = null
     ): PurchaseOrder {
         if ($po->status !== 'PENDING_ACTUAL_PO') {
             throw new \RuntimeException('لا يمكن إصدار أمر الشراء الفعلي إلا بعد اعتماد إذن الاستلام وانتقال الملف لمرحلة بانتظار الإصدار الفعلي.');
@@ -735,11 +750,25 @@ class PurchaseOrderService
             ]);
         }
 
-        return DB::transaction(function () use ($user, $po, $items, $notes, $headerSupplierId) {
+        return DB::transaction(function () use ($user, $po, $items, $notes, $headerSupplierId, $parcelReference, $region) {
             $lockedPo = PurchaseOrder::where('id', $po->id)->lockForUpdate()->firstOrFail();
 
             if ($lockedPo->status !== 'PENDING_ACTUAL_PO') {
                 throw new \RuntimeException('تغيرت حالة أمر الشراء أثناء المعالجة. أعد المحاولة.');
+            }
+
+            // Update Purchase Request parcel reference and region if provided
+            if ($lockedPo->purchaseRequest) {
+                $prUpdates = [];
+                if (!empty($parcelReference)) {
+                    $prUpdates['parcel_reference'] = trim((string) $parcelReference);
+                }
+                if (!empty($region)) {
+                    $prUpdates['region'] = trim((string) $region);
+                }
+                if (!empty($prUpdates)) {
+                    $lockedPo->purchaseRequest->update($prUpdates);
+                }
             }
 
             // ── Comprehensive Actual PO Line Items Preservation ──────────────────
@@ -794,6 +823,12 @@ class PurchaseOrderService
                     } elseif ($lockedPo->supplier_id) {
                         $input['supplier_id'] = (int) $lockedPo->supplier_id;
                     }
+                    if (empty($input['item_reference']) && !empty($parcelReference)) {
+                        $input['item_reference'] = trim((string) $parcelReference);
+                    }
+                    if (empty($input['region']) && !empty($region)) {
+                        $input['region'] = trim((string) $region);
+                    }
                     $finalizedItems[] = $input;
                 } else {
                     // Item was in Master PO but omitted from input: preserve it with actual received quantity or 0
@@ -803,8 +838,8 @@ class PurchaseOrderService
                         'item_id' => $existingPoItem->item_id,
                         'pr_item_id' => $existingPoItem->pr_item_id,
                         'item_description' => $existingPoItem->item_description,
-                        'item_reference' => $existingPoItem->item_reference,
-                        'region' => $existingPoItem->region,
+                        'item_reference' => !empty($parcelReference) ? trim((string) $parcelReference) : $existingPoItem->item_reference,
+                        'region' => !empty($region) ? trim((string) $region) : $existingPoItem->region,
                         'quantity' => max(0.0, $rcvQty),
                         'uom' => $existingPoItem->uom,
                         'unit_price' => (float) $existingPoItem->unit_price,
@@ -821,6 +856,12 @@ class PurchaseOrderService
                 if (! $matchedInputKeys->contains($key)) {
                     if (empty($newItem['supplier_id'])) {
                         $newItem['supplier_id'] = $headerSupplierId ?: (int) $lockedPo->supplier_id;
+                    }
+                    if (empty($newItem['item_reference']) && !empty($parcelReference)) {
+                        $newItem['item_reference'] = trim((string) $parcelReference);
+                    }
+                    if (empty($newItem['region']) && !empty($region)) {
+                        $newItem['region'] = trim((string) $region);
                     }
                     $finalizedItems[] = $newItem;
                 }
@@ -840,6 +881,8 @@ class PurchaseOrderService
             if ($headerSupplierId) {
                 $newHeaderSupplierId = (int) $headerSupplierId;
             } elseif ($allItemSuppliers->count() === 1) {
+                $newHeaderSupplierId = (int) $allItemSuppliers->first();
+            } elseif ($allItemSuppliers->isNotEmpty()) {
                 $newHeaderSupplierId = (int) $allItemSuppliers->first();
             } else {
                 $newHeaderSupplierId = (int) $lockedPo->supplier_id;
@@ -915,7 +958,14 @@ class PurchaseOrderService
             if ($lockedPo->purchaseRequest) {
                 $pr = $lockedPo->purchaseRequest;
                 $prFromState = $pr->status;
-                $pr->update(['status' => 'ISSUED']);
+                $prUpdates = ['status' => 'ISSUED'];
+                if (!empty($parcelReference)) {
+                    $prUpdates['parcel_reference'] = trim((string) $parcelReference);
+                }
+                if (!empty($region)) {
+                    $prUpdates['region'] = trim((string) $region);
+                }
+                $pr->update($prUpdates);
 
                 ApprovalHistory::create([
                     'target_type' => PurchaseRequest::class,

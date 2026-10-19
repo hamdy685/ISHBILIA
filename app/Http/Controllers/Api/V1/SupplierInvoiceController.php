@@ -117,6 +117,7 @@ class SupplierInvoiceController extends Controller
         $validated = $request->validate([
             'purchase_order_id' => ['required', 'integer', 'exists:purchase_orders,id'],
             'purchase_receipt_id' => ['required', 'integer', 'exists:purchase_receipts,id'],
+            'supplier_id' => ['nullable', 'integer', 'exists:suppliers,id'],
             'invoice_number' => ['nullable', 'string', 'max:100'],
             'amount' => ['required', 'numeric', 'gt:0'],
             'invoice_date' => ['nullable', 'date'],
@@ -154,7 +155,7 @@ class SupplierInvoiceController extends Controller
         }
 
         $po = PurchaseOrder::withoutGlobalScope(\App\Scopes\DataIsolationScope::class)
-            ->with('purchaseRequest.department')
+            ->with(['purchaseRequest.department', 'items'])
             ->findOrFail($validated['purchase_order_id']);
 
         // 4. Scoped department check
@@ -179,6 +180,7 @@ class SupplierInvoiceController extends Controller
             $validated['due_date'] ?? null,
             $validated['land_allocations'] ?? [],
             $validated['notes'] ?? null,
+            !empty($validated['supplier_id']) ? (int) $validated['supplier_id'] : null,
         );
 
         return response()->json(['data' => $invoice, 'message' => 'تم تسجيل فاتورة المورد بنجاح.'], 201);

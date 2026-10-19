@@ -15,7 +15,9 @@ class UpdatePurchaseOrderHeaderRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'supplier_id' => ['sometimes', 'required', 'integer', 'exists:suppliers,id'],
+            'supplier_id' => ['sometimes', 'nullable', 'integer', 'exists:suppliers,id'],
+            'parcel_reference' => ['nullable', 'string', 'max:100'],
+            'region' => ['nullable', 'string', 'max:150'],
             'payment_terms' => ['nullable', 'string', 'max:150'],
             'delivery_terms' => ['nullable', 'string', 'max:150'],
             'delivery_date' => ['nullable', 'date'],
@@ -28,8 +30,8 @@ class UpdatePurchaseOrderHeaderRequest extends FormRequest
             'items.*.item_id' => ['nullable', 'integer'],
             'items.*.pr_item_id' => ['nullable', 'integer'],
             'items.*.item_description' => ['sometimes', 'required', 'string', 'max:500'],
-            'items.*.item_reference' => ['sometimes', 'required', 'string', 'max:100'],
-            'items.*.region' => ['sometimes', 'required', 'string', 'max:150'],
+            'items.*.item_reference' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'items.*.region' => ['sometimes', 'nullable', 'string', 'max:150'],
             'items.*.quantity' => ['sometimes', 'required', 'numeric', 'gte:0'],
             'items.*.unit_price' => ['sometimes', 'required', 'numeric', 'gte:0'],
             'items.*.uom' => ['nullable', 'string', 'max:20'],

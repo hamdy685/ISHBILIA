@@ -56,6 +56,8 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<EditableModalItem[]>([]);
+  const [headerParcel, setHeaderParcel] = useState<string>('');
+  const [headerRegion, setHeaderRegion] = useState<string>('');
   const [finalizationNotes, setFinalizationNotes] = useState<string>('');
   const [busy, setBusy] = useState<boolean>(false);
   const [saveBusy, setSaveBusy] = useState<boolean>(false);
@@ -65,6 +67,8 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
       setPo(null);
       setSuppliers([]);
       setItems([]);
+      setHeaderParcel('');
+      setHeaderRegion('');
       setFinalizationNotes('');
       setError(null);
       return;
@@ -84,6 +88,11 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
         const loadedSuppliers = Array.isArray(sups) ? sups : ((sups as any)?.data || []);
         setSuppliers(loadedSuppliers);
         setFinalizationNotes(data.finalization_notes || '');
+
+        const pSummary = getSummaryParcels(data);
+        const rSummary = getSummaryRegions(data);
+        setHeaderParcel(pSummary !== '—' ? pSummary : (data.purchase_request?.parcel_reference || ''));
+        setHeaderRegion(rSummary !== '—' ? rSummary : (data.purchase_request?.region || ''));
 
         const receipts = data.receipts || [];
         const rawItems = data.items || [];
@@ -143,8 +152,8 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
             item_id: it.item_id ?? null,
             pr_item_id: it.pr_item_id ?? null,
             item_description: it.item_description || it.item_name || '',
-            item_reference: it.item_reference || '',
-            region: it.region || '',
+            item_reference: it.item_reference || data.purchase_request?.parcel_reference || '',
+            region: it.region || data.purchase_request?.region || '',
             quantity: qty,
             uom: it.uom || 'PCS',
             unit_price: price,
@@ -202,6 +211,23 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
     toast.info('تم تطبيق المورد على كافة البنود');
   };
 
+  const handleApplyParcelAndRegionToAll = () => {
+    const p = headerParcel.trim();
+    const r = headerRegion.trim();
+    if (!p && !r) {
+      toast.warning('يرجى إدخال رقم القطعة أو المنطقة أولاً لتطبيقها.');
+      return;
+    }
+    setItems((prev) =>
+      prev.map((it) => ({
+        ...it,
+        ...(p ? { item_reference: p } : {}),
+        ...(r ? { region: r } : {}),
+      }))
+    );
+    toast.success('تم تطبيق رقم القطعة والمنطقة على كافة البنود بنجاح.');
+  };
+
   const handleItemFieldChange = (index: number, field: keyof EditableModalItem, value: any) => {
     setItems((prev) => {
       const updated = [...prev];
@@ -230,14 +256,16 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
       const targetHeaderSupplierId = unifiedSupplierValue ? Number(unifiedSupplierValue) : undefined;
       await updatePurchaseOrderApi(po.id, {
         supplier_id: targetHeaderSupplierId,
+        parcel_reference: headerParcel.trim() || undefined,
+        region: headerRegion.trim() || undefined,
         finalization_notes: finalizationNotes || undefined,
         items: items.map((it) => ({
           id: it.id ? Number(it.id) : undefined,
           item_id: it.item_id ? Number(it.item_id) : undefined,
           pr_item_id: it.pr_item_id ? Number(it.pr_item_id) : undefined,
-          item_description: it.item_description,
-          item_reference: it.item_reference,
-          region: it.region,
+          item_description: it.item_description.trim(),
+          item_reference: it.item_reference.trim() || headerParcel.trim() || undefined,
+          region: it.region.trim() || headerRegion.trim() || undefined,
           quantity: Number(it.quantity),
           uom: it.uom,
           unit_price: Number(it.unit_price),
@@ -277,9 +305,9 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
         id: it.id ? Number(it.id) : undefined,
         item_id: it.item_id ? Number(it.item_id) : undefined,
         pr_item_id: it.pr_item_id ? Number(it.pr_item_id) : undefined,
-        item_description: it.item_description,
-        item_reference: it.item_reference,
-        region: it.region,
+        item_description: it.item_description.trim(),
+        item_reference: it.item_reference.trim() || headerParcel.trim() || 'عام',
+        region: it.region.trim() || headerRegion.trim() || 'عام',
         quantity: Number(it.quantity),
         uom: it.uom,
         unit_price: Number(it.unit_price),
@@ -289,6 +317,8 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
 
       await finalizeActualPurchaseOrderApi(po.id, {
         supplier_id: targetHeaderSupplierId,
+        parcel_reference: headerParcel.trim() || undefined,
+        region: headerRegion.trim() || undefined,
         items: payloadItems,
         notes: finalizationNotes.trim() || undefined,
       });
@@ -314,7 +344,7 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
       closeOnBackdrop={!busy && !saveBusy}
       closeOnEscape={!busy && !saveBusy}
       title={po ? `⚡ إصدار واعتماد أمر الشراء الفعلي — ${po.po_number}` : 'إصدار أمر الشراء الفعلي'}
-      subtitle="مطابقة وتعديل الأسعار والكميات الفعلية بعد اعتماد إذن الاستلام بالموقع لإرسال الملف للإدارة المالية."
+      subtitle="مطابقة وتعديل الأسعار والكميات والموردين وأرقام القطع الفعلية قبل اعتماد الملف وإرساله للإدارة المالية."
       size="2xl"
       footer={(
         <div className="flex flex-wrap items-center justify-between w-full gap-3">
@@ -417,12 +447,39 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
                 </select>
               </div>
 
-              <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-3">
-                <span className="text-amber-400 block text-[11px] font-semibold">الموقع / المشروع</span>
-                <div className="mt-0.5 flex items-center gap-1.5 flex-wrap">
-                  <span className="font-mono font-bold text-amber-200">قطعة {getSummaryParcels(po)}</span>
-                  <span className="text-slate-500">•</span>
-                  <span className="font-bold text-amber-300">{getSummaryRegions(po)}</span>
+              {/* ── Editable Parcel & Region Prompt Card ── */}
+              <div className="rounded-xl border border-amber-500/40 bg-amber-950/20 p-3 flex flex-col justify-between">
+                <div className="flex items-center justify-between gap-1 mb-1">
+                  <span className="text-amber-400 block text-[11px] font-semibold">📍 قطعة الأرض والمنطقة</span>
+                  <button
+                    type="button"
+                    onClick={handleApplyParcelAndRegionToAll}
+                    disabled={busy || saveBusy}
+                    className="text-[10px] font-bold text-amber-300 hover:text-white bg-amber-900/60 hover:bg-amber-800 border border-amber-700/60 px-1.5 py-0.5 rounded transition-all cursor-pointer disabled:opacity-50"
+                    title="تطبيق رقم القطعة والمنطقة على كافة البنود"
+                  >
+                    ⚡ تطبيق على الكل
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5 mt-0.5">
+                  <input
+                    type="text"
+                    value={headerParcel}
+                    onChange={(e) => setHeaderParcel(e.target.value)}
+                    disabled={busy || saveBusy}
+                    placeholder="رقم القطعة..."
+                    className="w-full bg-[#0b1424] border border-amber-500/40 rounded-lg px-2 py-1 text-xs text-amber-200 font-bold focus:border-amber-300 outline-none truncate"
+                    title="رقم قطعة الأرض العام"
+                  />
+                  <input
+                    type="text"
+                    value={headerRegion}
+                    onChange={(e) => setHeaderRegion(e.target.value)}
+                    disabled={busy || saveBusy}
+                    placeholder="المنطقة..."
+                    className="w-full bg-[#0b1424] border border-amber-500/40 rounded-lg px-2 py-1 text-xs text-amber-300 font-bold focus:border-amber-300 outline-none truncate"
+                    title="المنطقة / المشروع العام"
+                  />
                 </div>
               </div>
 
@@ -442,11 +499,11 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
                   تم توريد البضاعة واعتماد إذن الاستلام في الموقع:
                 </p>
                 <p className="mt-0.5 text-[11px] text-slate-300">
-                  راجِع الكميات الفعلية والأسعار وقم بتعديلها عند الحاجة، مع إمكانية
-                  <strong className="text-cyan-300 mx-1 font-bold">تحديد المورد الفعلي لكل بند</strong>
-                  ثم اضغط على زر
+                  يمكنك تعديل <strong className="text-cyan-300 mx-0.5">اسم الصنف، الكمية، السعر، رقم القطعة، والمنطقة</strong> لكل بند، بالإضافة إلى
+                  <strong className="text-emerald-300 mx-1 font-bold">تحديد المورد الفعلي لكل بند</strong>
+                  ثم اضغط على
                   <strong className="text-emerald-300 mx-1 font-bold">«اعتماد وإرسال للإدارة المالية»</strong>
-                  لتحويل الملف مباشرة إلى الحسابات.
+                  لترحيل كافة التعديلات مباشرة إلى شاشات وحسابات الإدارة المالية.
                 </p>
               </div>
             </div>
@@ -457,7 +514,8 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
                 <thead className="bg-slate-900 text-cyan-200">
                   <tr>
                     <th className="p-3 text-center w-10">#</th>
-                    <th className="p-3">اسم الصنف والمواصفات</th>
+                    <th className="p-3 min-w-[200px]">اسم الصنف والمواصفات</th>
+                    <th className="p-3 text-center w-48">القطعة والمنطقة</th>
                     <th className="p-3 text-center w-44">المورد الفعلي</th>
                     <th className="p-3 text-center w-28">الكمية المستلمة</th>
                     <th className="p-3 text-center w-44">سعر الوحدة</th>
@@ -467,7 +525,7 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
                 <tbody className="divide-y divide-slate-800/80">
                   {items.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="p-8 text-center text-rose-300 font-bold">
+                      <td colSpan={7} className="p-8 text-center text-rose-300 font-bold">
                         لا توجد بنود متاحة للإصدار الفعلي.
                       </td>
                     </tr>
@@ -476,35 +534,57 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
                       <tr key={item.id || idx} className="hover:bg-slate-900/50 transition-colors">
                         <td className="p-3 text-center font-mono text-slate-400 font-bold">{idx + 1}</td>
                         <td className="p-3 font-bold text-slate-100">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span>{item.item_description || '—'}</span>
-                            <SupplementItemBadge
-                              isSupplementary={item.is_supplementary}
-                              batchNumber={item.supplement_batch}
+                          <div className="space-y-1">
+                            <span className="sr-only">{item.item_description}</span>
+                            <input
+                              type="text"
+                              value={item.item_description}
+                              onChange={(e) => handleItemFieldChange(idx, 'item_description', e.target.value)}
+                              disabled={busy || saveBusy}
+                              className="w-full bg-[#0b1424] border border-slate-700 focus:border-cyan-400 rounded-lg px-2 py-1 text-xs text-slate-100 font-bold outline-none"
+                              placeholder="اسم الصنف..."
+                              title="تعديل اسم الصنف الفعلي"
                             />
-                          </div>
-                          {(item.item_reference || item.region) && (
-                            <div className="mt-1 flex items-center gap-2 text-[10px] text-slate-400">
-                              {item.item_reference && (
-                                <span className="bg-slate-800/80 px-1.5 py-0.5 rounded text-amber-300">
-                                  قطعة: {item.item_reference}
-                                </span>
-                              )}
-                              {item.region && (
-                                <span className="bg-slate-800/80 px-1.5 py-0.5 rounded text-copper-300">
-                                  المنطقة: {item.region}
-                                </span>
-                              )}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <SupplementItemBadge
+                                isSupplementary={item.is_supplementary}
+                                batchNumber={item.supplement_batch}
+                              />
                             </div>
-                          )}
+                          </div>
                         </td>
 
+                        {/* ── Per-Item Parcel & Region Inputs ── */}
+                        <td className="p-3 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <input
+                              type="text"
+                              value={item.item_reference || ''}
+                              onChange={(e) => handleItemFieldChange(idx, 'item_reference', e.target.value)}
+                              disabled={busy || saveBusy}
+                              placeholder="قطعة..."
+                              className="w-20 bg-[#0b1424] border border-amber-500/40 focus:border-amber-300 rounded-lg px-1.5 py-1 text-[11px] text-amber-200 font-mono font-bold outline-none text-center"
+                              title="رقم قطعة الأرض لهذا البند"
+                            />
+                            <input
+                              type="text"
+                              value={item.region || ''}
+                              onChange={(e) => handleItemFieldChange(idx, 'region', e.target.value)}
+                              disabled={busy || saveBusy}
+                              placeholder="المنطقة..."
+                              className="w-24 bg-[#0b1424] border border-amber-500/40 focus:border-amber-300 rounded-lg px-1.5 py-1 text-[11px] text-amber-300 font-bold outline-none text-center"
+                              title="المنطقة لهذا البند"
+                            />
+                          </div>
+                        </td>
+
+                        {/* ── Supplier Selection per item ── */}
                         <td className="p-3 text-center">
                           <select
                             value={item.supplier_id || po.supplier_id || ''}
                             onChange={(e) => handleItemFieldChange(idx, 'supplier_id', e.target.value ? Number(e.target.value) : null)}
                             disabled={busy || saveBusy}
-                            className="w-full min-w-[130px] max-w-[160px] h-9 rounded-lg border border-cyan-500/60 bg-[#0b1424] px-2 text-xs text-slate-100 font-medium outline-none focus:border-cyan-300 disabled:opacity-60 truncate cursor-pointer"
+                            className="w-full min-w-[130px] max-w-[160px] h-9 rounded-lg border border-cyan-500/60 bg-[#0b1424] px-2 text-xs text-slate-100 font-bold outline-none focus:border-cyan-300 disabled:opacity-60 truncate cursor-pointer"
                             title="تحديد المورد الفعلي لهذا البند"
                           >
                             {allSuppliers.map((s) => (
@@ -572,13 +652,46 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
                   className="rounded-xl border border-slate-800 bg-slate-950/80 p-3.5 space-y-3 text-xs"
                 >
                   <div className="flex items-start justify-between gap-2 border-b border-slate-850 pb-2">
-                    <div>
+                    <div className="w-full">
                       <span className="text-[10px] font-bold text-cyan-400">بند #{idx + 1}</span>
-                      <p className="font-bold text-slate-100 text-sm mt-0.5">{item.item_description}</p>
+                      <span className="sr-only">{item.item_description}</span>
+                      <input
+                        type="text"
+                        value={item.item_description}
+                        onChange={(e) => handleItemFieldChange(idx, 'item_description', e.target.value)}
+                        disabled={busy || saveBusy}
+                        className="w-full bg-[#0b1424] border border-slate-700 focus:border-cyan-400 rounded-lg px-2 py-1 text-xs text-slate-100 font-bold outline-none mt-1"
+                        placeholder="اسم الصنف..."
+                      />
                     </div>
-                    <span className="text-[11px] font-bold bg-amber-950/50 text-amber-300 border border-amber-800/50 px-2 py-0.5 rounded shrink-0">
+                    <span className="text-[11px] font-bold bg-amber-950/50 text-amber-300 border border-amber-800/50 px-2 py-0.5 rounded shrink-0 self-start mt-4">
                       {getUnitLabel(item.uom)}
                     </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[11px] text-amber-300 block mb-1 font-bold">رقم القطعة:</label>
+                      <input
+                        type="text"
+                        value={item.item_reference || ''}
+                        onChange={(e) => handleItemFieldChange(idx, 'item_reference', e.target.value)}
+                        disabled={busy || saveBusy}
+                        placeholder="رقم القطعة..."
+                        className="h-9 w-full rounded-lg border border-amber-500/40 bg-[#0b1424] px-2 font-mono font-bold text-xs text-amber-200 outline-none focus:border-amber-300"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-amber-300 block mb-1 font-bold">المنطقة:</label>
+                      <input
+                        type="text"
+                        value={item.region || ''}
+                        onChange={(e) => handleItemFieldChange(idx, 'region', e.target.value)}
+                        disabled={busy || saveBusy}
+                        placeholder="المنطقة..."
+                        className="h-9 w-full rounded-lg border border-amber-500/40 bg-[#0b1424] px-2 font-bold text-xs text-amber-300 outline-none focus:border-amber-300"
+                      />
+                    </div>
                   </div>
 
                   <div>
@@ -587,7 +700,7 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
                       value={item.supplier_id || po.supplier_id || ''}
                       onChange={(e) => handleItemFieldChange(idx, 'supplier_id', e.target.value ? Number(e.target.value) : null)}
                       disabled={busy || saveBusy}
-                      className="h-9 w-full rounded-lg border border-cyan-500/60 bg-[#0b1424] px-2 text-xs text-slate-100 outline-none focus:border-cyan-300"
+                      className="h-9 w-full rounded-lg border border-cyan-500/60 bg-[#0b1424] px-2 text-xs text-slate-100 font-bold outline-none focus:border-cyan-300"
                     >
                       {allSuppliers.map((s) => (
                         <option key={s.id} value={s.id}>
@@ -602,7 +715,7 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
                       <label className="text-[11px] text-slate-400 block mb-1">الكمية الفعلية:</label>
                       <input
                         type="number"
-                        min="0.01"
+                        min="0"
                         step="0.01"
                         value={item.quantity ?? ''}
                         onFocus={(e) => e.target.select()}

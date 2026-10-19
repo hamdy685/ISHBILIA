@@ -333,4 +333,60 @@ describe('FinalizeActualPoModal', () => {
       );
     });
   });
+
+  it('allows editing parcel, region, item description and sends them in finalizeActualPurchaseOrderApi payload', async () => {
+    vi.mocked(purchaseOrdersApi.getPurchaseOrderApi).mockResolvedValueOnce(mockPo);
+    vi.mocked(purchaseOrdersApi.finalizeActualPurchaseOrderApi).mockResolvedValueOnce({
+      ...mockPo,
+      status: 'ISSUED',
+    });
+
+    render(
+      <FinalizeActualPoModal
+        isOpen={true}
+        poId={101}
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('💰 اعتماد وإرسال للإدارة المالية')).toBeInTheDocument();
+    });
+
+    // Edit header parcel and region
+    const parcelInput = screen.getByTitle('رقم قطعة الأرض العام');
+    const regionInput = screen.getByTitle('المنطقة / المشروع العام');
+    fireEvent.change(parcelInput, { target: { value: '888' } });
+    fireEvent.change(regionInput, { target: { value: 'منطقة النرجس' } });
+
+    // Click apply to all
+    const applyToAllBtn = screen.getByTitle('تطبيق رقم القطعة والمنطقة على كافة البنود');
+    fireEvent.click(applyToAllBtn);
+
+    // Edit item description
+    const itemDescInputs = screen.getAllByTitle('تعديل اسم الصنف الفعلي');
+    fireEvent.change(itemDescInputs[0], { target: { value: 'حديد تسليح عز 12 مم معدل' } });
+
+    const finalizeBtn = screen.getByText('💰 اعتماد وإرسال للإدارة المالية');
+    fireEvent.click(finalizeBtn);
+
+    await waitFor(() => {
+      expect(purchaseOrdersApi.finalizeActualPurchaseOrderApi).toHaveBeenCalledWith(
+        101,
+        expect.objectContaining({
+          parcel_reference: '888',
+          region: 'منطقة النرجس',
+          items: expect.arrayContaining([
+            expect.objectContaining({
+              id: 501,
+              item_description: 'حديد تسليح عز 12 مم معدل',
+              item_reference: '888',
+              region: 'منطقة النرجس',
+            }),
+          ]),
+        })
+      );
+    });
+  });
 });
