@@ -725,11 +725,11 @@ class ProcurementPurchaseOrderController extends Controller
      */
     public function finalizeActualPo(Request $request, string|int $id): JsonResponse
     {
-        $validated = $request->validate([
-            'items'        => ['required', 'array', 'min:1'],
-            'items.*.id'   => ['nullable', 'integer'],
-            'items.*.item_id' => ['nullable', 'integer', 'exists:items,id'],
-            'items.*.pr_item_id' => ['nullable', 'integer', 'exists:purchase_request_items,id'],
+            'supplier_id'              => ['nullable', 'integer', 'exists:suppliers,id'],
+            'items'                    => ['required', 'array', 'min:1'],
+            'items.*.id'               => ['nullable', 'integer'],
+            'items.*.item_id'          => ['nullable', 'integer', 'exists:items,id'],
+            'items.*.pr_item_id'       => ['nullable', 'integer', 'exists:purchase_request_items,id'],
             'items.*.item_description' => ['required', 'string', 'max:500'],
             'items.*.item_reference'   => ['required', 'string', 'max:100'],
             'items.*.region'           => ['required', 'string', 'max:150'],
@@ -761,7 +761,8 @@ class ProcurementPurchaseOrderController extends Controller
                 $request->user(),
                 $po,
                 $validated['items'],
-                $validated['notes'] ?? null
+                $validated['notes'] ?? null,
+                !empty($validated['supplier_id']) ? (int) $validated['supplier_id'] : null
             );
         } catch (\RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 409);

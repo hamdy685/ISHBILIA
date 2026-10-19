@@ -192,9 +192,16 @@ export const AccountingPurchaseOrderDetailsPage: React.FC = () => {
       {/* المورد & PR Metadata Card */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
         <Card className="space-y-2">
-          <h3 className="text-xs font-bold text-slate-200 border-b border-slate-800 pb-2">🏢 تفاصيل المورد</h3>
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+            <h3 className="text-xs font-bold text-slate-200">🏢 تفاصيل المورد</h3>
+            {displayedItems.some(it => it.supplier_id && it.supplier_id !== po.supplier_id) && (
+              <span className="text-[10px] bg-amber-950/80 text-amber-300 border border-amber-600/60 px-2 py-0.5 rounded-full font-bold">
+                ⚠️ طلب موزع على أكثر من مورد
+              </span>
+            )}
+          </div>
           <div className="space-y-1 text-slate-300">
-            <div><strong className="text-slate-400">الشركة:</strong> {po.supplier?.company_name || 'غير محدد'}</div>
+            <div><strong className="text-slate-400">الشركة / المورد المعتمد:</strong> <span className="text-slate-100 font-bold">{po.supplier?.company_name || 'غير محدد'}</span></div>
             <div><strong className="text-slate-400">الكود:</strong> <span className="font-mono text-cyan-400">{po.supplier?.code || '-'}</span></div>
             <div><strong className="text-slate-400">الهاتف والبريد:</strong> {po.supplier?.phone || '-'} | {po.supplier?.email || '-'}</div>
           </div>
@@ -244,6 +251,7 @@ export const AccountingPurchaseOrderDetailsPage: React.FC = () => {
               <TableRow>
                 <TableHead>#</TableHead>
                 <TableHead>اسم الصنف</TableHead>
+                <TableHead>المورد</TableHead>
                 <TableHead>المنطقة</TableHead>
                 <TableHead>الكمية والوحدة</TableHead>
                 <TableHead>سعر الوحدة</TableHead>
@@ -265,6 +273,9 @@ export const AccountingPurchaseOrderDetailsPage: React.FC = () => {
                         />
                       </div>
                     </TableCell>
+                    <TableCell className="text-slate-300 font-semibold text-xs">
+                      {item.supplier?.company_name || po.supplier?.company_name || '—'}
+                    </TableCell>
                     <TableCell className="font-mono text-slate-300">{item.region || '—'}</TableCell>
                     <TableCell className="text-slate-300">
                       {item.quantity} {getUnitLabel(item.uom || '')}
@@ -282,7 +293,7 @@ export const AccountingPurchaseOrderDetailsPage: React.FC = () => {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-4 text-slate-500">
+                  <TableCell colSpan={8} className="text-center py-4 text-slate-500">
                     لا توجد بنود مضافة لهذا الأمر
                   </TableCell>
                 </TableRow>
@@ -318,16 +329,32 @@ export const AccountingPurchaseOrderDetailsPage: React.FC = () => {
 
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="bg-slate-900/80 p-2 rounded-lg border border-slate-800/60">
+                    <span className="text-slate-400 block text-[10px]">المورد:</span>
+                    <span className="font-bold text-slate-100 text-xs truncate block">
+                      {item.supplier?.company_name || po.supplier?.company_name || '—'}
+                    </span>
+                  </div>
+
+                  <div className="bg-slate-900/80 p-2 rounded-lg border border-slate-800/60">
                     <span className="text-slate-400 block text-[10px]">الكمية والوحدة:</span>
                     <span className="font-bold text-slate-100 text-xs">
                       {item.quantity} {getUnitLabel(item.uom || '')}
                     </span>
                   </div>
+                </div>
 
+                <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="bg-slate-900/80 p-2 rounded-lg border border-slate-800/60">
                     <span className="text-slate-400 block text-[10px]">سعر الوحدة:</span>
                     <span className="font-mono font-bold text-cyan-300 text-xs">
                       <CurrencyDisplay amount={item.unit_price || 0} currency={po.currency || 'ج.م'} />
+                    </span>
+                  </div>
+
+                  <div className="bg-slate-900/80 p-2 rounded-lg border border-slate-800/60">
+                    <span className="text-slate-400 block text-[10px]">إجمالي البند:</span>
+                    <span className="font-mono font-bold text-emerald-400 text-xs">
+                      <CurrencyDisplay amount={item.line_total || (Number(item.quantity || 0) * Number(item.unit_price || 0))} currency={po.currency || 'ج.م'} />
                     </span>
                   </div>
                 </div>

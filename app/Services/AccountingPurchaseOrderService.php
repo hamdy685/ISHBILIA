@@ -18,7 +18,7 @@ class AccountingPurchaseOrderService
     {
         $allowedCodes = $user ? app(SupplierInvoiceService::class)->getAllowedDepartmentCodesForAccountant($user) : null;
 
-        return PurchaseOrder::with(['purchaseRequest.requester', 'purchaseRequest.department', 'purchaseRequest.assignedReviewer', 'purchaseRequest.approvalHistory.actor', 'supplier', 'createdBy', 'accountingReviewer', 'items.item:id,name,sku', 'finalizedBy'])
+        return PurchaseOrder::with(['purchaseRequest.requester', 'purchaseRequest.department', 'purchaseRequest.assignedReviewer', 'purchaseRequest.approvalHistory.actor', 'supplier', 'createdBy', 'accountingReviewer', 'items.item:id,name,sku', 'items.supplier', 'finalizedBy'])
             ->whereIn('status', ['ISSUED', 'PENDING_ACCOUNTING_REVIEW', 'APPROVED_BY_ACCOUNTING', 'RETURNED_TO_PROCUREMENT'])
             ->where('status', '!=', 'PENDING_ACTUAL_PO')
             ->where(function ($query) {

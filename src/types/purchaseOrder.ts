@@ -343,6 +343,7 @@ export interface FinalizeActualPoItemPayload {
 }
 
 export interface FinalizeActualPoPayload {
+  supplier_id?: number | null;
   items: FinalizeActualPoItemPayload[];
   notes?: string;
 }

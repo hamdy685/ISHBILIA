@@ -412,6 +412,23 @@ class PurchaseOrderService
 
             if (! empty($updateFields)) {
                 $lockedPo->update($updateFields);
+
+                if (! empty($updateFields['supplier_id'])) {
+                    $newSupId = (int) $updateFields['supplier_id'];
+                    $lockedPo->receipts()->update(['supplier_id' => $newSupId]);
+
+                    $openInvoices = \App\Models\SupplierInvoice::where('purchase_order_id', $lockedPo->id)
+                        ->where('paid_amount', 0)
+                        ->get();
+                    foreach ($openInvoices as $inv) {
+                        $oldSupId = $inv->supplier_id;
+                        $inv->update(['supplier_id' => $newSupId]);
+                        if ($oldSupId) {
+                            app(SupplierInvoiceService::class)->refreshSupplierBalance($oldSupId);
+                        }
+                        app(SupplierInvoiceService::class)->refreshSupplierBalance($newSupId);
+                    }
+                }
             }
 
             if (! empty($data['items']) && is_array($data['items'])) {
@@ -705,7 +722,8 @@ class PurchaseOrderService
         User $user,
         PurchaseOrder $po,
         array $items,
-        ?string $notes = null
+        ?string $notes = null,
+        ?int $headerSupplierId = null
     ): PurchaseOrder {
         if ($po->status !== 'PENDING_ACTUAL_PO') {
             throw new \RuntimeException('لا يمكن إصدار أمر الشراء الفعلي إلا بعد اعتماد إذن الاستلام وانتقال الملف لمرحلة بانتظار الإصدار الفعلي.');
@@ -717,7 +735,7 @@ class PurchaseOrderService
             ]);
         }
 
-        return DB::transaction(function () use ($user, $po, $items, $notes) {
+        return DB::transaction(function () use ($user, $po, $items, $notes, $headerSupplierId) {
             $lockedPo = PurchaseOrder::where('id', $po->id)->lockForUpdate()->firstOrFail();
 
             if ($lockedPo->status !== 'PENDING_ACTUAL_PO') {
@@ -769,6 +787,8 @@ class PurchaseOrderService
                     $input['unit_price'] = $unitPrice;
                     if (!empty($input['supplier_id'])) {
                         $input['supplier_id'] = (int) $input['supplier_id'];
+                    } elseif ($headerSupplierId) {
+                        $input['supplier_id'] = (int) $headerSupplierId;
                     } elseif ($existingPoItem->supplier_id) {
                         $input['supplier_id'] = (int) $existingPoItem->supplier_id;
                     } elseif ($lockedPo->supplier_id) {
@@ -789,7 +809,7 @@ class PurchaseOrderService
                         'uom' => $existingPoItem->uom,
                         'unit_price' => (float) $existingPoItem->unit_price,
                         'specifications' => $existingPoItem->specifications,
-                        'supplier_id' => $existingPoItem->supplier_id ?? $lockedPo->supplier_id,
+                        'supplier_id' => $existingPoItem->supplier_id ?? ($headerSupplierId ?: $lockedPo->supplier_id),
                         'is_supplementary' => $existingPoItem->is_supplementary,
                         'supplement_batch' => $existingPoItem->supplement_batch,
                     ];
@@ -799,8 +819,8 @@ class PurchaseOrderService
             // Include any additional new items added by procurement manager
             foreach ($inputCollection as $key => $newItem) {
                 if (! $matchedInputKeys->contains($key)) {
-                    if (empty($newItem['supplier_id']) && $lockedPo->supplier_id) {
-                        $newItem['supplier_id'] = (int) $lockedPo->supplier_id;
+                    if (empty($newItem['supplier_id'])) {
+                        $newItem['supplier_id'] = $headerSupplierId ?: (int) $lockedPo->supplier_id;
                     }
                     $finalizedItems[] = $newItem;
                 }
@@ -815,11 +835,14 @@ class PurchaseOrderService
             // ── Full items sync (preserves all items, sets actual quantities including 0) ──
             $grandTotal = $this->syncPoItems($user, $lockedPo, $finalizedItems);
 
-            // Determine effective PO header supplier: if all items share the same supplier, update header
+            // Determine effective PO header supplier:
             $allItemSuppliers = $lockedPo->items()->pluck('supplier_id')->filter()->unique();
-            $newHeaderSupplierId = $lockedPo->supplier_id;
-            if ($allItemSuppliers->count() === 1) {
+            if ($headerSupplierId) {
+                $newHeaderSupplierId = (int) $headerSupplierId;
+            } elseif ($allItemSuppliers->count() === 1) {
                 $newHeaderSupplierId = (int) $allItemSuppliers->first();
+            } else {
+                $newHeaderSupplierId = (int) $lockedPo->supplier_id;
             }
 
             // Update PO totals and transition to ISSUED so accounting can see it
@@ -832,6 +855,22 @@ class PurchaseOrderService
                 'finalized_at'         => now(),
                 'finalization_notes'   => $notes,
             ]);
+
+            if ($newHeaderSupplierId) {
+                $lockedPo->receipts()->update(['supplier_id' => $newHeaderSupplierId]);
+
+                $openInvoices = \App\Models\SupplierInvoice::where('purchase_order_id', $lockedPo->id)
+                    ->where('paid_amount', 0)
+                    ->get();
+                foreach ($openInvoices as $inv) {
+                    $oldSupId = $inv->supplier_id;
+                    $inv->update(['supplier_id' => $newHeaderSupplierId]);
+                    if ($oldSupId) {
+                        app(SupplierInvoiceService::class)->refreshSupplierBalance($oldSupId);
+                    }
+                    app(SupplierInvoiceService::class)->refreshSupplierBalance($newHeaderSupplierId);
+                }
+            }
 
             // Synchronize approved receipt items so that receipt matches the finalized Actual PO definitively
             $approvedReceipts = $lockedPo->receipts()->where('status', 'APPROVED')->get();

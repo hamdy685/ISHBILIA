@@ -297,8 +297,7 @@ export const EditPurchaseOrderPage: React.FC = () => {
       quantity: Number(it.quantity),
       uom: it.uom,
       unit_price: Number(it.unit_price),
-      specifications: it.specifications,
-      supplier_id: it.supplier_id || (supplierId ? Number(supplierId) : po.supplier_id),
+      supplier_id: it.supplier_id ? Number(it.supplier_id) : (supplierId ? Number(supplierId) : po.supplier_id),
       is_supplementary: Boolean(it.is_supplementary),
       supplement_batch: it.supplement_batch ?? null,
     }));
@@ -410,10 +409,11 @@ export const EditPurchaseOrderPage: React.FC = () => {
         uom: it.uom,
         unit_price: Number(it.unit_price),
         specifications: it.specifications,
-        supplier_id: it.supplier_id || (supplierId ? Number(supplierId) : po.supplier_id),
+        supplier_id: it.supplier_id ? Number(it.supplier_id) : (supplierId ? Number(supplierId) : po.supplier_id),
       }));
 
       await finalizeActualPurchaseOrderApi(po.id, {
+        supplier_id: supplierId ? Number(supplierId) : undefined,
         items: payloadItems,
         notes: finalizationNotes.trim() || undefined,
       });
@@ -686,13 +686,36 @@ export const EditPurchaseOrderPage: React.FC = () => {
             <SupplierSelectWithQuickAdd
               suppliers={suppliers}
               selectedSupplierId={supplierId}
-              onSelectSupplierId={(val) => setSupplierId(val)}
+              onSelectSupplierId={(val) => {
+                const oldId = supplierId ? Number(supplierId) : po?.supplier_id;
+                setSupplierId(val);
+                if (val) {
+                  const newNum = Number(val);
+                  setItems((prev) =>
+                    prev.map((it) => {
+                      if (!it.supplier_id || it.supplier_id === oldId) {
+                        return { ...it, supplier_id: newNum };
+                      }
+                      return it;
+                    })
+                  );
+                }
+              }}
               oneTimeSupplierName={oneTimeSupplierName}
               onChangeOneTimeSupplierName={(name) => setOneTimeSupplierName(name)}
               onSupplierCreated={(newSup) => {
+                const oldId = supplierId ? Number(supplierId) : po?.supplier_id;
                 setSuppliers((prev) => [...prev, newSup]);
                 setSupplierId(String(newSup.id));
                 setOneTimeSupplierName('');
+                setItems((prev) =>
+                  prev.map((it) => {
+                    if (!it.supplier_id || it.supplier_id === oldId) {
+                      return { ...it, supplier_id: newSup.id };
+                    }
+                    return it;
+                  })
+                );
               }}
               disabled={!isEditable}
               label="المورد المعتمد"

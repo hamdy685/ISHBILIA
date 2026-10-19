@@ -227,7 +227,9 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
     setSaveBusy(true);
     setError(null);
     try {
+      const targetHeaderSupplierId = unifiedSupplierValue ? Number(unifiedSupplierValue) : undefined;
       await updatePurchaseOrderApi(po.id, {
+        supplier_id: targetHeaderSupplierId,
         finalization_notes: finalizationNotes || undefined,
         items: items.map((it) => ({
           id: it.id ? Number(it.id) : undefined,
@@ -240,7 +242,7 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
           uom: it.uom,
           unit_price: Number(it.unit_price),
           specifications: it.specifications,
-          supplier_id: it.supplier_id || po.supplier_id,
+          supplier_id: it.supplier_id ? Number(it.supplier_id) : (targetHeaderSupplierId || po.supplier_id),
         })),
       });
       toast.success('✅ تم حفظ تعديلات أمر الشراء بنجاح.');
@@ -270,6 +272,7 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
     setBusy(true);
     setError(null);
     try {
+      const targetHeaderSupplierId = unifiedSupplierValue ? Number(unifiedSupplierValue) : undefined;
       const payloadItems: FinalizeActualPoItemPayload[] = items.map((it) => ({
         id: it.id ? Number(it.id) : undefined,
         item_id: it.item_id ? Number(it.item_id) : undefined,
@@ -281,10 +284,11 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
         uom: it.uom,
         unit_price: Number(it.unit_price),
         specifications: it.specifications,
-        supplier_id: it.supplier_id || po.supplier_id,
+        supplier_id: it.supplier_id ? Number(it.supplier_id) : (targetHeaderSupplierId || po.supplier_id),
       }));
 
       await finalizeActualPurchaseOrderApi(po.id, {
+        supplier_id: targetHeaderSupplierId,
         items: payloadItems,
         notes: finalizationNotes.trim() || undefined,
       });
