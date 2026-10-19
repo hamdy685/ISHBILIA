@@ -773,10 +773,12 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                       {itemDateDisplay && (
                         <div
                           className="flex items-center gap-1.5 text-[11px] font-mono text-slate-300 bg-slate-900/90 border border-slate-700/70 px-2.5 py-1 rounded-lg shrink-0 shadow-xs"
-                          title="تاريخ ووقت تقديم الطلب"
+                          title={item.type === 'RECEIPT' ? 'تاريخ ووقت استلام المواد بالمخزن' : 'تاريخ ووقت تقديم الطلب'}
                         >
                           <span className="text-amber-400 font-sans text-xs">🕒</span>
-                          <span className="text-slate-400 text-[10px] font-sans">تاريخ الطلب:</span>
+                          <span className="text-slate-400 text-[10px] font-sans">
+                            {item.type === 'RECEIPT' ? 'تاريخ الاستلام:' : 'تاريخ الطلب:'}
+                          </span>
                           <span className="font-bold text-slate-100 tracking-tight" dir="ltr">{itemDateDisplay}</span>
                         </div>
                       )}
@@ -910,7 +912,9 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
 
                       {itemDateDisplay && (
                         <div className="flex items-center gap-1.5 font-mono text-[11px]">
-                          <span className="text-slate-500 font-sans">🕒 تاريخ ووقت الطلب:</span>
+                          <span className="text-slate-500 font-sans">
+                            🕒 {item.type === 'RECEIPT' ? 'تاريخ ووقت الاستلام:' : 'تاريخ ووقت الطلب:'}
+                          </span>
                           <strong className="text-cyan-300 font-bold tracking-tight" dir="ltr">{itemDateDisplay}</strong>
                         </div>
                       )}
