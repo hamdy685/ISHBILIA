@@ -452,6 +452,11 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
                         isSupplementary={item.is_supplementary}
                         batchNumber={item.supplement_batch}
                       />
+                      {item.supplier && item.supplier.id !== po.supplier_id && (
+                        <span className="text-[10px] font-bold text-amber-300 bg-amber-950/70 border border-amber-600/40 px-2 py-0.5 rounded">
+                          مورد البند: {item.supplier.company_name}
+                        </span>
+                      )}
                     </div>
                     {item.specifications && <div className="text-[10px] text-slate-400 mt-0.5 font-normal">{item.specifications}</div>}
                   </TableCell>

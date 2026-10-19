@@ -9,6 +9,13 @@ export interface MasterOrderItem {
   uom: string;
   unit_price: number;
   line_total: number;
+  supplier_id?: number | null;
+  supplier?: {
+    id: number;
+    company_name: string;
+    name?: string;
+    code?: string;
+  } | null;
   received_quantity?: number | null;
   specifications?: string | null;
 }
@@ -106,6 +113,7 @@ export interface MasterOrdersResponse {
 
 export interface ForceUpdateItemPayload {
   id?: number | null;
+  supplier_id?: number | null;
   item_description: string;
   item_reference?: string | null;
   region?: string | null;

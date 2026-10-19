@@ -224,7 +224,7 @@ class AdminMasterOrdersController extends Controller
                     'purchaseRequest.requester',
                     'purchaseRequest.landParcel',
                     'supplier',
-                    'items',
+                    'items.supplier',
                     'purchaseReceipts.items',
                     'supplierInvoices',
                     'createdBy',
@@ -235,7 +235,10 @@ class AdminMasterOrdersController extends Controller
             }
 
             if ($supplierId) {
-                $poQuery->where('supplier_id', $supplierId);
+                $poQuery->where(function ($sq) use ($supplierId) {
+                    $sq->where('supplier_id', $supplierId)
+                        ->orWhereHas('items', fn ($iq) => $iq->where('supplier_id', $supplierId));
+                });
             }
 
             if ($dateFrom) {
@@ -251,6 +254,10 @@ class AdminMasterOrdersController extends Controller
                         ->orWhere('manual_po_number', 'like', "%{$search}%")
                         ->orWhereHas('supplier', function ($sq) use ($search) {
                             $sq->where('company_name', 'like', "%{$search}%")
+                                ->orWhere('contact_name', 'like', "%{$search}%");
+                        })
+                        ->orWhereHas('items.supplier', function ($isq) use ($search) {
+                            $isq->where('company_name', 'like', "%{$search}%")
                                 ->orWhere('contact_name', 'like', "%{$search}%");
                         })
                         ->orWhereHas('purchaseRequest', function ($pq) use ($search) {
@@ -576,6 +583,7 @@ class AdminMasterOrdersController extends Controller
                 'purchaseRequest.landParcel',
                 'supplier',
                 'items.item',
+                'items.supplier',
                 'purchaseReceipts.items',
                 'supplierInvoices',
                 'approvalHistory.actor',
@@ -669,6 +677,7 @@ class AdminMasterOrdersController extends Controller
             'sync_pr' => 'nullable|boolean',
             'items' => 'nullable|array',
             'items.*.id' => 'nullable|integer',
+            'items.*.supplier_id' => 'nullable|exists:suppliers,id',
             'items.*.item_description' => 'required_with:items|string|max:255',
             'items.*.item_reference' => 'nullable|string|max:100',
             'items.*.region' => 'nullable|string|max:100',
@@ -691,6 +700,7 @@ class AdminMasterOrdersController extends Controller
             'finalized_at' => self::formatDateTimeSafely($po->finalized_at),
             'items' => $po->items->map(fn ($it) => [
                 'id' => $it->id,
+                'supplier_id' => $it->supplier_id,
                 'description' => $it->item_description,
                 'reference' => $it->item_reference,
                 'qty' => (float) $it->quantity,
@@ -770,8 +780,13 @@ class AdminMasterOrdersController extends Controller
                             $price = (float) $itemData['unit_price'];
                             $lineTotal = round($qty * $price, 2);
 
+                            $itemSupplierId = ! empty($itemData['supplier_id'])
+                                ? (int) $itemData['supplier_id']
+                                : ($po->supplier_id ?: null);
+
                             $existingItem->update([
                                 'item_description' => $itemData['item_description'],
+                                'supplier_id' => $itemSupplierId,
                                 'item_reference' => $itemData['item_reference'] ?? $existingItem->item_reference,
                                 'region' => $itemData['region'] ?? $existingItem->region,
                                 'quantity' => $qty,
@@ -787,8 +802,13 @@ class AdminMasterOrdersController extends Controller
                         $price = (float) $itemData['unit_price'];
                         $lineTotal = round($qty * $price, 2);
 
+                        $itemSupplierId = ! empty($itemData['supplier_id'])
+                            ? (int) $itemData['supplier_id']
+                            : ($po->supplier_id ?: null);
+
                         PurchaseOrderItem::create([
                             'purchase_order_id' => $po->id,
+                            'supplier_id' => $itemSupplierId,
                             'item_description' => $itemData['item_description'],
                             'item_reference' => $itemData['item_reference'] ?? null,
                             'region' => $itemData['region'] ?? null,
@@ -812,11 +832,24 @@ class AdminMasterOrdersController extends Controller
             if (Schema::hasColumn('purchase_orders', 'total_amount')) {
                 $po->total_amount = $grandTotal;
             }
+
+            // If all items share a single supplier and header was not explicitly set to something else, sync header supplier
+            $activeSupplierIds = $freshItems->pluck('supplier_id')->filter()->unique();
+            if ($activeSupplierIds->count() === 1) {
+                $po->supplier_id = $activeSupplierIds->first();
+            } elseif (empty($po->supplier_id) && $activeSupplierIds->isNotEmpty()) {
+                $po->supplier_id = $activeSupplierIds->first();
+            }
+
             $po->save();
 
             // 3. Receipt synchronization (if requested and receipts exist)
             if ($syncReceipt) {
                 foreach ($po->purchaseReceipts as $receipt) {
+                    if ($po->supplier_id) {
+                        $receipt->supplier_id = $po->supplier_id;
+                        $receipt->save();
+                    }
                     foreach ($freshItems as $pItem) {
                         $rcptItem = PurchaseReceiptItem::where('purchase_receipt_id', $receipt->id)
                             ->where('purchase_order_item_id', $pItem->id)
@@ -850,7 +883,21 @@ class AdminMasterOrdersController extends Controller
                     ]);
             }
 
-            // 5. System Audit Trail Logging
+            // 5. Accounting invoice synchronization
+            if ($po->supplier_id) {
+                DB::table('supplier_invoices')
+                    ->where('purchase_order_id', $po->id)
+                    ->whereIn('status', ['OPEN', 'PENDING'])
+                    ->where(function ($q) use ($po) {
+                        $q->whereNull('supplier_id')->orWhere('supplier_id', '!=', $po->supplier_id);
+                    })
+                    ->update([
+                        'supplier_id' => $po->supplier_id,
+                        'updated_at' => now(),
+                    ]);
+            }
+
+            // 6. System Audit Trail Logging
             $newSnapshot = [
                 'status' => $po->status,
                 'supplier_id' => $po->supplier_id,
@@ -861,6 +908,7 @@ class AdminMasterOrdersController extends Controller
                 'finalized_at' => self::formatDateTimeSafely($po->finalized_at),
                 'items' => $freshItems->map(fn ($it) => [
                     'id' => $it->id,
+                    'supplier_id' => $it->supplier_id,
                     'description' => $it->item_description,
                     'reference' => $it->item_reference,
                     'qty' => (float) $it->quantity,

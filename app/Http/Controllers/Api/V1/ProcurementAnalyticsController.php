@@ -246,15 +246,21 @@ class ProcurementAnalyticsController extends Controller
             ])
             ->values();
 
-        // توزيع المشتريات على الموردين يقتصر على أوامر الشراء الفعلية المعتمدة
-        $supplierMetrics = (clone $actualPurchaseOrderQuery)
-            ->select('supplier_id')
-            ->selectRaw('COUNT(*) as row_count, COALESCE(SUM(grand_total), 0) as total_value')
-            ->whereNotNull('supplier_id')
-            ->groupBy('supplier_id')
-            ->orderByDesc('total_value')
-            ->limit(6)
-            ->get();
+        // توزيع المشتريات على الموردين يقتصر على أوامر الشراء الفعلية المعتمدة ويأخذ في الحسبان موردي البنود
+        $actualPoIds = (clone $actualPurchaseOrderQuery)->pluck('id');
+        if ($actualPoIds->isNotEmpty()) {
+            $supplierMetrics = DB::table('purchase_order_items as poi')
+                ->join('purchase_orders as po', 'po.id', '=', 'poi.purchase_order_id')
+                ->whereIn('po.id', $actualPoIds)
+                ->selectRaw('COALESCE(poi.supplier_id, po.supplier_id) as supplier_id, COUNT(DISTINCT po.id) as row_count, COALESCE(SUM(poi.line_total), 0) as total_value')
+                ->whereNotNull(DB::raw('COALESCE(poi.supplier_id, po.supplier_id)'))
+                ->groupBy(DB::raw('COALESCE(poi.supplier_id, po.supplier_id)'))
+                ->orderByDesc('total_value')
+                ->limit(6)
+                ->get();
+        } else {
+            $supplierMetrics = collect();
+        }
         $supplierLookup = Supplier::query()
             ->whereIn('id', $supplierMetrics->pluck('supplier_id')->filter()->unique()->values())
             ->get(['id', 'company_name', 'is_active'])

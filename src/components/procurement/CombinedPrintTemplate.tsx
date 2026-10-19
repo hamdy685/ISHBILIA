@@ -282,7 +282,7 @@ export const CombinedPrintTemplate = React.forwardRef<HTMLDivElement, CombinedPr
           '---';
         return {
           description: item.item_description || item.item_name || '---',
-          supplier: item.supplier_name || props.supplierName || po?.supplier?.company_name || '---',
+          supplier: item.supplier?.company_name || item.supplier_name || props.supplierName || po?.supplier?.company_name || '---',
           purpose: itemPurpose,
           uom: item.uom || 'PCS',
           quantity: item.quantity ?? 0,

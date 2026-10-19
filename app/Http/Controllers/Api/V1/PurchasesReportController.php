@@ -53,6 +53,9 @@ class PurchasesReportController extends Controller
         $departmentId = $request->filled('department_id') && $request->query('department_id') !== 'ALL'
             ? (int) $request->query('department_id')
             : null;
+        $supplierId = $request->filled('supplier_id') && $request->query('supplier_id') !== 'ALL'
+            ? (int) $request->query('supplier_id')
+            : null;
         $accountingFilter = (string) $request->query('accounting_filter', 'ALL'); // 'VERIFIED_ONLY' | 'ALL' | 'PENDING'
         $actualOnly = $request->boolean('actual_only', true); // أوامر الشراء الفعلية فقط (الافتراضي نعم لحماية التقارير المالية)
         $dateBasis = (string) $request->query('date_basis', 'po_date'); // 'po_date' | 'delivery_date' | 'pr_date'
@@ -117,6 +120,7 @@ class PurchasesReportController extends Controller
             ->with([
                 'supplier',
                 'items.prItem',
+                'items.supplier',
                 'purchaseRequest.department',
                 'purchaseRequest.targetDepartment',
                 'purchaseRequest.landParcel',
@@ -134,6 +138,12 @@ class PurchasesReportController extends Controller
                 $q->actualPo();
             }, function ($q) {
                 $q->whereNotIn('status', ['PO_DRAFT', 'REJECTED', 'CANCELLED', 'VOIDED']);
+            })
+            ->when($supplierId !== null, function ($q) use ($supplierId) {
+                $q->where(function ($sq) use ($supplierId) {
+                    $sq->where('supplier_id', $supplierId)
+                        ->orWhereHas('items', fn ($iq) => $iq->where('supplier_id', $supplierId));
+                });
             })
             ->when($allowedDepartmentCodes !== null, function ($q) use ($allowedDepartmentCodes) {
                 $q->whereHas('purchaseRequest.department', function ($dq) use ($allowedDepartmentCodes) {
@@ -409,6 +419,13 @@ class PurchasesReportController extends Controller
                     $rowRegion = $poItem->region
                         ?: ($prItem?->region ?: $defaultRegion);
 
+                    $effectiveItemSupplier = $poItem->supplier ?? $order->supplier;
+                    $rowSupplierId = $poItem->supplier_id ?: $order->supplier_id;
+
+                    if ($supplierId !== null && (int) $rowSupplierId !== $supplierId) {
+                        continue;
+                    }
+
                     $works = $poItem->specifications
                         ?: ($prItem?->specifications ?: ($requestModel?->notes ?: '—'));
 
@@ -447,8 +464,8 @@ class PurchasesReportController extends Controller
                         'received_quantity' => $receivedQty,
                         'receipt_status' => $approvedReceipt?->status,
                         // المورد والموقع
-                        'supplier_name' => $order->supplier?->company_name ?? $order->supplier?->name ?? '—',
-                        'supplier_id' => $order->supplier_id,
+                        'supplier_name' => $effectiveItemSupplier?->company_name ?? $effectiveItemSupplier?->name ?? '—',
+                        'supplier_id' => $rowSupplierId,
                         'parcel_reference' => $rowParcelRef ?: '—',
                         'region' => $rowRegion ?: '—',
                         'department_id' => $deptId,
@@ -548,6 +565,7 @@ class PurchasesReportController extends Controller
                 'from_date' => $request->query('from_date'),
                 'to_date' => $request->query('to_date'),
                 'department_id' => $departmentId,
+                'supplier_id' => $supplierId,
                 'accounting_filter' => $accountingFilter,
                 'date_label' => $dateLabel,
             ],

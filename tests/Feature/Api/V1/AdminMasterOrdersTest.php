@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api\V1;
 
+use App\Models\AdminAuditLog;
 use App\Models\Department;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
@@ -205,6 +206,139 @@ class AdminMasterOrdersTest extends TestCase
         $this->assertStringContainsString('تصحيح مباشر للكميات الفعلية', $auditEvent->description);
     }
 
+    public function test_admin_can_force_update_order_items_suppliers_individually_and_sync_accounting(): void
+    {
+        $admin = $this->makeUser('admin', 'admin-multisup-test@ashbiliya.com');
+        $dept = Department::create(['name' => 'إدارة المباني', 'code' => 'BLD-MULTI']);
+
+        $supplierA = Supplier::create([
+            'company_name' => 'شركة التوريدات الأولى (أ)',
+            'name' => 'المورد أ',
+            'email' => 'supA@example.com',
+            'is_active' => true,
+        ]);
+        $supplierB = Supplier::create([
+            'company_name' => 'شركة الطوب الأحمر الحديث (ب)',
+            'name' => 'المورد ب',
+            'email' => 'supB@example.com',
+            'is_active' => true,
+        ]);
+        $supplierC = Supplier::create([
+            'company_name' => 'مؤسسة أسمنت المعلم (ج)',
+            'name' => 'المورد ج',
+            'email' => 'supC@example.com',
+            'is_active' => true,
+        ]);
+
+        $pr = PurchaseRequest::create([
+            'request_number' => 'PR-2026-MULTI-01',
+            'department_id' => $dept->id,
+            'user_id' => $admin->id,
+            'status' => 'APPROVED_BY_PROCUREMENT',
+            'total_estimated_cost' => 36137.5,
+        ]);
+
+        $po = PurchaseOrder::create([
+            'po_number' => 'PO-2026-MULTI-01',
+            'purchase_request_id' => $pr->id,
+            'supplier_id' => $supplierA->id,
+            'created_by_user_id' => $admin->id,
+            'status' => 'ISSUED',
+            'subtotal' => 36137.5,
+            'grand_total' => 36137.5,
+        ]);
+
+        $item1 = PurchaseOrderItem::create([
+            'purchase_order_id' => $po->id,
+            'supplier_id' => $supplierA->id,
+            'item_description' => 'طوب أحمر مفرغ',
+            'quantity' => 12,
+            'uom' => 'BRICKS',
+            'unit_price' => 2450,
+            'line_total' => 29400,
+        ]);
+
+        $item2 = PurchaseOrderItem::create([
+            'purchase_order_id' => $po->id,
+            'supplier_id' => $supplierA->id,
+            'item_description' => 'اسمنت المعلم',
+            'quantity' => 1.75,
+            'uom' => 'TON',
+            'unit_price' => 3850,
+            'line_total' => 6737.5,
+        ]);
+
+        $receipt = PurchaseReceipt::create([
+            'purchase_order_id' => $po->id,
+            'receipt_number' => 'GRN-MULTI-01',
+            'status' => 'APPROVED',
+            'supplier_id' => $supplierA->id,
+        ]);
+
+        // Force update: Assign item1 to supplierB and item2 to supplierC
+        $payload = [
+            'status' => 'ISSUED',
+            'supplier_id' => $supplierB->id,
+            'is_actual_po' => true,
+            'admin_reason' => 'تخصيص مورد مستقل لكل بند وتثبيت أمر الشراء الفعلي',
+            'sync_receipt' => true,
+            'sync_pr' => true,
+            'items' => [
+                [
+                    'id' => $item1->id,
+                    'supplier_id' => $supplierB->id,
+                    'item_description' => 'طوب أحمر مفرغ عالي الجودة',
+                    'quantity' => 12,
+                    'uom' => 'BRICKS',
+                    'unit_price' => 2450,
+                ],
+                [
+                    'id' => $item2->id,
+                    'supplier_id' => $supplierC->id,
+                    'item_description' => 'اسمنت المعلم بورتلاندي',
+                    'quantity' => 1.75,
+                    'uom' => 'TON',
+                    'unit_price' => 3850,
+                ],
+            ],
+        ];
+
+        $response = $this->actingAs($admin, 'sanctum')
+            ->putJson("/api/v1/admin/orders/{$po->id}/force-update", $payload);
+
+        $response->assertOk()
+            ->assertJsonPath('success', true);
+
+        // Verify items in DB
+        $item1Fresh = $item1->fresh(['supplier']);
+        $item2Fresh = $item2->fresh(['supplier']);
+
+        $this->assertEquals($supplierB->id, $item1Fresh->supplier_id);
+        $this->assertEquals($supplierC->id, $item2Fresh->supplier_id);
+
+        // Verify show details API returns items with supplier relationship
+        $detailsRes = $this->actingAs($admin, 'sanctum')
+            ->getJson("/api/v1/admin/orders/{$po->id}/details");
+        $detailsRes->assertOk();
+        $itemsData = $detailsRes->json('data.order.items');
+        $this->assertCount(2, $itemsData);
+        $this->assertEquals($supplierB->id, $itemsData[0]['supplier_id']);
+        $this->assertEquals($supplierC->id, $itemsData[1]['supplier_id']);
+
+        // Verify Purchases Report reflects each item's actual supplier
+        $reportRes = $this->actingAs($admin, 'sanctum')
+            ->getJson('/api/v1/reports/purchases?filter_type=custom&from_date=' . now()->subDays(5)->toDateString() . '&to_date=' . now()->addDays(5)->toDateString() . '&actual_only=0');
+        $reportRes->assertOk();
+        $reportRows = collect($reportRes->json('rows'));
+        $row1 = $reportRows->firstWhere('id', "PO-{$po->id}-ITEM-{$item1->id}");
+        $row2 = $reportRows->firstWhere('id', "PO-{$po->id}-ITEM-{$item2->id}");
+
+        $this->assertNotNull($row1);
+        $this->assertNotNull($row2);
+        $this->assertEquals('شركة الطوب الأحمر الحديث (ب)', $row1['supplier_name']);
+        $this->assertEquals('مؤسسة أسمنت المعلم (ج)', $row2['supplier_name']);
+    }
+
     public function test_non_admin_cannot_access_or_force_update(): void
     {
         $employee = $this->makeUser('employee', 'emp-test@ashbiliya.com');
@@ -307,20 +441,15 @@ class AdminMasterOrdersTest extends TestCase
         $response->assertOk()
             ->assertJsonPath('success', true);
 
-        // Verify cascading hard deletion of entire cycle
-        $this->assertDatabaseMissing('purchase_orders', ['id' => $po->id]);
-        $this->assertDatabaseMissing('purchase_order_items', ['id' => $poItem->id]);
-        $this->assertDatabaseMissing('purchase_receipts', ['id' => $receipt->id]);
-        $this->assertDatabaseMissing('purchase_receipt_items', ['id' => $receiptItem->id]);
-        $this->assertDatabaseMissing('supplier_invoices', ['id' => $invoice->id]);
-        $this->assertDatabaseMissing('purchase_requests', ['id' => $pr->id]);
-        $this->assertDatabaseMissing('purchase_request_items', ['id' => $prItem->id]);
+        // Verify safe cancellation of entire cycle without deleting financial trail
+        $this->assertEquals('CANCELLED', $po->fresh()->status);
 
-        // Verify System Audit Trail Event was recorded
-        $auditEvent = SystemEvent::where('action', 'ADMIN_FORCE_DELETE')->latest('id')->first();
-        $this->assertNotNull($auditEvent);
-        $this->assertEquals($admin->id, $auditEvent->actor_user_id);
-        $this->assertStringContainsString('طلب تجريبي تم إلغاؤه نهائياً', $auditEvent->description);
+        // Verify Admin Audit Log was recorded
+        $auditLog = AdminAuditLog::where('action', 'ADMIN_CANCEL_ORDER')
+            ->where('entity_id', $po->id)
+            ->first();
+        $this->assertNotNull($auditLog);
+        $this->assertEquals($admin->id, $auditLog->actor_user_id);
     }
 
     public function test_admin_can_force_delete_standalone_purchase_request(): void
@@ -354,8 +483,13 @@ class AdminMasterOrdersTest extends TestCase
         $response->assertOk()
             ->assertJsonPath('success', true);
 
-        $this->assertDatabaseMissing('purchase_requests', ['id' => $pr->id]);
-        $this->assertDatabaseMissing('purchase_request_items', ['id' => $prItem->id]);
+        $this->assertEquals('CANCELLED', $pr->fresh()->status);
+
+        $auditLog = AdminAuditLog::where('action', 'ADMIN_CANCEL_REQUEST')
+            ->where('entity_id', $pr->id)
+            ->first();
+        $this->assertNotNull($auditLog);
+        $this->assertEquals($admin->id, $auditLog->actor_user_id);
     }
 }
 

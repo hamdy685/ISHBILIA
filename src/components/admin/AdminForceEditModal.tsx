@@ -20,6 +20,7 @@ interface AdminForceEditModalProps {
 
 interface ItemDraft {
   id?: number | null;
+  supplier_id?: number | '' | null;
   item_description: string;
   item_reference: string;
   region: string;
@@ -103,6 +104,7 @@ export const AdminForceEditModal: React.FC<AdminForceEditModalProps> = ({
       // Populate items
       const draftItems: ItemDraft[] = (po.items || []).map((it: any) => ({
         id: it.id,
+        supplier_id: it.supplier_id || po.supplier_id || '',
         item_description: it.item_description || '',
         item_reference: it.item_reference || '',
         region: it.region || '',
@@ -131,11 +133,17 @@ export const AdminForceEditModal: React.FC<AdminForceEditModalProps> = ({
     });
   };
 
+  const handleApplySupplierToAll = () => {
+    if (!supplierId) return;
+    setItems((prev) => prev.map((it) => ({ ...it, supplier_id: Number(supplierId) })));
+  };
+
   const handleAddItem = () => {
     setItems((prev) => [
       ...prev,
       {
         id: null,
+        supplier_id: supplierId ? Number(supplierId) : (availableSuppliers[0]?.id ?? ''),
         item_description: '',
         item_reference: items[0]?.item_reference || '',
         region: items[0]?.region || '',
@@ -188,6 +196,7 @@ export const AdminForceEditModal: React.FC<AdminForceEditModalProps> = ({
     try {
       const formattedItems: ForceUpdateItemPayload[] = items.map((it) => ({
         id: it.id,
+        supplier_id: it.supplier_id ? Number(it.supplier_id) : (supplierId ? Number(supplierId) : null),
         item_description: it.item_description,
         item_reference: it.item_reference || null,
         region: it.region || null,
@@ -338,7 +347,19 @@ export const AdminForceEditModal: React.FC<AdminForceEditModalProps> = ({
                   </div>
 
                   <div>
-                    <label className="block text-slate-400 font-bold mb-1.5">المورد المعتمد للطلب:</label>
+                    <div className="flex items-center justify-between gap-1 mb-1.5">
+                      <label className="text-slate-400 font-bold">المورد المعتمد للطلب:</label>
+                      {supplierId && (
+                        <button
+                          type="button"
+                          onClick={handleApplySupplierToAll}
+                          className="text-[10px] text-amber-400 hover:text-amber-300 font-bold underline cursor-pointer"
+                          title="تطبيق هذا المورد على جميع بنود أمر الشراء بالجدول أدناه"
+                        >
+                          ⚡ تطبيق على كل البنود
+                        </button>
+                      )}
+                    </div>
                     <select
                       value={supplierId}
                       onChange={(e) => setSupplierId(e.target.value ? Number(e.target.value) : '')}
@@ -412,6 +433,7 @@ export const AdminForceEditModal: React.FC<AdminForceEditModalProps> = ({
                     <thead className="bg-slate-950 text-slate-400 font-bold border-b border-slate-800">
                       <tr>
                         <th className="p-2.5">اسم الصنف والتوصيف</th>
+                        <th className="p-2.5 w-44">المورد</th>
                         <th className="p-2.5 w-28">رقم القطعة</th>
                         <th className="p-2.5 w-24">المنطقة</th>
                         <th className="p-2.5 w-24">الكمية</th>
@@ -435,6 +457,21 @@ export const AdminForceEditModal: React.FC<AdminForceEditModalProps> = ({
                                 placeholder="وصف البند..."
                                 className="w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-100 font-bold focus:border-amber-400 focus:outline-none"
                               />
+                            </td>
+                            <td className="p-2">
+                              <select
+                                value={it.supplier_id || ''}
+                                onChange={(e) => handleItemChange(idx, 'supplier_id', e.target.value ? Number(e.target.value) : '')}
+                                disabled={it.delete}
+                                className="w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-amber-200 font-bold focus:border-amber-400 focus:outline-none text-xs"
+                              >
+                                <option value="">— نفس المورد العام —</option>
+                                {availableSuppliers.map((sup) => (
+                                  <option key={sup.id} value={sup.id}>
+                                    {sup.company_name || sup.name}
+                                  </option>
+                                ))}
+                              </select>
                             </td>
                             <td className="p-2">
                               <input
