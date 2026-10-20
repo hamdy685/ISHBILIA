@@ -155,9 +155,9 @@ class AdminMasterOrdersController extends Controller
         $hasPendingReceipt = false;
         if ($po) {
             if ($po->relationLoaded('purchaseReceipts')) {
-                $hasPendingReceipt = $po->purchaseReceipts->contains(fn ($r) => in_array($r->status, ['PENDING', 'SUBMITTED_BY_WAREHOUSE'], true));
+                $hasPendingReceipt = $po->purchaseReceipts->contains(fn ($r) => in_array($r->status, ['PENDING', 'SUBMITTED_BY_WAREHOUSE', 'PENDING_SITE_ENGINEER', 'WAREHOUSE_RECEIPT_SUBMITTED'], true));
             } else {
-                $hasPendingReceipt = $po->purchaseReceipts()->whereIn('status', ['PENDING', 'SUBMITTED_BY_WAREHOUSE'])->exists();
+                $hasPendingReceipt = $po->purchaseReceipts()->whereIn('status', ['PENDING', 'SUBMITTED_BY_WAREHOUSE', 'PENDING_SITE_ENGINEER', 'WAREHOUSE_RECEIPT_SUBMITTED'])->exists();
             }
         }
 
@@ -672,6 +672,8 @@ class AdminMasterOrdersController extends Controller
             'rejection_reason' => 'nullable|string',
             'is_actual_po' => 'nullable|boolean',
             'finalized_at' => 'nullable|date',
+            'receipt_status' => 'nullable|string',
+            'delivery_status' => 'nullable|string',
             'admin_reason' => 'required|string|min:3|max:500',
             'sync_receipt' => 'nullable|boolean',
             'sync_pr' => 'nullable|boolean',
@@ -744,6 +746,10 @@ class AdminMasterOrdersController extends Controller
                 $po->rejection_reason = $validated['rejection_reason'];
             }
 
+            if (array_key_exists('delivery_status', $validated)) {
+                $po->delivery_status = $validated['delivery_status'];
+            }
+
             // Handle Actual PO flag / finalization timestamp
             if (array_key_exists('is_actual_po', $validated)) {
                 if ($validated['is_actual_po']) {
@@ -754,6 +760,10 @@ class AdminMasterOrdersController extends Controller
                 } else {
                     $po->finalized_at = null;
                     $po->finalized_by_user_id = null;
+                    // Reset delivery status if rolling back to ISSUED so it's not permanently stuck as DELIVERED
+                    if (! array_key_exists('delivery_status', $validated) && in_array($po->status, ['ISSUED', 'PO_ISSUED'], true)) {
+                        $po->delivery_status = 'IN_RECEIPT';
+                    }
                 }
             } elseif (! empty($validated['finalized_at'])) {
                 $po->finalized_at = Carbon::parse($validated['finalized_at']);
@@ -848,8 +858,18 @@ class AdminMasterOrdersController extends Controller
                 foreach ($po->purchaseReceipts as $receipt) {
                     if ($po->supplier_id) {
                         $receipt->supplier_id = $po->supplier_id;
-                        $receipt->save();
                     }
+
+                    if (! empty($validated['receipt_status'])) {
+                        $receipt->status = $validated['receipt_status'];
+                    } elseif (array_key_exists('is_actual_po', $validated) && ! $validated['is_actual_po'] && in_array($po->status, ['ISSUED', 'PO_ISSUED'], true)) {
+                        // If reverting back to ISSUED and unmarking Actual PO, reset receipt to pending site engineer
+                        if ($receipt->status === 'APPROVED') {
+                            $receipt->status = 'PENDING_SITE_ENGINEER';
+                        }
+                    }
+
+                    $receipt->save();
                     foreach ($freshItems as $pItem) {
                         $rcptItem = PurchaseReceiptItem::where('purchase_receipt_id', $receipt->id)
                             ->where('purchase_order_item_id', $pItem->id)

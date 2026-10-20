@@ -60,6 +60,7 @@ export const AdminForceEditModal: React.FC<AdminForceEditModalProps> = ({
   const [adminReason, setAdminReason] = useState<string>('');
   const [syncReceipt, setSyncReceipt] = useState<boolean>(true);
   const [syncPr, setSyncPr] = useState<boolean>(true);
+  const [receiptStatus, setReceiptStatus] = useState<string>('');
   const [items, setItems] = useState<ItemDraft[]>([]);
 
   useEffect(() => {
@@ -100,6 +101,9 @@ export const AdminForceEditModal: React.FC<AdminForceEditModalProps> = ({
       setNotes(po.notes || '');
       setFinancialNotes(po.financial_notes || '');
       setAdminReason('');
+
+      const existingReceipt = (po.purchase_receipts && po.purchase_receipts[0]) || po.receipt;
+      setReceiptStatus(existingReceipt?.status || '');
 
       // Populate items
       const draftItems: ItemDraft[] = (po.items || []).map((it: any) => ({
@@ -218,6 +222,7 @@ export const AdminForceEditModal: React.FC<AdminForceEditModalProps> = ({
         admin_reason: adminReason.trim(),
         sync_receipt: syncReceipt,
         sync_pr: syncPr,
+        receipt_status: receiptStatus || null,
         items: formattedItems,
       };
 
@@ -335,12 +340,19 @@ export const AdminForceEditModal: React.FC<AdminForceEditModalProps> = ({
                     <label className="block text-slate-400 font-bold mb-1.5">حالة أمر الشراء (Status Override):</label>
                     <select
                       value={status}
-                      onChange={(e) => setStatus(e.target.value)}
+                      onChange={(e) => {
+                        const nextSt = e.target.value;
+                        setStatus(nextSt);
+                        if (nextSt === 'ISSUED') {
+                          setIsActualPo(false);
+                          setReceiptStatus('PENDING_SITE_ENGINEER');
+                        }
+                      }}
                       className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 font-bold focus:border-amber-400 focus:outline-none"
                     >
                       {allowedStatuses.map((st) => (
                         <option key={st.value} value={st.value}>
-                          {st.label} ({st.value})
+                          {st.label.includes(st.value) ? st.label : `${st.label} (${st.value})`}
                         </option>
                       ))}
                     </select>
@@ -586,6 +598,28 @@ export const AdminForceEditModal: React.FC<AdminForceEditModalProps> = ({
                     </div>
                   </label>
                 </div>
+
+                {/* GRN Status Override */}
+                {(orderData?.receipt || (orderData?.purchase_receipts && orderData?.purchase_receipts.length > 0) || receiptStatus) && (
+                  <div className="rounded-lg border border-purple-500/30 bg-purple-950/20 p-3 space-y-1.5">
+                    <label className="block text-slate-300 font-bold text-xs">
+                      حالة إذن / محضر الاستلام المرتبط (GRN Status Override):
+                    </label>
+                    <select
+                      value={receiptStatus}
+                      onChange={(e) => setReceiptStatus(e.target.value)}
+                      className="w-full rounded-lg border border-purple-500/40 bg-slate-900 px-3 py-2 text-slate-100 font-bold text-xs focus:border-amber-400 focus:outline-none"
+                    >
+                      <option value="">— إبقاء الحالة الحالية للمحضر —</option>
+                      <option value="PENDING_SITE_ENGINEER">قيد الانتظار - فحص واعتماد مهندس الموقع (PENDING_SITE_ENGINEER)</option>
+                      <option value="APPROVED">معتمد ومطابق بالموقع (APPROVED)</option>
+                      <option value="CANCELLED">ملغي (CANCELLED)</option>
+                    </select>
+                    <p className="text-[11px] text-purple-300/80">
+                      * إذا اخترت <strong>قيد الانتظار</strong>، سيظهر إذن الاستلام فوراً في صفحة مهندس الموقع / المستلم في قائمة أذونات الاستلام قيد الفحص.
+                    </p>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs pt-1">
                   <div>

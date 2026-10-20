@@ -135,6 +135,8 @@ export interface ForceUpdateOrderPayload {
   rejection_reason?: string | null;
   is_actual_po?: boolean;
   finalized_at?: string | null;
+  receipt_status?: string | null;
+  delivery_status?: string | null;
   admin_reason: string;
   sync_receipt?: boolean;
   sync_pr?: boolean;
