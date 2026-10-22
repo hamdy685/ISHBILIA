@@ -148,6 +148,8 @@ export const ProcurementDashboardPage: React.FC = () => {
             actionLabel: '⚡ إصدار ملحق توريد سريع',
             created_at: pr.created_at,
             timeAgo: pr.created_at ? formatDateTime24h(pr.created_at) : undefined,
+            purpose: pr.notes || (pr as any).purpose || pr.justification || '',
+            notes: pr.notes || (pr as any).purpose || '',
             request_type: pr.request_type,
             date_needed: pr.date_needed || undefined,
             priority: 'URGENT' as const,
@@ -184,6 +186,8 @@ export const ProcurementDashboardPage: React.FC = () => {
               actionLabel: 'إصدار أمر الشراء',
               created_at: pr.created_at,
               timeAgo: pr.created_at ? formatDateTime24h(pr.created_at) : undefined,
+              purpose: pr.notes || (pr as any).purpose || pr.justification || '',
+              notes: pr.notes || (pr as any).purpose || '',
               request_type: pr.request_type,
               date_needed: pr.date_needed || undefined,
               priority: pr.priority,
@@ -241,6 +245,8 @@ export const ProcurementDashboardPage: React.FC = () => {
                 actionLabel: '⚡ إصدار أمر الشراء الفعلي',
                 created_at: po.purchase_request?.created_at || po.created_at || undefined,
                 timeAgo: (po.purchase_request?.created_at || po.created_at || po.updated_at) ? formatDateTime24h(po.purchase_request?.created_at || po.created_at || po.updated_at) : undefined,
+                purpose: po.purchase_request?.notes || (po as any).purchase_request?.purpose || po.notes || (po as any).purpose || '',
+                notes: po.purchase_request?.notes || po.notes || '',
                 items_count: itemsList.length,
                 items_list: itemsList,
               };
@@ -262,6 +268,8 @@ export const ProcurementDashboardPage: React.FC = () => {
               actionLabel: 'تعديل أمر الشراء',
               created_at: po.purchase_request?.created_at || po.created_at || undefined,
               timeAgo: (po.purchase_request?.created_at || po.created_at) ? formatDateTime24h(po.purchase_request?.created_at || po.created_at) : undefined,
+              purpose: po.purchase_request?.notes || (po as any).purchase_request?.purpose || po.notes || (po as any).purpose || '',
+              notes: po.purchase_request?.notes || po.notes || '',
               items_count: po.items?.length || 0,
               items_list: po.items?.map((it: any) => {
                 const poQty = Number(it.quantity ?? it.actual_quantity ?? 0);

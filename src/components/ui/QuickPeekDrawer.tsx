@@ -184,13 +184,13 @@ export const QuickPeekDrawer: React.FC<QuickPeekDrawerProps> = ({
                 </div>
 
                 {/* ── Justification / Notes ── */}
-                {((type === 'PR' && prData?.justification) || (type === 'PO' && poData?.notes)) && (
+                {((type === 'PR' && (prData?.notes || prData?.purpose || prData?.justification)) || (type === 'PO' && (poData?.purchase_request?.notes || poData?.purchase_request?.purpose || poData?.notes || (poData as any)?.purpose))) && (
                   <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3.5 space-y-1">
                     <span className="text-[11px] font-bold text-slate-400 block">
-                      {type === 'PR' ? '📝 مبررات الاحتياج والغرض:' : '📌 ملاحظات أمر الشراء:'}
+                      {type === 'PR' ? '📝 مبررات الاحتياج والغرض من الشراء:' : '📌 ملاحظات والغرض من الشراء:'}
                     </span>
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      {type === 'PR' ? prData?.justification : poData?.notes}
+                    <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap">
+                      {type === 'PR' ? (prData?.notes || prData?.purpose || prData?.justification) : (poData?.purchase_request?.notes || poData?.purchase_request?.purpose || poData?.notes || (poData as any)?.purpose)}
                     </p>
                   </div>
                 )}

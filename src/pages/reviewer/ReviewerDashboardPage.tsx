@@ -163,6 +163,8 @@ export const ReviewerDashboardPage: React.FC = () => {
           actionLabel: req.status === 'SUBMITTED' ? 'مراجعة وتعديل الطلب' : 'استكمال المراجعة',
           created_at: req.created_at,
           timeAgo: req.created_at ? formatDateTime24h(req.created_at) : undefined,
+          purpose: req.notes || (req as any).purpose || req.justification || '',
+          notes: req.notes || (req as any).purpose || '',
           request_type: req.request_type,
           date_needed: req.date_needed || undefined,
           priority: req.priority,
@@ -233,6 +235,8 @@ export const ReviewerDashboardPage: React.FC = () => {
         },
         timeAgo: q.created_at ? q.created_at.slice(0, 10) : undefined,
         created_at: q.created_at || undefined,
+        purpose: q.notes || (q as any).purpose || q.justification || '',
+        notes: q.notes || (q as any).purpose || '',
         items_count: q.items?.length || 0,
         items_list: (q.items || []).map((it) => ({
           description: it?.item_description || it?.item?.name || 'صنف',

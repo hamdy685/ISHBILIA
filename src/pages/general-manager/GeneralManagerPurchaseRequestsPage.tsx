@@ -699,6 +699,23 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
               {/* Timeline */}
               <PurchaseRequestTimeline request={selected} />
 
+              {/* Purpose of Purchase - Read Only */}
+              {(selected.notes || (selected as any).purpose) && (
+                <div className="rounded-2xl border border-amber-500/40 bg-amber-950/20 p-4 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+                      <span>🎯</span> الغرض من الشراء ومبررات الاحتياج:
+                    </span>
+                    <span className="text-[10px] text-amber-500 font-semibold bg-amber-950/60 border border-amber-800/60 px-2 py-0.5 rounded-md">
+                      🔒 نص أصلي من الطالب (للقراءة فقط)
+                    </span>
+                  </div>
+                  <p className="text-xs sm:text-sm text-slate-100 leading-relaxed whitespace-pre-wrap break-words select-text font-medium">
+                    {selected.notes || (selected as any).purpose}
+                  </p>
+                </div>
+              )}
+
               {/* Comment */}
               <div>
                 <label className="text-xs font-bold text-slate-300">

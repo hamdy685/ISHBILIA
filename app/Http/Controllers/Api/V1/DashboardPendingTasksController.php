@@ -56,6 +56,8 @@ class DashboardPendingTasksController extends Controller
                 'reason' => $isReturned
                     ? 'تمت إعادة الطلب إليك للمراجعة والتعديل قبل إعادة الإرسال'
                     : ($isRejected ? ($pr->rejection_reason ?: 'تم رفض الطلب ويحتاج التعديل أو المراجعة') : 'مسودة لم تُرسل بعد للمراجعة والاعتماد'),
+                'notes' => $pr->notes,
+                'purpose' => $pr->notes,
                 'actionUrl' => "/employee/requests/{$pr->id}/edit",
                 'actionLabel' => ($isReturned || $isRejected) ? 'تعديل وإعادة الإرسال' : 'فتح وتعديل المسودة',
                 'stageBadge' => [
@@ -246,6 +248,8 @@ class DashboardPendingTasksController extends Controller
                         'reason' => $isSupplement
                             ? 'طلب كمالة عاجل بانتظار مراجعتك واعتمادك الفني للانتقال الفوري إلى مدير المشتريات ⚡'
                             : ($pr->status === 'SUBMITTED' ? 'طلب جديد مقدم بانتظار مراجعتك واعتمادك الفني' : 'طلب قيد المراجعة الفنية'),
+                        'notes' => $pr->notes,
+                        'purpose' => $pr->notes,
                         'next_actor' => $isSupplement
                             ? 'مدير المشتريات (تنفيذ فوري مباشر دون مالية أو تنفيذي)'
                             : 'المدير العام للاعتماد النهائي',
@@ -367,6 +371,8 @@ class DashboardPendingTasksController extends Controller
                         'amount' => $q->total_estimated_cost ? (float) $q->total_estimated_cost : null,
                         'urgency' => 'HIGH',
                         'reason' => 'عروض أسعار مسجلة بانتظار التوصية الفنية لاختيار العرض الأنسب',
+                        'notes' => $q->notes,
+                        'purpose' => $q->notes,
                         'actionUrl' => "/reviewer/purchase-quotes?open={$q->id}",
                         'actionLabel' => 'البت وترشيح عروض الأسعار',
                         'stageBadge' => [
@@ -482,6 +488,8 @@ class DashboardPendingTasksController extends Controller
                     'amount' => $pr->total_estimated_cost ? (float) $pr->total_estimated_cost : null,
                     'urgency' => 'CRITICAL',
                     'reason' => 'طلب شراء معتمد بانتظار قرارك التنفيذي النهائي',
+                    'notes' => $pr->notes,
+                    'purpose' => $pr->notes,
                     'actionUrl' => "/general-manager/purchase-requests?open={$pr->id}",
                     'actionLabel' => 'اعتماد أو رفض الطلب',
                     'created_at' => $pr->created_at?->toISOString(),
@@ -520,6 +528,8 @@ class DashboardPendingTasksController extends Controller
                     'requester' => $pr->requester?->name,
                     'urgency' => 'CRITICAL',
                     'reason' => 'عروض أسعار موصى بها بانتظار اعتماد الترسية التنفيذية',
+                    'notes' => $pr->notes,
+                    'purpose' => $pr->notes,
                     'actionUrl' => "/general-manager/purchase-quotes?open={$pr->id}",
                     'actionLabel' => 'البت والاعتماد التنفيذي',
                     'created_at' => $pr->created_at?->toISOString(),

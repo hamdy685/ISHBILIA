@@ -142,6 +142,7 @@ export interface PurchaseOrder {
     } | null;
     date_needed?: string | null;
     notes?: string | null;
+    purpose?: string | null;
     department?: {
       id: number;
       name: string;
@@ -208,6 +209,7 @@ export interface PurchaseOrder {
   budget_code?: string | null;
   financial_notes?: string | null;
   notes?: string | null;
+  purpose?: string | null;
   finalized_by_user_id?: number | null;
   finalized_at?: string | null;
   finalization_notes?: string | null;

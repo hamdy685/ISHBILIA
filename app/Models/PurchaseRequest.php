@@ -99,6 +99,11 @@ class PurchaseRequest extends Model
         return $this->request_type === 'OFFICE_SUPPLIES';
     }
 
+    public function getPurposeAttribute(): ?string
+    {
+        return $this->notes;
+    }
+
     public function isComplementaryRequest(): bool
     {
         if ($this->request_type === 'COMPLEMENTARY') {

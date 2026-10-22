@@ -45,6 +45,7 @@ class PurchaseRequestResource extends JsonResource
                 ? $this->date_needed->format('Y-m-d')
                 : ($this->date_needed ? substr((string) $this->date_needed, 0, 10) : null),
             'notes' => $this->notes,
+            'purpose' => $this->notes,
             'rejection_reason' => $this->rejection_reason,
             'return_reason' => $this->return_reason,
             'submitted_at' => $this->submitted_at instanceof \DateTimeInterface

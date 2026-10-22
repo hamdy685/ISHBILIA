@@ -15,6 +15,7 @@ import { formatCleanNumber, formatCleanQty } from '../../utils/numberFormat';
 import { formatRebarDisplay } from '../../utils/rebar';
 import { formatDateTime24h } from '../../utils/dateTime';
 import { PurchaseRequestType } from '../../types/purchaseRequest';
+import { cachedGetData } from '../../api/client';
 
 export interface ActionInboxItemDetail {
   description: string;
@@ -66,6 +67,8 @@ export interface ActionInboxItem {
   items_list?: ActionInboxItemDetail[];
   requires_warehouse_receipt?: boolean;
   next_actor?: string;
+  purpose?: string | null;
+  notes?: string | null;
 
   // --- Direct Action Callbacks ---
   onDirectApprove?: (
@@ -232,11 +235,84 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
     roleName?.includes('قسم') ||
     roleName?.includes('مراجع')
   );
+  const isGeneralManager = Boolean(
+    hasRole('general_manager') ||
+    hasRole('execution_manager') ||
+    roleName?.includes('تنفيذ') ||
+    roleName?.includes('مدير عام') ||
+    roleName?.includes('general_manager')
+  );
 
   const safeItems = Array.isArray(items) ? items : [];
 
   // Track optimistically dismissed items after fast modal action
   const [dismissedItemIds, setDismissedItemIds] = useState<Set<string | number>>(new Set());
+
+  // Purchase Purpose Inspection Modal State (Mobile friendly)
+  const [purposeModal, setPurposeModal] = useState<{
+    isOpen: boolean;
+    item: ActionInboxItem | null;
+    loading: boolean;
+    fullPurpose: string | null;
+  }>({
+    isOpen: false,
+    item: null,
+    loading: false,
+    fullPurpose: null,
+  });
+
+  const handleOpenPurposeModal = async (item: ActionInboxItem) => {
+    const prId = Number(item.rawId || item.pr_id || item.purchase_request_id || 0);
+    const initialText = (item.purpose || item.notes || '').trim();
+
+    if (initialText) {
+      setPurposeModal({
+        isOpen: true,
+        item,
+        loading: false,
+        fullPurpose: initialText,
+      });
+      return;
+    }
+
+    setPurposeModal({
+      isOpen: true,
+      item,
+      loading: true,
+      fullPurpose: null,
+    });
+
+    try {
+      if (prId > 0) {
+        const res = await cachedGetData<{ data: any }>(`/purchase-requests/${prId}`);
+        const pr = res?.data || res;
+        const fetchedPurpose = (pr?.notes || pr?.purpose || pr?.justification || '').trim() || null;
+        setPurposeModal({
+          isOpen: true,
+          item,
+          loading: false,
+          fullPurpose: fetchedPurpose,
+        });
+        item.purpose = fetchedPurpose;
+        item.notes = fetchedPurpose;
+      } else {
+        setPurposeModal({
+          isOpen: true,
+          item,
+          loading: false,
+          fullPurpose: null,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to fetch original purchase purpose:', err);
+      setPurposeModal({
+        isOpen: true,
+        item,
+        loading: false,
+        fullPurpose: null,
+      });
+    }
+  };
 
   // Quick Receipt Inspection Modal State
   const [receiptInspectionModal, setReceiptInspectionModal] = useState<{
@@ -1099,7 +1175,25 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                         </button>
                       )}
 
-                      {canPeek && !item.onPreviewReceipt && (
+                      {/* For General Manager: Replace معاينة entirely with الغرض من الشراء */}
+                      {isGeneralManager && (item.type === 'PR' || item.type === 'QUOTE' || canPeek) && !item.onPreviewReceipt && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleOpenPurposeModal(item);
+                          }}
+                          className="rounded-xl border border-amber-500/60 bg-amber-950/80 hover:bg-amber-900/90 text-amber-200 hover:text-white px-3.5 py-1.5 text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center gap-1.5 shadow-sm active:scale-95"
+                          title="الغرض من الشراء الأصلي الذي أدخله مقدم الطلب"
+                        >
+                          <span>🎯</span>
+                          <span>الغرض من الشراء</span>
+                        </button>
+                      )}
+
+                      {/* For Other Roles: Standard معاينة */}
+                      {!isGeneralManager && canPeek && !item.onPreviewReceipt && (
                         <button
                           type="button"
                           onClick={(e) => {
@@ -1111,6 +1205,23 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                         >
                           <span>👁️</span>
                           <span className="mr-1">معاينة</span>
+                        </button>
+                      )}
+
+                      {/* For Other Reviewers/Officials: Also provide الغرض من الشراء button on PR/QUOTE items */}
+                      {!isGeneralManager && (item.type === 'PR' || item.type === 'QUOTE') && !item.onPreviewReceipt && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleOpenPurposeModal(item);
+                          }}
+                          className="rounded-xl border border-amber-600/50 bg-amber-950/40 hover:bg-amber-900/70 text-amber-300 hover:text-white px-2.5 py-1.5 text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center gap-1 shadow-xs"
+                          title="الغرض من الشراء الأصلي الذي أدخله مقدم الطلب"
+                        >
+                          <span>🎯</span>
+                          <span>الغرض</span>
                         </button>
                       )}
                     </div>
@@ -1395,6 +1506,101 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
           onClose={() => setActualPoModal({ isOpen: false, poId: null, item: null })}
           onSuccess={handleActualPoSuccess}
         />
+      )}
+
+      {/* ── Purchase Purpose Inspection Modal (Mobile-Optimized) ── */}
+      {purposeModal.isOpen && purposeModal.item && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md transition-all duration-200"
+          dir="rtl"
+          onClick={() => setPurposeModal({ isOpen: false, item: null, loading: false, fullPurpose: null })}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="purpose-modal-title"
+        >
+          <div
+            className="relative w-full max-w-[94vw] sm:max-w-md rounded-2xl sm:rounded-3xl border border-amber-500/50 bg-gradient-to-b from-slate-900 via-slate-950 to-slate-950 p-4 sm:p-5 shadow-2xl shadow-black/80 flex flex-col gap-3.5 max-h-[88vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header: Title, Code Badge, and Close Button × */}
+            <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-xl sm:text-2xl select-none shrink-0">🎯</span>
+                <div className="min-w-0">
+                  <h3 id="purpose-modal-title" className="text-sm sm:text-base font-black text-slate-100 truncate">
+                    الغرض من الشراء
+                  </h3>
+                  <span className="font-mono text-[11px] font-bold text-cyan-400 bg-cyan-950/80 border border-cyan-800/60 px-2 py-0.5 rounded-md inline-block mt-0.5">
+                    {purposeModal.item.code || `PR-${purposeModal.item.rawId}`}
+                  </span>
+                </div>
+              </div>
+
+              {/* Mobile touch-friendly × close button */}
+              <button
+                type="button"
+                onClick={() => setPurposeModal({ isOpen: false, item: null, loading: false, fullPurpose: null })}
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-700 bg-slate-850 hover:bg-rose-950/50 text-xl font-black text-slate-300 hover:border-rose-500/60 hover:text-rose-300 transition-all cursor-pointer active:scale-95"
+                aria-label="إغلاق النافذة"
+                title="إغلاق"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Requester & Department Metadata Bar */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-300 bg-slate-950/60 border border-slate-800/80 rounded-xl px-3 py-2">
+              {purposeModal.item.requester && (
+                <div className="flex items-center gap-1.5 truncate">
+                  <span className="text-slate-500">👤 مقدم الطلب:</span>
+                  <strong className="text-slate-100 font-bold truncate">{purposeModal.item.requester}</strong>
+                </div>
+              )}
+              {purposeModal.item.department && (
+                <div className="flex items-center gap-1 text-[11px] text-slate-400">
+                  <span>🏢</span>
+                  <span>({purposeModal.item.department})</span>
+                </div>
+              )}
+            </div>
+
+            {/* Purpose Body Content */}
+            <div className="flex-1 overflow-y-auto custom-select-scrollbar rounded-xl border border-slate-800/90 bg-slate-950/90 p-3.5 sm:p-4 text-slate-100 min-h-[110px] max-h-[46vh]">
+              {purposeModal.loading ? (
+                <div className="flex flex-col items-center justify-center gap-2 py-6 text-xs text-amber-300 animate-pulse">
+                  <span className="text-2xl animate-spin">⏳</span>
+                  <span>جاري تحميل الغرض الأصلي للطلب من السيرفر...</span>
+                </div>
+              ) : purposeModal.fullPurpose ? (
+                <p className="text-xs sm:text-sm font-medium leading-relaxed whitespace-pre-wrap break-words select-text text-slate-200">
+                  {purposeModal.fullPurpose}
+                </p>
+              ) : (
+                <div className="flex flex-col items-center justify-center gap-1.5 py-6 text-xs text-slate-400 text-center">
+                  <span>ℹ️</span>
+                  <span>لم يتم العثور على نص مسجل للغرض من الشراء في هذا الطلب.</span>
+                </div>
+              )}
+            </div>
+
+            {/* Read-Only Safety Badge */}
+            <div className="flex items-center gap-2 rounded-xl border border-amber-500/25 bg-amber-950/20 px-3 py-2 text-[11px] text-amber-300/90 font-medium select-none">
+              <span className="text-sm">🔒</span>
+              <span>نص أصلي للقراءة فقط كما حرره الطالب (غير قابل للتعديل أثناء المراجعة أو الاعتماد).</span>
+            </div>
+
+            {/* Footer Action Bar */}
+            <div className="flex items-center justify-end pt-1">
+              <button
+                type="button"
+                onClick={() => setPurposeModal({ isOpen: false, item: null, loading: false, fullPurpose: null })}
+                className="w-full sm:w-auto px-5 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 transition-all cursor-pointer active:scale-95"
+              >
+                إغلاق النافذة
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );

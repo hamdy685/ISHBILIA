@@ -258,6 +258,7 @@ export interface PurchaseRequest {
   date_needed?: string | null;
 
   notes?: string | null;
+  purpose?: string | null;
   rejection_reason?: string | null;
   submitted_at?: string | null;
   created_at: string;

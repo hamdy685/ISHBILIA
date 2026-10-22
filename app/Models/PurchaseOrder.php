@@ -69,6 +69,11 @@ class PurchaseOrder extends Model
         return $this->items()->where('is_supplementary', true)->exists();
     }
 
+    public function getPurposeAttribute(): ?string
+    {
+        return $this->purchaseRequest?->notes ?? $this->notes;
+    }
+
     public function getWarehouseApprovalAttribute(): array
     {
         $requiresWarehouse = $this->requiresWarehouseReceipt();
