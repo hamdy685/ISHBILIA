@@ -39,11 +39,13 @@ class CreatePurchaseOrderRequest extends FormRequest
             'items.*.supplier_id' => ['nullable', 'integer', 'exists:suppliers,id'],
             'groups' => ['nullable', 'array'],
             'groups.*.group_name' => ['nullable', 'string', 'max:150'],
+            'groups.*.group_type' => ['nullable', 'string', 'in:SHARED_SHIPMENT,STEEL_WEIGHING,NONE'],
             'groups.*.supplier_id' => ['nullable', 'integer', 'exists:suppliers,id'],
             'groups.*.one_time_supplier_name' => ['nullable', 'string', 'max:150'],
             'groups.*.manual_po_number' => ['nullable', 'string', 'max:50'],
             'groups.*.payment_terms' => ['nullable', 'string', 'max:150'],
             'groups.*.delivery_date' => ['nullable', 'date'],
+            'groups.*.notes' => ['nullable', 'string', 'max:1000'],
             'groups.*.items' => ['required_with:groups', 'array', 'min:1'],
         ];
     }

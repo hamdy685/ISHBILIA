@@ -96,6 +96,8 @@ class PurchaseReceiptController extends Controller
             'purchaseOrder.purchaseRequest.siteEngineer',
             'purchaseOrder.items.item',
             'purchaseOrder.items.prItem',
+            'purchaseOrder.items.shipmentGroup',
+            'purchaseOrder.shipmentGroups.items',
             'purchaseRequest.department',
             'purchaseRequest.requester',
             'purchaseRequest.siteEngineer',
@@ -105,6 +107,7 @@ class PurchaseReceiptController extends Controller
             'actualReceiver',
             'items.purchaseOrderItem.item',
             'items.purchaseOrderItem.prItem',
+            'items.purchaseOrderItem.shipmentGroup',
             'weighingGroup.items',
         ]);
 

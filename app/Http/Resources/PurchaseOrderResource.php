@@ -163,6 +163,39 @@ class PurchaseOrderResource extends JsonResource
                     ];
                 });
             }),
+            'shipment_groups' => $this->whenLoaded('shipmentGroups', function () {
+                return $this->shipmentGroups->map(function ($sg) {
+                    return [
+                        'id'                   => $sg->id,
+                        'group_number'         => $sg->group_number,
+                        'group_name'           => $sg->group_name,
+                        'status'               => $sg->status,
+                        'vehicle_plate_number' => $sg->vehicle_plate_number,
+                        'driver_name'          => $sg->driver_name,
+                        'notes'                => $sg->notes,
+                        'items_count'          => $sg->relationLoaded('items') ? $sg->items->count() : $sg->items()->count(),
+                        'items'                => $sg->relationLoaded('items') ? PurchaseOrderItemResource::collection($sg->items) : [],
+                    ];
+                });
+            }),
+            'weighing_groups' => $this->whenLoaded('weighingGroups', function () {
+                return $this->weighingGroups->map(function ($wg) {
+                    return [
+                        'id'                    => $wg->id,
+                        'group_number'          => $wg->group_number,
+                        'group_type'            => $wg->group_type,
+                        'status'                => $wg->status,
+                        'total_ordered_weight'  => (string) $wg->total_ordered_weight,
+                        'total_received_weight' => $wg->total_received_weight !== null ? (string) $wg->total_received_weight : null,
+                        'weight_difference'     => $wg->weight_difference !== null ? (string) $wg->weight_difference : null,
+                        'uom'                   => $wg->uom,
+                        'unit_price'            => (string) $wg->unit_price,
+                        'total_amount'          => (string) $wg->total_amount,
+                        'items_count'           => $wg->relationLoaded('items') ? $wg->items->count() : $wg->items()->count(),
+                        'items'                 => $wg->relationLoaded('items') ? $wg->items : [],
+                    ];
+                });
+            }),
         ];
     }
 }

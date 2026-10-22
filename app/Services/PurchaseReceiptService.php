@@ -77,7 +77,9 @@ class PurchaseReceiptService
                 'items.item',
                 'items.prItem',
                 'items.weighingGroupItem',
+                'items.shipmentGroup',
                 'weighingGroups.items',
+                'shipmentGroups.items',
                 'receipts.warehouseKeeper',
             ])
             // 1. Status allows receiving (issued or approved)
@@ -179,6 +181,8 @@ class PurchaseReceiptService
             'purchaseOrder.purchaseRequest.siteEngineer',
             'purchaseOrder.items.item',
             'purchaseOrder.items.prItem',
+            'purchaseOrder.items.shipmentGroup',
+            'purchaseOrder.shipmentGroups.items',
             'purchaseRequest.department',
             'purchaseRequest.requester',
             'purchaseRequest.siteEngineer',
@@ -186,6 +190,7 @@ class PurchaseReceiptService
             'siteEngineer',
             'items.purchaseOrderItem.item',
             'items.purchaseOrderItem.prItem',
+            'items.purchaseOrderItem.shipmentGroup',
             'weighingGroup.items',
         ])->orderByDesc('created_at');
 
@@ -359,6 +364,11 @@ class PurchaseReceiptService
                     'received_quantity' => $finalReceivedQuantity,
                     'notes' => $noteText,
                 ]);
+            }
+
+            $affectedShipmentGroupIds = $orderItems->pluck('shipment_group_id')->filter()->unique()->all();
+            foreach ($affectedShipmentGroupIds as $sgId) {
+                app(\App\Services\SharedShipmentGroupService::class)->updateShipmentStatus($sgId);
             }
 
             if ($weighingGroup) {
@@ -575,6 +585,17 @@ class PurchaseReceiptService
             app(NotificationService::class)->markEntityNotificationsAsRead($receipt);
             if ($receipt->purchaseOrder) {
                 app(NotificationService::class)->markEntityNotificationsAsRead($receipt->purchaseOrder);
+            }
+
+            $affectedShipmentGroupIds = $receipt->items()
+                ->join('purchase_order_items', 'purchase_receipt_items.purchase_order_item_id', '=', 'purchase_order_items.id')
+                ->whereNotNull('purchase_order_items.shipment_group_id')
+                ->pluck('purchase_order_items.shipment_group_id')
+                ->unique()
+                ->all();
+
+            foreach ($affectedShipmentGroupIds as $sgId) {
+                app(\App\Services\SharedShipmentGroupService::class)->updateShipmentStatus($sgId);
             }
 
             $itemDescriptions = $receipt->items->map(function ($item) {

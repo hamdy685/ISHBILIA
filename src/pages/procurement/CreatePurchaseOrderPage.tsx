@@ -49,6 +49,7 @@ interface PoItemInput {
   selected?: boolean;
   group_id?: string;
   group_name?: string;
+  group_type?: 'SHARED_SHIPMENT' | 'STEEL_WEIGHING';
 }
 
 export const CreatePurchaseOrderPage: React.FC = () => {
@@ -283,7 +284,7 @@ export const CreatePurchaseOrderPage: React.FC = () => {
       }];
     }
 
-    const map = new Map<string, { id: string; name: string; items: PoItemInput[]; isCustomGroup: boolean }>();
+    const map = new Map<string, { id: string; name: string; items: PoItemInput[]; isCustomGroup: boolean; group_type?: 'SHARED_SHIPMENT' | 'STEEL_WEIGHING' }>();
 
     activeItems.forEach((item, idx) => {
       const gid = item.group_id ? `group_${item.group_id}` : `separate_item_${item.pr_item_id || idx}`;
@@ -294,6 +295,7 @@ export const CreatePurchaseOrderPage: React.FC = () => {
           name: gname,
           items: [],
           isCustomGroup: Boolean(item.group_id),
+          group_type: item.group_type,
         });
       }
       map.get(gid)!.items.push(item);
@@ -320,18 +322,44 @@ export const CreatePurchaseOrderPage: React.FC = () => {
     );
   };
 
-  const handleGroupSelectedItems = () => {
+  const isSteelItemChecker = (item: PoItemInput): boolean => {
+    const desc = (item.item_description || '').toLowerCase();
+    const uom = (item.uom || '').toLowerCase();
+    const nonSteel = ['رمل', 'سن', 'أسمنت', 'طوب', 'خشب', 'بلوك', 'عزل', 'مواسير', 'سيراميك', 'دهان', 'جبس', 'بلاط'];
+    if (nonSteel.some((ns) => desc.includes(ns))) return false;
+    return (
+      isRebarUnit(item.uom) ||
+      desc.includes('حديد') ||
+      desc.includes('تسليح') ||
+      desc.includes('rebar') ||
+      desc.includes('كانات') ||
+      desc.includes('لنية') ||
+      desc.includes('لينية') ||
+      uom.includes('ton') ||
+      uom.includes('طن')
+    );
+  };
+
+  // ── Handler 1: Shared Shipment Group (دمج كشحنة واحدة) ──
+  const handleGroupAsShipment = () => {
     const selectedIndices = poItems
       .map((item, idx) => (!item.is_already_ordered && item.selected ? idx : -1))
       .filter((idx) => idx !== -1);
 
     if (selectedIndices.length < 2) {
-      setError('يرجى تحديد بندين على الأقل لدمجهما كحزمة شحنة واحدة (مثل أصناف حديد التسليح المختلفة).');
+      setError('يرجى تحديد بندين على الأقل لدمجهما كشحنة مشتركة (نقلة / سيارة واحدة).');
       return;
     }
 
-    const gid = String(nextGroupIndex);
-    const gname = `حزمة شحنة مدمجة #${nextGroupIndex} (حديد/مواد مشتركة)`;
+    const selectedItems = selectedIndices.map((idx) => poItems[idx]);
+    const alreadySteel = selectedItems.find((it) => it.group_type === 'STEEL_WEIGHING');
+    if (alreadySteel) {
+      setError(`البند [${alreadySteel.item_description}] مدمج حالياً في وزنة حديد. يرجى فك دمجه أولاً قبل إدراجه في شحنة مشتركة.`);
+      return;
+    }
+
+    const gid = `shp_${nextGroupIndex}`;
+    const gname = `شحنة مشتركة #${nextGroupIndex} (نقلة واحدة)`;
 
     setPoItems((prev) => {
       const updated = [...prev];
@@ -340,6 +368,73 @@ export const CreatePurchaseOrderPage: React.FC = () => {
           ...updated[idx],
           group_id: gid,
           group_name: gname,
+          group_type: 'SHARED_SHIPMENT',
+          selected: false,
+        };
+      });
+      return updated;
+    });
+
+    setNextGroupIndex((prev) => prev + 1);
+    setError(null);
+  };
+
+  // ── Handler 2: Steel Weighing Group (تجميع وزنة حديد) ──
+  const handleGroupAsSteelWeighing = (autoAllSteel = false) => {
+    let indicesToGroup: number[] = [];
+
+    if (autoAllSteel) {
+      indicesToGroup = poItems
+        .map((item, idx) => (!item.is_already_ordered && isSteelItemChecker(item) ? idx : -1))
+        .filter((idx) => idx !== -1);
+      if (indicesToGroup.length < 2) {
+        setError('لم يتم العثور على بندين أو أكثر من حديد التسليح لدمجهما تلقائياً.');
+        return;
+      }
+    } else {
+      indicesToGroup = poItems
+        .map((item, idx) => (!item.is_already_ordered && item.selected ? idx : -1))
+        .filter((idx) => idx !== -1);
+
+      if (indicesToGroup.length < 1) {
+        setError('يرجى تحديد بنود حديد التسليح المراد تجميعها كوزنة ميزان بسكول واحدة.');
+        return;
+      }
+
+      // Strict validation: ALL selected items MUST be steel items
+      const nonSteelIdx = indicesToGroup.find((idx) => !isSteelItemChecker(poItems[idx]));
+      if (nonSteelIdx !== undefined) {
+        setError(`البند [${poItems[nonSteelIdx].item_description}] ليس من حديد التسليح. تجميع وزنة الحديد مخصص لبنود حديد التسليح فقط ويمنع خلط مواد أخرى معه.`);
+        return;
+      }
+
+      // Cross-conflict check: cannot be in a shared shipment
+      const inShipmentIdx = indicesToGroup.find((idx) => poItems[idx].group_type === 'SHARED_SHIPMENT');
+      if (inShipmentIdx !== undefined) {
+        setError(`البند [${poItems[inShipmentIdx].item_description}] مدمج حالياً ضمن شحنة مشتركة. يرجى فك دمج الشحنة أولاً قبل تجميعها كوزنة حديد.`);
+        return;
+      }
+    }
+
+    // Check uniform unit price for steel items
+    const selectedItems = indicesToGroup.map((idx) => poItems[idx]);
+    const prices = Array.from(new Set(selectedItems.map((it) => Number(it.unit_price) || 0)));
+    if (prices.length > 1) {
+      setError('لا يمكن تجميع بنود الحديد في وزنة واحدة لأن سعر الطن مختلف بين البنود. يجب أن يكون سعر الطن موحداً لكافة أقطار الوزنة.');
+      return;
+    }
+
+    const gid = `steel_${nextGroupIndex}`;
+    const gname = `وزنة حديد مجمعة #${nextGroupIndex} (بسكول)`;
+
+    setPoItems((prev) => {
+      const updated = [...prev];
+      indicesToGroup.forEach((idx) => {
+        updated[idx] = {
+          ...updated[idx],
+          group_id: gid,
+          group_name: gname,
+          group_type: 'STEEL_WEIGHING',
           selected: false,
         };
       });
@@ -354,48 +449,10 @@ export const CreatePurchaseOrderPage: React.FC = () => {
     setPoItems((prev) =>
       prev.map((item) =>
         item.selected
-          ? { ...item, group_id: '', group_name: '', selected: false }
+          ? { ...item, group_id: '', group_name: '', group_type: undefined, selected: false }
           : item
       )
     );
-    setError(null);
-  };
-
-  const handleAutoGroupSteel = () => {
-    const steelIndices = poItems
-      .map((item, idx) => {
-        if (item.is_already_ordered) return -1;
-        const isSteel =
-          isRebarUnit(item.uom) ||
-          (item.item_description || '').includes('حديد') ||
-          (item.uom || '').trim().toUpperCase() === 'TON' ||
-          (item.uom || '').trim().toUpperCase() === 'PARCEL';
-        return isSteel ? idx : -1;
-      })
-      .filter((idx) => idx !== -1);
-
-    if (steelIndices.length < 2) {
-      setError('لم يتم العثور على بندين أو أكثر من حديد التسليح لدمجهما تلقائياً.');
-      return;
-    }
-
-    const gid = `steel_${nextGroupIndex}`;
-    const gname = `شحنة حديد تسليح مدمجة (وزن مشترك)`;
-
-    setPoItems((prev) => {
-      const updated = [...prev];
-      steelIndices.forEach((idx) => {
-        updated[idx] = {
-          ...updated[idx],
-          group_id: gid,
-          group_name: gname,
-          selected: false,
-        };
-      });
-      return updated;
-    });
-
-    setNextGroupIndex((prev) => prev + 1);
     setError(null);
   };
 
@@ -405,6 +462,7 @@ export const CreatePurchaseOrderPage: React.FC = () => {
         ...item,
         group_id: '',
         group_name: '',
+        group_type: undefined,
         selected: false,
       }))
     );
@@ -592,6 +650,7 @@ export const CreatePurchaseOrderPage: React.FC = () => {
       } else {
         const groupsPayload = finalGroups.map((g) => ({
           group_name: g.name,
+          group_type: (g.group_type || 'NONE') as 'SHARED_SHIPMENT' | 'STEEL_WEIGHING' | 'NONE',
           supplier_id: g.items[0]?.supplier_id || (finalSupplierId ? Number(finalSupplierId) : undefined),
           payment_terms: paymentTerms || undefined,
           delivery_date: deliveryDate || undefined,
@@ -1103,30 +1162,39 @@ export const CreatePurchaseOrderPage: React.FC = () => {
                   </span>
                   <button
                     type="button"
-                    onClick={handleGroupSelectedItems}
+                    onClick={handleGroupAsShipment}
                     disabled={poItems.filter(i => i.selected && !i.is_already_ordered).length < 2}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 px-3 py-1.5 text-xs font-bold transition-all disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
-                    title="دمج البنود المحددة في أمر شراء واحد لأنها تأتي بشحنة ووزن واحد"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 px-3.5 py-1.5 text-xs font-bold transition-all disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
+                    title="تجميع بنود المواد المختلفة لتوريدها معاً كشحنة واحدة على نفس السيارة/النقلة"
                   >
-                    <span>🔗</span> دمج البنود المحددة كشحنة واحدة (حديد/مواد مشتركة)
+                    <span>🚚</span> دمج كشحنة واحدة
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleGroupAsSteelWeighing(false)}
+                    disabled={poItems.filter(i => i.selected && !i.is_already_ordered).length < 1}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 px-3.5 py-1.5 text-xs font-bold transition-all disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
+                    title="تجميع بنود حديد التسليح في وزنة ميزان بسكول واحدة"
+                  >
+                    <span>⚖️</span> تجميع وزنة حديد
                   </button>
                   <button
                     type="button"
                     onClick={handleUngroupSelectedItems}
                     disabled={!poItems.some(i => i.selected && i.group_id)}
                     className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-3 py-1.5 text-xs font-medium transition-all disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
-                    title="إلغاء دمج البنود المحددة وإرجاعها كأوامر شراء منفصلة"
+                    title="إلغاء دمج البنود المحددة وإرجاعها كبنود مستقلة"
                   >
                     <span>✂️</span> فك الدمج
                   </button>
                   {hasMultipleSteelItems && (
                     <button
                       type="button"
-                      onClick={handleAutoGroupSteel}
+                      onClick={() => handleGroupAsSteelWeighing(true)}
                       className="inline-flex items-center gap-1.5 rounded-lg bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-700/60 px-3 py-1.5 text-xs font-bold transition-all cursor-pointer"
-                      title="دمج جميع مقاسات حديد التسليح تلقائياً في شحنة واحدة"
+                      title="تجميع كافة بنود حديد التسليح تلقائياً في وزنة بسكول واحدة"
                     >
-                      <span>🏗️</span> تجميع تلقائي لبنود حديد التسليح
+                      <span>🏗️</span> تجميع تلقائي لحديد التسليح
                     </button>
                   )}
                 </div>
@@ -1211,9 +1279,13 @@ export const CreatePurchaseOrderPage: React.FC = () => {
                             <span className="inline-flex items-center gap-1 rounded bg-emerald-950/80 border border-emerald-700/70 px-2 py-0.5 text-[10.5px] font-bold text-emerald-300">
                               ✅ تم إصداره مسبقاً
                             </span>
+                          ) : item.group_type === 'STEEL_WEIGHING' ? (
+                            <span className="inline-flex items-center gap-1 rounded bg-indigo-950/80 border border-indigo-600/70 px-2 py-0.5 text-[10.5px] font-bold text-indigo-300">
+                              ⚖️ {item.group_name || 'وزنة حديد'}
+                            </span>
                           ) : item.group_id ? (
                             <span className="inline-flex items-center gap-1 rounded bg-amber-950/80 border border-amber-600/70 px-2 py-0.5 text-[10.5px] font-bold text-amber-300">
-                              🔗 {item.group_name || 'حزمة مدمجة'}
+                              🚚 {item.group_name || 'شحنة مشتركة'}
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 rounded bg-slate-800 border border-slate-700 px-2 py-0.5 text-[10.5px] font-bold text-cyan-300">

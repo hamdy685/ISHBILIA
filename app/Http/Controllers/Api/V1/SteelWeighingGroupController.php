@@ -143,4 +143,25 @@ class SteelWeighingGroupController extends Controller
             'data'    => $group,
         ]);
     }
+
+    /**
+     * Safely un-group a steel weighing group.
+     */
+    public function ungroup(Request $request, int $id): JsonResponse
+    {
+        $validated = $request->validate([
+            'reason' => 'nullable|string|max:500',
+        ]);
+
+        $group = $this->weighingService->ungroupWeighingGroup(
+            $request->user(),
+            $id,
+            $validated['reason'] ?? 'فك دمج وزنة الحديد'
+        );
+
+        return response()->json([
+            'message' => 'تم فك دمج وزنة الحديد بنجاح وإعادة البنود كبنود مستقلة.',
+            'data'    => $group,
+        ]);
+    }
 }

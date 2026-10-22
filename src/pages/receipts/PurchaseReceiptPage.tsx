@@ -929,6 +929,52 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                               </h4>
                             </div>
 
+                            {order.shipment_groups && order.shipment_groups.length > 0 && (
+                              <div className="space-y-2">
+                                {order.shipment_groups.map((sg) => (
+                                  <div
+                                    key={sg.id}
+                                    className={`rounded-2xl border-2 p-3.5 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs ${
+                                      sg.status === 'RECEIVED'
+                                        ? 'border-emerald-500/60 bg-emerald-950/40 text-emerald-200'
+                                        : sg.status === 'PARTIALLY_RECEIVED'
+                                        ? 'border-cyan-500/60 bg-cyan-950/40 text-cyan-200'
+                                        : 'border-amber-500/60 bg-gradient-to-r from-amber-950/40 via-slate-900 to-slate-950 text-amber-200'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-3">
+                                      <span className="text-2xl">🚚</span>
+                                      <div>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <span className="font-black text-sm text-white">
+                                            شحنة مشتركة ({sg.group_number}): {sg.group_name}
+                                          </span>
+                                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border border-current">
+                                            {sg.status === 'RECEIVED'
+                                              ? '✅ مستلمة بالكامل'
+                                              : sg.status === 'PARTIALLY_RECEIVED'
+                                              ? '⏳ مستلمة جزئياً'
+                                              : '⏳ قيد التوريد بالموقع'}
+                                          </span>
+                                          {sg.vehicle_plate_number && (
+                                            <span className="font-mono text-[10px] bg-slate-800 border border-slate-700 px-2 py-0.5 rounded text-amber-300">
+                                              لوحة: {sg.vehicle_plate_number}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="text-slate-300 mt-1 flex items-center gap-3 flex-wrap">
+                                          {sg.driver_name && <span>السائق: {sg.driver_name}</span>}
+                                          {sg.driver_phone && <span className="font-mono">هاتف: {sg.driver_phone}</span>}
+                                          <span>عدد البنود: {sg.items?.length || sg.items_count || 0}</span>
+                                          {sg.notes && <span className="text-slate-400">ملاحظات: {sg.notes}</span>}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
                             <div className="space-y-4">
                           {(order.items || []).map((item, idx) => {
                             const key = `${order.id}-${item.id}`;
@@ -965,6 +1011,12 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                           isSupplementary={item.is_supplementary}
                                           batchNumber={item.supplement_batch}
                                         />
+                                        {item.shipment_group && (
+                                          <span className="text-xs font-bold text-amber-300 bg-amber-950 border border-amber-500/60 px-2.5 py-0.5 rounded-xl flex items-center gap-1 shadow-sm">
+                                            <span>🚚</span>
+                                            <span>شحنة: {item.shipment_group.group_number}</span>
+                                          </span>
+                                        )}
                                       </h4>
                                     </div>
                                     {item.specifications && (
@@ -1587,6 +1639,12 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                           isSupplementary={item.purchase_order_item?.is_supplementary}
                                           batchNumber={item.purchase_order_item?.supplement_batch}
                                         />
+                                        {item.purchase_order_item?.shipment_group && (
+                                          <span className="text-xs font-bold text-amber-300 bg-amber-950 border border-amber-500/60 px-2.5 py-0.5 rounded-xl flex items-center gap-1 shadow-sm">
+                                            <span>🚚</span>
+                                            <span>شحنة: {item.purchase_order_item.shipment_group.group_number}</span>
+                                          </span>
+                                        )}
                                       </h4>
                                     </div>
                                   </div>
@@ -2008,6 +2066,12 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                     isSupplementary={item.purchase_order_item?.is_supplementary}
                                     batchNumber={item.purchase_order_item?.supplement_batch}
                                   />
+                                  {item.purchase_order_item?.shipment_group && (
+                                    <span className="text-[10px] font-bold text-amber-300 bg-amber-950/80 border border-amber-600/50 px-2 py-0.5 rounded flex items-center gap-1 shadow-sm">
+                                      <span>🚚</span>
+                                      <span>شحنة: {item.purchase_order_item.shipment_group.group_number}</span>
+                                    </span>
+                                  )}
                                 </span>
                               </div>
                             </div>

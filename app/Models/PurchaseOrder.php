@@ -213,6 +213,11 @@ class PurchaseOrder extends Model
         return $this->hasMany(WeighingGroup::class, 'purchase_order_id');
     }
 
+    public function shipmentGroups(): HasMany
+    {
+        return $this->hasMany(ShipmentGroup::class, 'purchase_order_id');
+    }
+
     public function purchaseReceipts(): HasMany
     {
         return $this->receipts();

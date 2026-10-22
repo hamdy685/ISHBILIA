@@ -316,6 +316,10 @@ class ProcurementPurchaseOrderController extends Controller
             'createdBy',
             'items.item',
             'items.supplier',
+            'items.shipmentGroup',
+            'items.weighingGroupItem.weighingGroup',
+            'shipmentGroups.items',
+            'weighingGroups.items.purchaseOrderItem',
             'receipts.items.purchaseOrderItem.supplier',
             'receipts.warehouseKeeper',
             'receipts.siteEngineer',
@@ -462,10 +466,38 @@ class ProcurementPurchaseOrderController extends Controller
                         $payload
                     );
 
+                    $po->load('items');
+                    $createdItemIds = $po->items->pluck('id')->all();
+
+                    $groupType = $group['group_type'] ?? null;
+
+                    if ($groupType === 'STEEL_WEIGHING' && count($createdItemIds) > 0) {
+                        app(\App\Services\SteelWeighingGroupService::class)->createWeighingGroup(
+                            $request->user(),
+                            $po->id,
+                            $createdItemIds,
+                            $group['notes'] ?? null
+                        );
+                    } elseif ($groupType === 'SHARED_SHIPMENT' && count($createdItemIds) > 0) {
+                        app(\App\Services\SharedShipmentGroupService::class)->createShipmentGroup(
+                            $request->user(),
+                            $po->id,
+                            $createdItemIds,
+                            $group['group_name'] ?? null,
+                            $group['notes'] ?? null
+                        );
+                    }
+
                     $po = $this->poService->submitToAccounting($request->user(), $po);
+                    $po->load(['items.shipmentGroup', 'items.weighingGroupItem.weighingGroup', 'shipmentGroups.items', 'weighingGroups.items']);
                     $createdPos[] = $po;
                 }
             });
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'message' => $e->validator->errors()->first() ?: 'خطأ في التحقق من صحة بيانات التجميع.',
+                'errors'  => $e->errors(),
+            ], 422);
         } catch (\RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 409);
         }

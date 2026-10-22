@@ -54,6 +54,24 @@ class PurchaseOrderItemResource extends JsonResource
                 'company_name' => $this->supplier?->company_name,
                 'code'         => $this->supplier?->code,
             ] : null),
+            'shipment_group_id' => $this->shipment_group_id,
+            'shipment_group'    => $this->whenLoaded('shipmentGroup', function () {
+                return $this->shipmentGroup ? [
+                    'id'           => $this->shipmentGroup->id,
+                    'group_number' => $this->shipmentGroup->group_number,
+                    'group_name'   => $this->shipmentGroup->group_name,
+                    'status'       => $this->shipmentGroup->status,
+                ] : null;
+            }),
+            'weighing_group_item' => $this->whenLoaded('weighingGroupItem', function () {
+                return $this->weighingGroupItem ? [
+                    'id'                => $this->weighingGroupItem->id,
+                    'weighing_group_id' => $this->weighingGroupItem->weighing_group_id,
+                    'group_number'      => $this->weighingGroupItem->weighingGroup?->group_number,
+                    'ordered_weight'    => (string) $this->weighingGroupItem->ordered_weight,
+                    'received_weight'   => $this->weighingGroupItem->received_weight !== null ? (string) $this->weighingGroupItem->received_weight : null,
+                ] : null;
+            }),
         ];
     }
 }

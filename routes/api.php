@@ -26,6 +26,7 @@ use App\Http\Controllers\Api\V1\PurchaseRequestSupplementController;
 use App\Http\Controllers\Api\V1\PurchasesReportController;
 use App\Http\Controllers\Api\V1\ReviewerPurchaseRequestController;
 use App\Http\Controllers\Api\V1\SteelWeighingGroupController;
+use App\Http\Controllers\Api\V1\SharedShipmentGroupController;
 use App\Http\Controllers\Api\Accounting\AccountController;
 use App\Http\Controllers\Api\Accounting\CostCenterController;
 use App\Http\Controllers\Api\Accounting\ContractorInvoiceController;
@@ -457,6 +458,16 @@ Route::middleware('auth:sanctum')->prefix('weighing-groups')->group(function () 
     Route::post('/', [SteelWeighingGroupController::class, 'store']);
     Route::post('/{id}/receive', [SteelWeighingGroupController::class, 'receive']);
     Route::post('/{id}/cancel', [SteelWeighingGroupController::class, 'cancel']);
+    Route::post('/{id}/ungroup', [SteelWeighingGroupController::class, 'ungroup']);
+});
+
+// Shared Shipment Groups (مجموعات الشحنات المشتركة)
+Route::middleware('auth:sanctum')->prefix('shipment-groups')->group(function () {
+    Route::get('/eligible/{poId}', [SharedShipmentGroupController::class, 'eligibleItems']);
+    Route::get('/po/{poId}', [SharedShipmentGroupController::class, 'byPurchaseOrder']);
+    Route::get('/{id}', [SharedShipmentGroupController::class, 'show']);
+    Route::post('/', [SharedShipmentGroupController::class, 'store']);
+    Route::post('/{id}/ungroup', [SharedShipmentGroupController::class, 'ungroup']);
 });
 
 // Receipt direct photo stream (authenticated & permission-checked)

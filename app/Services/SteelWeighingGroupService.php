@@ -255,8 +255,8 @@ class SteelWeighingGroupService
         return DB::transaction(function () use ($user, $poId, $itemIds, $notes) {
             $po = PurchaseOrder::with(['items.item.category', 'supplier'])->findOrFail($poId);
 
-            // 1. Status check: PO must be in an active state allowing delivery
-            $disallowedStatuses = ['PO_DRAFT', 'REJECTED', 'CANCELLED', 'VOIDED'];
+            // 1. Status check: PO must not be cancelled, rejected or voided
+            $disallowedStatuses = ['REJECTED', 'CANCELLED', 'VOIDED'];
             if (in_array($po->status, $disallowedStatuses, true)) {
                 throw ValidationException::withMessages([
                     'purchase_order' => ['حالة أمر الشراء الحالية لا تسمح بإنشاء مجموعة وزنة.'],
@@ -315,6 +315,22 @@ class SteelWeighingGroupService
             if (! empty($alreadyGroupedIds)) {
                 throw ValidationException::withMessages([
                     'items' => ['بعض البنود المختارة مجمعة بالفعل في مجموعة وزنة سابقة نشطة.'],
+                ]);
+            }
+
+            // 4.5. Cross-feature conflict validation: MUST NOT be in an active shared shipment group
+            $alreadyInShipment = PurchaseOrderItem::whereIn('id', $itemIds)
+                ->whereNotNull('shipment_group_id')
+                ->whereHas('shipmentGroup', function ($q) {
+                    $q->where('status', '!=', 'CANCELLED');
+                })
+                ->pluck('id')
+                ->all();
+
+            if (! empty($alreadyInShipment)) {
+                $conflictItem = $selectedItems->firstWhere('id', $alreadyInShipment[0]);
+                throw ValidationException::withMessages([
+                    'items' => ["البند [{$conflictItem?->item_description}] مدمج بالفعل في شحنة مشتركة نشطة. يجب فك دمج الشحنة أولاً قبل تجميعها كوزنة حديد."],
                 ]);
             }
 
@@ -561,5 +577,13 @@ class SteelWeighingGroupService
 
             return $group;
         });
+    }
+
+    /**
+     * Safely un-group a steel weighing group and release its member items.
+     */
+    public function ungroupWeighingGroup(User $user, int $weighingGroupId, ?string $reason = null): WeighingGroup
+    {
+        return $this->cancelWeighingGroup($user, $weighingGroupId, $reason ?: 'فك دمج وزنة الحديد');
     }
 }

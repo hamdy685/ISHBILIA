@@ -84,6 +84,25 @@ export interface PurchaseOrderItem {
   } | null;
   is_supplementary?: boolean;
   supplement_batch?: number | null;
+  shipment_group_id?: number | null;
+  shipment_group?: {
+    id: number;
+    group_number: string;
+    group_name: string;
+    status: string;
+  } | null;
+  weighing_group_item?: {
+    id: number;
+    weighing_group_id: number;
+    group_number?: string;
+    ordered_weight: string;
+    received_weight?: string | null;
+    weighing_group?: {
+      id: number;
+      group_number: string;
+      status: string;
+    } | null;
+  } | null;
 }
 
 
@@ -201,6 +220,18 @@ export interface PurchaseOrder {
   created_at?: string | null;
   updated_at?: string | null;
   items?: PurchaseOrderItem[];
+  shipment_groups?: Array<{
+    id: number;
+    group_number: string;
+    group_name: string;
+    status: string;
+    vehicle_plate_number?: string | null;
+    driver_name?: string | null;
+    notes?: string | null;
+    items_count?: number;
+    items?: PurchaseOrderItem[];
+  }>;
+  weighing_groups?: Array<any>;
   receipts?: LinkedReceiptSummary[];
   approval_history?: Array<{
     action: string;
@@ -299,6 +330,7 @@ export interface PurchaseOrderPayload {
 
 export interface PurchaseOrderGroupPayload {
   group_name?: string;
+  group_type?: 'SHARED_SHIPMENT' | 'STEEL_WEIGHING' | 'NONE';
   supplier_id?: number;
   one_time_supplier_name?: string;
   payment_terms?: string;

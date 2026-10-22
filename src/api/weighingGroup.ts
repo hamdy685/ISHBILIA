@@ -69,3 +69,11 @@ export const cancelWeighingGroupApi = async (id: number, reason?: string): Promi
   const response = await apiClient.post<{ message: string; data: WeighingGroup }>(`/weighing-groups/${id}/cancel`, { reason });
   return response.data.data;
 };
+
+/**
+ * Safely un-group a steel weighing group.
+ */
+export const ungroupWeighingGroupApi = async (id: number, reason?: string): Promise<WeighingGroup> => {
+  const response = await apiClient.post<{ message: string; data: WeighingGroup }>(`/weighing-groups/${id}/ungroup`, { reason });
+  return response.data.data;
+};

@@ -28,6 +28,7 @@ class PurchaseOrderItem extends Model
         'supplement_batch',
         'specifications',
         'supplier_id',
+        'shipment_group_id',
     ];
 
     protected function casts(): array
@@ -109,6 +110,11 @@ class PurchaseOrderItem extends Model
     public function weighingGroupItem(): \Illuminate\Database\Eloquent\Relations\HasOne
     {
         return $this->hasOne(WeighingGroupItem::class, 'purchase_order_item_id');
+    }
+
+    public function shipmentGroup(): BelongsTo
+    {
+        return $this->belongsTo(ShipmentGroup::class, 'shipment_group_id');
     }
 
     public function getActualQuantityAttribute(): float

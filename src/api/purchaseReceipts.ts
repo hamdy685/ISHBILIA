@@ -1,6 +1,7 @@
 import apiClient from './client';
 import { getToken } from '../utils/authStorage';
 import { WeighingGroup } from '../types/weighingGroup';
+import { ShipmentGroup } from '../types/shipmentGroup';
 
 export interface ReceiptOrderItem {
   id: number;
@@ -12,6 +13,8 @@ export interface ReceiptOrderItem {
   unit_price?: string | number | null;
   specifications?: string | null;
   notes?: string | null;
+  shipment_group_id?: number | null;
+  shipment_group?: ShipmentGroup | null;
   item?: { id: number; name: string; sku?: string; category?: { name: string } } | null;
   pr_item?: {
     id: number;
@@ -35,6 +38,7 @@ export interface ReceiptPurchaseOrder {
   notes?: string | null;
   supplier?: { id: number; company_name: string; contact_person?: string | null; phone?: string | null } | null;
   weighing_groups?: WeighingGroup[];
+  shipment_groups?: ShipmentGroup[];
   purchase_request?: {
     id: number;
     request_number: string;

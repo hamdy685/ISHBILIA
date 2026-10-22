@@ -20,9 +20,13 @@ import { SupplementItemBadge } from '../../components/common/SupplementItemBadge
 import { isActualPurchaseOrder, getActualPoLineItems, calculateActualPoGrandTotal } from '../../utils/actualPo';
 import { getSummaryParcels, getSummaryRegions, getSummaryProject } from '../../utils/formatRequestSummary';
 import CreateWeighingGroupModal from '../../components/procurement/CreateWeighingGroupModal';
-import { getWeighingGroupsByPoApi } from '../../api/weighingGroup';
+import CreateShipmentGroupModal from '../../components/procurement/CreateShipmentGroupModal';
+import { getWeighingGroupsByPoApi, ungroupWeighingGroupApi } from '../../api/weighingGroup';
+import { getShipmentGroupsByPoApi, ungroupShipmentGroupApi } from '../../api/shipmentGroup';
 import { WeighingGroup } from '../../types/weighingGroup';
+import { ShipmentGroup } from '../../types/shipmentGroup';
 import { formatCleanQty } from '../../utils/numberFormat';
+import { toast } from '../../utils/toast';
 
 export const PurchaseOrderDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -35,7 +39,9 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
   const [isPrintModalOpen, setIsPrintModalOpen] = useState<boolean>(false);
   const [isCyclePrintModalOpen, setIsCyclePrintModalOpen] = useState<boolean>(false);
   const [isWeighingModalOpen, setIsWeighingModalOpen] = useState<boolean>(false);
+  const [isShipmentModalOpen, setIsShipmentModalOpen] = useState<boolean>(false);
   const [weighingGroups, setWeighingGroups] = useState<WeighingGroup[]>([]);
+  const [shipmentGroups, setShipmentGroups] = useState<ShipmentGroup[]>([]);
 
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -76,9 +82,12 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
       const parsedId = parseInt(id, 10);
       const data = await getPurchaseOrderApi(parsedId);
       setPo(data);
-      // Fetch weighing groups in parallel
+      // Fetch weighing groups and shipment groups in parallel
       getWeighingGroupsByPoApi(parsedId)
         .then((groups) => setWeighingGroups(groups || []))
+        .catch(() => {});
+      getShipmentGroupsByPoApi(parsedId)
+        .then((groups) => setShipmentGroups(groups || []))
         .catch(() => {});
       return data;
     } catch (err: unknown) {
@@ -87,6 +96,30 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
       return null;
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleUngroupShipment = async (groupId: number) => {
+    if (!confirm('هل أنت متأكد من فك دمج هذه الشحنة المشتركة وإعادة البنود كبنود مستقلة؟')) return;
+    try {
+      await ungroupShipmentGroupApi(groupId);
+      toast.success('تم فك دمج الشحنة المشتركة بنجاح.');
+      await loadPo();
+    } catch (err: any) {
+      const parsed = parseApiError(err);
+      toast.error(parsed.message || 'تعذر فك دمج الشحنة.');
+    }
+  };
+
+  const handleUngroupWeighing = async (groupId: number) => {
+    if (!confirm('هل أنت متأكد من فك دمج وزنة الحديد وإعادة البنود كبنود مستقلة؟')) return;
+    try {
+      await ungroupWeighingGroupApi(groupId);
+      toast.success('تم فك دمج وزنة الحديد بنجاح.');
+      await loadPo();
+    } catch (err: any) {
+      const parsed = parseApiError(err);
+      toast.error(parsed.message || 'تعذر فك دمج وزنة الحديد.');
     }
   };
 
@@ -174,6 +207,18 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
             </Link>
           )}
 
+          {isProcurementManager && po && !['REJECTED', 'CANCELLED', 'VOIDED'].includes(po.status) && (
+            <Button
+              variant="secondary"
+              size="md"
+              onClick={() => setIsShipmentModalOpen(true)}
+              className="flex-1 md:flex-none min-h-10 text-xs font-bold border-amber-500/40 text-amber-300 hover:bg-amber-950/40"
+              title="دمج بنود مشتريات مختلفة لتوريدها واستلامها معاً كشحنة واحدة على نفس السيارة/النقلة"
+            >
+              🚚 دمج كشحنة واحدة
+            </Button>
+          )}
+
           {canCreateWeighingGroup && (
             <Button
               variant="warning"
@@ -182,7 +227,7 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
               className="flex-1 md:flex-none min-h-10 text-xs font-black bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-slate-950 shadow-md border-amber-500/50"
               title="تجميع بنود الحديد في وزنة استلام واحدة لميزان البسكول مع الحفاظ على كل مقاس وسعر"
             >
-              ⚖️ تجميع الوزنة
+              ⚖️ تجميع وزنة حديد
             </Button>
           )}
 
@@ -236,6 +281,74 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
 
       {error && <ErrorMessage error={error} />}
 
+      {/* ── Active Shared Shipment Groups Banner ── */}
+      {shipmentGroups.length > 0 && (
+        <div className="space-y-2">
+          {shipmentGroups.map((sg) => (
+            <div
+              key={sg.id}
+              className={`rounded-2xl border-2 p-4 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs ${
+                sg.status === 'RECEIVED'
+                  ? 'border-emerald-500/50 bg-emerald-950/30 text-emerald-200'
+                  : sg.status === 'PARTIALLY_RECEIVED'
+                  ? 'border-cyan-500/50 bg-cyan-950/30 text-cyan-200'
+                  : sg.status === 'CANCELLED'
+                  ? 'border-slate-700 bg-slate-900/50 text-slate-400'
+                  : 'border-amber-500/60 bg-gradient-to-r from-amber-950/40 via-slate-900 to-slate-950 text-amber-200'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">🚚</span>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-black text-sm text-white">شحنة مشتركة ({sg.group_number}): {sg.group_name}</span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                        sg.status === 'RECEIVED'
+                          ? 'bg-emerald-900/60 border-emerald-500 text-emerald-300'
+                          : sg.status === 'PARTIALLY_RECEIVED'
+                          ? 'bg-cyan-900/60 border-cyan-500 text-cyan-300'
+                          : sg.status === 'CANCELLED'
+                          ? 'bg-slate-800 border-slate-700 text-slate-400'
+                          : 'bg-amber-900/60 border-amber-500 text-amber-300'
+                      }`}
+                    >
+                      {sg.status === 'RECEIVED'
+                        ? '✅ تم استلامها بالكامل'
+                        : sg.status === 'PARTIALLY_RECEIVED'
+                        ? '⏳ مستلمة جزئياً'
+                        : sg.status === 'CANCELLED'
+                        ? 'ملغاة'
+                        : '⏳ قيد التوريد / بانتظار الاستلام بالموقع'}
+                    </span>
+                    {sg.vehicle_plate_number && (
+                      <span className="font-mono text-[10px] bg-slate-800/80 border border-slate-700 px-2 py-0.5 rounded text-amber-300">
+                        لوحة: {sg.vehicle_plate_number}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[11px] text-slate-300 mt-0.5 flex items-center gap-3 flex-wrap">
+                    <span>عدد البنود المدمجة: <strong className="font-mono text-amber-300">{sg.items?.length || sg.items_count || 0} بنود</strong></span>
+                    {sg.notes && <span className="text-slate-400">ملاحظات: {sg.notes}</span>}
+                  </div>
+                </div>
+              </div>
+              {isProcurementManager && sg.status === 'PENDING_DELIVERY' && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleUngroupShipment(sg.id)}
+                  className="text-rose-400 hover:text-rose-300 border border-rose-500/30 hover:bg-rose-950/30 text-xs shrink-0"
+                  title="فك دمج هذه الشحنة وإعادة البنود كبنود مستقلة"
+                >
+                  ✂️ فك الدمج
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* ── Active Steel Weighing Groups Banner ── */}
       {weighingGroups.length > 0 && (
         <div className="space-y-2">
@@ -247,7 +360,7 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
                   ? 'border-emerald-500/50 bg-emerald-950/30 text-emerald-200'
                   : wg.status === 'CANCELLED'
                   ? 'border-slate-700 bg-slate-900/50 text-slate-400'
-                  : 'border-amber-500/60 bg-gradient-to-r from-amber-950/40 via-slate-900 to-slate-950 text-amber-200'
+                  : 'border-indigo-500/60 bg-gradient-to-r from-indigo-950/40 via-slate-900 to-slate-950 text-indigo-200'
               }`}
             >
               <div className="flex items-center gap-3">
@@ -261,7 +374,7 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
                           ? 'bg-emerald-900/60 border-emerald-500 text-emerald-300'
                           : wg.status === 'CANCELLED'
                           ? 'bg-slate-800 border-slate-700 text-slate-400'
-                          : 'bg-amber-900/60 border-amber-500 text-amber-300'
+                          : 'bg-indigo-900/60 border-indigo-500 text-indigo-300'
                       }`}
                     >
                       {wg.status === 'RECEIVED' ? '✅ تم استلامها بالبسكول' : (wg.status === 'CANCELLED' ? 'ملغاة' : '⏳ بانتظار استلام البسكول بالموقع')}
@@ -280,6 +393,17 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
                   </div>
                 </div>
               </div>
+              {isProcurementManager && wg.status === 'PENDING_RECEIPT' && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleUngroupWeighing(wg.id)}
+                  className="text-rose-400 hover:text-rose-300 border border-rose-500/30 hover:bg-rose-950/30 text-xs shrink-0"
+                  title="فك دمج وزنة الحديد وإرجاع البنود كبنود مستقلة"
+                >
+                  ✂️ فك الدمج
+                </Button>
+              )}
             </div>
           ))}
         </div>
@@ -457,6 +581,18 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
                           مورد البند: {item.supplier.company_name}
                         </span>
                       )}
+                      {item.shipment_group && (
+                        <span className="text-[10px] font-bold text-amber-300 bg-amber-950/70 border border-amber-500/50 px-2 py-0.5 rounded flex items-center gap-1">
+                          <span>🚚</span>
+                          <span>شحنة: {item.shipment_group.group_number}</span>
+                        </span>
+                      )}
+                      {(item.weighing_group_item?.weighing_group || item.weighing_group_item?.group_number) && (
+                        <span className="text-[10px] font-bold text-indigo-300 bg-indigo-950/70 border border-indigo-500/50 px-2 py-0.5 rounded flex items-center gap-1">
+                          <span>⚖️</span>
+                          <span>وزنة حديد: {item.weighing_group_item?.weighing_group?.group_number || item.weighing_group_item?.group_number}</span>
+                        </span>
+                      )}
                     </div>
                     {item.specifications && <div className="text-[10px] text-slate-400 mt-0.5 font-normal">{item.specifications}</div>}
                   </TableCell>
@@ -493,6 +629,18 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
                       isSupplementary={item.is_supplementary}
                       batchNumber={item.supplement_batch}
                     />
+                    {item.shipment_group && (
+                      <span className="text-[10px] font-bold text-amber-300 bg-amber-950/70 border border-amber-500/50 px-2 py-0.5 rounded flex items-center gap-1">
+                        <span>🚚</span>
+                        <span>شحنة: {item.shipment_group.group_number}</span>
+                      </span>
+                    )}
+                    {(item.weighing_group_item?.weighing_group || item.weighing_group_item?.group_number) && (
+                      <span className="text-[10px] font-bold text-indigo-300 bg-indigo-950/70 border border-indigo-500/50 px-2 py-0.5 rounded flex items-center gap-1">
+                        <span>⚖️</span>
+                        <span>وزنة حديد: {item.weighing_group_item?.weighing_group?.group_number || item.weighing_group_item?.group_number}</span>
+                      </span>
+                    )}
                   </dd>
                 </div>
                 <div>
@@ -554,6 +702,18 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
         po={po}
         isOpen={isCyclePrintModalOpen}
         onClose={() => setIsCyclePrintModalOpen(false)}
+      />
+
+      {/* مودال تجميع الشحنة المشتركة */}
+      <CreateShipmentGroupModal
+        isOpen={isShipmentModalOpen}
+        poId={po.id}
+        poNumber={po.po_number}
+        onClose={() => setIsShipmentModalOpen(false)}
+        onSuccess={() => {
+          setIsShipmentModalOpen(false);
+          loadPo();
+        }}
       />
 
       {/* مودال تجميع وزنة الحديد */}
