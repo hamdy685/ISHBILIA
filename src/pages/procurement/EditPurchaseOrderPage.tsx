@@ -4,6 +4,7 @@ import {
   getPurchaseOrderApi,
   updatePurchaseOrderApi,
   finalizeActualPurchaseOrderApi,
+  uploadPurchaseOrderInvoiceApi,
   submitPurchaseOrderApi
 } from '../../api/purchaseOrders';
 import { getSuppliersApi } from '../../api/suppliers';
@@ -56,6 +57,7 @@ export const EditPurchaseOrderPage: React.FC = () => {
   const [budgetCode, setBudgetCode] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [finalizationNotes, setFinalizationNotes] = useState<string>('');
+  const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
 
   // Items State (Local editable array for reactive & fast editing)
   const [items, setItems] = useState<EditableItem[]>([]);
@@ -333,8 +335,13 @@ export const EditPurchaseOrderPage: React.FC = () => {
         finalization_notes: finalizationNotes || undefined,
         items: payloadItems,
       });
-      setPo(updated);
-      setSuccessMsg('✅ تم حفظ كافة تعديلات أمر الشراء وبيانات البنود والأسعار بنجاح.');
+      let currentPo = updated;
+      if (invoiceFile) {
+        currentPo = await uploadPurchaseOrderInvoiceApi(po.id, invoiceFile);
+        setInvoiceFile(null);
+      }
+      setPo(currentPo);
+      setSuccessMsg('✅ تم حفظ كافة تعديلات أمر الشراء وبيانات البنود والأسعار والفاتورة بنجاح.');
     } catch (err) {
       const parsed = parseApiError(err);
       setError(parsed.message);
@@ -416,6 +423,7 @@ export const EditPurchaseOrderPage: React.FC = () => {
         supplier_id: supplierId ? Number(supplierId) : undefined,
         items: payloadItems,
         notes: finalizationNotes.trim() || undefined,
+        invoice_file: invoiceFile || undefined,
       });
 
       toast.success(`✅ تم إصدار أمر الشراء الفعلي (${po.po_number}) بنجاح واعتماده وإرساله للإدارة المالية.`);
@@ -1293,6 +1301,62 @@ export const EditPurchaseOrderPage: React.FC = () => {
                 {formatCleanNumber(calculatedGrandTotal)} ج.م
               </span>
             </div>
+          </div>
+        </div>
+
+        {/* ── إرفاق فاتورة الشراء / المورد (حفظ تلقائي في Google Drive بمجلد «فواتير») ── */}
+        <div className="rounded-2xl border-2 border-amber-500/40 bg-gradient-to-r from-amber-950/20 via-slate-900 to-slate-950 p-4 shadow-lg space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-500/20 pb-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">🧾</span>
+              <div>
+                <h4 className="text-sm font-bold text-amber-300">
+                  إرفاق فاتورة الشراء / المورد (تُحفظ في Google Drive بمجلد «فواتير»)
+                </h4>
+                <p className="text-[11px] text-slate-400">
+                  يتم حفظها وأرشفتها تلقائياً على الدرايف، وتظهر فوراً للمحاسب في المطابقة والتقارير المالية كزر أصفر مباشر.
+                </p>
+              </div>
+            </div>
+            {po.has_invoice_attachment && (po.invoice_photo_url || (po as any).invoice_photo_path) && (
+              <a
+                href={po.invoice_photo_url || `/api/v1/purchase-orders/${po.id}/invoice-photo`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-amber-950 font-black text-xs px-3 py-1.5 shadow-sm transition-all whitespace-nowrap self-start sm:self-auto cursor-pointer"
+                title="استعراض الفاتورة المرفوعة حالياً"
+              >
+                <span>🔍</span>
+                <span>معاينة الفاتورة الحالية ({po.invoice_photo_name || 'ملف الفاتورة'})</span>
+              </a>
+            )}
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            <label className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-dashed border-slate-700 hover:border-amber-400 bg-slate-900/60 p-3 text-xs text-slate-300 hover:text-amber-200 cursor-pointer transition-colors">
+              <span>📁</span>
+              <span className="font-semibold">
+                {invoiceFile ? `تم اختيار: ${invoiceFile.name} (${(invoiceFile.size / 1024).toFixed(0)} KB)` : 'اضغط لاختيار صورة الفاتورة أو ملف PDF...'}
+              </span>
+              <input
+                type="file"
+                accept="image/*,application/pdf"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) setInvoiceFile(file);
+                }}
+              />
+            </label>
+            {invoiceFile && (
+              <button
+                type="button"
+                onClick={() => setInvoiceFile(null)}
+                className="px-3 py-2 text-xs font-bold text-rose-400 hover:text-rose-300 hover:bg-rose-950/30 rounded-xl border border-rose-900/50 transition-colors cursor-pointer whitespace-nowrap"
+              >
+                ✕ إلغاء الاختيار
+              </button>
+            )}
           </div>
         </div>
 
