@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
@@ -313,6 +314,26 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
       });
     }
   };
+
+  // Lock body scroll and handle Escape key when Purpose Modal is open
+  useEffect(() => {
+    if (!purposeModal.isOpen) return undefined;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setPurposeModal({ isOpen: false, item: null, loading: false, fullPurpose: null });
+      }
+    };
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [purposeModal.isOpen]);
 
   // Quick Receipt Inspection Modal State
   const [receiptInspectionModal, setReceiptInspectionModal] = useState<{
@@ -1508,10 +1529,10 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
         />
       )}
 
-      {/* ── Purchase Purpose Inspection Modal (Mobile-Optimized) ── */}
-      {purposeModal.isOpen && purposeModal.item && (
+      {/* ── Purchase Purpose Inspection Modal (Centered in Viewport across Mobile/Tablet/Desktop via Portal) ── */}
+      {purposeModal.isOpen && purposeModal.item && typeof document !== 'undefined' && createPortal(
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md transition-all duration-200"
+          className="fixed inset-0 z-[99999] flex min-h-[100dvh] items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-950/85 backdrop-blur-md overflow-y-auto"
           dir="rtl"
           onClick={() => setPurposeModal({ isOpen: false, item: null, loading: false, fullPurpose: null })}
           role="dialog"
@@ -1519,7 +1540,7 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
           aria-labelledby="purpose-modal-title"
         >
           <div
-            className="relative w-full max-w-[94vw] sm:max-w-md rounded-2xl sm:rounded-3xl border border-amber-500/50 bg-gradient-to-b from-slate-900 via-slate-950 to-slate-950 p-4 sm:p-5 shadow-2xl shadow-black/80 flex flex-col gap-3.5 max-h-[88vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+            className="relative my-auto w-full max-w-[94vw] sm:max-w-md md:max-w-lg rounded-2xl sm:rounded-3xl border border-amber-500/50 bg-gradient-to-b from-slate-900 via-slate-950 to-slate-950 p-4 sm:p-5 shadow-2xl shadow-black/90 flex flex-col gap-3.5 max-h-[88dvh] overflow-hidden animate-in fade-in zoom-in-95 duration-150"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header: Title, Code Badge, and Close Button × */}
@@ -1600,7 +1621,8 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
