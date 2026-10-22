@@ -140,6 +140,34 @@ export const ThreeWayMatchPrintModal: React.FC<ThreeWayMatchPrintModalProps> = (
               </button>
             )}
 
+            {/* زر الفاتورة: أصفر إذا توفرت ورمادي إذا لم تتوفر */}
+            {(() => {
+              const poInvoiceUrl = receipt?.invoice_photo_url || receipt?.purchase_order?.invoice_photo_url || po?.invoice_photo_url;
+              const hasInvoice = Boolean(receipt?.has_invoice_attachment || receipt?.purchase_order?.has_invoice_attachment || po?.has_invoice_attachment || poInvoiceUrl);
+              return hasInvoice && poInvoiceUrl ? (
+                <a
+                  href={poInvoiceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 sm:flex-none inline-flex min-h-[40px] sm:min-h-0 items-center justify-center gap-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 px-4 py-2 text-xs font-black text-amber-950 transition-all shadow-md cursor-pointer border border-amber-400"
+                  title="استعراض فاتورة المورد المرفوعة على Google Drive بمجلد «فواتير»"
+                >
+                  <span>🧾</span>
+                  <span>الفاتورة</span>
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  className="flex-1 sm:flex-none inline-flex min-h-[40px] sm:min-h-0 items-center justify-center gap-1.5 rounded-xl bg-slate-800 border border-slate-700/60 px-4 py-2 text-xs font-bold text-slate-500 cursor-not-allowed opacity-60"
+                  title="لا توجد فاتورة مرفقة لهذا الطلب"
+                >
+                  <span className="opacity-40">🧾</span>
+                  <span>الفاتورة</span>
+                </button>
+              );
+            })()}
+
             {onRegisterInvoice && (
               <button
                 type="button"

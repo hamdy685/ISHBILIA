@@ -210,6 +210,11 @@ export interface PurchaseOrder {
   financial_notes?: string | null;
   notes?: string | null;
   purpose?: string | null;
+  invoice_photo_url?: string | null;
+  invoice_photo_name?: string | null;
+  invoice_photo_size?: number | null;
+  invoice_photo_uploaded_at?: string | null;
+  has_invoice_attachment?: boolean;
   finalized_by_user_id?: number | null;
   finalized_at?: string | null;
   finalization_notes?: string | null;
@@ -384,4 +389,7 @@ export interface FinalizeActualPoPayload {
   region?: string;
   items: FinalizeActualPoItemPayload[];
   notes?: string;
+  invoice_file?: File | null;
+  invoice_photo?: string | null;
+  invoice_photo_name?: string | null;
 }

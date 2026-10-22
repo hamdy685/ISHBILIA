@@ -39,6 +39,79 @@ class GoogleDriveService
         return (string) config('google_drive.folder_id', env('GOOGLE_DRIVE_RECEIPTS_FOLDER_ID', env('GOOGLE_DRIVE_FOLDER_ID', '1ZdrP3K-NqU4uIs5GL3JD7biz7rDpSIdX')));
     }
 
+    public static function invoicesFolderId(): string
+    {
+        $configured = (string) config('google_drive.invoices_folder_id', env('GOOGLE_DRIVE_INVOICES_FOLDER_ID', ''));
+        if (! empty($configured)) {
+            return $configured;
+        }
+
+        // Auto-resolve or create "فواتير" folder in Google Drive
+        return (string) Cache::remember('google_drive_invoices_resolved_folder_id', 86400, function () {
+            return self::getOrCreateFolder('فواتير', self::folderId()) ?: self::folderId();
+        });
+    }
+
+    /**
+     * Search for a folder by name inside a parent, or create it if missing.
+     */
+    public static function getOrCreateFolder(string $folderName, ?string $parentFolderId = null): ?string
+    {
+        $accessToken = self::getAccessToken();
+        if (! $accessToken) {
+            return null;
+        }
+
+        $parent = $parentFolderId ?: self::folderId();
+
+        try {
+            // 1. Search for existing folder
+            $query = "name = '{$folderName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false";
+            if ($parent) {
+                $query .= " and '{$parent}' in parents";
+            }
+
+            $searchResponse = Http::withToken($accessToken)
+                ->timeout(15)
+                ->get('https://www.googleapis.com/drive/v3/files', [
+                    'q' => $query,
+                    'fields' => 'files(id, name)',
+                    'supportsAllDrives' => 'true',
+                    'includeItemsFromAllDrives' => 'true',
+                ]);
+
+            if ($searchResponse->successful()) {
+                $files = $searchResponse->json('files', []);
+                if (! empty($files) && ! empty($files[0]['id'])) {
+                    return $files[0]['id'];
+                }
+            }
+
+            // 2. Create the folder if not found
+            $createPayload = [
+                'name' => $folderName,
+                'mimeType' => 'application/vnd.google-apps.folder',
+            ];
+            if ($parent) {
+                $createPayload['parents'] = [$parent];
+            }
+
+            $createResponse = Http::withToken($accessToken)
+                ->timeout(15)
+                ->post('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true', $createPayload);
+
+            if ($createResponse->successful()) {
+                $folderId = $createResponse->json('id');
+                Log::info("Google Drive created folder '{$folderName}': {$folderId}");
+                return $folderId;
+            }
+        } catch (Throwable $e) {
+            Log::error("Google Drive getOrCreateFolder exception: {$e->getMessage()}");
+        }
+
+        return null;
+    }
+
     /**
      * Get a valid access token using the refresh token, with caching.
      */
@@ -159,5 +232,14 @@ class GoogleDriveService
         } catch (Throwable $e) {
             Log::warning("Could not set public permission on Google Drive file {$fileId}: " . $e->getMessage());
         }
+    }
+
+    /**
+     * Upload an invoice document to the dedicated "فواتير" folder in Google Drive.
+     */
+    public static function uploadInvoice(string $binaryContent, string $fileName, string $mimeType = 'application/pdf'): ?array
+    {
+        $invoicesFolderId = self::invoicesFolderId();
+        return self::upload($binaryContent, $fileName, $mimeType, $invoicesFolderId);
     }
 }

@@ -102,8 +102,61 @@ export const getPendingActualPosApi = async (params: { page?: number; per_page?:
 };
 
 export const finalizeActualPurchaseOrderApi = async (id: number, payload: FinalizeActualPoPayload): Promise<PurchaseOrder> => {
-  const response = await apiClient.post<{ message: string; data: PurchaseOrder }>(`${base}/${id}/finalize`, payload);
+  let body: any = payload;
+  let headers: Record<string, string> | undefined = undefined;
+
+  if (payload.invoice_file instanceof File) {
+    const formData = new FormData();
+    if (payload.supplier_id) formData.append('supplier_id', String(payload.supplier_id));
+    if (payload.parcel_reference) formData.append('parcel_reference', payload.parcel_reference);
+    if (payload.region) formData.append('region', payload.region);
+    if (payload.notes) formData.append('notes', payload.notes);
+    formData.append('invoice_file', payload.invoice_file);
+    payload.items.forEach((item, idx) => {
+      if (item.id) formData.append(`items[${idx}][id]`, String(item.id));
+      if (item.item_id) formData.append(`items[${idx}][item_id]`, String(item.item_id));
+      if (item.pr_item_id) formData.append(`items[${idx}][pr_item_id]`, String(item.pr_item_id));
+      formData.append(`items[${idx}][item_description]`, item.item_description);
+      formData.append(`items[${idx}][item_reference]`, item.item_reference);
+      formData.append(`items[${idx}][region]`, item.region);
+      formData.append(`items[${idx}][quantity]`, String(item.quantity));
+      if (item.uom) formData.append(`items[${idx}][uom]`, item.uom);
+      formData.append(`items[${idx}][unit_price]`, String(item.unit_price));
+      if (item.specifications) formData.append(`items[${idx}][specifications]`, item.specifications);
+      if (item.supplier_id) formData.append(`items[${idx}][supplier_id]`, String(item.supplier_id));
+    });
+    body = formData;
+    headers = { 'Content-Type': 'multipart/form-data' };
+  }
+
+  const response = await apiClient.post<{ message: string; data: PurchaseOrder }>(`${base}/${id}/finalize`, body, { headers });
   invalidateCachedGet(base);
   invalidateCachedGet('/procurement/pending-actual-pos');
+  invalidateCachedGet('/accounting/receipts/approved');
+  invalidateCachedGet('/procurement/reports/purchases');
+  return response.data.data;
+};
+
+export const uploadPurchaseOrderInvoiceApi = async (
+  id: number,
+  file: File | { photo: string; name?: string }
+): Promise<PurchaseOrder> => {
+  let response;
+  if (file instanceof File) {
+    const formData = new FormData();
+    formData.append('invoice_file', file);
+    response = await apiClient.post<{ message: string; data: PurchaseOrder }>(`${base}/${id}/upload-invoice`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  } else {
+    response = await apiClient.post<{ message: string; data: PurchaseOrder }>(`${base}/${id}/upload-invoice`, {
+      invoice_photo: file.photo,
+      invoice_photo_name: file.name,
+    });
+  }
+  invalidateCachedGet(base);
+  invalidateCachedGet('/procurement/pending-actual-pos');
+  invalidateCachedGet('/accounting/receipts/approved');
+  invalidateCachedGet('/procurement/reports/purchases');
   return response.data.data;
 };

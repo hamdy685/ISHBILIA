@@ -42,6 +42,8 @@ export interface PurchasesReportRow {
   receipt_number?: string | null;
   has_receipt_attachment?: boolean;
   receipt_view_allowed?: boolean;
+  invoice_url?: string | null;
+  has_invoice_attachment?: boolean;
   grand_total?: number;
   created_at?: string;
 }

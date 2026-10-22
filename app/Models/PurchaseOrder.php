@@ -53,12 +53,20 @@ class PurchaseOrder extends Model
         'finalized_by_user_id',
         'finalized_at',
         'finalization_notes',
+        'invoice_photo_path',
+        'invoice_photo_name',
+        'invoice_photo_size',
+        'invoice_photo_mime_type',
+        'invoice_photo_uploaded_at',
+        'invoice_photo_uploaded_by_user_id',
     ];
 
     protected $appends = [
         'warehouse_approval',
         'site_engineer_approval',
         'is_supplementary',
+        'invoice_photo_url',
+        'has_invoice_attachment',
     ];
 
     public function getIsSupplementaryAttribute(): bool
@@ -72,6 +80,40 @@ class PurchaseOrder extends Model
     public function getPurposeAttribute(): ?string
     {
         return $this->purchaseRequest?->notes ?? $this->notes;
+    }
+
+    public function invoiceUploadedBy(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(User::class, 'invoice_photo_uploaded_by_user_id');
+    }
+
+    public function getInvoicePhotoUrlAttribute(): ?string
+    {
+        if (! $this->invoice_photo_path) {
+            return null;
+        }
+
+        if (filter_var($this->invoice_photo_path, FILTER_VALIDATE_URL)) {
+            return $this->invoice_photo_path;
+        }
+
+        $r2Url = config('filesystems.disks.r2.url');
+        if ($r2Url && config('filesystems.default') === 'r2') {
+            return rtrim($r2Url, '/') . '/' . ltrim($this->invoice_photo_path, '/');
+        }
+
+        return "/api/v1/purchase-orders/{$this->id}/invoice-photo";
+    }
+
+    public function getHasInvoiceAttachmentAttribute(): bool
+    {
+        if (! empty($this->invoice_photo_path)) {
+            return true;
+        }
+        if ($this->relationLoaded('supplierInvoices')) {
+            return $this->supplierInvoices->isNotEmpty();
+        }
+        return false;
     }
 
     public function getWarehouseApprovalAttribute(): array
@@ -152,6 +194,7 @@ class PurchaseOrder extends Model
             'actual_delivery_date' => 'date',
             'reviewed_at_accounting' => 'datetime',
             'finalized_at' => 'datetime',
+            'invoice_photo_uploaded_at' => 'datetime',
         ];
     }
 

@@ -286,6 +286,9 @@ Route::middleware('auth:sanctum')->prefix('procurement')->group(function () {
     Route::post('/purchase-orders/{id}/finalize', [ProcurementPurchaseOrderController::class, 'finalizeActualPo'])
         ->middleware('permission:purchase_order.create');
 
+    Route::post('/purchase-orders/{id}/upload-invoice', [ProcurementPurchaseOrderController::class, 'uploadInvoice'])
+        ->middleware('permission:purchase_order.create|purchase_order.edit|purchase_order.manage');
+
     Route::get('/analytics', [ProcurementAnalyticsController::class, 'index'])
         ->middleware('permission:purchase_order.view|purchase_order.view_gm|purchase_order.view_accounting');
 
@@ -473,6 +476,9 @@ Route::middleware('auth:sanctum')->prefix('shipment-groups')->group(function () 
 // Receipt direct photo stream (authenticated & permission-checked)
 Route::middleware(['auth:sanctum', 'permission:purchase_receipt.view_assigned|accounting.invoice.view'])->get('/purchase-receipts/{id}/photo', [PurchaseReceiptController::class, 'viewPhoto']);
 Route::middleware(['auth:sanctum', 'permission:purchase_receipt.view_assigned|accounting.invoice.view|purchase_order.view'])->get('/purchase-receipts/{id}/attachment', [PurchaseReceiptController::class, 'getAttachment']);
+
+// Purchase Order direct invoice photo stream (authenticated & permission-checked)
+Route::middleware(['auth:sanctum', 'permission:purchase_order.view|purchase_receipt.view_assigned|accounting.invoice.view'])->get('/purchase-orders/{id}/invoice-photo', [ProcurementPurchaseOrderController::class, 'viewInvoicePhoto']);
 
 // Quote direct file stream (authenticated & permission-checked)
 Route::middleware(['auth:sanctum', 'permission:purchase_quote.view|purchase_request.view_own'])->get('/purchase-quotes/{id}/file', [PurchaseQuoteController::class, 'viewFile']);

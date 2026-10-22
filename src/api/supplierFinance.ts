@@ -67,6 +67,8 @@ export interface ApprovedReceipt {
   purchase_order_id: number;
   purchase_order?: PurchaseOrder | null;
   purchase_request?: PurchaseOrder['purchase_request'] | null;
+  invoice_photo_url?: string | null;
+  has_invoice_attachment?: boolean;
   items?: ApprovedReceiptItem[];
 }
 

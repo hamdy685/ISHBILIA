@@ -38,11 +38,13 @@ class StorageService
         $fileName = Str::slug(pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)) . '_' . time() . '_' . Str::random(6) . '.' . $extension;
         $mimeType = $file->getClientMimeType() ?: $file->getMimeType();
 
-        // 1. Upload to Google Drive for receipts or if configured
-        if (($directory === 'receipts' || GoogleDriveService::isConfigured()) && config('google_drive.enabled', true)) {
+        // 1. Upload to Google Drive for receipts or invoices or if configured
+        if (($directory === 'receipts' || $directory === 'invoices' || GoogleDriveService::isConfigured()) && config('google_drive.enabled', true)) {
             try {
                 $content = $file->getContent();
-                $driveData = GoogleDriveService::upload($content, $fileName, $mimeType);
+                $driveData = ($directory === 'invoices')
+                    ? GoogleDriveService::uploadInvoice($content, $fileName, $mimeType)
+                    : GoogleDriveService::upload($content, $fileName, $mimeType);
                 if ($driveData && ! empty($driveData['path'])) {
                     // Save backup copy to local disk
                     try {
@@ -116,10 +118,12 @@ class StorageService
 
         $fileName = ($customName ? Str::slug(pathinfo($customName, PATHINFO_FILENAME)) . '_' : 'receipt_') . time() . '_' . Str::random(8) . '.' . $extension;
 
-        // 1. Upload to Google Drive for receipts
-        if (($directory === 'receipts' || GoogleDriveService::isConfigured()) && config('google_drive.enabled', true)) {
+        // 1. Upload to Google Drive for receipts or invoices
+        if (($directory === 'receipts' || $directory === 'invoices' || GoogleDriveService::isConfigured()) && config('google_drive.enabled', true)) {
             try {
-                $driveData = GoogleDriveService::upload($decoded, $fileName, $mimeType);
+                $driveData = ($directory === 'invoices')
+                    ? GoogleDriveService::uploadInvoice($decoded, $fileName, $mimeType)
+                    : GoogleDriveService::upload($decoded, $fileName, $mimeType);
                 if ($driveData && ! empty($driveData['path'])) {
                     // Save backup copy to local disk
                     try {

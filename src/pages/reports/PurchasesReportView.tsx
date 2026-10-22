@@ -1314,8 +1314,8 @@ export const PurchasesReportView: React.FC = () => {
                     <th className="border border-slate-300 px-2.5 py-2 text-center w-24">إسم المنطقة</th>
                     <th className="border border-slate-300 px-2.5 py-2 text-center w-24">القسم</th>
                     <th className="border border-slate-300 px-3 py-2 min-w-[170px]">الاعمال</th>
-                    <th className="border border-slate-300 px-3 py-2 text-center whitespace-nowrap min-w-[210px] bg-slate-200/90 text-slate-900 font-black">
-                      الإذن / تسجيل الفاتورة
+                    <th className="border border-slate-300 px-3 py-2 text-center whitespace-nowrap min-w-[250px] bg-slate-200/90 text-slate-900 font-black">
+                      الإذن • الفاتورة • التسجيل
                     </th>
                   </tr>
 
@@ -1651,6 +1651,31 @@ export const PurchasesReportView: React.FC = () => {
                               >
                                 <span className="opacity-50">📄</span>
                                 <span className="text-slate-400">رؤية الإذن</span>
+                              </button>
+                            )}
+
+                            {/* زر الفاتورة: أصفر إذا توفرت ورمادي إذا لم تتوفر */}
+                            {row.has_invoice_attachment && row.invoice_url ? (
+                              <a
+                                href={row.invoice_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="inline-flex items-center gap-1 rounded-md bg-amber-500 hover:bg-amber-400 active:scale-95 text-amber-950 py-1 px-2.5 text-xs font-black shadow-2xs transition-all border border-amber-400 hover:shadow-xs cursor-pointer select-none shrink-0"
+                                title="استعراض فاتورة المورد المرفوعة على Google Drive بمجلد «فواتير»"
+                              >
+                                <span>🧾</span>
+                                <span>الفاتورة</span>
+                              </a>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled
+                                className="inline-flex items-center gap-1 rounded-md bg-slate-100 text-slate-400 border border-slate-200 py-1 px-2 text-xs font-medium cursor-not-allowed select-none shadow-2xs shrink-0"
+                                title="لا توجد فاتورة مرفقة لهذا الطلب"
+                              >
+                                <span className="opacity-40">🧾</span>
+                                <span className="text-slate-400">الفاتورة</span>
                               </button>
                             )}
 

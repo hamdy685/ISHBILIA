@@ -774,6 +774,9 @@ class ProcurementPurchaseOrderController extends Controller
             'items.*.specifications'   => ['nullable', 'string'],
             'items.*.supplier_id'      => ['nullable', 'integer', 'exists:suppliers,id'],
             'notes'                    => ['nullable', 'string', 'max:3000'],
+            'invoice_file'             => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:20480'],
+            'invoice_photo'            => ['nullable', 'string'],
+            'invoice_photo_name'       => ['nullable', 'string', 'max:255'],
         ]);
 
         $po = PurchaseOrder::with([
@@ -801,14 +804,127 @@ class ProcurementPurchaseOrderController extends Controller
                 !empty($validated['parcel_reference']) ? trim((string) $validated['parcel_reference']) : null,
                 !empty($validated['region']) ? trim((string) $validated['region']) : null
             );
+
+            // Handle optional invoice attachment uploaded during actual PO finalization
+            $uploadedData = null;
+            if ($request->hasFile('invoice_file')) {
+                $uploadedData = \App\Services\StorageService::storeUploadedFile($request->file('invoice_file'), 'invoices');
+            } elseif ($request->filled('invoice_photo')) {
+                $uploadedData = \App\Services\StorageService::storeBase64File(
+                    $request->input('invoice_photo'),
+                    'invoices',
+                    $request->input('invoice_photo_name')
+                );
+            }
+
+            if ($uploadedData && ! empty($uploadedData['path'])) {
+                $finalizedPo->update([
+                    'invoice_photo_path' => $uploadedData['path'],
+                    'invoice_photo_name' => $uploadedData['name'] ?? 'invoice_' . time(),
+                    'invoice_photo_size' => $uploadedData['size'] ?? null,
+                    'invoice_photo_mime_type' => $uploadedData['mime_type'] ?? null,
+                    'invoice_photo_uploaded_at' => now(),
+                    'invoice_photo_uploaded_by_user_id' => $request->user()->id,
+                ]);
+
+                app(\App\Services\SystemEventService::class)->recordAction(
+                    $finalizedPo,
+                    'INVOICE_ATTACHED',
+                    "تم إرفاق فاتورة أمر الشراء الفعلي ({$finalizedPo->po_number}) وتخزينها في Google Drive بمجلد الفواتير.",
+                    ['user_id' => $request->user()->id, 'invoice_path' => $uploadedData['path']]
+                );
+            }
         } catch (\RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 409);
         }
 
         return response()->json([
             'message' => 'تم إصدار أمر الشراء الفعلي بنجاح وإرساله للحسابات.',
-            'data'    => new PurchaseOrderResource($finalizedPo),
+            'data'    => new PurchaseOrderResource($finalizedPo->fresh()),
         ]);
+    }
+
+    public function uploadInvoice(Request $request, string|int $id): JsonResponse
+    {
+        $request->validate([
+            'invoice_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:20480'],
+            'invoice_photo' => ['nullable', 'string'],
+            'invoice_photo_name' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $po = PurchaseOrder::findOrFail((int) $id);
+
+        $uploadedData = null;
+        if ($request->hasFile('invoice_file')) {
+            $uploadedData = \App\Services\StorageService::storeUploadedFile($request->file('invoice_file'), 'invoices');
+        } elseif ($request->filled('invoice_photo')) {
+            $uploadedData = \App\Services\StorageService::storeBase64File(
+                $request->input('invoice_photo'),
+                'invoices',
+                $request->input('invoice_photo_name')
+            );
+        }
+
+        if (! $uploadedData || empty($uploadedData['path'])) {
+            return response()->json(['message' => 'لم يتم استلام ملف الفاتورة بشكل صحيح.'], 422);
+        }
+
+        $po->update([
+            'invoice_photo_path' => $uploadedData['path'],
+            'invoice_photo_name' => $uploadedData['name'] ?? 'invoice_' . time(),
+            'invoice_photo_size' => $uploadedData['size'] ?? null,
+            'invoice_photo_mime_type' => $uploadedData['mime_type'] ?? null,
+            'invoice_photo_uploaded_at' => now(),
+            'invoice_photo_uploaded_by_user_id' => $request->user()->id,
+        ]);
+
+        app(\App\Services\SystemEventService::class)->recordAction(
+            $po,
+            'INVOICE_UPLOADED',
+            "تم إرفاق فاتورة أمر الشراء الفعلي ({$po->po_number}) وتخزينها في Google Drive بمجلد الفواتير.",
+            ['user_id' => $request->user()->id, 'invoice_path' => $uploadedData['path']]
+        );
+
+        return response()->json([
+            'message' => 'تم إرفاق الفاتورة وحفظها في مجلد الفواتير بنجاح ✅',
+            'data' => new PurchaseOrderResource($po->fresh()),
+        ]);
+    }
+
+    public function viewInvoicePhoto(Request $request, string|int $id)
+    {
+        $user = $request->user() ?: auth('sanctum')->user();
+        if (! $user && $request->filled('token')) {
+            $tokenModel = \Laravel\Sanctum\PersonalAccessToken::findToken($request->query('token'));
+            if ($tokenModel) {
+                $user = $tokenModel->tokenable;
+            }
+        }
+
+        if (! $user) {
+            abort(401, 'انتهت جلسة الدخول. يرجى تسجيل الدخول أولاً.');
+        }
+
+        $po = PurchaseOrder::withoutGlobalScopes()->findOrFail((int) $id);
+
+        if (! $po->invoice_photo_path) {
+            abort(404, 'لم يتم إرفاق فاتورة لهذا الأمر.');
+        }
+
+        if (filter_var($po->invoice_photo_path, FILTER_VALIDATE_URL)) {
+            return redirect()->away($po->invoice_photo_path);
+        }
+
+        try {
+            return \App\Services\StorageService::streamResponse(
+                $po->invoice_photo_path,
+                $po->invoice_photo_name ?: "invoice_po_{$po->id}.pdf",
+                $po->invoice_photo_mime_type ?: 'application/pdf',
+                false
+            );
+        } catch (\Throwable) {
+            abort(404, 'ملف الفاتورة غير متوفر على السيرفر.');
+        }
     }
 
     public function pendingWarehouseTasks(Request $request)

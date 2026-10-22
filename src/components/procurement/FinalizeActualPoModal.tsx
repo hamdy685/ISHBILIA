@@ -10,6 +10,7 @@ import {
   getPurchaseOrderApi,
   updatePurchaseOrderApi,
   finalizeActualPurchaseOrderApi,
+  uploadPurchaseOrderInvoiceApi,
 } from '../../api/purchaseOrders';
 import { getSuppliersApi } from '../../api/suppliers';
 import { LoadingSpinner } from '../LoadingSpinner';
@@ -59,6 +60,7 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
   const [headerParcel, setHeaderParcel] = useState<string>('');
   const [headerRegion, setHeaderRegion] = useState<string>('');
   const [finalizationNotes, setFinalizationNotes] = useState<string>('');
+  const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
   const [busy, setBusy] = useState<boolean>(false);
   const [saveBusy, setSaveBusy] = useState<boolean>(false);
 
@@ -70,6 +72,7 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
       setHeaderParcel('');
       setHeaderRegion('');
       setFinalizationNotes('');
+      setInvoiceFile(null);
       setError(null);
       return;
     }
@@ -273,7 +276,10 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
           supplier_id: it.supplier_id ? Number(it.supplier_id) : (targetHeaderSupplierId || po.supplier_id),
         })),
       });
-      toast.success('✅ تم حفظ تعديلات أمر الشراء بنجاح.');
+      if (invoiceFile) {
+        await uploadPurchaseOrderInvoiceApi(po.id, invoiceFile);
+      }
+      toast.success('✅ تم حفظ تعديلات أمر الشراء وإرفاق الفاتورة بنجاح.');
     } catch (err) {
       setError(parseApiError(err).message);
     } finally {
@@ -321,6 +327,7 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
         region: headerRegion.trim() || undefined,
         items: payloadItems,
         notes: finalizationNotes.trim() || undefined,
+        invoice_file: invoiceFile,
       });
 
       toast.success(`✅ تم إصدار أمر الشراء الفعلي (${po.po_number}) واعتماده وإرساله للإدارة المالية بنجاح.`);
@@ -776,6 +783,67 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
                 placeholder="اكتب أي توضيحات للإدارة المالية بشأن فروق الكميات أو الأسعار أو استلامات الموقع..."
                 className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-cyan-500 disabled:opacity-60"
               />
+            </div>
+
+            {/* ── Invoice Attachment (Stored in Google Drive فواتير) ── */}
+            <div className="rounded-xl border border-amber-500/40 bg-amber-950/20 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-black text-amber-300 flex items-center gap-1.5">
+                  <span>🧾</span>
+                  <span>إرفاق فاتورة الشراء / المورد (تُحفظ في Google Drive بمجلد «فواتير»):</span>
+                </label>
+                {invoiceFile && (
+                  <span className="text-[11px] font-bold text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-700/60 flex items-center gap-1">
+                    <span>✓</span> تم اختيار الملف
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <label className="flex-1 cursor-pointer flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 border-dashed border-amber-500/40 hover:border-amber-400 bg-slate-900/80 hover:bg-slate-900 text-xs font-bold text-amber-200 transition-colors">
+                  <span>📎</span>
+                  <span className="truncate max-w-[280px]">
+                    {invoiceFile ? invoiceFile.name : 'اضغط لاختيار صورة الفاتورة أو ملف PDF...'}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    className="hidden"
+                    disabled={busy || saveBusy}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) setInvoiceFile(file);
+                    }}
+                  />
+                </label>
+
+                {invoiceFile && (
+                  <button
+                    type="button"
+                    onClick={() => setInvoiceFile(null)}
+                    className="px-3 py-2 text-xs font-bold text-red-400 hover:text-red-300 bg-red-950/40 hover:bg-red-950/80 rounded-xl border border-red-800/50 transition-colors"
+                  >
+                    ✕ إلغاء
+                  </button>
+                )}
+              </div>
+
+              {/* If PO already has an invoice attached */}
+              {po?.invoice_photo_url && !invoiceFile && (
+                <div className="flex items-center justify-between text-xs text-slate-300 bg-slate-900/90 p-2.5 rounded-lg border border-amber-500/30">
+                  <span className="flex items-center gap-1.5 text-amber-300 font-bold truncate">
+                    <span>📄</span> فاتورة سابقة مرفقة: {po.invoice_photo_name || 'فاتورة المورد'}
+                  </span>
+                  <a
+                    href={po.invoice_photo_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-cyan-400 hover:text-cyan-300 font-bold underline flex items-center gap-1 shrink-0 ml-2"
+                  >
+                    <span>👁️ معاينة الفاتورة</span>
+                  </a>
+                </div>
+              )}
             </div>
           </>
         )}

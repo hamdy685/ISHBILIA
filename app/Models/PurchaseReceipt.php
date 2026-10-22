@@ -63,6 +63,8 @@ class PurchaseReceipt extends Model
         'warehouse_keeper_pass_status',
         'warehouse_keeper_pass_label',
         'actual_receiver_display_name',
+        'invoice_photo_url',
+        'has_invoice_attachment',
     ];
 
     public function getIsSupplementaryAttribute(): bool
@@ -176,6 +178,22 @@ class PurchaseReceipt extends Model
             return rtrim($r2Url, '/') . '/' . ltrim($this->photo_path, '/');
         }
         return "/api/v1/purchase-receipts/{$this->id}/photo";
+    }
+
+    public function getInvoicePhotoUrlAttribute(): ?string
+    {
+        return $this->purchaseOrder?->invoice_photo_url;
+    }
+
+    public function getHasInvoiceAttachmentAttribute(): bool
+    {
+        if ($this->relationLoaded('purchaseOrder') && $this->purchaseOrder?->has_invoice_attachment) {
+            return true;
+        }
+        if ($this->relationLoaded('supplierInvoices') && $this->supplierInvoices->isNotEmpty()) {
+            return true;
+        }
+        return false;
     }
 
     protected function casts(): array

@@ -104,6 +104,11 @@ class PurchaseOrderResource extends JsonResource
                     'email' => $this->finalizedBy->email,
                 ] : null;
             }),
+            'invoice_photo_url' => $this->invoice_photo_url,
+            'invoice_photo_name' => $this->invoice_photo_name,
+            'invoice_photo_size' => $this->invoice_photo_size,
+            'invoice_photo_uploaded_at' => $this->invoice_photo_uploaded_at ? \Illuminate\Support\Carbon::parse($this->invoice_photo_uploaded_at)->toIso8601String() : null,
+            'has_invoice_attachment' => (bool) $this->has_invoice_attachment,
             'rejection_reason' => $this->rejection_reason,
             'created_at' => $this->created_at ? $this->created_at->toIso8601String() : null,
             'updated_at' => $this->updated_at ? $this->updated_at->toIso8601String() : null,
