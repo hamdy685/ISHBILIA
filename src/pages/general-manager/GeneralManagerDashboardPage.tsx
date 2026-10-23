@@ -125,30 +125,7 @@ export const GeneralManagerDashboardPage: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-fade-in" dir="rtl">
-      {/* Executive Header */}
-      <div className="border-b border-slate-800 pb-4">
-        <div className="flex justify-between items-center flex-wrap gap-2">
-          <div>
-            <h1 className="text-xl font-bold text-slate-100 flex items-center gap-2">
-              <span>👑</span> لوحة المدير العام التنفيذية
-            </h1>
-            <p className="text-xs text-slate-400 mt-1">
-              متابعة التدفقات التنفيذية والقرارات المعلقة وأوامر الشراء المصدرة وتقارير الإنفاق بـ (EGP / ج.م).
-            </p>
-          </div>
-          <div className="inline-flex items-center gap-1.5 bg-blue-900/40 border border-blue-700/50 rounded-lg px-3 py-1.5">
-            <span className="text-xs text-blue-300 font-medium">🛡️ الإدارة التنفيذية العليا</span>
-          </div>
-        </div>
-      </div>
-
-      {/* ── حالة واختبار إشعارات التابلت ── */}
-      <PushNotificationPrompt variant="executive" title="إشعارات التابلت وجهاز المدير العام" className="mb-1" />
-
-      {/* ── اختصارات الإجراءات السريعة (Quick Launcher Bar) ── */}
-      <QuickLauncherBar className="mb-2" />
-
-      {/* ── صندوق القرارات التنفيذية المطلوبة منك الآن (Executive Action Inbox) ── */}
+      {/* ── صندوق القرارات التنفيذية المطلوبة منك الآن (يظهر في أعلى الصفحة للمدير العام مباشرة) ── */}
       {(() => {
         const gmActionItems: ActionInboxItem[] = [
           ...requests.map((req) => {
@@ -378,6 +355,32 @@ export const GeneralManagerDashboardPage: React.FC = () => {
             📈 تقارير الإنفاق التفصيلية
           </button>
         </RouterLink>
+      </div>
+
+      {/* ── أقسام التعريف والإشعارات والوصول السريع (تم نقلها لأسفل الصفحة لسهولة وصول المدير العام للطلبات أولاً) ── */}
+      <div className="border-t border-slate-800/80 pt-6 space-y-4">
+        {/* Executive Header */}
+        <div className="border border-slate-800 bg-slate-900/50 rounded-2xl p-4">
+          <div className="flex justify-between items-center flex-wrap gap-2">
+            <div>
+              <h2 className="text-base sm:text-lg font-bold text-slate-100 flex items-center gap-2">
+                <span>👑</span> لوحة المدير العام التنفيذية
+              </h2>
+              <p className="text-xs text-slate-400 mt-1">
+                متابعة التدفقات التنفيذية والقرارات المعلقة وأوامر الشراء المصدرة وتقارير الإنفاق بـ (EGP / ج.م).
+              </p>
+            </div>
+            <div className="inline-flex items-center gap-1.5 bg-blue-900/40 border border-blue-700/50 rounded-lg px-3 py-1.5">
+              <span className="text-xs text-blue-300 font-medium">🛡️ الإدارة التنفيذية العليا</span>
+            </div>
+          </div>
+        </div>
+
+        {/* ── حالة واختبار إشعارات التابلت ── */}
+        <PushNotificationPrompt variant="executive" title="إشعارات التابلت وجهاز المدير العام" className="mb-1" />
+
+        {/* ── اختصارات الإجراءات السريعة (Quick Launcher Bar) ── */}
+        <QuickLauncherBar className="mb-2" />
       </div>
     </div>
   );
