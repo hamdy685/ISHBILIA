@@ -718,6 +718,80 @@ class DashboardPendingTasksController extends Controller
             }
         }
 
+        // 7. Material Transfer Requests: Requester (Returned), Reviewer (Pending), Accountant (Pending)
+        // A) Requester: Returned transfer requests needing edit
+        $returnedMtrs = \App\Models\MaterialTransferRequest::with('items')
+            ->where('user_id', $user->id)
+            ->where('status', \App\Models\MaterialTransferRequest::STATUS_RETURNED)
+            ->get();
+        foreach ($returnedMtrs as $mtr) {
+            $tasks->push([
+                'id' => "mtr-returned-{$mtr->id}",
+                'rawId' => $mtr->id,
+                'type' => 'MATERIAL_TRANSFER',
+                'code' => $mtr->request_number,
+                'title' => "طلب نقل خامات ({$mtr->request_number}): من {$mtr->from_project} إلى {$mtr->to_project}",
+                'subtitle' => 'طلب نقل خامات مُعاد للتعديل من المراجع',
+                'urgency' => 'HIGH',
+                'reason' => $mtr->return_reason ?: 'تمت إعادة الطلب إليك للمراجعة والتعديل قبل إعادة الإرسال',
+                'actionUrl' => "/material-transfers/{$mtr->id}/edit",
+                'actionLabel' => 'تعديل وإعادة الإرسال',
+                'created_at' => $mtr->created_at?->toISOString(),
+                'timeAgo' => $mtr->created_at?->format('Y-m-d H:i'),
+                'items_count' => $mtr->items->count(),
+            ]);
+        }
+
+        // B) Reviewer: Requests waiting for review
+        if ($user->hasRole('reviewer') || $user->hasAnyRole(['admin', 'general_manager', 'execution_manager'])) {
+            $pendingReviewMtrs = \App\Models\MaterialTransferRequest::with(['user', 'items'])
+                ->where('status', \App\Models\MaterialTransferRequest::STATUS_PENDING_REVIEWER)
+                ->get();
+            foreach ($pendingReviewMtrs as $mtr) {
+                $tasks->push([
+                    'id' => "mtr-review-{$mtr->id}",
+                    'rawId' => $mtr->id,
+                    'type' => 'MATERIAL_TRANSFER',
+                    'code' => $mtr->request_number,
+                    'title' => "طلب نقل خامات ({$mtr->request_number}): من {$mtr->from_project} إلى {$mtr->to_project}",
+                    'subtitle' => 'طلب نقل خامات بانتظار مراجعتك واعتمادك',
+                    'requester' => $mtr->user?->name,
+                    'urgency' => 'HIGH',
+                    'reason' => 'طلب نقل خامات جديد بانتظار المراجعة والاعتماد أو الرفض أو الإعادة للتعديل',
+                    'actionUrl' => '/reviewer/material-transfers',
+                    'actionLabel' => 'مراجعة واعتماد الطلب',
+                    'created_at' => $mtr->created_at?->toISOString(),
+                    'timeAgo' => $mtr->created_at?->format('Y-m-d H:i'),
+                    'items_count' => $mtr->items->count(),
+                ]);
+            }
+        }
+
+        // C) Accountant: Requests waiting for accounting action & archiving
+        if ($user->hasAnyRole(['accountant', 'site_accountant', 'general_accountant', 'admin'])) {
+            $pendingAcctMtrs = \App\Models\MaterialTransferRequest::with(['user', 'reviewer', 'items'])
+                ->where('status', \App\Models\MaterialTransferRequest::STATUS_PENDING_ACCOUNTING)
+                ->get();
+            foreach ($pendingAcctMtrs as $mtr) {
+                $tasks->push([
+                    'id' => "mtr-acct-{$mtr->id}",
+                    'rawId' => $mtr->id,
+                    'type' => 'MATERIAL_TRANSFER',
+                    'code' => $mtr->request_number,
+                    'title' => "طلب نقل خامات ({$mtr->request_number}): من {$mtr->from_project} إلى {$mtr->to_project}",
+                    'subtitle' => 'طلب نقل خامات معتمد بانتظار الإجراء المحاسبي والأرشفة',
+                    'requester' => $mtr->user?->name,
+                    'urgency' => 'HIGH',
+                    'reason' => 'تم اعتماد الطلب فنيًا وبانتظار التوجيه المحاسبي وإتمام الأرشفة في أرشيف المنقولات',
+                    'actionUrl' => '/accounting/material-transfers',
+                    'actionLabel' => 'معالجة وأرشفة الطلب',
+                    'created_at' => $mtr->created_at?->toISOString(),
+                    'timeAgo' => $mtr->created_at?->format('Y-m-d H:i'),
+                    'items_count' => $mtr->items->count(),
+                ]);
+            }
+        }
+
         // Sort newest first & deduplicate by task id
         $sorted = $tasks->unique('id')->sortByDesc(fn ($t) => $t['created_at'] ?? '')->values();
 

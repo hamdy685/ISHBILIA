@@ -27,6 +27,7 @@ use App\Http\Controllers\Api\V1\PurchasesReportController;
 use App\Http\Controllers\Api\V1\ReviewerPurchaseRequestController;
 use App\Http\Controllers\Api\V1\SteelWeighingGroupController;
 use App\Http\Controllers\Api\V1\SharedShipmentGroupController;
+use App\Http\Controllers\Api\V1\MaterialTransferRequestController;
 use App\Http\Controllers\Api\Accounting\AccountController;
 use App\Http\Controllers\Api\Accounting\CostCenterController;
 use App\Http\Controllers\Api\Accounting\ContractorInvoiceController;
@@ -498,6 +499,28 @@ Route::middleware('auth:sanctum')->prefix('activity')->group(function () {
     Route::get('/purchase-requests/{id}', [SystemEventController::class, 'purchaseRequest']);
     Route::get('/purchase-orders/{id}', [SystemEventController::class, 'purchaseOrder']);
     Route::get('/my-archive', [SystemEventController::class, 'myArchive']);
+});
+
+// Material Transfer Requests Module (طلب نقل خامات وأرشيف المنقولات)
+Route::middleware('auth:sanctum')->prefix('material-transfers')->group(function () {
+    // Requester routes
+    Route::get('/', [MaterialTransferRequestController::class, 'index']);
+    Route::post('/', [MaterialTransferRequestController::class, 'store']);
+    Route::get('/archive', [MaterialTransferRequestController::class, 'archiveIndex']);
+    Route::get('/{id}', [MaterialTransferRequestController::class, 'show'])->whereNumber('id');
+    Route::put('/{id}', [MaterialTransferRequestController::class, 'update'])->whereNumber('id');
+    Route::post('/{id}/submit', [MaterialTransferRequestController::class, 'submit'])->whereNumber('id');
+    Route::delete('/{id}', [MaterialTransferRequestController::class, 'destroy'])->whereNumber('id');
+
+    // Reviewer routes
+    Route::get('/reviewer/pending', [MaterialTransferRequestController::class, 'reviewerIndex']);
+    Route::post('/{id}/approve', [MaterialTransferRequestController::class, 'reviewerApprove'])->whereNumber('id');
+    Route::post('/{id}/reject', [MaterialTransferRequestController::class, 'reviewerReject'])->whereNumber('id');
+    Route::post('/{id}/return', [MaterialTransferRequestController::class, 'reviewerReturn'])->whereNumber('id');
+
+    // Accounting routes
+    Route::get('/accounting/pending', [MaterialTransferRequestController::class, 'accountingIndex']);
+    Route::post('/{id}/process-archive', [MaterialTransferRequestController::class, 'accountingProcessAndArchive'])->whereNumber('id');
 });
 
 // In-App Notification System Routes

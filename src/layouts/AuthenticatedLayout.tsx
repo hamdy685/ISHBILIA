@@ -72,6 +72,12 @@ export const AuthenticatedLayout: React.FC = () => {
                             <span className="ml-2.5 text-sm" aria-hidden="true">💰</span> ترشيح عروض الأسعار
                         </Link>
                         <Link
+                            to="/reviewer/material-transfers"
+                            className={linkClassName("/reviewer/material-transfers")}
+                        >
+                            <span className="ml-2.5 text-sm" aria-hidden="true">🚚</span> مراجعة نقل الخامات
+                        </Link>
+                        <Link
                             to="/site-engineer"
                             className={linkClassName("/site-engineer")}
                         >
@@ -195,6 +201,12 @@ export const AuthenticatedLayout: React.FC = () => {
                             className={linkClassName("/accounting/land-parcels")}
                         >
                             <span className="ml-2.5 text-sm" aria-hidden="true">🏗️</span> دفتر قطع الأراضي
+                        </Link>
+                        <Link
+                            to="/accounting/material-transfers"
+                            className={linkClassName("/accounting/material-transfers")}
+                        >
+                            <span className="ml-2.5 text-sm" aria-hidden="true">🚚</span> معالجة نقل الخامات
                         </Link>
                         <Link
                             to="/accounting/reports"
@@ -564,7 +576,20 @@ export const AuthenticatedLayout: React.FC = () => {
                             <span className="ml-2.5 text-sm" aria-hidden="true">🗂️</span> أرشيف إجراءاتي
                         </Link>
 
-                        <div className="border-t border-slate-800/80 my-3 pt-3"></div>
+                        <div className="border-t border-slate-800/80 my-3 pt-2">
+                            <span className="px-3 text-[10px] font-black text-amber-400 uppercase tracking-wider block mb-1">
+                                نقل الخامات والعهد
+                            </span>
+                            <Link to="/material-transfers" className={linkClassName('/material-transfers')} onClick={closeMobileMenu}>
+                                <span className="ml-2.5 text-sm" aria-hidden="true">🚚</span> طلبات نقل الخامات
+                            </Link>
+                            <Link to="/material-transfers/create" className={linkClassName('/material-transfers/create')} onClick={closeMobileMenu}>
+                                <span className="ml-2.5 text-sm" aria-hidden="true">✍️</span> إنشاء طلب نقل خامات
+                            </Link>
+                            <Link to="/material-transfers/archive" className={linkClassName('/material-transfers/archive')} onClick={closeMobileMenu}>
+                                <span className="ml-2.5 text-sm" aria-hidden="true">📂</span> أرشيف المنقولات
+                            </Link>
+                        </div>
                         <Link
                             to="/notifications"
                             className={`justify-between ${linkClassName("/notifications")}`}

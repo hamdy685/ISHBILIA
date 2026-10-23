@@ -63,6 +63,11 @@ const AdminRequestTrackerPage = lazyImportWithRetry(() => import("../pages/admin
 const AdminRequestDetailsPage = lazyImportWithRetry(() => import("../pages/admin/AdminRequestDetailsPage"), "AdminRequestDetailsPage");
 const AdminMasterOrdersPage = lazyImportWithRetry(() => import("../pages/admin/AdminMasterOrdersPage"), "AdminMasterOrdersPage");
 const AdminControlCenterPage = lazyImportWithRetry(() => import("../pages/admin/AdminControlCenterPage"), "AdminControlCenterPage");
+const MyMaterialTransfersPage = lazyImportWithRetry(() => import("../pages/transfers/MyMaterialTransfersPage").then(m => ({ default: m.MyMaterialTransfersPage })), "MyMaterialTransfersPage");
+const CreateMaterialTransferPage = lazyImportWithRetry(() => import("../pages/transfers/CreateMaterialTransferPage").then(m => ({ default: m.CreateMaterialTransferPage })), "CreateMaterialTransferPage");
+const ReviewerMaterialTransfersPage = lazyImportWithRetry(() => import("../pages/transfers/ReviewerMaterialTransfersPage").then(m => ({ default: m.ReviewerMaterialTransfersPage })), "ReviewerMaterialTransfersPage");
+const AccountingMaterialTransfersPage = lazyImportWithRetry(() => import("../pages/transfers/AccountingMaterialTransfersPage").then(m => ({ default: m.AccountingMaterialTransfersPage })), "AccountingMaterialTransfersPage");
+const MaterialTransferArchivePage = lazyImportWithRetry(() => import("../pages/transfers/MaterialTransferArchivePage").then(m => ({ default: m.MaterialTransferArchivePage })), "MaterialTransferArchivePage");
 import RoleHomeRedirect from "./RoleHomeRedirect";
 import { ForbiddenPage, NotFoundPage, ServerErrorPage } from "../pages/ErrorPages";
 
@@ -108,6 +113,12 @@ export const AppRoutes: React.FC = () => {
                     <Route path="/requests/supplements" element={<SupplementaryRequestsPage />} />
                     <Route path="/requests/:id" element={<PurchaseRequestDetailsPage />} />
                     <Route path="/requests/:id/edit" element={<EditPurchaseRequestPage />} />
+
+                    {/* Material Transfer Requests (طلب نقل خامات وأرشيف المنقولات) */}
+                    <Route path="/material-transfers" element={<MyMaterialTransfersPage />} />
+                    <Route path="/material-transfers/create" element={<CreateMaterialTransferPage />} />
+                    <Route path="/material-transfers/:id/edit" element={<CreateMaterialTransferPage />} />
+                    <Route path="/material-transfers/archive" element={<MaterialTransferArchivePage />} />
                 </Route>
 
                 {/* ── Admin Routes ─────────────────────────────────────────── */}
@@ -145,6 +156,7 @@ export const AppRoutes: React.FC = () => {
                     <Route path="/reviewer/requests/:id" element={<ReviewerPurchaseRequestDetailsPage />} />
                     <Route path="/reviewer/requests/:id/review" element={<ReviewPurchaseRequestPage />} />
                     <Route path="/reviewer/purchase-quotes" element={<PurchaseQuotesDecisionPage mode="recommend" />} />
+                    <Route path="/reviewer/material-transfers" element={<ReviewerMaterialTransfersPage />} />
                 </Route>
 
                 {/* ── Warehouse Keeper Routes ─────────────────────────────── */}
@@ -179,6 +191,7 @@ export const AppRoutes: React.FC = () => {
                     <Route path="/accounting/supplier-finance" element={<SupplierFinanceWorkspacePage />} />
                     <Route path="/accounting/supplier-payments" element={<SupplierFinanceWorkspacePage />} />
                     <Route path="/accounting/supplier-accounts" element={<SupplierFinanceWorkspacePage />} />
+                    <Route path="/accounting/material-transfers" element={<AccountingMaterialTransfersPage />} />
                     <Route path="/accounting/reports" element={<UniversalReportsPage />} />
                 </Route>
 

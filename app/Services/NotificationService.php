@@ -285,6 +285,14 @@ class NotificationService
     }
 
     /**
+     * Create notification for a single recipient.
+     */
+    public function notifyUser(User|int $recipient, string $type, string $title, string $message, Model $notifiable): ?Notification
+    {
+        return $this->createNotification($recipient, $type, $title, $message, $notifiable);
+    }
+
+    /**
      * Create notifications for multiple recipients.
      */
     public function notifyUsers(iterable $recipients, string $type, string $title, string $message, Model $notifiable): void
