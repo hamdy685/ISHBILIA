@@ -5,8 +5,10 @@ import { TableSkeleton } from '../../components/ui/StateFeedback';
 import PurchaseRequestTable from '../../components/purchase-requests/PurchaseRequestTable';
 import DeleteRequestDialog from '../../components/purchase-requests/DeleteRequestDialog';
 import SubmitRequestDialog from '../../components/purchase-requests/SubmitRequestDialog';
+import CancelRequestDialog from '../../components/purchase-requests/CancelRequestDialog';
 import { useAuth } from '../../context/AuthContext';
 import {
+  cancelPurchaseRequestApi,
   deletePurchaseRequestApi,
   getOwnPurchaseRequestsApi,
   submitPurchaseRequestApi,
@@ -61,6 +63,8 @@ export const PurchaseRequestsPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [selectedDeletePr, setSelectedDeletePr] = useState<PurchaseRequest | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const [selectedCancelPr, setSelectedCancelPr] = useState<PurchaseRequest | null>(null);
+  const [isCancelling, setIsCancelling] = useState<boolean>(false);
 
   const fetchRequests = async (silent = false) => {
     if (!silent) setIsLoading(true);
@@ -111,6 +115,21 @@ export const PurchaseRequestsPage: React.FC = () => {
     }
   };
 
+  const handleConfirmCancel = async (reason: string) => {
+    if (!selectedCancelPr) return;
+    setIsCancelling(true);
+    try {
+      await cancelPurchaseRequestApi(selectedCancelPr.id, { reason });
+      setSelectedCancelPr(null);
+      emitAppDataUpdated();
+      await fetchRequests(true);
+    } catch (err) {
+      setError(parseApiError(err));
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   const handleOpenSubmitModal = React.useCallback((pr: PurchaseRequest) => {
     setSelectedSubmitPr(pr);
   }, []);
@@ -119,11 +138,16 @@ export const PurchaseRequestsPage: React.FC = () => {
     setSelectedDeletePr(pr);
   }, []);
 
+  const handleOpenCancelModal = React.useCallback((pr: PurchaseRequest) => {
+    setSelectedCancelPr(pr);
+  }, []);
+
   const requestNeedsAction = React.useCallback((request: PurchaseRequest) => {
     const canEdit = EMPLOYEE_EDITABLE_STATUSES.has(request.status) && hasPermission('purchase_request.edit_own');
     const canDelete = request.status === 'DRAFT' && hasPermission('purchase_request.edit_own');
     const canSubmit = request.status === 'DRAFT' && hasPermission('purchase_request.submit');
-    return canEdit || canDelete || canSubmit;
+    const canCancel = ['REJECTED', 'RETURNED'].includes(request.status) && hasPermission('purchase_request.edit_own');
+    return canEdit || canDelete || canSubmit || canCancel;
   }, [hasPermission]);
 
   const filteredRequests = React.useMemo(() => {
@@ -249,6 +273,9 @@ export const PurchaseRequestsPage: React.FC = () => {
             <Button variant={btnFilterVariant('REJECTED')} size="sm" className="w-full sm:w-auto" onClick={() => setActiveFilter('REJECTED')}>
               مرفوضة ({requests.filter(r => r.status === 'REJECTED').length})
             </Button>
+            <Button variant={btnFilterVariant('CANCELLED')} size="sm" className="w-full sm:w-auto" onClick={() => setActiveFilter('CANCELLED')}>
+              ملغية ({requests.filter(r => r.status === 'CANCELLED').length})
+            </Button>
           </div>
         </div>
       </div>
@@ -260,6 +287,7 @@ export const PurchaseRequestsPage: React.FC = () => {
         emptyDescription={hasResultFilters ? 'غيّر كلمة البحث أو التاريخ أو تبويب الحالة، أو استخدم «مسح كل الفلاتر» لعرض الطلبات.' : 'ابدأ بإنشاء أول طلب شراء جديد لمؤسستك.'}
         onOpenSubmitModal={handleOpenSubmitModal}
         onOpenDeleteModal={handleOpenDeleteModal}
+        onOpenCancelModal={handleOpenCancelModal}
       />
 
       {/* Dialog Modals */}
@@ -277,6 +305,14 @@ export const PurchaseRequestsPage: React.FC = () => {
         isDeleting={isDeleting}
         onConfirm={handleConfirmDelete}
         onCancel={() => setSelectedDeletePr(null)}
+      />
+
+      <CancelRequestDialog
+        isOpen={!!selectedCancelPr}
+        requestNumber={selectedCancelPr?.request_number || ''}
+        isCancelling={isCancelling}
+        onConfirm={handleConfirmCancel}
+        onCancel={() => setSelectedCancelPr(null)}
       />
     </div>
   );

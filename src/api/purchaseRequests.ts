@@ -74,6 +74,17 @@ export const submitPurchaseRequestApi = async (
   return response.data.data;
 };
 
+export const cancelPurchaseRequestApi = async (
+  id: number,
+  payload?: { reason?: string }
+): Promise<PurchaseRequest> => {
+  const response = await apiClient.post<{ message: string; data: PurchaseRequest }>(
+    `/purchase-requests/${id}/cancel`,
+    payload
+  );
+  return response.data.data;
+};
+
 export interface AddPurchaseRequestItemPayload {
   item_description: string;
   item_id?: number | null;

@@ -5,10 +5,12 @@ import LoadingSpinner from '../../components/LoadingSpinner';
 import PurchaseRequestStatusBadge from '../../components/purchase-requests/PurchaseRequestStatusBadge';
 import DeleteRequestDialog from '../../components/purchase-requests/DeleteRequestDialog';
 import SubmitRequestDialog from '../../components/purchase-requests/SubmitRequestDialog';
+import CancelRequestDialog from '../../components/purchase-requests/CancelRequestDialog';
 import ApproveRequestDialog from '../../components/reviewer/ApproveRequestDialog';
 import PurchaseRequestPrintModal from '../../components/purchase-requests/PurchaseRequestPrintModal';
 import { useAuth } from '../../context/AuthContext';
 import {
+  cancelPurchaseRequestApi,
   deletePurchaseRequestApi,
   getPurchaseRequestApi,
   submitPurchaseRequestApi,
@@ -58,6 +60,8 @@ export const PurchaseRequestDetailsPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState<boolean>(false);
+  const [isCancelling, setIsCancelling] = useState<boolean>(false);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState<boolean>(false);
   const [isOfficeReceiptModalOpen, setIsOfficeReceiptModalOpen] = useState<boolean>(false);
   const [isSupplementModalOpen, setIsSupplementModalOpen] = useState<boolean>(false);
@@ -128,6 +132,21 @@ export const PurchaseRequestDetailsPage: React.FC = () => {
     }
   };
 
+  const handleConfirmCancel = async (reason: string) => {
+    if (!id) return;
+    setIsCancelling(true);
+    try {
+      await cancelPurchaseRequestApi(parseInt(id, 10), { reason });
+      setIsCancelModalOpen(false);
+      setFlashMessage('تم إلغاء طلب الشراء بنجاح.');
+      fetchRequest();
+    } catch (err) {
+      setError(parseApiError(err));
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   if (isLoading) return <LoadingSpinner fullScreen message="تحميل تفاصيل طلب الشراء..." />;
 
   if (error && !requestData) {
@@ -149,6 +168,7 @@ export const PurchaseRequestDetailsPage: React.FC = () => {
   const isDraft = requestData.status === 'DRAFT';
   const canEdit = REQUESTER_EDITABLE_STATUSES.includes(requestData.status) && hasPermission('purchase_request.edit_own');
   const canDelete = isDraft && hasPermission('purchase_request.edit_own');
+  const canCancel = ['REJECTED', 'RETURNED'].includes(requestData.status) && (requestData.user_id === user?.id || hasPermission('purchase_request.edit_own'));
   const canSubmit = isDraft && hasPermission('purchase_request.submit');
   const reviewerDecisionFinal = REVIEWER_DECISION_STATUSES.includes(requestData.status);
   const canRequestSupplement =
@@ -238,12 +258,24 @@ export const PurchaseRequestDetailsPage: React.FC = () => {
       )}
 
       {/* Rejection Alert */}
-      {requestData.status === 'REJECTED' && requestData.rejection_reason && (
-        <div className="bg-rose-950/40 border border-rose-800/80 p-4 rounded-xl">
-          <h3 className="font-bold text-rose-200 text-xs flex items-center gap-2">
-            <span>⚠️</span> سبب الرفض:
-          </h3>
-          <p className="text-xs mt-1 text-rose-300">{requestData.rejection_reason}</p>
+      {requestData.status === 'REJECTED' && (
+        <div className="bg-rose-950/40 border border-rose-800/80 p-4 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
+          <div>
+            <h3 className="font-bold text-rose-200 text-xs flex items-center gap-2">
+              <span>⚠️</span> سبب الرفض:
+            </h3>
+            <p className="text-xs mt-1 text-rose-300">{requestData.rejection_reason || 'تم رفض طلب الشراء.'}</p>
+          </div>
+          {canCancel && (
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => setIsCancelModalOpen(true)}
+              className="bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs whitespace-nowrap shadow-md self-start sm:self-center"
+            >
+              🚫 إلغاء الطلب نهائياً
+            </Button>
+          )}
         </div>
       )}
 
@@ -294,6 +326,16 @@ export const PurchaseRequestDetailsPage: React.FC = () => {
           {canDelete && (
             <Button variant="danger" size="sm" onClick={() => setIsDeleteModalOpen(true)}>
               حذف
+            </Button>
+          )}
+          {canCancel && (
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => setIsCancelModalOpen(true)}
+              className="bg-rose-950/60 text-rose-300 border-rose-800/60 hover:bg-rose-900/60 flex items-center gap-1.5"
+            >
+              <span>🚫</span> إلغاء الطلب
             </Button>
           )}
           <Button
@@ -582,6 +624,13 @@ export const PurchaseRequestDetailsPage: React.FC = () => {
         isDeleting={isDeleting}
         onConfirm={handleConfirmDelete}
         onCancel={() => setIsDeleteModalOpen(false)}
+      />
+      <CancelRequestDialog
+        isOpen={isCancelModalOpen}
+        requestNumber={requestData.request_number}
+        isCancelling={isCancelling}
+        onConfirm={handleConfirmCancel}
+        onCancel={() => setIsCancelModalOpen(false)}
       />
       <PurchaseRequestPrintModal
         isOpen={isPrintModalOpen}

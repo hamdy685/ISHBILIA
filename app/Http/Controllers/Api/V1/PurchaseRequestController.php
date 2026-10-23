@@ -387,6 +387,64 @@ class PurchaseRequestController extends Controller
     }
 
     /**
+     * Cancel the specified rejected, returned, or draft Purchase Request.
+     */
+    public function cancel(Request $request, string|int $id): JsonResponse
+    {
+        $pr = PurchaseRequest::withoutGlobalScopes()->find((int) $id);
+        if (! $pr) {
+            return response()->json([
+                'message' => 'طلب الشراء غير موجود.',
+            ], 404);
+        }
+
+        $user = $request->user();
+
+        if ($pr->user_id !== $user->id && ! $user->hasAnyRole(['admin', 'general_manager'])) {
+            return response()->json([
+                'message' => 'ليس لديك صلاحية لتنفيذ هذا الإجراء.',
+            ], 403);
+        }
+
+        if ($pr->status === 'CANCELLED') {
+            return response()->json([
+                'message' => 'طلب الشراء ملغي بالفعل ولا يمكن إلغاؤه مرة أخرى.',
+            ], 409);
+        }
+
+        $cancellableStatuses = ['REJECTED', 'RETURNED', 'DRAFT'];
+        if (! in_array($pr->status, $cancellableStatuses, true)) {
+            return response()->json([
+                'message' => "لا يمكن إلغاء الطلب في حالته الحالية ({$pr->status}). يسمح بالإلغاء فقط للطلبات المرفوضة أو المعادة أو المسودات.",
+            ], 422);
+        }
+
+        try {
+            $reason = $request->input('reason');
+            $cancelledPr = $this->purchaseRequestService->cancelRequest($user, $pr, $reason);
+
+            return response()->json([
+                'message' => 'تم إلغاء طلب الشراء بنجاح.',
+                'data' => new PurchaseRequestResource($cancelledPr),
+            ], 200);
+        } catch (\DomainException $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], 422);
+        } catch (\Throwable $e) {
+            Log::error('PurchaseRequestController@cancel: Failed to cancel PR: ' . $e->getMessage(), [
+                'user_id' => $user->id,
+                'pr_id' => $id,
+                'exception' => get_class($e),
+            ]);
+
+            return response()->json([
+                'message' => 'تعذر إلغاء طلب الشراء: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Upload an attachment to a Purchase Request.
      */
     public function attachmentUpload(Request $request, string|int $id): JsonResponse

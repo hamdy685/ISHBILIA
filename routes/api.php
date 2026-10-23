@@ -112,6 +112,10 @@ Route::middleware('auth:sanctum')->prefix('purchase-requests')->group(function (
         ->whereNumber('id')
         ->middleware('permission:purchase_request.submit');
 
+    Route::post('/{id}/cancel', [PurchaseRequestController::class, 'cancel'])
+        ->whereNumber('id')
+        ->middleware('permission:purchase_request.edit_own');
+
     Route::post('/{id}/attachments', [PurchaseRequestController::class, 'attachmentUpload'])
         ->whereNumber('id')
         ->middleware('permission:purchase_request.create');

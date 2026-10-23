@@ -825,5 +825,92 @@ class PurchaseRequestService
             ->orderBy('created_at', 'desc')
             ->paginate($perPage);
     }
+
+    /**
+     * Cancel a rejected, returned, or draft purchase request by the requester or admin.
+     */
+    public function cancelRequest(User $user, PurchaseRequest $pr, ?string $reason = null): PurchaseRequest
+    {
+        // 1. Authorization: Only the requester who owns the request, or Admin/GM
+        if ($pr->user_id !== $user->id && ! $user->hasAnyRole(['admin', 'general_manager'])) {
+            throw new \DomainException('ليس لديك صلاحية لإلغاء هذا الطلب.');
+        }
+
+        // 2. Prevent duplicate cancellation
+        if ($pr->status === 'CANCELLED') {
+            throw new \DomainException('طلب الشراء ملغي بالفعل ولا يمكن إلغاؤه مرة أخرى.');
+        }
+
+        // 3. Status checks: Can only cancel if REJECTED, RETURNED, or DRAFT
+        $cancellableStatuses = ['REJECTED', 'RETURNED', 'DRAFT'];
+        if (! in_array($pr->status, $cancellableStatuses, true)) {
+            throw new \DomainException("لا يمكن إلغاء الطلب في حالته الحالية ({$pr->status}). يسمح بالإلغاء فقط للطلبات المرفوضة أو المعادة أو المسودات.");
+        }
+
+        // 4. Must not have any active (non-cancelled) POs
+        $hasActivePos = $pr->purchaseOrders()->whereNotIn('status', ['REJECTED', 'CANCELLED', 'VOIDED'])->exists();
+        if ($hasActivePos) {
+            throw new \DomainException('لا يمكن إلغاء طلب شراء صدرت له أوامر شراء نشطة.');
+        }
+
+        return DB::transaction(function () use ($user, $pr, $reason) {
+            $fromState = $pr->status;
+
+            // Update status to CANCELLED
+            $pr->update([
+                'status' => 'CANCELLED',
+            ]);
+
+            $commentText = $reason ?: ($fromState === 'REJECTED'
+                ? 'تم إلغاء طلب الشراء المرفوض نهائياً من قبل مقدم الطلب والاستغناء عن إعادة إرساله.'
+                : 'تم إلغاء طلب الشراء من قبل مقدم الطلب.');
+
+            // Record in ApprovalHistory to preserve rejection history and audit trail
+            ApprovalHistory::create([
+                'target_type' => PurchaseRequest::class,
+                'target_id' => $pr->id,
+                'actor_user_id' => $user->id,
+                'action' => 'CANCELLED',
+                'from_state' => $fromState,
+                'to_state' => 'CANCELLED',
+                'comments' => $commentText,
+            ]);
+
+            AuditLog::create([
+                'user_id' => $user->id,
+                'action' => 'CANCELLED',
+                'entity_type' => PurchaseRequest::class,
+                'entity_id' => $pr->id,
+                'old_value' => json_encode(['status' => $fromState], JSON_UNESCAPED_UNICODE),
+                'new_value' => json_encode(['status' => 'CANCELLED'], JSON_UNESCAPED_UNICODE),
+            ]);
+
+            try {
+                app(SystemEventService::class)->recordAction(
+                    $pr,
+                    'PR_CANCELLED_BY_REQUESTER',
+                    "قام {$user->name} بإلغاء طلب الشراء ({$pr->request_number}) بعد أن كان في حالة ({$fromState}).",
+                    [
+                        'event_type' => 'purchase_request.cancelled',
+                        'from_state' => $fromState,
+                        'to_state' => 'CANCELLED',
+                        'actor_user_id' => $user->id,
+                        'metadata' => [
+                            'reason' => $reason,
+                        ],
+                    ]
+                );
+            } catch (\Throwable $e) {
+                Log::warning('Failed to log system event for PR cancellation: ' . $e->getMessage());
+            }
+
+            return $pr->fresh([
+                'requester',
+                'department',
+                'items.item',
+                'approvalHistory.actor',
+            ]);
+        });
+    }
 }
 

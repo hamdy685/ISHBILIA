@@ -10,6 +10,7 @@ import { sharePurchaseRequestToSupplierWhatsApp } from '../../utils/whatsapp';
 
 const REQUESTER_EDITABLE_STATUSES = ['DRAFT', 'SUBMITTED', 'UNDER_REVIEW'];
 const REQUESTER_DELETABLE_STATUSES = ['DRAFT'];
+const REQUESTER_CANCELLABLE_STATUSES = ['REJECTED', 'RETURNED'];
 
 const formatRequestDate = (value?: string | null): string => {
   if (!value) return '—';
@@ -143,8 +144,10 @@ interface RowProps {
   canEdit: boolean;
   canDelete: boolean;
   canSubmit: boolean;
+  canCancel?: boolean;
   onOpenSubmitModal: (pr: PurchaseRequest) => void;
   onOpenDeleteModal: (pr: PurchaseRequest) => void;
+  onOpenCancelModal?: (pr: PurchaseRequest) => void;
 }
 
 export const PurchaseRequestTableRow: React.FC<RowProps> = React.memo(({
@@ -152,8 +155,10 @@ export const PurchaseRequestTableRow: React.FC<RowProps> = React.memo(({
   canEdit,
   canDelete,
   canSubmit,
+  canCancel,
   onOpenSubmitModal,
   onOpenDeleteModal,
+  onOpenCancelModal,
 }) => {
   const itemNames = pr.items?.map((item) => item.item_description || item.item?.name).filter(Boolean) || [];
   const itemsDisplay = getItemsSummaryDisplay(pr.items);
@@ -248,6 +253,18 @@ export const PurchaseRequestTableRow: React.FC<RowProps> = React.memo(({
               حذف
             </Button>
           )}
+
+          {canCancel && onOpenCancelModal && (
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => onOpenCancelModal(pr)}
+              className="px-2 py-0.5 text-[10px] bg-rose-950/60 text-rose-300 border-rose-800/60 hover:bg-rose-900/60"
+              title="إلغاء الطلب نهائياً"
+            >
+              إلغاء
+            </Button>
+          )}
         </div>
       </TableCell>
     </TableRow>
@@ -260,8 +277,10 @@ export const PurchaseRequestMobileCard: React.FC<RowProps> = React.memo(({
   canEdit,
   canDelete,
   canSubmit,
+  canCancel,
   onOpenSubmitModal,
   onOpenDeleteModal,
+  onOpenCancelModal,
 }) => {
   const itemNames = pr.items?.map((item) => item.item_description || item.item?.name).filter(Boolean) || [];
   const parcelsDisplay = getSummaryParcels(pr);
@@ -410,6 +429,16 @@ export const PurchaseRequestMobileCard: React.FC<RowProps> = React.memo(({
             حذف
           </Button>
         )}
+        {canCancel && onOpenCancelModal && (
+          <Button
+            variant="danger"
+            size="sm"
+            className="text-xs font-bold px-2.5 py-1.5 bg-rose-950/70 text-rose-300 border-rose-800/60 hover:bg-rose-900/70"
+            onClick={() => onOpenCancelModal(pr)}
+          >
+            إلغاء الطلب
+          </Button>
+        )}
       </div>
     </article>
   );
@@ -420,6 +449,7 @@ interface Props {
   requests: PurchaseRequest[];
   onOpenSubmitModal: (pr: PurchaseRequest) => void;
   onOpenDeleteModal: (pr: PurchaseRequest) => void;
+  onOpenCancelModal?: (pr: PurchaseRequest) => void;
   emptyMessage?: string;
   emptyDescription?: string;
 }
@@ -428,6 +458,7 @@ export const PurchaseRequestTable: React.FC<Props> = React.memo(({
   requests,
   onOpenSubmitModal,
   onOpenDeleteModal,
+  onOpenCancelModal,
   emptyMessage = 'لا توجد طلبات شراء حالياً',
   emptyDescription = 'ابدأ بإنشاء أول طلب شراء جديد لمؤسستك.',
 }) => {
@@ -484,6 +515,7 @@ export const PurchaseRequestTable: React.FC<Props> = React.memo(({
               const isDraft = pr.status === 'DRAFT';
               const canEdit = REQUESTER_EDITABLE_STATUSES.includes(pr.status) && hasPermission('purchase_request.edit_own');
               const canDelete = REQUESTER_DELETABLE_STATUSES.includes(pr.status) && hasPermission('purchase_request.edit_own');
+              const canCancel = REQUESTER_CANCELLABLE_STATUSES.includes(pr.status) && hasPermission('purchase_request.edit_own');
               const canSubmit = isDraft && hasPermission('purchase_request.submit');
 
               return (
@@ -493,8 +525,10 @@ export const PurchaseRequestTable: React.FC<Props> = React.memo(({
                   canEdit={canEdit}
                   canDelete={canDelete}
                   canSubmit={canSubmit}
+                  canCancel={canCancel}
                   onOpenSubmitModal={onOpenSubmitModal}
                   onOpenDeleteModal={onOpenDeleteModal}
+                  onOpenCancelModal={onOpenCancelModal}
                 />
               );
             })}
@@ -507,6 +541,7 @@ export const PurchaseRequestTable: React.FC<Props> = React.memo(({
           const isDraft = pr.status === 'DRAFT';
           const canEdit = REQUESTER_EDITABLE_STATUSES.includes(pr.status) && hasPermission('purchase_request.edit_own');
           const canDelete = REQUESTER_DELETABLE_STATUSES.includes(pr.status) && hasPermission('purchase_request.edit_own');
+          const canCancel = REQUESTER_CANCELLABLE_STATUSES.includes(pr.status) && hasPermission('purchase_request.edit_own');
           const canSubmit = isDraft && hasPermission('purchase_request.submit');
 
           return (
@@ -516,8 +551,10 @@ export const PurchaseRequestTable: React.FC<Props> = React.memo(({
               canEdit={canEdit}
               canDelete={canDelete}
               canSubmit={canSubmit}
+              canCancel={canCancel}
               onOpenSubmitModal={onOpenSubmitModal}
               onOpenDeleteModal={onOpenDeleteModal}
+              onOpenCancelModal={onOpenCancelModal}
             />
           );
         })}

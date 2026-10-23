@@ -45,7 +45,8 @@ export type PurchaseRequestStatus =
   | 'GRN_PENDING'
   | 'COMPLETED'
   | 'RETURNED'
-  | 'REJECTED';
+  | 'REJECTED'
+  | 'CANCELLED';
 
 export type PurchaseRequestPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
 
@@ -71,6 +72,7 @@ export const PR_STATUS_LABELS: Record<PurchaseRequestStatus, string> = {
   COMPLETED: 'مكتمل',
   RETURNED: 'مُعاد للتعديل',
   REJECTED: 'مرفوض',
+  CANCELLED: 'ملغي',
 };
 
 /** Human-readable Arabic+English approval action labels */

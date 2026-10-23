@@ -5,8 +5,10 @@ import LoadingSpinner from '../../components/LoadingSpinner';
 import PurchaseRequestTable from '../../components/purchase-requests/PurchaseRequestTable';
 import DeleteRequestDialog from '../../components/purchase-requests/DeleteRequestDialog';
 import SubmitRequestDialog from '../../components/purchase-requests/SubmitRequestDialog';
+import CancelRequestDialog from '../../components/purchase-requests/CancelRequestDialog';
 import { useAuth } from '../../context/AuthContext';
 import {
+  cancelPurchaseRequestApi,
   deletePurchaseRequestApi,
   getOwnPurchaseRequestsApi,
   submitPurchaseRequestApi,
@@ -49,6 +51,8 @@ export const EmployeeDashboardPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [selectedDeletePr, setSelectedDeletePr] = useState<PurchaseRequest | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const [selectedCancelPr, setSelectedCancelPr] = useState<PurchaseRequest | null>(null);
+  const [isCancelling, setIsCancelling] = useState<boolean>(false);
 
   const fetchRequests = async (silent = false) => {
     if (!silent) setIsLoading(true);
@@ -138,6 +142,21 @@ export const EmployeeDashboardPage: React.FC = () => {
       setError(parseApiError(err));
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleConfirmCancel = async (reason: string) => {
+    if (!selectedCancelPr) return;
+    setIsCancelling(true);
+    try {
+      await cancelPurchaseRequestApi(selectedCancelPr.id, { reason });
+      setSelectedCancelPr(null);
+      emitAppDataUpdated();
+      await fetchRequests();
+    } catch (err) {
+      setError(parseApiError(err));
+    } finally {
+      setIsCancelling(false);
     }
   };
 
@@ -427,6 +446,7 @@ export const EmployeeDashboardPage: React.FC = () => {
               requests={filteredRequests.slice(0, 10)}
               onOpenSubmitModal={(pr) => setSelectedSubmitPr(pr)}
               onOpenDeleteModal={(pr) => setSelectedDeletePr(pr)}
+              onOpenCancelModal={(pr) => setSelectedCancelPr(pr)}
             />
             {filteredRequests.length > 10 && (
               <div className="mt-3 text-center">
@@ -454,6 +474,14 @@ export const EmployeeDashboardPage: React.FC = () => {
         isDeleting={isDeleting}
         onConfirm={handleConfirmDelete}
         onCancel={() => setSelectedDeletePr(null)}
+      />
+
+      <CancelRequestDialog
+        isOpen={!!selectedCancelPr}
+        requestNumber={selectedCancelPr?.request_number || ''}
+        isCancelling={isCancelling}
+        onConfirm={handleConfirmCancel}
+        onCancel={() => setSelectedCancelPr(null)}
       />
     </div>
   );
