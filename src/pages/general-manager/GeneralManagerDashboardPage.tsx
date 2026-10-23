@@ -195,7 +195,7 @@ export const GeneralManagerDashboardPage: React.FC = () => {
                 ? 'الإدارة المالية (الحسابات)'
                 : 'إدارة المشتريات',
 
-              actionUrl: `/general-manager/purchase-requests?open=${req.id}`,
+              actionUrl: `/general-manager/purchase-requests?open=${req.id}&view=items_only`,
               actionLabel: isReturnedFromProcurement
                 ? 'مراجعة الأسعار والمورد وتعديل الطلب'
                 : 'مراجعة وتعديل الطلب',

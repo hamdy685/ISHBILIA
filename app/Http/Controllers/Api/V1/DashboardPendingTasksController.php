@@ -490,7 +490,7 @@ class DashboardPendingTasksController extends Controller
                     'reason' => 'طلب شراء معتمد بانتظار قرارك التنفيذي النهائي',
                     'notes' => $pr->notes,
                     'purpose' => $pr->notes,
-                    'actionUrl' => "/general-manager/purchase-requests?open={$pr->id}",
+                    'actionUrl' => "/general-manager/purchase-requests?open={$pr->id}&view=items_only",
                     'actionLabel' => 'اعتماد أو رفض الطلب',
                     'created_at' => $pr->created_at?->toISOString(),
                     'timeAgo' => $pr->created_at?->format('Y-m-d H:i'),

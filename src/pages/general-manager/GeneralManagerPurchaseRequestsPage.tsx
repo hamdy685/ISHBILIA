@@ -88,6 +88,7 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
+  const [modalViewMode, setModalViewMode] = useState<'full' | 'items_only'>('full');
 
   const handleDirectApprove = async (request: PurchaseRequest) => {
     setDirectApprovingId(request.id);
@@ -153,13 +154,18 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
 
     const request = requests.find((item) => item.id === requestId);
     if (request) {
-      openRequest(request);
+      const isItemsOnly =
+        searchParams.get('view') === 'items_only' ||
+        searchParams.get('mode') === 'items_only' ||
+        searchParams.get('items_only') === 'true';
+      openRequest(request, isItemsOnly ? 'items_only' : 'full');
       setSearchParams({}, { replace: true });
     }
   }, [loading, requests, searchParams, selected, setSearchParams]);
 
-  const openRequest = (request: PurchaseRequest) => {
+  const openRequest = (request: PurchaseRequest, mode: 'full' | 'items_only' = 'full') => {
     setSelected(request);
+    setModalViewMode(mode);
     setDraftNotes(request.notes || '');
     setDraftItems(toDraftItems(request));
     setComment('');
@@ -611,66 +617,314 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
             className="modal-top-viewport fixed inset-0 z-[9999] flex min-h-screen items-center justify-center overflow-y-auto bg-slate-950/80 p-3 sm:p-6 backdrop-blur-sm"
             role="dialog"
             aria-modal="true"
-            aria-label="قرار المدير التنفيذي"
+            aria-label={modalViewMode === 'items_only' ? 'مراجعة بنود الطلب' : 'قرار المدير التنفيذي'}
           >
-            <div className="min-h-0 max-h-[calc(100dvh-2rem)] w-full max-w-[1150px] overflow-y-auto rounded-3xl border border-slate-700 bg-slate-950 p-4 pb-24 sm:p-6 sm:pb-6 shadow-2xl space-y-4">
-              {/* Top Modal Bar */}
-              <div className="flex flex-col gap-2 border-b border-slate-800 pb-4 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h2 className="text-lg font-black text-slate-100 font-mono">
-                      {selected.request_number}
-                    </h2>
-                    <span className="rounded-md bg-amber-500/20 px-2 py-0.5 text-xs font-bold text-amber-300 border border-amber-500/30">
-                      قرار المدير العام
+            {modalViewMode === 'items_only' ? (
+              <div
+                className="min-h-0 max-h-[calc(100dvh-1.5rem)] w-full max-w-[620px] overflow-y-auto rounded-3xl border border-slate-700/80 bg-slate-950 p-4 pb-36 sm:p-5 sm:pb-32 shadow-2xl space-y-3.5 custom-select-scrollbar"
+                dir="rtl"
+              >
+                {/* 1. عنوان مراجعة بنود الطلب والاعتماد الجزئي وعدد البنود وحالة اعتمادها */}
+                <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                  <h3 className="text-sm sm:text-base font-black text-slate-100 flex items-center gap-2">
+                    <span>📦</span>
+                    <span>{isFinancialDirector ? 'بنود الطلب والتكلفة التقديرية' : 'مراجعة بنود الطلب والاعتماد الجزئي'}</span>
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full bg-emerald-950/90 border border-emerald-700/70 px-3 py-1 text-xs font-bold text-emerald-300 shadow-xs">
+                      {isFinancialDirector
+                        ? `عدد البنود: ${draftItems.length} بند`
+                        : `معتمد: ${activeApprovedItems.length} من ${draftItems.length} بند`}
+                    </span>
+                    <button
+                      type="button"
+                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-700 bg-slate-900/80 text-lg font-black text-slate-300 hover:border-cyan-400 hover:text-white cursor-pointer"
+                      onClick={() => {
+                        setSelected(null);
+                        setSearchParams({}, { replace: true });
+                      }}
+                      title="إغلاق النافذة"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+
+                {/* شريط توضيحي صغير وزر للتبديل لعرض التفاصيل الكاملة إن رغب */}
+                <div className="flex items-center justify-between text-[11px] text-slate-400 bg-slate-900/60 border border-slate-800/80 rounded-xl px-3 py-1.5">
+                  <span className="font-mono text-cyan-300 font-bold">{selected.request_number}</span>
+                  <button
+                    type="button"
+                    onClick={() => setModalViewMode('full')}
+                    className="text-cyan-400 hover:text-cyan-300 hover:underline font-semibold flex items-center gap-1"
+                  >
+                    <span>عرض تفاصيل الطلب الكاملة</span>
+                    <span>←</span>
+                  </button>
+                </div>
+
+                {/* 2. كارت مستقل لكل بند يحتوي على: اسم الصنف ورقم القطعة والمنطقة والكمية والوحدة وسعر الوحدة وعروض الأسعار وإجمالي البند */}
+                <div className="space-y-3">
+                  {draftItems.map((item, index) => {
+                    const isExcluded = item.isExcluded;
+                    const lineTotal = (Number(item.quantity) || 0) * (Number(item.estimated_unit_price) || 0);
+                    return (
+                      <article
+                        key={`items-only-item-${index}`}
+                        className={`rounded-2xl border p-3.5 sm:p-4 space-y-3 transition-all ${
+                          isExcluded
+                            ? 'border-rose-900/60 bg-rose-950/20 opacity-70'
+                            : 'border-slate-800 bg-slate-900/80 shadow-sm'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-bold text-slate-100 text-sm">بند {index + 1}</span>
+                          {isExcluded ? (
+                            <span className="rounded bg-rose-500/20 border border-rose-500/40 px-2.5 py-0.5 text-[10px] font-bold text-rose-300">
+                              ❌ مستبعد من الشراء
+                            </span>
+                          ) : (
+                            <span className="rounded bg-emerald-500/20 border border-emerald-500/40 px-2.5 py-0.5 text-[10px] font-bold text-emerald-300">
+                              ✓ معتمد
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="space-y-2.5 text-xs">
+                          {/* اسم الصنف */}
+                          <div>
+                            <label className="text-slate-400 block mb-1">اسم الصنف</label>
+                            <input
+                              disabled={isExcluded || isFinancialDirector}
+                              value={item.item_description}
+                              onChange={(e) => updateItem(index, 'item_description', e.target.value)}
+                              className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 text-xs font-semibold disabled:bg-slate-950 disabled:text-slate-500"
+                            />
+                          </div>
+
+                          {/* رقم القطعة والمنطقة */}
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-slate-400 block mb-1">رقم القطعة</label>
+                              <input
+                                disabled={isExcluded || isFinancialDirector}
+                                value={item.item_reference || ''}
+                                onChange={(e) => updateItem(index, 'item_reference', e.target.value)}
+                                className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 font-mono text-slate-100 text-xs disabled:bg-slate-950 disabled:text-slate-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-slate-400 block mb-1">المنطقة</label>
+                              <input
+                                disabled={isExcluded || isFinancialDirector}
+                                value={item.region || ''}
+                                onChange={(e) => updateItem(index, 'region', e.target.value)}
+                                className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 text-xs disabled:bg-slate-950 disabled:text-slate-500"
+                              />
+                            </div>
+                          </div>
+
+                          {/* الكمية وسعر الوحدة */}
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-slate-400 block mb-1">الكمية ({getUnitLabel(item.uom)})</label>
+                              <input
+                                disabled={isExcluded || isFinancialDirector}
+                                type="number"
+                                min="0.01"
+                                step="any"
+                                value={item.quantity}
+                                onChange={(e) => updateItem(index, 'quantity', e.target.value)}
+                                className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 font-mono text-slate-100 font-bold text-xs disabled:bg-slate-950 disabled:text-slate-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-slate-400 block mb-1">
+                                سعر الوحدة ({item.uom === 'TON' ? 'ج.م/طن' : 'ج.م'})
+                              </label>
+                              <SmartKgPricingInput
+                                unitPrice={item.estimated_unit_price ?? 0}
+                                quantity={item.quantity}
+                                uom={item.uom}
+                                itemDescription={item.item_description}
+                                disabled={isExcluded || isFinancialDirector}
+                                onChangeUnitPrice={(newPrice) => updateItem(index, 'estimated_unit_price', newPrice)}
+                                onConvertToTon={(newQty, tonPrice) => {
+                                  setDraftItems((prev) => prev.map((it, i) => i === index ? {
+                                    ...it,
+                                    quantity: newQty,
+                                    uom: 'TON',
+                                    estimated_unit_price: tonPrice,
+                                    estimated_line_total: Math.round(newQty * tonPrice * 100) / 100,
+                                  } : it));
+                                }}
+                                onConvertToKgPrice={(newKgPrice) => {
+                                  updateItem(index, 'estimated_unit_price', newKgPrice);
+                                }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* المورد المقترح */}
+                          <div className="flex items-center justify-between border-t border-slate-800/80 pt-2 text-xs">
+                            <span className="text-slate-400">المورد المقترح:</span>
+                            <span className="font-bold text-emerald-300">
+                              {item.supplier_name || selected.direct_supplier?.company_name || 'عروض أسعار'}
+                            </span>
+                          </div>
+
+                          {/* إجمالي البند */}
+                          <div className="flex items-center justify-between border-t border-slate-800/80 pt-2 text-xs">
+                            <span className="text-slate-400">إجمالي البند:</span>
+                            <span className="font-mono font-bold text-amber-300">
+                              {formatCleanNumber(lineTotal)} ج.م
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* زر استبعاد البند وإجراءاته الحالية */}
+                        {!isFinancialDirector && (
+                          <div className="flex items-center gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => toggleExcludeItem(index)}
+                              className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-colors ${
+                                isExcluded
+                                  ? 'border-emerald-600 bg-emerald-950 text-emerald-300 hover:bg-emerald-900/60'
+                                  : 'border-amber-600/70 bg-amber-950/40 text-amber-200 hover:bg-amber-900/60'
+                              }`}
+                            >
+                              {isExcluded ? '↩️ استرجاع البند' : '🚫 استبعاد هذا البند'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removeItemPermanently(index)}
+                              className="px-3 py-2 rounded-xl text-xs border border-rose-800/80 text-rose-300 bg-rose-950/40 hover:bg-rose-900/60 transition-colors"
+                              title="حذف البند نهائياً"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        )}
+                      </article>
+                    );
+                  })}
+                </div>
+
+                {activeApprovedTotal > 0 && (
+                  <div className="flex items-center justify-between rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5">
+                    <span className="text-xs font-bold text-amber-200">
+                      💰 إجمالي القيمة التقديرية المعتمدة:
+                    </span>
+                    <span className="font-mono font-black text-amber-300 text-sm">
+                      {formatCleanNumber(activeApprovedTotal)} ج.م
                     </span>
                   </div>
-                  <p className="mt-1 text-xs text-slate-400">
-                    الحالة: {PR_STATUS_LABELS[selected.status]}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
+                )}
+
+                {error && (
+                  <div className="pt-1">
+                    <ErrorMessage error={error} onDismiss={() => setError(null)} />
+                  </div>
+                )}
+
+                {/* 3. زر اعتماد البنود المحددة وإرسالها للمشتريات وزر رفض الطلب بالكامل */}
+                <div className="fixed bottom-0 inset-x-0 z-30 flex flex-col gap-2.5 border-t border-slate-800 bg-slate-950/95 p-3.5 shadow-2xl backdrop-blur sm:static sm:z-auto sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none sm:backdrop-blur-none">
                   <Button
                     type="button"
-                    size="sm"
                     variant="primary"
                     isLoading={actionLoading}
                     onClick={() => void performAction('approve')}
-                    className={`text-xs font-black shadow-md ${
-                      isPrReturnedFromProcurement(selected)
-                        ? 'bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-slate-950'
-                        : 'bg-gradient-to-r from-sky-600 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-slate-950'
-                    }`}
-                    title={isPrReturnedFromProcurement(selected) ? 'اعتماد نهائي وإحالة للحسابات' : 'موافقة وإرسال للمشتريات'}
+                    className="w-full min-h-12 text-sm font-black bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 text-slate-950 shadow-lg shadow-emerald-950/50 rounded-xl"
                   >
-                    {isPrReturnedFromProcurement(selected)
-                      ? `👑✓ اعتماد نهائي للحسابات (${activeApprovedItems.length})`
-                      : `📤 موافقة وإرسال للمشتريات (${activeApprovedItems.length})`}
+                    <span>
+                      {isFinancialDirector
+                        ? '✓ اعتماد وموافقة على الطلب'
+                        : isPrReturnedFromProcurement(selected)
+                          ? `👑✓ اعتماد نهائي للحسابات (${activeApprovedItems.length})`
+                          : `✓ اعتماد البنود المحددة (${activeApprovedItems.length}) وإرسال للمشتريات`}
+                    </span>
                   </Button>
                   <Button
                     type="button"
-                    size="sm"
                     variant="danger"
                     isLoading={actionLoading}
                     onClick={() => setIsRejectModalOpen(true)}
-                    className="text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white"
-                    title="رفض الطلب"
+                    className="w-full min-h-12 text-sm font-bold bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400 text-white shadow-lg shadow-rose-950/50 rounded-xl"
                   >
-                    ✕ رفض
+                    <span>✕ رفض الطلب بالكامل</span>
                   </Button>
-                  <button
-                    type="button"
-                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-600 bg-slate-900/60 text-lg font-black text-slate-300 hover:border-cyan-400 hover:text-white cursor-pointer"
-                    onClick={() => {
-                      setSelected(null);
-                      setSearchParams({}, { replace: true });
-                    }}
-                    title="إغلاق النافذة"
-                  >
-                    ×
-                  </button>
                 </div>
               </div>
+            ) : (
+              <div className="min-h-0 max-h-[calc(100dvh-2rem)] w-full max-w-[1150px] overflow-y-auto rounded-3xl border border-slate-700 bg-slate-950 p-4 pb-24 sm:p-6 sm:pb-6 shadow-2xl space-y-4">
+                {/* Top Modal Bar */}
+                <div className="flex flex-col gap-2 border-b border-slate-800 pb-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className="text-lg font-black text-slate-100 font-mono">
+                        {selected.request_number}
+                      </h2>
+                      <span className="rounded-md bg-amber-500/20 px-2 py-0.5 text-xs font-bold text-amber-300 border border-amber-500/30">
+                        قرار المدير العام
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-400">
+                      الحالة: {PR_STATUS_LABELS[selected.status]}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="primary"
+                      isLoading={actionLoading}
+                      onClick={() => void performAction('approve')}
+                      className={`text-xs font-black shadow-md ${
+                        isPrReturnedFromProcurement(selected)
+                          ? 'bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-slate-950'
+                          : 'bg-gradient-to-r from-sky-600 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-slate-950'
+                      }`}
+                      title={isPrReturnedFromProcurement(selected) ? 'اعتماد نهائي وإحالة للحسابات' : 'موافقة وإرسال للمشتريات'}
+                    >
+                      {isPrReturnedFromProcurement(selected)
+                        ? `👑✓ اعتماد نهائي للحسابات (${activeApprovedItems.length})`
+                        : `📤 موافقة وإرسال للمشتريات (${activeApprovedItems.length})`}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="danger"
+                      isLoading={actionLoading}
+                      onClick={() => setIsRejectModalOpen(true)}
+                      className="text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white"
+                      title="رفض الطلب"
+                    >
+                      ✕ رفض
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setModalViewMode('items_only')}
+                      className="text-xs font-bold border-cyan-800/60 text-cyan-300 hover:bg-cyan-950/60"
+                      title="التبديل إلى عرض مراجعة البنود فقط"
+                    >
+                      📦 مراجعة البنود فقط
+                    </Button>
+                    <button
+                      type="button"
+                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-600 bg-slate-900/60 text-lg font-black text-slate-300 hover:border-cyan-400 hover:text-white cursor-pointer"
+                      onClick={() => {
+                        setSelected(null);
+                        setSearchParams({}, { replace: true });
+                      }}
+                      title="إغلاق النافذة"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
 
               {/* Request Info Cards */}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-5 text-xs">
@@ -1103,6 +1357,7 @@ export const GeneralManagerPurchaseRequestsPage: React.FC = () => {
                 </Button>
               </div>
             </div>
+            )}
           </div>,
           document.body,
         )}
