@@ -843,9 +843,19 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
                             <span>⚖️</span>
                             <span>ترشيح أسعار</span>
                           </span>
+                        ) : item.type === 'MATERIAL_TRANSFER' ? (
+                          <span className="text-[11px] font-black px-2.5 py-0.5 rounded-lg border flex items-center gap-1 bg-teal-950/80 text-teal-300 border-teal-800/60 shadow-xs">
+                            <span>🚚</span>
+                            <span>طلب نقل خامات</span>
+                          </span>
                         ) : null}
 
-                        {isOffice ? (
+                        {item.type === 'MATERIAL_TRANSFER' ? (
+                          <span className="text-[11px] font-bold bg-teal-950/70 text-teal-300 border border-teal-700/60 px-2.5 py-1 rounded-xl flex items-center gap-1.5 shadow-sm">
+                            <span>🔄</span>
+                            <span>مناقلة مواد بين المشروعات</span>
+                          </span>
+                        ) : isOffice ? (
                           <span className="text-[11px] font-bold bg-indigo-950/90 text-indigo-300 border border-indigo-800/70 px-2.5 py-1 rounded-xl flex items-center gap-1">
                             <span>🏢</span> مستلزمات مكتبية للمقر
                           </span>

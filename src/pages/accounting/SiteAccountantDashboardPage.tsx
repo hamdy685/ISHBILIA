@@ -20,8 +20,10 @@ import {
 } from '../../api/supplierFinance';
 import { getAccountingPurchaseOrdersApi } from '../../api/accounting';
 import { getOwnPurchaseRequestsApi, submitPurchaseRequestApi } from '../../api/purchaseRequests';
+import { getAccountingPendingMaterialTransfersApi } from '../../api/materialTransfers';
 import { PurchaseOrder } from '../../types/purchaseOrder';
 import { PurchaseRequest } from '../../types/purchaseRequest';
+import { MaterialTransferRequest } from '../../types/materialTransfer';
 import { getUnitLabel } from '../../utils/units';
 import { formatCleanNumber } from '../../utils/numberFormat';
 import ThreeWayMatchPrintModal from '../../components/accounting/ThreeWayMatchPrintModal';
@@ -60,6 +62,7 @@ export const SiteAccountantDashboardPage: React.FC = () => {
   const [invoices, setInvoices] = useState<SupplierInvoice[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [ownRequests, setOwnRequests] = useState<PurchaseRequest[]>([]);
+  const [transfers, setTransfers] = useState<MaterialTransferRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'RECEIPTS' | 'INVOICES' | 'ORDERS' | 'MY_REQUESTS'>('RECEIPTS');
@@ -89,18 +92,20 @@ export const SiteAccountantDashboardPage: React.FC = () => {
     if (!silent) setLoading(true);
     setError(null);
     try {
-      const [receiptsData, recordedData, invoicesData, posData, requestsData] = await Promise.all([
+      const [receiptsData, recordedData, invoicesData, posData, requestsData, transfersData] = await Promise.all([
         getApprovedReceiptsForAccountingApi({ status: 'pending' }).catch(() => []),
         getApprovedReceiptsForAccountingApi({ recorded: true }).catch(() => []),
         getSupplierInvoicesApi().catch(() => []),
         getAccountingPurchaseOrdersApi().catch(() => []),
         getOwnPurchaseRequestsApi().catch(() => []),
+        getAccountingPendingMaterialTransfersApi().catch(() => ({ data: [] })),
       ]);
       setReceipts(receiptsData || []);
       setRecordedReceipts(recordedData || []);
       setInvoices(invoicesData || []);
       setPurchaseOrders(posData || []);
       setOwnRequests(requestsData || []);
+      setTransfers(transfersData?.data || []);
     } catch (err) {
       if (!silent) setError(parseApiError(err).message);
     } finally {
@@ -355,8 +360,34 @@ export const SiteAccountantDashboardPage: React.FC = () => {
       });
     }
 
+    // 4. Pending Material Transfers waiting for accounting & archiving
+    for (const mtr of transfers) {
+      items.push({
+        id: `mtr-${mtr.id}`,
+        rawId: mtr.id,
+        type: 'MATERIAL_TRANSFER',
+        code: mtr.request_number,
+        title: `طلب نقل خامات (${mtr.request_number}): من ${mtr.from_project} إلى ${mtr.to_project}`,
+        subtitle: 'طلب نقل خامات معتمد بانتظار الإجراء المحاسبي والأرشفة',
+        department: 'إدارة المشروعات',
+        requester: mtr.user?.name,
+        urgency: 'HIGH',
+        reason: 'تم اعتماد الطلب فنيًا وبانتظار التوجيه المحاسبي وإتمام الأرشفة في أرشيف المنقولات',
+        actionUrl: '/accounting/material-transfers',
+        actionLabel: 'معالجة وأرشفة الطلب',
+        created_at: mtr.created_at || undefined,
+        timeAgo: mtr.created_at ? formatDateTime24h(mtr.created_at) : undefined,
+        items_count: mtr.items?.length || 0,
+        items_list: (mtr.items || []).map((it) => ({
+          description: it.item_description,
+          quantity: it.quantity,
+          uom: it.uom,
+        })),
+      });
+    }
+
     return items;
-  }, [receipts, pendingMatchInvoices, draftRequests]);
+  }, [receipts, pendingMatchInvoices, draftRequests, transfers]);
 
   const handleMatchInvoice = async (invoice: SupplierInvoice) => {
     setError(null);
@@ -446,6 +477,15 @@ export const SiteAccountantDashboardPage: React.FC = () => {
           onClick={() => setActiveTab('RECEIPTS')}
           clickableHint="عرض أذونات الاستلام"
         />
+        <Link to="/accounting/material-transfers">
+          <KpiPill
+            title="نقل خامات بانتظار الأرشفة"
+            value={transfers.length}
+            accentColor="cyan"
+            icon={<span className="text-xs">🚚</span>}
+            clickableHint="معالجة وأرشفة المنقولات ←"
+          />
+        </Link>
         <KpiPill
           title="فواتير بانتظار المطابقة"
           value={pendingMatchInvoices.length}

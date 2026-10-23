@@ -4,8 +4,10 @@ import { getAccountingPurchaseOrdersApi, getAccountingPurchaseOrderApi } from '.
 import { getDirectAccountingPurchaseRequestsApi, approveDirectAccountingPurchaseRequestApi } from '../../api/accountingPurchaseRequests';
 import { getSupplierAccountsApi, SupplierAccountSummary } from '../../api/supplierFinance';
 import { getPendingQuoteRequestsApi } from '../../api/purchaseQuotes';
+import { getAccountingPendingMaterialTransfersApi } from '../../api/materialTransfers';
 import { PurchaseOrder } from '../../types/purchaseOrder';
 import { PurchaseRequest } from '../../types/purchaseRequest';
+import { MaterialTransferRequest } from '../../types/materialTransfer';
 import { Button } from '../../components/ui/Button';
 import { KpiCard, KpiPill, KpiPillsBar } from '../../components/ui/Card';
 import { CurrencyDisplay } from '../../components/ui/CurrencyDisplay';
@@ -23,6 +25,7 @@ export const AccountingDashboardPage: React.FC = () => {
   const [directPrs, setDirectPrs] = useState<PurchaseRequest[]>([]);
   const [quoteRequests, setQuoteRequests] = useState<PurchaseRequest[]>([]);
   const [accounts, setAccounts] = useState<SupplierAccountSummary[]>([]);
+  const [pendingTransfers, setPendingTransfers] = useState<MaterialTransferRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPo, setSelectedPo] = useState<PurchaseOrder | null>(null);
   const [openingPoId, setOpeningPoId] = useState<number | null>(null);
@@ -42,16 +45,18 @@ export const AccountingDashboardPage: React.FC = () => {
   const loadData = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [posData, directData, accountsData, quotesData] = await Promise.all([
+      const [posData, directData, accountsData, quotesData, transfersData] = await Promise.all([
         getAccountingPurchaseOrdersApi().catch(() => []),
         getDirectAccountingPurchaseRequestsApi().catch(() => []),
         getSupplierAccountsApi().catch(() => []),
         getPendingQuoteRequestsApi().catch(() => []),
+        getAccountingPendingMaterialTransfersApi().catch(() => ({ data: [] })),
       ]);
       setPos(posData);
       setDirectPrs(directData);
       setAccounts(accountsData);
       setQuoteRequests(quotesData);
+      setPendingTransfers(transfersData?.data || []);
     } finally {
       if (!silent) setLoading(false);
     }
@@ -221,6 +226,30 @@ export const AccountingDashboardPage: React.FC = () => {
               line_total: it.estimated_line_total,
             })),
           })),
+
+          // 5. Pending Material Transfer Requests for Accounting Processing & Archiving
+          ...pendingTransfers.map((mtr) => ({
+            id: `mtr-${mtr.id}`,
+            rawId: mtr.id,
+            type: 'MATERIAL_TRANSFER' as const,
+            code: mtr.request_number,
+            title: `طلب نقل خامات (${mtr.request_number}): من ${mtr.from_project} إلى ${mtr.to_project}`,
+            subtitle: 'طلب نقل خامات معتمد بانتظار الإجراء المحاسبي والأرشفة',
+            department: 'إدارة المشروعات',
+            requester: mtr.user?.name,
+            urgency: 'HIGH' as const,
+            reason: 'تم اعتماد الطلب فنيًا وبانتظار التوجيه المحاسبي وإتمام الأرشفة في أرشيف المنقولات',
+            actionUrl: '/accounting/material-transfers',
+            actionLabel: 'معالجة وأرشفة الطلب',
+            created_at: mtr.created_at || undefined,
+            timeAgo: mtr.created_at ? formatDateTime24h(mtr.created_at) : undefined,
+            items_count: mtr.items?.length || 0,
+            items_list: (mtr.items || []).map((it) => ({
+              description: it.item_description,
+              quantity: it.quantity,
+              uom: it.uom,
+            })),
+          })),
         ];
 
         return (
@@ -236,6 +265,14 @@ export const AccountingDashboardPage: React.FC = () => {
 
       {/* Slim Horizontal KPI Pills */}
       <KpiPillsBar className="my-2">
+        <KpiPill
+          title="نقل خامات بانتظار الأرشفة"
+          value={pendingTransfers.length}
+          accentColor="cyan"
+          icon={<span className="text-xs">🚚</span>}
+          to="/accounting/material-transfers"
+          clickableHint="معالجة وأرشفة المنقولات ←"
+        />
         <KpiPill
           title="أوامر الشراء المصدرة"
           value={`${pos.length} أمر`}

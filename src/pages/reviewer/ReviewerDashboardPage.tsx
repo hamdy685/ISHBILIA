@@ -300,6 +300,7 @@ export const ReviewerDashboardPage: React.FC = () => {
     }
     if (item.type === 'QUOTE' && item.rawId) return `quote-${item.rawId}`;
     if (item.type === 'SUPPLEMENT' && item.rawId) return `supplement-${item.rawId}`;
+    if (item.type === 'MATERIAL_TRANSFER' && item.rawId) return `mtr-${item.rawId}`;
     const idStr = String(item.id || '');
     return idStr.replace(/^pr-rev-/, 'pr-');
   };
