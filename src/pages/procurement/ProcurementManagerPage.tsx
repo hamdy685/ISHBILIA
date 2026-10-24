@@ -6,6 +6,7 @@ import {
   approveProcurementPrApi,
   createDirectPoApi,
   getApprovedByProcurementPrsApi,
+  getExecutivePendingRequestsApi,
   getPendingProcurementApprovalApi,
   getPendingQuoteRequestsApi,
   getProcurementAnalyticsApi,
@@ -80,7 +81,7 @@ const fmtAmount = (value?: string | number | null) => formatCleanNumber(value);
 const statusLabel = (status: string) => STATUS_LABELS[status] || status;
 const reviewerName = (request: PurchaseRequest, departments: ProcurementDepartmentOption[]) => request.approval_history?.find((entry) => entry.action === 'APPROVED_BY_REVIEWER')?.actor?.name || request.assigned_reviewer?.name || departments.find((department) => department.id === request.department?.id || department.name === request.department?.name)?.manager?.name || '—';
 
-type ProcurementQueueStage = 'PENDING_ROUTE' | 'QUOTE_SETUP' | 'READY_FOR_PO';
+type ProcurementQueueStage = 'PENDING_ROUTE' | 'QUOTE_SETUP' | 'READY_FOR_PO' | 'EXECUTIVE_PENDING';
 
 type ProcurementQueueRow = {
   request: PurchaseRequest;
@@ -91,6 +92,7 @@ const QUEUE_STAGE_LABELS: Record<ProcurementQueueStage, string> = {
   PENDING_ROUTE: 'بانتظار اختيار المسار',
   QUOTE_SETUP: 'بانتظار تجهيز عروض الأسعار',
   READY_FOR_PO: 'جاهز لإنشاء أمر شراء',
+  EXECUTIVE_PENDING: 'قرارات بانتظار المدير التنفيذي',
 };
 
 type ReportLine = {
@@ -112,6 +114,7 @@ export const ProcurementManagerPage: React.FC = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = usePersistedState<number>('procurement.active-tab.v1', 0);
   const [pendingPrs, setPendingPrs] = useState<PurchaseRequest[]>([]);
+  const [executivePendingPrs, setExecutivePendingPrs] = useState<PurchaseRequest[]>([]);
   const [quotePrs, setQuotePrs] = useState<PurchaseRequest[]>([]);
   const [approvedPrs, setApprovedPrs] = useState<PurchaseRequest[]>([]);
   const [pos, setPos] = useState<PurchaseOrder[]>([]);
@@ -262,8 +265,9 @@ export const ProcurementManagerPage: React.FC = () => {
     };
 
     try {
-      const [pending, quotePending, approved, ordersPage, actualOrdersPage, supplierData, departmentData, catalogData, report] = await Promise.all([
+      const [pending, executivePending, quotePending, approved, ordersPage, actualOrdersPage, supplierData, departmentData, catalogData, report] = await Promise.all([
         safeLoad('طلبات الاعتماد', getPendingProcurementApprovalApi(), []),
+        safeLoad('قرارات المدير التنفيذي', getExecutivePendingRequestsApi(), []),
         safeLoad('عروض الأسعار', getPendingQuoteRequestsApi(), []),
         safeLoad('الطلبات المعتمدة', getApprovedByProcurementPrsApi(), []),
         safeLoad('أوامر الشراء', getPurchaseOrdersApi({
@@ -286,6 +290,7 @@ export const ProcurementManagerPage: React.FC = () => {
       ]);
 
       setPendingPrs(pending || []);
+      setExecutivePendingPrs(executivePending || []);
       setQuotePrs(quotePending || []);
       setApprovedPrs(approved || []);
       setPos(ordersPage?.data || []);
@@ -527,10 +532,19 @@ export const ProcurementManagerPage: React.FC = () => {
       }
     });
 
+    // 4. Executive Pending (Awaiting GM preliminary approval or final pricing decision)
+    executivePendingPrs.forEach((request) => {
+      if (!seenIds.has(request.id)) {
+        seenIds.add(request.id);
+        rows.push({ request, stage: 'EXECUTIVE_PENDING' });
+      }
+    });
+
     return rows;
-  }, [pendingPrs, quotePrs, approvedPrs]);
+  }, [pendingPrs, executivePendingPrs, quotePrs, approvedPrs]);
 
   const pendingCount = useMemo(() => queueRows.filter((r) => r.stage === 'PENDING_ROUTE').length, [queueRows]);
+  const executivePendingCount = useMemo(() => queueRows.filter((r) => r.stage === 'EXECUTIVE_PENDING').length, [queueRows]);
   const quoteCount = useMemo(() => queueRows.filter((r) => r.stage === 'QUOTE_SETUP').length, [queueRows]);
   const readyForPoCount = useMemo(() => queueRows.filter((r) => r.stage === 'READY_FOR_PO').length, [queueRows]);
   const totalTasksCount = queueRows.length;
@@ -570,7 +584,7 @@ export const ProcurementManagerPage: React.FC = () => {
       matchesRoute = !request.procurement_route && !pendingSupplement && request.request_type !== 'COMPLEMENTARY';
     }
 
-    const matchesStage = queueStage === 'ALL' || stage === queueStage;
+    const matchesStage = queueStage === 'ALL' || (queueStage === 'EXECUTIVE_PENDING' ? (stage === 'EXECUTIVE_PENDING' || stage === 'PENDING_ROUTE') : stage === queueStage);
     const reqDate = String(pendingSupplement?.created_at || request.updated_at || request.created_at || '').slice(0, 10);
     const matchesDate = Boolean(pendingSupplement) || ((!queueDateFrom || reqDate >= queueDateFrom) && (!queueDateTo || reqDate <= queueDateTo));
 
@@ -825,8 +839,53 @@ export const ProcurementManagerPage: React.FC = () => {
       });
     });
 
+    // 6. Executive Pending PRs
+    executivePendingPrs.forEach((pr) => {
+      const isAlreadyPriced = pr.procurement_route === 'DIRECT';
+      items.push({
+        id: `pr-exec-${pr.id}`,
+        rawId: pr.id,
+        type: 'PR',
+        code: pr.request_number,
+        title: pr.justification || (pr.request_type === 'OFFICE_SUPPLIES' ? 'طلب مستلزمات مكتبية' : 'طلب مواد مشروعات'),
+        subtitle: isAlreadyPriced ? 'تم التسعير وبانتظار اعتماد المدير التنفيذي النهائي' : 'بانتظار المدير التنفيذي — متاح لك التسعير المباشر والتخطي فوراً',
+        department: pr.department?.name,
+        requester: pr.requester?.name,
+        amount: pr.total_estimated_cost ? Number(pr.total_estimated_cost) : undefined,
+        urgency: pr.priority === 'HIGH' || pr.priority === 'URGENT' ? 'HIGH' : 'NORMAL',
+        reason: isAlreadyPriced ? 'طلب مسعر بانتظار الاعتماد النهائي من الإدارة التنفيذية' : 'طلب شراء بانتظار المدير التنفيذي مع إمكانية التسعير المباشر وتجاوز الاعتماد المبدئي',
+        actionUrl: `/procurement?open=${pr.id}`,
+        actionLabel: isAlreadyPriced ? '👁️ مراجعة الطلب' : '🏷️ تسعير وتخطي للاعتماد',
+        onAction: () => {
+          if (!isAlreadyPriced) {
+            setDirectAccountingError(null);
+            setDirectAccountingRequest(pr);
+          } else {
+            setSelectedPrForDetails(pr);
+          }
+        },
+        created_at: pr.created_at,
+        timeAgo: pr.created_at ? formatDateTime24h(pr.created_at) : undefined,
+        request_type: pr.request_type,
+        date_needed: pr.date_needed || undefined,
+        priority: pr.priority,
+        parcel_number: pr.items?.[0]?.item_reference || undefined,
+        region: pr.items?.[0]?.region || undefined,
+        items_count: pr.items?.length || 0,
+        items_list: pr.items?.map((it) => ({
+          description: it.item_description || it.item?.name || 'صنف',
+          quantity: it.quantity,
+          uom: it.uom,
+          parcel: it.item_reference,
+          region: it.region,
+          unit_price: it.estimated_unit_price,
+          line_total: it.estimated_line_total,
+        })),
+      });
+    });
+
     return items;
-  }, [pendingActualPos, pos, approvedPrs, pendingPrs, quotePrs]);
+  }, [pendingActualPos, pos, approvedPrs, pendingPrs, quotePrs, executivePendingPrs]);
 
   if (loading) return <div className="min-h-[400px] p-8"><TableSkeleton rows={8} columns={6} /></div>;
 
@@ -1075,8 +1134,47 @@ export const ProcurementManagerPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 pt-1">
-          {/* Card 1: تحديد مسار التوريد */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5 pt-1">
+          {/* Card 1: قرارات بانتظار المدير التنفيذي */}
+          <div className="rounded-xl border border-purple-500/40 bg-gradient-to-b from-purple-950/30 to-slate-950/80 p-3.5 flex flex-col justify-between gap-3 hover:border-purple-400 hover:shadow-lg hover:shadow-purple-950/40 transition-all">
+            <div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-purple-200 font-bold flex items-center gap-1.5">
+                  <span className="text-base">👑</span> قرارات بانتظار المدير التنفيذي
+                </span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                  (executivePendingCount + pendingCount) > 0
+                    ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                    : 'bg-slate-800 text-slate-400'
+                }`}>
+                  {executivePendingCount + pendingCount} طلب
+                </span>
+              </div>
+              <div className="mt-2 space-y-1 text-[11px]">
+                <div className="flex items-center justify-between text-slate-300">
+                  <span>⏳ بانتظار المبدئي (تسعير مباشر متاح):</span>
+                  <strong className="font-mono text-purple-300 font-bold">{executivePendingCount}</strong>
+                </div>
+                <div className="flex items-center justify-between text-slate-300">
+                  <span>🧭 معتمد مبدئياً (بانتظار التسعير/المسار):</span>
+                  <strong className="font-mono text-cyan-300 font-bold">{pendingCount}</strong>
+                </div>
+              </div>
+              <p className="text-[10px] text-slate-400 mt-2 leading-4 border-t border-purple-900/40 pt-1.5">
+                يمكن لمدير المشتريات تسعير الطلبات مباشرة وتجاوز الاعتماد المبدئي لإرسالها للاعتماد النهائي.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="w-full text-xs font-black bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 hover:from-purple-500 hover:to-indigo-500 text-white py-2.5 rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5"
+              onClick={() => handleScrollToQueue('EXECUTIVE_PENDING')}
+            >
+              <span>عرض طلبات المدير التنفيذي ({executivePendingCount + pendingCount})</span>
+              <span>←</span>
+            </button>
+          </div>
+
+          {/* Card 2: تحديد مسار التوريد */}
           <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-3.5 flex flex-col justify-between gap-3 hover:border-amber-500/60 transition-colors">
             <div>
               <div className="flex items-center justify-between text-xs">
@@ -1355,6 +1453,17 @@ export const ProcurementManagerPage: React.FC = () => {
             <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold">
               <button
                 type="button"
+                onClick={() => setQueueStage(queueStage === 'EXECUTIVE_PENDING' ? 'ALL' : 'EXECUTIVE_PENDING')}
+                className={`rounded-full border px-3 py-1.5 transition-all cursor-pointer ${
+                  queueStage === 'EXECUTIVE_PENDING'
+                    ? 'border-purple-400 bg-purple-500/20 text-purple-200 ring-2 ring-purple-500/30 font-black'
+                    : 'border-purple-700/50 bg-purple-950/30 text-purple-300 hover:border-purple-500/60'
+                }`}
+              >
+                👑 قرارات المدير التنفيذي: {executivePendingCount + pendingCount}
+              </button>
+              <button
+                type="button"
                 onClick={() => setQueueStage(queueStage === 'PENDING_ROUTE' ? 'ALL' : 'PENDING_ROUTE')}
                 className={`rounded-full border px-3 py-1.5 transition-all cursor-pointer ${
                   queueStage === 'PENDING_ROUTE'
@@ -1413,7 +1522,7 @@ export const ProcurementManagerPage: React.FC = () => {
             selects={[
               { label: 'القسم المصدر', value: queueDepartment, onChange: setQueueDepartment, options: [{ value: 'ALL', label: 'كل الأقسام' }, ...departmentOptions] },
               { label: 'مسار الشراء', value: queueRoute, onChange: setQueueRoute, options: [{ value: 'ALL', label: 'كل المسارات' }, { value: 'UNDECIDED', label: 'لم يتم تحديده' }, { value: 'DIRECT', label: 'شراء مباشر' }, { value: 'QUOTES', label: 'عروض أسعار' }, { value: 'SUPPLEMENT', label: '⚡ مسار طلب كمالة مباشر' }] },
-              { label: 'مرحلة التنفيذ', value: queueStage, onChange: setQueueStage, options: [{ value: 'ALL', label: 'كل المراحل' }, { value: 'PENDING_ROUTE', label: QUEUE_STAGE_LABELS.PENDING_ROUTE }, { value: 'QUOTE_SETUP', label: QUEUE_STAGE_LABELS.QUOTE_SETUP }, { value: 'READY_FOR_PO', label: QUEUE_STAGE_LABELS.READY_FOR_PO }] },
+              { label: 'مرحلة التنفيذ', value: queueStage, onChange: setQueueStage, options: [{ value: 'ALL', label: 'كل المراحل' }, { value: 'EXECUTIVE_PENDING', label: '👑 قرارات بانتظار المدير التنفيذي' }, { value: 'PENDING_ROUTE', label: QUEUE_STAGE_LABELS.PENDING_ROUTE }, { value: 'QUOTE_SETUP', label: QUEUE_STAGE_LABELS.QUOTE_SETUP }, { value: 'READY_FOR_PO', label: QUEUE_STAGE_LABELS.READY_FOR_PO }] },
             ]}
             dateFrom={queueDateFrom}
             dateTo={queueDateTo}
@@ -1456,9 +1565,13 @@ export const ProcurementManagerPage: React.FC = () => {
                   ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30' 
                   : stage === 'QUOTE_SETUP' 
                   ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' 
+                  : stage === 'EXECUTIVE_PENDING'
+                  ? 'bg-purple-500/15 text-purple-300 border-purple-500/30'
                   : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30';
                 const route = isAnySupplement
                   ? '⚡ شراء مباشر (كمالة)'
+                  : stage === 'EXECUTIVE_PENDING'
+                  ? (request.procurement_route === 'DIRECT' ? '⚡ شراء مباشر مسعر' : '⏳ بانتظار الاعتماد المبدئي')
                   : request.procurement_route === 'DIRECT' 
                   ? 'شراء مباشر' 
                   : request.procurement_route === 'QUOTES' 
@@ -1471,6 +1584,8 @@ export const ProcurementManagerPage: React.FC = () => {
                     className={`rounded-2xl border p-4 sm:p-5 shadow-lg transition-all space-y-4 ${
                       isAnySupplement
                         ? 'border-amber-500/60 bg-gradient-to-b from-slate-900 via-amber-950/20 to-slate-950 shadow-amber-950/30'
+                        : stage === 'EXECUTIVE_PENDING'
+                        ? 'border-purple-500/60 bg-gradient-to-b from-slate-900 via-purple-950/20 to-slate-950 shadow-purple-950/30 hover:border-purple-400'
                         : 'border-slate-800/90 bg-gradient-to-b from-slate-900/90 to-slate-950/90 hover:border-slate-700'
                     }`}
                   >
@@ -1486,6 +1601,8 @@ export const ProcurementManagerPage: React.FC = () => {
                         <span className={`rounded-full border px-2.5 py-0.5 text-xs font-bold ${
                           pendingSupplement
                             ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                            : stage === 'EXECUTIVE_PENDING'
+                            ? 'bg-purple-500/20 text-purple-300 border-purple-500/50'
                             : 'bg-slate-800 border-slate-700 text-slate-300'
                         }`}>
                           {route}
@@ -1493,6 +1610,16 @@ export const ProcurementManagerPage: React.FC = () => {
                         {request.priority && request.priority !== 'NORMAL' && (
                           <span className="rounded-full bg-rose-500/20 border border-rose-500/40 px-2 py-0.5 text-[11px] font-bold text-rose-300">
                             عاجل
+                          </span>
+                        )}
+                        {stage === 'EXECUTIVE_PENDING' && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-purple-500/25 to-indigo-600/25 border border-purple-500/50 px-3 py-1 text-xs font-black text-purple-200 shadow-sm shadow-purple-500/20">
+                            <span>👑</span>
+                            <span>
+                              {request.procurement_route === 'DIRECT'
+                                ? 'طلب تم تسعيره وهو بانتظار موافقة المدير التنفيذي النهائية للتحويل للحسابات'
+                                : 'بانتظار موافقة المدير التنفيذي المبدئية — يمكنك التسعير وتخطي الاعتماد المبدئي مباشرة'}
+                            </span>
                           </span>
                         )}
                         {pendingSupplement && (
@@ -1629,6 +1756,38 @@ export const ProcurementManagerPage: React.FC = () => {
                           </>
                         ) : (
                           <>
+                            {stage === 'EXECUTIVE_PENDING' && (
+                              <>
+                                <Button
+                                  variant="primary"
+                                  size="sm"
+                                  onClick={() => {
+                                    setDirectAccountingError(null);
+                                    setDirectAccountingRequest(request);
+                                  }}
+                                  className="font-black bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-md shadow-purple-950/40 flex items-center gap-1.5"
+                                >
+                                  <span>🏷️</span>
+                                  <span>{request.procurement_route === 'DIRECT' ? 'تعديل بيانات التسعير' : 'تسعير مباشر وتخطي الاعتماد المبدئي'}</span>
+                                </Button>
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() => void handleStartQuotes(request)}
+                                  className="font-bold border-cyan-700/60 text-cyan-200 hover:bg-cyan-950/50 flex items-center gap-1"
+                                >
+                                  <span>🎯</span>
+                                  <span>بدء عروض الأسعار</span>
+                                </Button>
+                                <Button
+                                  variant="danger"
+                                  size="sm"
+                                  onClick={() => handleReject(request)}
+                                >
+                                  رفض
+                                </Button>
+                              </>
+                            )}
                             {stage === 'PENDING_ROUTE' && (
                               <>
                                 <Button

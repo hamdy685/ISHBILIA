@@ -168,6 +168,10 @@ export const getProcurementCatalogItemsApi = async (): Promise<ProcurementCatalo
 export const getPendingProcurementApprovalApi = async (): Promise<PurchaseRequest[]> =>
   (await apiClient.get<{ data: PurchaseRequest[] }>('/procurement/purchase-requests')).data.data;
 
+/** PRs awaiting Executive Director / General Manager decisions (PENDING_EXECUTIVE_APPROVAL) */
+export const getExecutivePendingRequestsApi = async (): Promise<PurchaseRequest[]> =>
+  (await apiClient.get<{ data: PurchaseRequest[] }>('/procurement/purchase-requests/executive-pending')).data.data;
+
 /** PRs ready for PO creation: quote path approved by procurement or direct path approved by accounting. */
 export const getApprovedByProcurementPrsApi = async (): Promise<PurchaseRequest[]> =>
   (await apiClient.get<{ data: PurchaseRequest[] }>('/procurement/approved-purchase-requests')).data.data;

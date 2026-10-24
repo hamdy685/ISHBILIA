@@ -42,6 +42,36 @@ class ProcurementPurchaseRequestService
     }
 
     /**
+     * Get PRs awaiting Executive Director / General Manager decisions.
+     */
+    public function getExecutivePendingRequests(int $perPage = 50)
+    {
+        return PurchaseRequest::with([
+            'requester.roles',
+            'requester.department',
+            'department',
+            'targetDepartment.manager',
+            'targetDepartment.siteEngineer',
+            'assignedReviewer',
+            'siteEngineer',
+            'directSupplier',
+            'items.item',
+            'items.supplier',
+            'approvalHistory.actor',
+            'quotes.supplier',
+            'supplements',
+        ])->withCount(['purchaseOrders as issued_purchase_orders_count' => function ($query) {
+            $query->whereNotIn('status', ['REJECTED']);
+        }])
+        ->where('status', 'PENDING_EXECUTIVE_APPROVAL')
+        ->where(function ($query) {
+            $query->whereNull('request_type')->orWhere('request_type', '!=', 'COMPLEMENTARY');
+        })
+        ->orderBy('updated_at', 'desc')
+        ->paginate($perPage);
+    }
+
+    /**
      * Get PRs waiting for the procurement manager to enter three supplier quotes.
      */
     public function getPendingQuoteRequests(int $perPage = 15, ?User $actor = null)
@@ -178,23 +208,26 @@ class ProcurementPurchaseRequestService
     }
 
     /**
-     * Procurement Manager starts the supplier quote process (PENDING_PROCUREMENT_APPROVAL → PENDING_QUOTE_RECOMMENDATIONS).
+     * Procurement Manager starts the supplier quote process (PENDING_PROCUREMENT_APPROVAL or PENDING_EXECUTIVE_APPROVAL → PENDING_QUOTE_RECOMMENDATIONS).
      */
     public function approvePurchaseRequest(User $procurementManager, PurchaseRequest $request, ?string $comment = null): PurchaseRequest
     {
-        if ($request->status !== 'PENDING_PROCUREMENT_APPROVAL') {
-            throw new \RuntimeException('Only purchase requests pending procurement approval can be approved by the procurement manager.');
+        $allowedStatuses = ['PENDING_PROCUREMENT_APPROVAL', 'PENDING_EXECUTIVE_APPROVAL'];
+        if (! in_array($request->status, $allowedStatuses, true)) {
+            throw new \RuntimeException('Only purchase requests pending procurement or executive approval can be approved by the procurement manager.');
         }
 
         if ($request->items()->count() === 0) {
             throw new \RuntimeException('Cannot approve a purchase request with no line items.');
         }
 
-        return DB::transaction(function () use ($procurementManager, $request, $comment) {
+        return DB::transaction(function () use ($procurementManager, $request, $comment, $allowedStatuses) {
             $pr = PurchaseRequest::where('id', $request->id)->lockForUpdate()->first();
-            if (! $pr || $pr->status !== 'PENDING_PROCUREMENT_APPROVAL') {
-                throw new \RuntimeException('تم اتخاذ قرار بشأن طلب الشراء أو لم يعد بانتظار اعتماد المشتريات.');
+            if (! $pr || ! in_array($pr->status, $allowedStatuses, true)) {
+                throw new \RuntimeException('تم اتخاذ قرار بشأن طلب الشراء أو لم يعد متاحًا لاتخاذ الإجراء.');
             }
+
+            $fromState = $pr->status;
 
             $pr->update([
                 'status' => 'PENDING_QUOTE_RECOMMENDATIONS',
@@ -208,7 +241,7 @@ class ProcurementPurchaseRequestService
                 'target_id' => $pr->id,
                 'actor_user_id' => $procurementManager->id,
                 'action' => 'THREE_QUOTES_REQUIRED',
-                'from_state' => 'PENDING_PROCUREMENT_APPROVAL',
+                'from_state' => $fromState,
                 'to_state' => 'PENDING_QUOTE_RECOMMENDATIONS',
                 'comments' => $comment ?? 'بدأ مدير المشتريات تجهيز عروض أسعار من موردين مختلفين.',
             ]);
@@ -217,7 +250,7 @@ class ProcurementPurchaseRequestService
                 $pr,
                 'THREE_QUOTES_REQUIRED',
                 'بدأ مدير المشتريات تجهيز عروض أسعار من موردين مختلفين للطلب.',
-                ['event_type' => 'purchase_request.quotes_required', 'from_state' => 'PENDING_PROCUREMENT_APPROVAL', 'to_state' => 'PENDING_QUOTE_RECOMMENDATIONS', 'actor_user_id' => $procurementManager->id, 'metadata' => ['comment' => $comment]]
+                ['event_type' => 'purchase_request.quotes_required', 'from_state' => $fromState, 'to_state' => 'PENDING_QUOTE_RECOMMENDATIONS', 'actor_user_id' => $procurementManager->id, 'metadata' => ['comment' => $comment]]
             );
 
             AuditLog::create([
@@ -226,7 +259,7 @@ class ProcurementPurchaseRequestService
                 'entity_id' => $pr->id,
                 'action' => 'THREE_QUOTES_REQUIRED',
                 'field_name' => 'status',
-                'old_value' => 'PENDING_PROCUREMENT_APPROVAL',
+                'old_value' => $fromState,
                 'new_value' => 'PENDING_QUOTE_RECOMMENDATIONS',
             ]);
 
@@ -236,11 +269,13 @@ class ProcurementPurchaseRequestService
 
     /**
      * Send a purchase request directly to accounting when procurement decides that quotes are not required.
+     * Also supports fast-track pricing from PENDING_EXECUTIVE_APPROVAL, skipping preliminary approval and routing directly to final executive approval.
      */
     public function sendToAccountingWithoutQuotes(User $procurementManager, PurchaseRequest $request, array $financialData = [], ?string $comment = null): PurchaseRequest
     {
-        if ($request->status !== 'PENDING_PROCUREMENT_APPROVAL') {
-            throw new \RuntimeException('يمكن إرسال الطلب إلى الحسابات فقط من مرحلة اعتماد المشتريات.');
+        $allowedStatuses = ['PENDING_PROCUREMENT_APPROVAL', 'PENDING_EXECUTIVE_APPROVAL'];
+        if (! in_array($request->status, $allowedStatuses, true)) {
+            throw new \RuntimeException('يمكن إرسال الطلب إلى الحسابات فقط من مرحلة اعتماد المشتريات أو انتظار اعتماد المدير التنفيذي.');
         }
 
         $submittedItems = $financialData['items'] ?? [];
@@ -252,11 +287,14 @@ class ProcurementPurchaseRequestService
             throw ValidationException::withMessages(['items' => ['يجب إدخال البيانات المالية لبند واحد على الأقل قبل الإرسال.']]);
         }
 
-        return DB::transaction(function () use ($procurementManager, $request, $globalSupplierId, $submittedItems, $hasNotes, $notes, $comment): PurchaseRequest {
+        return DB::transaction(function () use ($procurementManager, $request, $globalSupplierId, $submittedItems, $hasNotes, $notes, $comment, $allowedStatuses): PurchaseRequest {
             $pr = PurchaseRequest::with('items')->where('id', $request->id)->lockForUpdate()->firstOrFail();
-            if ($pr->status !== 'PENDING_PROCUREMENT_APPROVAL') {
-                throw new \RuntimeException('تم اتخاذ قرار بشأن طلب الشراء أو لم يعد بانتظار اعتماد المشتريات.');
+            if (! in_array($pr->status, $allowedStatuses, true)) {
+                throw new \RuntimeException('تم اتخاذ قرار بشأن طلب الشراء أو لم يعد متاحًا للاعتماد.');
             }
+
+            $fromState = $pr->status;
+            $isFastTrack = ($fromState === 'PENDING_EXECUTIVE_APPROVAL');
 
             $requestItemsById = $pr->items->keyBy('id');
             $submittedById = collect($submittedItems)->keyBy(fn (array $item): int => (int) ($item['pr_item_id'] ?? 0));
@@ -331,23 +369,28 @@ class ProcurementPurchaseRequestService
 
             app(NotificationService::class)->markEntityNotificationsAsRead($pr);
 
+            $action = $isFastTrack ? 'FAST_TRACK_PRICING_SKIPPED_PRELIMINARY' : 'DIRECT_EXECUTIVE_REVIEW_REQUIRED';
+            $actionComment = $comment ?? ($isFastTrack
+                ? 'قام مدير المشتريات بتسعير الطلب مباشرة واختيار المورد وتخطي مرحلة الاعتماد المبدئي وأرسل الطلب إلى المدير التنفيذي للاعتماد النهائي.'
+                : 'أدخل مدير المشتريات البيانات المالية واختار المورد ثم أرسل الطلب إلى المدير التنفيذي المهندس محمد للاعتماد.');
+
             ApprovalHistory::create([
                 'target_type' => PurchaseRequest::class,
                 'target_id' => $pr->id,
                 'actor_user_id' => $procurementManager->id,
-                'action' => 'DIRECT_EXECUTIVE_REVIEW_REQUIRED',
-                'from_state' => 'PENDING_PROCUREMENT_APPROVAL',
+                'action' => $action,
+                'from_state' => $fromState,
                 'to_state' => 'PENDING_EXECUTIVE_APPROVAL',
-                'comments' => $comment ?? 'أدخل مدير المشتريات البيانات المالية واختار المورد ثم أرسل الطلب إلى المدير التنفيذي المهندس محمد للاعتماد.',
+                'comments' => $actionComment,
             ]);
 
             AuditLog::create([
                 'user_id' => $procurementManager->id,
                 'entity_type' => PurchaseRequest::class,
                 'entity_id' => $pr->id,
-                'action' => 'DIRECT_EXECUTIVE_REVIEW_REQUIRED',
+                'action' => $action,
                 'field_name' => 'status',
-                'old_value' => 'PENDING_PROCUREMENT_APPROVAL',
+                'old_value' => $fromState,
                 'new_value' => 'PENDING_EXECUTIVE_APPROVAL',
             ]);
 
@@ -358,16 +401,20 @@ class ProcurementPurchaseRequestService
             $isExecutionManager = $directManager && $directManager->hasRole('execution_manager');
             $targetExecutiveTitle = $isExecutionManager ? "مدير مشروعات التنفيذ ({$directManager->name})" : 'المدير التنفيذي';
 
+            $systemEventDesc = $isFastTrack
+                ? "قام مدير المشتريات بتسعير الطلب واختيار المورد وتخطي الاعتماد المبدئي، وأرسله مسعرًا إلى {$targetExecutiveTitle} للاعتماد النهائي."
+                : "أدخل مدير المشتريات البيانات المالية واختار المورد وأرسل طلب الشراء المباشر إلى {$targetExecutiveTitle} للاعتماد.";
+
             app(SystemEventService::class)->recordAction(
                 $pr,
-                'DIRECT_EXECUTIVE_REVIEW_REQUIRED',
-                "أدخل مدير المشتريات البيانات المالية واختار المورد وأرسل طلب الشراء المباشر إلى {$targetExecutiveTitle} للاعتماد.",
+                $action,
+                $systemEventDesc,
                 [
-                    'event_type' => 'purchase_request.direct_executive_review_required',
-                    'from_state' => 'PENDING_PROCUREMENT_APPROVAL',
+                    'event_type' => $isFastTrack ? 'purchase_request.fast_track_pricing' : 'purchase_request.direct_executive_review_required',
+                    'from_state' => $fromState,
                     'to_state' => 'PENDING_EXECUTIVE_APPROVAL',
                     'actor_user_id' => $procurementManager->id,
-                    'metadata' => ['comment' => $comment, 'requires_quotes' => false, 'supplier_ids' => $uniqueSupplierIds, 'total_estimated_cost' => round($grandTotal, 2)],
+                    'metadata' => ['comment' => $comment, 'requires_quotes' => false, 'supplier_ids' => $uniqueSupplierIds, 'total_estimated_cost' => round($grandTotal, 2), 'is_fast_track' => $isFastTrack],
                 ]
             );
 
@@ -385,8 +432,8 @@ class ProcurementPurchaseRequestService
                 $notificationService->queueUsers(
                     $gmUsers,
                     'purchase_request_pending_executive_approval',
-                    'طلب شراء مباشر بانتظار اعتماد المدير التنفيذي',
-                    "أرسل مدير المشتريات الطلب المباشر {$pr->request_number} بعد تحديد المورد والأسعار إلى المدير التنفيذي للاعتماد.",
+                    'طلب شراء مباشر مسعر بانتظار اعتماد المدير التنفيذي',
+                    "أرسل مدير المشتريات الطلب {$pr->request_number} بعد تحديد المورد والأسعار إلى المدير التنفيذي للاعتماد النهائي.",
                     $pr
                 );
             }
@@ -567,19 +614,22 @@ class ProcurementPurchaseRequestService
     }
 
     /**
-     * Procurement Manager rejects PR (PENDING_PROCUREMENT_APPROVAL → REJECTED).
+     * Procurement Manager rejects PR (PENDING_PROCUREMENT_APPROVAL or PENDING_EXECUTIVE_APPROVAL → REJECTED).
      */
     public function rejectPurchaseRequest(User $procurementManager, PurchaseRequest $request, string $comment): PurchaseRequest
     {
-        if ($request->status !== 'PENDING_PROCUREMENT_APPROVAL') {
-            throw new \RuntimeException('Only purchase requests pending procurement approval can be rejected by the procurement manager.');
+        $allowedStatuses = ['PENDING_PROCUREMENT_APPROVAL', 'PENDING_EXECUTIVE_APPROVAL'];
+        if (! in_array($request->status, $allowedStatuses, true)) {
+            throw new \RuntimeException('Only purchase requests pending procurement or executive approval can be rejected by the procurement manager.');
         }
 
-        return DB::transaction(function () use ($procurementManager, $request, $comment) {
+        return DB::transaction(function () use ($procurementManager, $request, $comment, $allowedStatuses) {
             $pr = PurchaseRequest::where('id', $request->id)->lockForUpdate()->first();
-            if (! $pr || $pr->status !== 'PENDING_PROCUREMENT_APPROVAL') {
-                throw new \RuntimeException('تم اتخاذ قرار بشأن طلب الشراء أو لم يعد بانتظار اعتماد المشتريات.');
+            if (! $pr || ! in_array($pr->status, $allowedStatuses, true)) {
+                throw new \RuntimeException('تم اتخاذ قرار بشأن طلب الشراء أو لم يعد متاحًا لاتخاذ الإجراء.');
             }
+
+            $fromState = $pr->status;
 
             $pr->update([
                 'status' => 'REJECTED',
@@ -593,7 +643,7 @@ class ProcurementPurchaseRequestService
                 'target_id' => $pr->id,
                 'actor_user_id' => $procurementManager->id,
                 'action' => 'REJECTED_BY_PROCUREMENT',
-                'from_state' => 'PENDING_PROCUREMENT_APPROVAL',
+                'from_state' => $fromState,
                 'to_state' => 'REJECTED',
                 'comments' => $comment,
             ]);
@@ -602,7 +652,7 @@ class ProcurementPurchaseRequestService
                 $pr,
                 'REJECTED_BY_PROCUREMENT',
                 'رفض مدير المشتريات طلب الشراء.',
-                ['event_type' => 'purchase_request.rejected_by_procurement', 'from_state' => 'PENDING_PROCUREMENT_APPROVAL', 'to_state' => 'REJECTED', 'actor_user_id' => $procurementManager->id, 'metadata' => ['comment' => $comment]]
+                ['event_type' => 'purchase_request.rejected_by_procurement', 'from_state' => $fromState, 'to_state' => 'REJECTED', 'actor_user_id' => $procurementManager->id, 'metadata' => ['comment' => $comment]]
             );
 
             AuditLog::create([
@@ -611,7 +661,7 @@ class ProcurementPurchaseRequestService
                 'entity_id' => $pr->id,
                 'action' => 'PROCUREMENT_REJECTED',
                 'field_name' => 'status',
-                'old_value' => 'PENDING_PROCUREMENT_APPROVAL',
+                'old_value' => $fromState,
                 'new_value' => 'REJECTED',
             ]);
 

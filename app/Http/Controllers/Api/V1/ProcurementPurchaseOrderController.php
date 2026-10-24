@@ -44,6 +44,16 @@ class ProcurementPurchaseOrderController extends Controller
     }
 
     /**
+     * List PRs awaiting Executive Director / General Manager decisions.
+     */
+    public function indexExecutivePendingPrs(Request $request): AnonymousResourceCollection
+    {
+        $perPage = min((int) $request->query('per_page', 50), 100);
+        $prs = $this->procurementPrService->getExecutivePendingRequests($perPage);
+        return PurchaseRequestResource::collection($prs);
+    }
+
+    /**
      * List PRs waiting for three supplier quotes.
      */
     public function indexPendingQuoteRequests(Request $request): AnonymousResourceCollection
@@ -87,7 +97,7 @@ class ProcurementPurchaseOrderController extends Controller
 
         $hasPendingSupplement = $pr->supplements()->whereIn('status', ['PENDING_PROCUREMENT_APPROVAL', 'REVIEWER_APPROVED'])->exists();
 
-        if (! $hasPendingSupplement && ! in_array($pr->status, ['PENDING_PROCUREMENT_APPROVAL', 'PENDING_QUOTE_RECOMMENDATIONS', 'PENDING_EXECUTIVE_QUOTE_DECISION', 'APPROVED_BY_PROCUREMENT', 'APPROVED_BY_ACCOUNTING'])) {
+        if (! $hasPendingSupplement && ! in_array($pr->status, ['PENDING_PROCUREMENT_APPROVAL', 'PENDING_EXECUTIVE_APPROVAL', 'PENDING_QUOTE_RECOMMENDATIONS', 'PENDING_EXECUTIVE_QUOTE_DECISION', 'APPROVED_BY_PROCUREMENT', 'APPROVED_BY_ACCOUNTING'])) {
             return response()->json(['message' => 'Purchase request is not in a procurement queue status.'], 409);
         }
 

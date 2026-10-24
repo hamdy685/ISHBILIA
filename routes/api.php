@@ -193,6 +193,9 @@ Route::middleware('auth:sanctum')->prefix('procurement')->group(function () {
     Route::get('/purchase-requests/quotes', [ProcurementPurchaseOrderController::class, 'indexPendingQuoteRequests'])
         ->middleware('permission:purchase_quote.view');
 
+    Route::get('/purchase-requests/executive-pending', [ProcurementPurchaseOrderController::class, 'indexExecutivePendingPrs'])
+        ->middleware('permission:purchase_request.view_approved');
+
     Route::get('/purchase-requests/{id}', [ProcurementPurchaseOrderController::class, 'showApprovedPr'])
         ->middleware('permission:purchase_request.view_approved');
 
