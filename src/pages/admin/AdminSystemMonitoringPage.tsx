@@ -13,6 +13,7 @@ import {
   getAdminDataQualityApi,
   getAdminSecurityEventsApi,
   getAdminSystemMonitoringApi,
+  runAdminMigrationsApi,
   MonitoringAlert,
   MonitoringSnapshot,
 } from '../../api/admin/systemMonitoring';
@@ -98,7 +99,23 @@ export const AdminSystemMonitoringPage: React.FC = () => {
   const [securityEvents, setSecurityEvents] = useState<AdminSecurityEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [runningMigrations, setRunningMigrations] = useState(false);
+  const [migrationMsg, setMigrationMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const handleRunMigrations = async () => {
+    setRunningMigrations(true);
+    setMigrationMsg(null);
+    try {
+      const res = await runAdminMigrationsApi();
+      setMigrationMsg(res.message || 'تم تطبيق الترحيلات بنجاح.');
+      await loadMonitoring(true);
+    } catch (err: unknown) {
+      setMigrationMsg(parseApiError(err).message);
+    } finally {
+      setRunningMigrations(false);
+    }
+  };
 
   const loadMonitoring = useCallback(async (silent = false) => {
     if (silent) setRefreshing(true);
@@ -168,6 +185,41 @@ export const AdminSystemMonitoringPage: React.FC = () => {
       </div>
 
       {error && <ErrorMessage error={error} />}
+
+      {snapshot?.migrations?.pending_count && snapshot.migrations.pending_count > 0 ? (
+        <div className="rounded-2xl border-2 border-amber-500/50 bg-gradient-to-r from-amber-950/40 via-slate-900 to-amber-950/20 p-4 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xl font-black animate-pulse">
+              ⚠️
+            </span>
+            <div>
+              <h3 className="text-sm font-black text-amber-200">
+                يوجد {snapshot.migrations.pending_count} ترحيل قاعدة بيانات معلق
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                تحديثات الجداول وقاعدة البيانات جاهزة للتطبيق.
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={handleRunMigrations}
+            disabled={runningMigrations}
+            className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-black shadow-lg shadow-amber-900/40 shrink-0 flex items-center gap-2"
+          >
+            <span>⚡</span>
+            <span>{runningMigrations ? 'جاري تطبيق الترحيلات...' : 'تطبيق الترحيلات الآن بضغطة واحدة'}</span>
+          </Button>
+        </div>
+      ) : null}
+
+      {migrationMsg && (
+        <div className="rounded-xl border border-cyan-500/50 bg-cyan-950/40 p-3 text-xs text-cyan-200 flex items-center justify-between">
+          <span>{migrationMsg}</span>
+          <button onClick={() => setMigrationMsg(null)} className="text-slate-400 hover:text-white text-sm font-bold">✕</button>
+        </div>
+      )}
 
       {snapshot && (
         <>

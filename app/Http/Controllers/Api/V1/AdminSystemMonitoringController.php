@@ -15,12 +15,34 @@ use App\Models\Supplier;
 use App\Models\SystemEvent;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Throwable;
 
 class AdminSystemMonitoringController extends Controller
 {
+    public function runMigrations(): JsonResponse
+    {
+        try {
+            Artisan::call('migrate', ['--force' => true]);
+            $output = Artisan::output();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'تم تطبيق جميع ترحيلات قاعدة البيانات بنجاح.',
+                'output' => $output,
+                'snapshot' => $this->snapshot(),
+            ]);
+        } catch (Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'فشل تنفيذ ترحيلات قاعدة البيانات: ' . $e->getMessage(),
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     public function index(): JsonResponse
     {
         return response()->json(['data' => $this->snapshot()]);

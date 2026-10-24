@@ -7,6 +7,7 @@ import { getDepartmentsAdminApi } from '../../api/admin/departments';
 import {
   getAdminSystemMonitoringApi,
   getAdminAuditLogApi,
+  runAdminMigrationsApi,
   MonitoringSnapshot,
   AdminAuditEvent,
 } from '../../api/admin/systemMonitoring';
@@ -30,9 +31,25 @@ export const AdminDashboardPage: React.FC = () => {
   const [auditFilter, setAuditFilter] = useState<'ALL' | 'WORKFLOW' | 'USERS' | 'SUPPLIERS'>('ALL');
   const [loading, setLoading] = useState<boolean>(true);
   const [exporting, setExporting] = useState<boolean>(false);
+  const [runningMigrations, setRunningMigrations] = useState<boolean>(false);
+  const [migrationMessage, setMigrationMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const { hasPermission } = useAuth();
+
+  const handleRunMigrations = async () => {
+    setRunningMigrations(true);
+    setMigrationMessage(null);
+    try {
+      const res = await runAdminMigrationsApi();
+      setMigrationMessage(res.message || 'تم تطبيق الترحيلات بنجاح.');
+      await loadData();
+    } catch (err) {
+      setMigrationMessage(parseApiError(err).message);
+    } finally {
+      setRunningMigrations(false);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -172,7 +189,8 @@ export const AdminDashboardPage: React.FC = () => {
         urgency: 'HIGH',
         reason: 'توجد ملفات ترحيل معلقة بقاعدة البيانات',
         actionUrl: '/admin/system-monitor',
-        actionLabel: 'فحص ترحيلات النظام',
+        actionLabel: runningMigrations ? 'جاري التطبيق...' : '⚡ تطبيق الترحيل الآن',
+        onAction: () => void handleRunMigrations(),
       });
     }
 
@@ -233,6 +251,42 @@ export const AdminDashboardPage: React.FC = () => {
           </Button>
         </div>
       </div>
+
+      {/* ── تنبيه الترحيلات المعلقة مع زر التنفيذ المباشر ── */}
+      {snapshot?.migrations?.pending_count && snapshot.migrations.pending_count > 0 ? (
+        <div className="rounded-2xl border-2 border-amber-500/50 bg-gradient-to-r from-amber-950/40 via-slate-900 to-amber-950/20 p-4 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xl font-black animate-pulse">
+              ⚠️
+            </span>
+            <div>
+              <h3 className="text-sm font-black text-amber-200">
+                يوجد {snapshot.migrations.pending_count} ترحيل قاعدة بيانات معلق
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                تحديثات الجداول وقاعدة البيانات بانتظار التطبيق للوصول لأحدث إصدار.
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={handleRunMigrations}
+            disabled={runningMigrations}
+            className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-black shadow-lg shadow-amber-900/40 shrink-0 flex items-center gap-2"
+          >
+            <span>⚡</span>
+            <span>{runningMigrations ? 'جاري تطبيق الترحيلات...' : 'تطبيق الترحيلات الآن بضغطة واحدة'}</span>
+          </Button>
+        </div>
+      ) : null}
+
+      {migrationMessage && (
+        <div className="rounded-xl border border-cyan-500/50 bg-cyan-950/40 p-3 text-xs text-cyan-200 flex items-center justify-between">
+          <span>{migrationMessage}</span>
+          <button onClick={() => setMigrationMessage(null)} className="text-slate-400 hover:text-white text-sm font-bold">✕</button>
+        </div>
+      )}
 
       {/* ── صندوق المهام والإجراءات الإدارية المطلوبة (Admin Action Inbox) ── */}
       <ActionRequiredInbox

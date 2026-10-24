@@ -142,3 +142,16 @@ export const getAdminSecurityEventsApi = async (): Promise<AdminSecurityEvent[]>
   const response = await client.get<{ data: AdminSecurityEvent[] }>('/admin/system/security-events');
   return response.data.data;
 };
+
+export interface RunMigrationsResult {
+  success: boolean;
+  message: string;
+  output?: string;
+  snapshot?: MonitoringSnapshot;
+}
+
+export const runAdminMigrationsApi = async (): Promise<RunMigrationsResult> => {
+  const response = await client.post<RunMigrationsResult>('/admin/system/run-migrations');
+  return response.data;
+};
+
