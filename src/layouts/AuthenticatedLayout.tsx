@@ -134,6 +134,12 @@ export const AuthenticatedLayout: React.FC = () => {
                             <span className="ml-2.5 text-sm" aria-hidden="true">📋</span> أوامر الشراء
                         </Link>
                         <Link
+                            to="/procurement/pending-receipts"
+                            className={linkClassName("/procurement/pending-receipts")}
+                        >
+                            <span className="ml-2.5 text-sm" aria-hidden="true">📦</span> أذونات الاستلام المتوقفة
+                        </Link>
+                        <Link
                             to="/procurement/suppliers"
                             className={linkClassName("/procurement/suppliers")}
                         >

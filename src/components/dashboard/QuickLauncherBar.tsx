@@ -129,6 +129,7 @@ export const QuickLauncherBar: React.FC<QuickLauncherBarProps> = ({
     if (hasRole('procurement_manager')) {
       items.push(
         { id: 'proc-queue', label: 'طابور الطلبات المعتمدة', icon: '⚡', to: '/procurement/purchase-requests', variant: 'primary' },
+        { id: 'proc-pending-receipts', label: 'أذونات الاستلام المتوقفة', icon: '📦', to: '/procurement/pending-receipts', variant: 'emerald' },
         { id: 'proc-approved-quotes', label: 'الأسعار المعتمدة للتعميد', icon: '⚖️', to: '/procurement/purchase-requests?tab=approved-quotes', variant: 'emerald' },
         { id: 'proc-pos', label: 'أرشيف أوامر الشراء', icon: '📑', to: '/procurement/purchase-orders', variant: 'slate' },
         { id: 'proc-suppliers', label: 'إدارة الموردين', icon: '🏢', to: '/procurement/suppliers', variant: 'amber' },

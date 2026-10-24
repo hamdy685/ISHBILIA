@@ -280,3 +280,21 @@ export const updateDeliveryStatusApi = async (
   return response.data.data;
 };
 
+export const getProcurementPendingReceiptsApi = async (params?: {
+  q?: string;
+  supplier_id?: number | string;
+  status?: string;
+}): Promise<{
+  success: boolean;
+  count: number;
+  data: any[];
+}> => {
+  const response = await apiClient.get<{
+    success: boolean;
+    count: number;
+    data: any[];
+  }>('/procurement/pending-receipts', { params });
+  return response.data;
+};
+
+

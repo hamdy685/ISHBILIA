@@ -24,6 +24,7 @@ const CreatePurchaseOrderPage = lazyImportWithRetry(() => import("../pages/procu
 const EditPurchaseOrderPage = lazyImportWithRetry(() => import("../pages/procurement/EditPurchaseOrderPage"), "EditPurchaseOrderPage");
 const PurchaseOrderDetailsPage = lazyImportWithRetry(() => import("../pages/procurement/PurchaseOrderDetailsPage"), "PurchaseOrderDetailsPage");
 const ProcurementManagerPage = lazyImportWithRetry(() => import("../pages/procurement/ProcurementManagerPage"), "ProcurementManagerPage");
+const ProcurementPendingReceiptsPage = lazyImportWithRetry(() => import("../pages/procurement/ProcurementPendingReceiptsPage"), "ProcurementPendingReceiptsPage");
 const ProcurementReportsPage = lazyImportWithRetry(() => import("../pages/procurement/ProcurementReportsPage"), "ProcurementReportsPage");
 const UniversalReportsPage = lazyImportWithRetry(() => import("../pages/reports/UniversalReportsPage"), "UniversalReportsPage");
 const SiteAccountantDashboardPage = lazyImportWithRetry(() => import("../pages/accounting/SiteAccountantDashboardPage"), "SiteAccountantDashboardPage");
@@ -174,12 +175,13 @@ export const AppRoutes: React.FC = () => {
                 </Route>
 
                 {/* ── Procurement Manager Routes ────────────────────────────── */}
-                <Route element={<RoleRoute allowedRoles={["procurement_manager"]} />}>
+                <Route element={<RoleRoute allowedRoles={["procurement_manager", "admin"]} />}>
                     <Route path="/procurement" element={<ProcurementManagerPage />} />
                     <Route path="/procurement/approved-requests" element={<ApprovedPurchaseRequestsPage />} />
                     <Route path="/procurement/purchase-orders/create" element={<CreatePurchaseOrderPage />} />
                     <Route path="/procurement/purchase-orders/:id/edit" element={<EditPurchaseOrderPage />} />
                     <Route path="/procurement/purchase-orders/:id" element={<PurchaseOrderDetailsPage />} />
+                    <Route path="/procurement/pending-receipts" element={<ProcurementPendingReceiptsPage />} />
                     <Route path="/procurement/reports" element={<ProcurementReportsPage />} />
                     <Route path="/procurement/*" element={<ProcurementManagerPage />} />
                 </Route>
