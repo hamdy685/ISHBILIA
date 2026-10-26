@@ -834,6 +834,7 @@ class ProcurementPurchaseOrderController extends Controller
                     'invoice_photo_name' => $uploadedData['name'] ?? 'invoice_' . time(),
                     'invoice_photo_size' => $uploadedData['size'] ?? null,
                     'invoice_photo_mime_type' => $uploadedData['mime_type'] ?? null,
+                    'invoice_photo_drive_id' => $uploadedData['drive_id'] ?? null,
                     'invoice_photo_uploaded_at' => now(),
                     'invoice_photo_uploaded_by_user_id' => $request->user()->id,
                 ]);
@@ -866,14 +867,18 @@ class ProcurementPurchaseOrderController extends Controller
         $po = PurchaseOrder::findOrFail((int) $id);
 
         $uploadedData = null;
-        if ($request->hasFile('invoice_file')) {
-            $uploadedData = \App\Services\StorageService::storeUploadedFile($request->file('invoice_file'), 'invoices');
-        } elseif ($request->filled('invoice_photo')) {
-            $uploadedData = \App\Services\StorageService::storeBase64File(
-                $request->input('invoice_photo'),
-                'invoices',
-                $request->input('invoice_photo_name')
-            );
+        try {
+            if ($request->hasFile('invoice_file')) {
+                $uploadedData = \App\Services\StorageService::storeUploadedFile($request->file('invoice_file'), 'invoices');
+            } elseif ($request->filled('invoice_photo')) {
+                $uploadedData = \App\Services\StorageService::storeBase64File(
+                    $request->input('invoice_photo'),
+                    'invoices',
+                    $request->input('invoice_photo_name')
+                );
+            }
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
         }
 
         if (! $uploadedData || empty($uploadedData['path'])) {
@@ -885,6 +890,7 @@ class ProcurementPurchaseOrderController extends Controller
             'invoice_photo_name' => $uploadedData['name'] ?? 'invoice_' . time(),
             'invoice_photo_size' => $uploadedData['size'] ?? null,
             'invoice_photo_mime_type' => $uploadedData['mime_type'] ?? null,
+            'invoice_photo_drive_id' => $uploadedData['drive_id'] ?? null,
             'invoice_photo_uploaded_at' => now(),
             'invoice_photo_uploaded_by_user_id' => $request->user()->id,
         ]);
@@ -922,6 +928,24 @@ class ProcurementPurchaseOrderController extends Controller
             abort(404, 'لم يتم إرفاق فاتورة لهذا الأمر.');
         }
 
+        // 1. Google Drive direct stream check
+        $driveId = $po->invoice_photo_drive_id ?: \App\Services\GoogleDriveService::extractFileId($po->invoice_photo_path);
+        if ($driveId && \App\Services\GoogleDriveService::isConfigured()) {
+            try {
+                return \App\Services\GoogleDriveService::streamFile(
+                    $driveId,
+                    $po->invoice_photo_name ?: "invoice_po_{$po->id}.pdf",
+                    $po->invoice_photo_mime_type ?: 'application/pdf',
+                    false
+                );
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning("Drive stream failed for invoice {$po->id}: " . $e->getMessage());
+                if (filter_var($po->invoice_photo_path, FILTER_VALIDATE_URL)) {
+                    return redirect()->away($po->invoice_photo_path);
+                }
+            }
+        }
+
         if (filter_var($po->invoice_photo_path, FILTER_VALIDATE_URL)) {
             return redirect()->away($po->invoice_photo_path);
         }
@@ -934,7 +958,7 @@ class ProcurementPurchaseOrderController extends Controller
                 false
             );
         } catch (\Throwable) {
-            abort(404, 'ملف الفاتورة غير متوفر على السيرفر.');
+            abort(404, 'ملف الفاتورة مفقود من الخادم القديم (تم حذفه في عملية نشر سابقة قبل ربط التخزين الدائم). يرجى إعادة إرفاق الفاتورة.');
         }
     }
 

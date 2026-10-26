@@ -48,6 +48,15 @@ class AdminSystemMonitoringController extends Controller
         return response()->json(['data' => $this->snapshot()]);
     }
 
+    public function driveStatus(): JsonResponse
+    {
+        $status = \App\Services\GoogleDriveService::testConnection();
+        return response()->json([
+            'success' => $status['success'] ?? false,
+            'data' => $status,
+        ], ($status['success'] ?? false) ? 200 : 503);
+    }
+
     public function healthCheck(): JsonResponse
     {
         $snapshot = $this->snapshot();

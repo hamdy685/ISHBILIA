@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
@@ -30,7 +31,10 @@ class StorageService
     }
 
     /**
-     * Store an uploaded file to the active disk (prefers Google Drive for receipts when configured).
+     * Store an uploaded file.
+     * Google Drive is the primary permanent cloud storage for procurement receipts and invoices.
+     *
+     * @throws \RuntimeException If cloud upload fails in production
      */
     public static function storeUploadedFile(UploadedFile $file, string $directory = 'attachments'): array
     {
@@ -38,15 +42,19 @@ class StorageService
         $fileName = Str::slug(pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)) . '_' . time() . '_' . Str::random(6) . '.' . $extension;
         $mimeType = $file->getClientMimeType() ?: $file->getMimeType();
 
-        // 1. Upload to Google Drive for receipts or invoices or if configured
-        if (($directory === 'receipts' || $directory === 'invoices' || GoogleDriveService::isConfigured()) && config('google_drive.enabled', true)) {
+        $isGoogleDriveCandidate = ($directory === 'receipts' || $directory === 'invoices' || GoogleDriveService::isConfigured())
+            && config('google_drive.enabled', true);
+
+        // 1. Upload to Google Drive
+        if ($isGoogleDriveCandidate) {
             try {
                 $content = $file->getContent();
                 $driveData = ($directory === 'invoices')
                     ? GoogleDriveService::uploadInvoice($content, $fileName, $mimeType)
                     : GoogleDriveService::upload($content, $fileName, $mimeType);
-                if ($driveData && ! empty($driveData['path'])) {
-                    // Save backup copy to local disk
+
+                if (! empty($driveData['path']) && ! empty($driveData['id'])) {
+                    // Cache a temporary local copy if possible, but Google Drive is the source of truth
                     try {
                         Storage::disk('public')->put(rtrim($directory, '/') . '/' . $fileName, $content);
                     } catch (\Throwable) {}
@@ -54,24 +62,32 @@ class StorageService
                     return [
                         'disk' => 'google_drive',
                         'path' => $driveData['path'],
+                        'drive_id' => $driveData['id'],
                         'name' => $file->getClientOriginalName(),
                         'size' => $file->getSize(),
                         'mime_type' => $mimeType,
                         'url' => $driveData['url'],
-                        'drive_id' => $driveData['id'] ?? null,
+                        'download_url' => $driveData['download_url'] ?? null,
                     ];
                 }
             } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::warning('Google Drive file upload fallback: ' . $e->getMessage());
+                Log::error('Google Drive file upload failed: ' . $e->getMessage());
+
+                // Prevent silent local fallback in production or when Google Drive is configured
+                if (app()->environment('production') || GoogleDriveService::isConfigured()) {
+                    throw new \RuntimeException('تعذر رفع المرفق إلى Google Drive: ' . $e->getMessage() . '. تم إيقاف العملية لحماية المرفقات من الفقدان بعد إعادة النشر.');
+                }
             }
         }
 
+        // 2. Fallback to configured active disk only for local dev/testing
         $disk = self::disk();
         $path = $file->storeAs($directory, $fileName, $disk);
 
         return [
             'disk' => $disk,
             'path' => $path,
+            'drive_id' => null,
             'name' => $file->getClientOriginalName(),
             'size' => $file->getSize(),
             'mime_type' => $mimeType,
@@ -80,7 +96,9 @@ class StorageService
     }
 
     /**
-     * Store base64 data to the active disk (prefers Google Drive for receipts when configured).
+     * Store base64 data to Google Drive or active disk.
+     *
+     * @throws \RuntimeException If cloud upload fails in production
      */
     public static function storeBase64(string $base64Data, string $directory = 'receipts', ?string $customName = null): ?array
     {
@@ -118,14 +136,17 @@ class StorageService
 
         $fileName = ($customName ? Str::slug(pathinfo($customName, PATHINFO_FILENAME)) . '_' : 'receipt_') . time() . '_' . Str::random(8) . '.' . $extension;
 
-        // 1. Upload to Google Drive for receipts or invoices
-        if (($directory === 'receipts' || $directory === 'invoices' || GoogleDriveService::isConfigured()) && config('google_drive.enabled', true)) {
+        $isGoogleDriveCandidate = ($directory === 'receipts' || $directory === 'invoices' || GoogleDriveService::isConfigured())
+            && config('google_drive.enabled', true);
+
+        // 1. Upload to Google Drive
+        if ($isGoogleDriveCandidate) {
             try {
                 $driveData = ($directory === 'invoices')
                     ? GoogleDriveService::uploadInvoice($decoded, $fileName, $mimeType)
                     : GoogleDriveService::upload($decoded, $fileName, $mimeType);
-                if ($driveData && ! empty($driveData['path'])) {
-                    // Save backup copy to local disk
+
+                if (! empty($driveData['path']) && ! empty($driveData['id'])) {
                     try {
                         Storage::disk('public')->put(rtrim($directory, '/') . '/' . $fileName, $decoded);
                     } catch (\Throwable) {}
@@ -133,18 +154,24 @@ class StorageService
                     return [
                         'disk' => 'google_drive',
                         'path' => $driveData['path'],
+                        'drive_id' => $driveData['id'],
                         'name' => $customName ?: $fileName,
                         'size' => strlen($decoded),
                         'mime_type' => $mimeType,
                         'url' => $driveData['url'],
-                        'drive_id' => $driveData['id'] ?? null,
+                        'download_url' => $driveData['download_url'] ?? null,
                     ];
                 }
             } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::warning('Google Drive base64 upload fallback: ' . $e->getMessage());
+                Log::error('Google Drive base64 upload failed: ' . $e->getMessage());
+
+                if (app()->environment('production') || GoogleDriveService::isConfigured()) {
+                    throw new \RuntimeException('تعذر رفع المرفق إلى Google Drive: ' . $e->getMessage() . '. تم إيقاف العملية لحماية المرفقات من الفقدان بعد إعادة النشر.');
+                }
             }
         }
 
+        // 2. Fallback only in local dev/testing
         $disk = self::disk();
         $path = rtrim($directory, '/') . '/' . $fileName;
 
@@ -153,11 +180,20 @@ class StorageService
         return [
             'disk' => $disk,
             'path' => $path,
+            'drive_id' => null,
             'name' => $customName ?: $fileName,
             'size' => strlen($decoded),
             'mime_type' => $mimeType,
             'url' => self::url($path, $disk),
         ];
+    }
+
+    /**
+     * Alias for storeBase64.
+     */
+    public static function storeBase64File(string $base64Data, string $directory = 'receipts', ?string $customName = null): ?array
+    {
+        return self::storeBase64($base64Data, $directory, $customName);
     }
 
     /**
@@ -182,16 +218,14 @@ class StorageService
             }
             try {
                 return Storage::disk($disk)->url($path);
-            } catch (\Throwable) {
-                // fallback to local API streaming route if URL generation fails
-            }
+            } catch (\Throwable) {}
         }
 
         return null;
     }
 
     /**
-     * Stream or download a file from any configured disk (R2, S3, Public, Local).
+     * Stream or download a file from any configured disk or Google Drive.
      */
     public static function streamResponse(
         string $path,
@@ -201,12 +235,31 @@ class StorageService
     ): Response {
         $fileName = $fileName ?: basename($path);
         $mimeType = $mimeType ?: 'application/octet-stream';
+
+        // 1. Google Drive streaming check
+        $driveId = GoogleDriveService::extractFileId($path);
+        if ($driveId && GoogleDriveService::isConfigured()) {
+            try {
+                return GoogleDriveService::streamFile($driveId, $fileName, $mimeType, $download);
+            } catch (\Throwable $e) {
+                Log::warning("Drive streaming fallback for {$driveId}: " . $e->getMessage());
+                if (filter_var($path, FILTER_VALIDATE_URL)) {
+                    return redirect()->away($path);
+                }
+            }
+        }
+
+        // 2. If it's a direct web URL, redirect
+        if (filter_var($path, FILTER_VALIDATE_URL)) {
+            return redirect()->away($path);
+        }
+
+        // 3. Check storage disks (R2, S3, Public, Local)
         $disksToCheck = ['r2', 's3', 'public', 'local'];
 
         foreach ($disksToCheck as $disk) {
             try {
                 if (Storage::disk($disk)->exists($path)) {
-                    // For R2 / S3, if public URL is configured and we're inline viewing, we can redirect or stream
                     if (($disk === 'r2' || $disk === 's3') && ! $download) {
                         $publicUrl = config('filesystems.disks.r2.url') ?: config('filesystems.disks.s3.url');
                         if ($publicUrl) {
@@ -230,7 +283,7 @@ class StorageService
             }
         }
 
-        // Fallback checks in local filesystem paths
+        // 4. Local filesystem fallback checks
         $baseName = basename($path);
         $fileBaseName = basename($fileName);
         $localPaths = [

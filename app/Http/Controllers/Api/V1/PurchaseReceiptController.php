@@ -51,14 +51,18 @@ class PurchaseReceiptController extends Controller
         ]);
 
         $photoData = null;
-        if ($request->hasFile('photo')) {
-            $photoData = \App\Services\StorageService::storeUploadedFile($request->file('photo'), 'receipts');
-        } elseif ($request->filled('photo_base64')) {
-            $photoData = \App\Services\StorageService::storeBase64(
-                $request->input('photo_base64'),
-                'receipts',
-                $request->input('photo_name')
-            );
+        try {
+            if ($request->hasFile('photo')) {
+                $photoData = \App\Services\StorageService::storeUploadedFile($request->file('photo'), 'receipts');
+            } elseif ($request->filled('photo_base64')) {
+                $photoData = \App\Services\StorageService::storeBase64(
+                    $request->input('photo_base64'),
+                    'receipts',
+                    $request->input('photo_name')
+                );
+            }
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
         }
 
         $purchaseOrder = PurchaseOrder::findOrFail($purchaseOrderId);
@@ -331,6 +335,24 @@ class PurchaseReceiptController extends Controller
             abort(404, 'لم يتم إرفاق صورة لهذا الإذن.');
         }
 
+        // 1. If stored as Google Drive URL or File ID, stream securely via Drive API
+        $driveId = $receipt->photo_drive_id ?: \App\Services\GoogleDriveService::extractFileId($receipt->photo_path);
+        if ($driveId && \App\Services\GoogleDriveService::isConfigured()) {
+            try {
+                return \App\Services\GoogleDriveService::streamFile(
+                    $driveId,
+                    $receipt->photo_name ?: "receipt_{$receipt->id}.jpg",
+                    $receipt->photo_mime_type ?: 'image/jpeg',
+                    false
+                );
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning("Drive streaming failed for receipt {$receipt->id}: " . $e->getMessage());
+                if (filter_var($receipt->photo_path, FILTER_VALIDATE_URL)) {
+                    return redirect()->away($receipt->photo_path);
+                }
+            }
+        }
+
         if (filter_var($receipt->photo_path, FILTER_VALIDATE_URL)) {
             return redirect()->away($receipt->photo_path);
         }
@@ -343,7 +365,7 @@ class PurchaseReceiptController extends Controller
                 false
             );
         } catch (\Throwable) {
-            abort(404, 'الصورة غير موجودة أو تعذر تحميلها.');
+            abort(404, 'ملف الصورة مفقود من الخادم القديم (تم حذفه في عملية نشر سابقة قبل ربط التخزين الدائم). يرجى إعادة إرفاق الصورة.');
         }
     }
 

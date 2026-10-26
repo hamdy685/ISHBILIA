@@ -44,6 +44,7 @@ class PurchaseReceipt extends Model
         'photo_name',
         'photo_size',
         'photo_mime_type',
+        'photo_drive_id',
         'site_engineer_notes',
         'receiver_notes',
         'rejection_reason',

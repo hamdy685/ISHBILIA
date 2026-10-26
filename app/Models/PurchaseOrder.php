@@ -57,6 +57,7 @@ class PurchaseOrder extends Model
         'invoice_photo_name',
         'invoice_photo_size',
         'invoice_photo_mime_type',
+        'invoice_photo_drive_id',
         'invoice_photo_uploaded_at',
         'invoice_photo_uploaded_by_user_id',
     ];

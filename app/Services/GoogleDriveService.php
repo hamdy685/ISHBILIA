@@ -5,10 +5,14 @@ namespace App\Services;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Symfony\Component\HttpFoundation\Response;
 use Throwable;
 
 class GoogleDriveService
 {
+    /**
+     * Check if Google Drive credentials and folder are configured.
+     */
     public static function isConfigured(): bool
     {
         $clientId = self::clientId();
@@ -121,38 +125,95 @@ class GoogleDriveService
             return null;
         }
 
-        return Cache::remember('google_drive_access_token', 3000, function () {
-            try {
-                $response = Http::asForm()->timeout(15)->post('https://oauth2.googleapis.com/token', [
-                    'client_id' => self::clientId(),
-                    'client_secret' => self::clientSecret(),
-                    'refresh_token' => self::refreshToken(),
-                    'grant_type' => 'refresh_token',
-                ]);
+        $cachedToken = Cache::get('google_drive_access_token');
+        if ($cachedToken && is_string($cachedToken)) {
+            return $cachedToken;
+        }
 
-                if (! $response->successful()) {
-                    Log::error('Google Drive OAuth token refresh failed', ['status' => $response->status(), 'body' => $response->body()]);
-                    return null;
-                }
+        try {
+            $response = Http::asForm()->timeout(15)->post('https://oauth2.googleapis.com/token', [
+                'client_id' => self::clientId(),
+                'client_secret' => self::clientSecret(),
+                'refresh_token' => self::refreshToken(),
+                'grant_type' => 'refresh_token',
+            ]);
 
-                $json = $response->json();
-                return $json['access_token'] ?? null;
-            } catch (Throwable $e) {
-                Log::error('Google Drive token exception: ' . $e->getMessage());
+            if (! $response->successful()) {
+                $status = $response->status();
+                $body = $response->body();
+                Log::error('Google Drive OAuth token refresh failed', ['status' => $status, 'body' => $body]);
+                Cache::forget('google_drive_access_token');
                 return null;
             }
-        });
+
+            $json = $response->json();
+            $token = $json['access_token'] ?? null;
+            $expiresIn = (int) ($json['expires_in'] ?? 3600);
+
+            if ($token) {
+                // Cache slightly less than expires_in (e.g. 50 minutes for a 1-hour token)
+                Cache::put('google_drive_access_token', $token, max(60, $expiresIn - 600));
+                return $token;
+            }
+
+            return null;
+        } catch (Throwable $e) {
+            Log::error('Google Drive token exception: ' . $e->getMessage());
+            Cache::forget('google_drive_access_token');
+            return null;
+        }
     }
 
     /**
-     * Upload binary content to Google Drive inside the receipts folder.
+     * Extract a Google Drive file ID from a URL, link, or raw string.
      */
-    public static function upload(string $binaryContent, string $fileName, string $mimeType = 'image/jpeg', ?string $customFolderId = null): ?array
+    public static function extractFileId(?string $pathOrUrl): ?string
     {
+        if (! $pathOrUrl) {
+            return null;
+        }
+
+        $clean = trim($pathOrUrl);
+
+        // 1. Matches: drive.google.com/file/d/([a-zA-Z0-9_-]+)
+        if (preg_match('#drive\.google\.com/file/d/([a-zA-Z0-9_-]+)#i', $clean, $m)) {
+            return $m[1];
+        }
+
+        // 2. Matches: id=([a-zA-Z0-9_-]+)
+        if (preg_match('#[?&]id=([a-zA-Z0-9_-]+)#i', $clean, $m)) {
+            return $m[1];
+        }
+
+        // 3. Matches: lh3.googleusercontent.com/d/([a-zA-Z0-9_-]+)
+        if (preg_match('#googleusercontent\.com/d/([a-zA-Z0-9_-]+)#i', $clean, $m)) {
+            return $m[1];
+        }
+
+        // 4. Raw file ID (typically 25 to 50 characters, only alphanumeric and _ -)
+        if (preg_match('/^[a-zA-Z0-9_-]{25,60}$/', $clean)) {
+            return $clean;
+        }
+
+        return null;
+    }
+
+    /**
+     * Upload binary content to Google Drive.
+     *
+     * @throws \RuntimeException If upload fails
+     */
+    public static function upload(
+        string $binaryContent,
+        string $fileName,
+        string $mimeType = 'image/jpeg',
+        ?string $customFolderId = null
+    ): array {
         $accessToken = self::getAccessToken();
         if (! $accessToken) {
-            Log::warning('Google Drive upload aborted: No valid access token.');
-            return null;
+            $msg = 'تعذر الاتصال بـ Google Drive: انتهت صلاحية رمز الدخول (OAuth Token Expired) أو لم يتم إعداده بشكل صحيح.';
+            Log::error('Google Drive upload aborted: No valid access token.');
+            throw new \RuntimeException($msg);
         }
 
         $folderId = $customFolderId ?: self::folderId();
@@ -174,7 +235,7 @@ class GoogleDriveService
 
         try {
             $response = Http::withToken($accessToken)
-                ->timeout(30)
+                ->timeout(45)
                 ->withHeaders([
                     'Content-Type' => "multipart/related; boundary={$boundary}",
                     'Content-Length' => strlen($body),
@@ -183,26 +244,31 @@ class GoogleDriveService
                 ->post('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,name,webViewLink,webContentLink,size');
 
             if (! $response->successful()) {
-                Log::error('Google Drive upload failed', ['status' => $response->status(), 'body' => $response->body()]);
-                return null;
+                $status = $response->status();
+                $errBody = $response->body();
+                Log::error('Google Drive upload failed', ['status' => $status, 'body' => $errBody]);
+                throw new \RuntimeException("فشل رفع الملف إلى Google Drive (HTTP {$status}): " . substr($errBody, 0, 300));
             }
 
             $data = $response->json();
             $fileId = $data['id'] ?? null;
 
-            if ($fileId) {
-                // Ensure file is readable with the link
-                self::makeFilePubliclyReadable($accessToken, $fileId);
+            if (! $fileId) {
+                throw new \RuntimeException('استجاب Google Drive بنجاح ولكن لم يتم إرجاع معرف الملف (File ID).');
             }
+
+            // Attempt to ensure file is readable with the link
+            self::makeFilePubliclyReadable($accessToken, $fileId);
 
             $webViewLink = $data['webViewLink'] ?? "https://drive.google.com/file/d/{$fileId}/view";
             $webContentLink = $data['webContentLink'] ?? "https://drive.google.com/uc?id={$fileId}&export=download";
 
-            Log::info("Google Drive upload successful for {$fileName}: {$webViewLink}");
+            Log::info("Google Drive upload successful for {$fileName}: {$webViewLink} (ID: {$fileId})");
 
             return [
                 'disk' => 'google_drive',
                 'id' => $fileId,
+                'drive_id' => $fileId,
                 'path' => $webViewLink,
                 'url' => $webViewLink,
                 'download_url' => $webContentLink,
@@ -210,14 +276,72 @@ class GoogleDriveService
                 'size' => strlen($binaryContent),
                 'mime_type' => $mimeType,
             ];
+        } catch (\RuntimeException $e) {
+            throw $e;
         } catch (Throwable $e) {
             Log::error('Google Drive upload exception: ' . $e->getMessage());
-            return null;
+            throw new \RuntimeException('حدث استثناء غير متوقع أثناء الرفع إلى Google Drive: ' . $e->getMessage());
         }
     }
 
     /**
-     * Grant 'reader' role to 'anyone' with link so receipt photos can be viewed seamlessly.
+     * Upload an invoice document to the dedicated "فواتير" folder in Google Drive.
+     *
+     * @throws \RuntimeException If upload fails
+     */
+    public static function uploadInvoice(
+        string $binaryContent,
+        string $fileName,
+        string $mimeType = 'application/pdf'
+    ): array {
+        $invoicesFolderId = self::invoicesFolderId();
+        return self::upload($binaryContent, $fileName, $mimeType, $invoicesFolderId);
+    }
+
+    /**
+     * Stream a file directly from Google Drive API to the client browser (authenticated proxy stream).
+     */
+    public static function streamFile(
+        string $fileIdOrPath,
+        ?string $fileName = null,
+        ?string $mimeType = null,
+        bool $download = false
+    ): Response {
+        $fileId = self::extractFileId($fileIdOrPath) ?: $fileIdOrPath;
+        $accessToken = self::getAccessToken();
+
+        if (! $accessToken) {
+            abort(502, 'تعذر التحقق من مصادقة Google Drive لعرض الملف.');
+        }
+
+        try {
+            $response = Http::withToken($accessToken)
+                ->timeout(45)
+                ->get("https://www.googleapis.com/drive/v3/files/{$fileId}?alt=media&supportsAllDrives=true");
+
+            if (! $response->successful()) {
+                Log::warning("Google Drive stream failed for file {$fileId}", ['status' => $response->status()]);
+                abort($response->status() === 404 ? 404 : 502, 'الملف غير متاح على Google Drive أو تم حذفه.');
+            }
+
+            $resolvedName = $fileName ?: "drive_file_{$fileId}";
+            $resolvedMime = $mimeType ?: $response->header('Content-Type') ?: 'application/octet-stream';
+            $content = $response->body();
+
+            return response($content, 200, [
+                'Content-Type' => $resolvedMime,
+                'Content-Length' => strlen($content),
+                'Content-Disposition' => ($download ? 'attachment' : 'inline') . '; filename="' . $resolvedName . '"',
+                'Cache-Control' => 'private, max-age=86400',
+            ]);
+        } catch (Throwable $e) {
+            Log::error("Google Drive streaming exception for {$fileId}: " . $e->getMessage());
+            abort(502, 'تعذر استرجاع الملف من Google Drive: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Grant 'reader' role to 'anyone' with link so receipt photos can be viewed directly if needed.
      */
     private static function makeFilePubliclyReadable(string $accessToken, string $fileId): void
     {
@@ -235,11 +359,59 @@ class GoogleDriveService
     }
 
     /**
-     * Upload an invoice document to the dedicated "فواتير" folder in Google Drive.
+     * Test Google Drive connection and report status.
      */
-    public static function uploadInvoice(string $binaryContent, string $fileName, string $mimeType = 'application/pdf'): ?array
+    public static function testConnection(): array
     {
-        $invoicesFolderId = self::invoicesFolderId();
-        return self::upload($binaryContent, $fileName, $mimeType, $invoicesFolderId);
+        if (! self::isConfigured()) {
+            return [
+                'success' => false,
+                'configured' => false,
+                'error' => 'إعدادات Google Drive غير مكتملة في متغيرات البيئة (client_id, client_secret, refresh_token, folder_id).',
+            ];
+        }
+
+        $token = self::getAccessToken();
+        if (! $token) {
+            return [
+                'success' => false,
+                'configured' => true,
+                'token_valid' => false,
+                'error' => 'فشلت المصادقة مع Google OAuth: رمز التحديث Refresh Token منتهي الصلاحية أو غير صالح (invalid_grant).',
+            ];
+        }
+
+        $folderId = self::folderId();
+        try {
+            $res = Http::withToken($token)
+                ->timeout(15)
+                ->get("https://www.googleapis.com/drive/v3/files/{$folderId}?supportsAllDrives=true&fields=id,name,capabilities");
+
+            if (! $res->successful()) {
+                return [
+                    'success' => false,
+                    'configured' => true,
+                    'token_valid' => true,
+                    'error' => "تعذر الوصول للمجلد المطلوب (HTTP {$res->status()}): " . $res->body(),
+                ];
+            }
+
+            $data = $res->json();
+            return [
+                'success' => true,
+                'configured' => true,
+                'token_valid' => true,
+                'folder_id' => $data['id'] ?? $folderId,
+                'folder_name' => $data['name'] ?? 'مجلد المشتريات',
+                'can_add_children' => $data['capabilities']['canAddChildren'] ?? false,
+            ];
+        } catch (Throwable $e) {
+            return [
+                'success' => false,
+                'configured' => true,
+                'token_valid' => true,
+                'error' => 'حدث استثناء أثناء الاتصال بـ Google Drive: ' . $e->getMessage(),
+            ];
+        }
     }
 }

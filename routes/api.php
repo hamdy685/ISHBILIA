@@ -615,6 +615,7 @@ Route::middleware(['auth:sanctum', 'permission:system.monitor.view'])->prefix('a
     Route::get('/audit-log', [AdminSystemMonitoringController::class, 'auditLog']);
     Route::get('/security-events', [AdminSystemMonitoringController::class, 'securityEvents']);
     Route::get('/data-quality', [AdminSystemMonitoringController::class, 'dataQuality']);
+    Route::get('/drive-status', [AdminSystemMonitoringController::class, 'driveStatus']);
     Route::post('/run-migrations', [AdminSystemMonitoringController::class, 'runMigrations']);
 });
 

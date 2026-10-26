@@ -326,6 +326,7 @@ class PurchaseReceiptService
                 'photo_name' => $photoData['name'] ?? null,
                 'photo_size' => $photoData['size'] ?? null,
                 'photo_mime_type' => $photoData['mime_type'] ?? null,
+                'photo_drive_id' => $photoData['drive_id'] ?? null,
             ]);
 
             foreach ($items as $item) {
