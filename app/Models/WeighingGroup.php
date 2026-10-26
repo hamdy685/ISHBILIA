@@ -37,13 +37,33 @@ class WeighingGroup extends Model
     protected function casts(): array
     {
         return [
-            'total_ordered_weight'  => 'decimal:3',
-            'total_received_weight' => 'decimal:3',
-            'weight_difference'     => 'decimal:3',
-            'unit_price'            => 'decimal:2',
+            'total_ordered_weight'  => 'decimal:4',
+            'total_received_weight' => 'decimal:4',
+            'weight_difference'     => 'decimal:4',
+            'unit_price'            => 'decimal:4',
             'total_amount'          => 'decimal:2',
             'received_at'           => 'datetime',
         ];
+    }
+
+    public function getTotalOrderedWeightAttribute($value): ?string
+    {
+        return $value !== null ? \App\Support\DecimalHelper::formatCleanDecimal($value, 4) : null;
+    }
+
+    public function getTotalReceivedWeightAttribute($value): ?string
+    {
+        return $value !== null ? \App\Support\DecimalHelper::formatCleanDecimal($value, 4) : null;
+    }
+
+    public function getWeightDifferenceAttribute($value): ?string
+    {
+        return $value !== null ? \App\Support\DecimalHelper::formatCleanDecimal($value, 4) : null;
+    }
+
+    public function getUnitPriceAttribute($value): ?string
+    {
+        return $value !== null ? \App\Support\DecimalHelper::formatCleanDecimal($value, 4) : null;
     }
 
     public function purchaseOrder(): BelongsTo

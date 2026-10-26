@@ -82,10 +82,20 @@ class PurchaseRequestItem extends Model
         return [
             'is_supplementary' => 'boolean',
             'supplement_batch' => 'integer',
-            'quantity' => 'decimal:2',
-            'estimated_unit_price' => 'decimal:2',
+            'quantity' => 'decimal:4',
+            'estimated_unit_price' => 'decimal:4',
             'estimated_line_total' => 'decimal:2',
         ];
+    }
+
+    public function getQuantityAttribute($value): ?string
+    {
+        return $value !== null ? \App\Support\DecimalHelper::formatCleanDecimal($value, 4) : null;
+    }
+
+    public function getEstimatedUnitPriceAttribute($value): ?string
+    {
+        return $value !== null ? \App\Support\DecimalHelper::formatCleanDecimal($value, 4) : null;
     }
 
     public function purchaseRequest(): BelongsTo

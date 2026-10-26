@@ -44,7 +44,7 @@ const initialFilters: ColumnFilters = {
 };
 
 // Clean number formatting without any RTL reversing bugs or minus signs
-const formatCleanNumber = (val: number | string | null | undefined, maxDecimals = 2) => {
+const formatCleanNumber = (val: number | string | null | undefined, maxDecimals = 4) => {
   const num = Math.abs(Number(val || 0));
   return num.toLocaleString('en-US', {
     minimumFractionDigits: 0,
@@ -56,7 +56,7 @@ const formatCleanQty = (val: number | string | null | undefined) => {
   const num = Math.abs(Number(val || 0));
   return num.toLocaleString('en-US', {
     minimumFractionDigits: 0,
-    maximumFractionDigits: 3,
+    maximumFractionDigits: 4,
   });
 };
 

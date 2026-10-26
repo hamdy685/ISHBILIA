@@ -607,7 +607,7 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
                             <input
                               type="number"
                               min="0"
-                              step="0.01"
+                              step="any"
                               value={item.quantity ?? ''}
                               onFocus={(e) => e.target.select()}
                               onChange={(e) => handleItemFieldChange(idx, 'quantity', e.target.value)}
@@ -723,7 +723,7 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
                       <input
                         type="number"
                         min="0"
-                        step="0.01"
+                        step="any"
                         value={item.quantity ?? ''}
                         onFocus={(e) => e.target.select()}
                         onChange={(e) => handleItemFieldChange(idx, 'quantity', e.target.value)}

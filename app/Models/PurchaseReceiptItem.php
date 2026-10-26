@@ -21,9 +21,19 @@ class PurchaseReceiptItem extends Model
     protected function casts(): array
     {
         return [
-            'ordered_quantity' => 'decimal:3',
-            'received_quantity' => 'decimal:3',
+            'ordered_quantity' => 'decimal:4',
+            'received_quantity' => 'decimal:4',
         ];
+    }
+
+    public function getOrderedQuantityAttribute($value): ?string
+    {
+        return $value !== null ? \App\Support\DecimalHelper::formatCleanDecimal($value, 4) : null;
+    }
+
+    public function getReceivedQuantityAttribute($value): ?string
+    {
+        return $value !== null ? \App\Support\DecimalHelper::formatCleanDecimal($value, 4) : null;
     }
 
     public function receipt(): BelongsTo

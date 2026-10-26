@@ -9,7 +9,7 @@
 
 export const formatCleanNumber = (
   val: number | string | null | undefined,
-  maxDecimals = 2
+  maxDecimals = 4
 ): string => {
   if (val === null || val === undefined || val === '') return '0';
   const num = typeof val === 'string' ? parseFloat(val) : Number(val);
@@ -23,16 +23,17 @@ export const formatCleanNumber = (
 
 export const formatCleanCurrency = (
   val: number | string | null | undefined,
-  suffix = 'ج.م'
+  suffix = 'ج.م',
+  maxDecimals = 2
 ): string => {
-  const formatted = formatCleanNumber(val, 2);
+  const formatted = formatCleanNumber(val, maxDecimals);
   return suffix ? `${formatted} ${suffix}` : formatted;
 };
 
 export const formatCleanQty = (
   val: number | string | null | undefined
 ): string => {
-  return formatCleanNumber(val, 3);
+  return formatCleanNumber(val, 4);
 };
 
 export default {

@@ -20,7 +20,7 @@ class PurchaseOrderResource extends JsonResource
                 return $this->selectedQuote ? [
                     'id' => $this->selectedQuote->id,
                     'supplier_id' => $this->selectedQuote->supplier_id,
-                    'unit_price' => number_format((float) $this->selectedQuote->unit_price, 2, '.', ''),
+                    'unit_price' => \App\Support\DecimalHelper::formatCleanDecimal($this->selectedQuote->unit_price, 4),
                     'total_amount' => number_format((float) $this->selectedQuote->total_amount, 2, '.', ''),
                     'currency' => $this->selectedQuote->currency,
                     'status' => $this->selectedQuote->status,

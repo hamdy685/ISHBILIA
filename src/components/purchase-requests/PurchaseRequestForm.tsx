@@ -666,8 +666,8 @@ export const PurchaseRequestForm: React.FC<Props> = ({
                 <FormField label="الكمية المطلوبة" required error={fieldErrors[`item_${index}_quantity`]} >
                   <Input
                     type="number"
-                    step="0.01"
-                    min="0.01"
+                    step="any"
+                    min="0"
                     required
                     error={Boolean(fieldErrors[`item_${index}_quantity`])}
                     value={item.quantity === 0 ? '' : (item.quantity ?? '')}

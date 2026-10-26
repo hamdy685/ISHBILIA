@@ -138,7 +138,7 @@ class PurchaseRequestResource extends JsonResource
                         'id' => $quote->supplier->id,
                         'company_name' => $quote->supplier->company_name,
                     ] : null,
-                    'unit_price' => number_format((float) $quote->unit_price, 2, '.', ''),
+                    'unit_price' => \App\Support\DecimalHelper::formatCleanDecimal($quote->unit_price, 4),
                     'total_amount' => number_format((float) $quote->total_amount, 2, '.', ''),
                     'currency' => $quote->currency,
                     'notes' => $quote->notes,
@@ -169,7 +169,7 @@ class PurchaseRequestResource extends JsonResource
                     'supplier' => $this->selectedQuote->relationLoaded('supplier') && $this->selectedQuote->supplier
                         ? ['id' => $this->selectedQuote->supplier->id, 'company_name' => $this->selectedQuote->supplier->company_name]
                         : null,
-                    'unit_price' => number_format((float) $this->selectedQuote->unit_price, 2, '.', ''),
+                    'unit_price' => \App\Support\DecimalHelper::formatCleanDecimal($this->selectedQuote->unit_price, 4),
                     'total_amount' => number_format((float) $this->selectedQuote->total_amount, 2, '.', ''),
                     'currency' => $this->selectedQuote->currency,
                     'file_path' => $this->selectedQuote->file_path,

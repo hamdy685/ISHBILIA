@@ -478,7 +478,7 @@ export const PurchaseQuotesModal: React.FC<PurchaseQuotesModalProps> = ({
                     <input
                       type="number"
                       min="0"
-                      step="0.01"
+                      step="any"
                       value={draft.unit_price}
                       onChange={(event) => updateDraft(index, 'unit_price', event.target.value)}
                       className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-mono text-slate-100 focus:border-cyan-400"

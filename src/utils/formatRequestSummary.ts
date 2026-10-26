@@ -138,7 +138,7 @@ export function getSummaryQuantities(items?: SummaryItem[] | null): QuantitySumm
   });
 
   const formatNum = (n: number) => {
-    return Number.isInteger(n) ? n.toString() : parseFloat(n.toFixed(2)).toString();
+    return Number.isInteger(n) ? n.toString() : parseFloat(n.toFixed(4)).toString();
   };
 
   if (cleanItems.length === 1) {

@@ -1391,7 +1391,7 @@ export const CreatePurchaseOrderPage: React.FC = () => {
                         <td className="p-3">
                           <input
                             type="number"
-                            step="0.01"
+                            step="any"
                             min="0"
                             required
                             value={item.unit_price ?? ''}
@@ -1559,7 +1559,7 @@ export const CreatePurchaseOrderPage: React.FC = () => {
                         </div>
                         <input
                           type="number"
-                          step="0.01"
+                          step="any"
                           min="0"
                           required
                           value={item.unit_price ?? ''}

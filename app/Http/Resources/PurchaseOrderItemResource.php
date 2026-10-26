@@ -25,21 +25,21 @@ class PurchaseOrderItemResource extends JsonResource
             'item_description' => $this->item_description,
             'item_reference'   => $this->item_reference,
             'region'           => $this->region,
-            'quantity'         => number_format((float) $this->quantity, 2, '.', ''),
-            'original_quantity'=> number_format((float) $this->quantity, 2, '.', ''),
-            'actual_quantity'  => number_format((float) $this->quantity, 2, '.', ''),
+            'quantity'         => \App\Support\DecimalHelper::formatCleanDecimal($this->quantity, 4),
+            'original_quantity'=> \App\Support\DecimalHelper::formatCleanDecimal($this->quantity, 4),
+            'actual_quantity'  => \App\Support\DecimalHelper::formatCleanDecimal($this->quantity, 4),
             'uom'              => $this->uom,
             'pr_item_quantity' => $this->whenLoaded('prItem', function () {
-                return $this->prItem ? number_format((float) $this->prItem->quantity, 2, '.', '') : null;
+                return $this->prItem ? \App\Support\DecimalHelper::formatCleanDecimal($this->prItem->quantity, 4) : null;
             }, function () {
-                return $this->pr_item_id && $this->relationLoaded('prItem') && $this->prItem ? number_format((float) $this->prItem->quantity, 2, '.', '') : null;
+                return $this->pr_item_id && $this->relationLoaded('prItem') && $this->prItem ? \App\Support\DecimalHelper::formatCleanDecimal($this->prItem->quantity, 4) : null;
             }),
-            'unit_price'       => number_format((float) $this->unit_price,  2, '.', ''),
-            'actual_unit_price'=> number_format((float) $this->unit_price,  2, '.', ''),
+            'unit_price'       => \App\Support\DecimalHelper::formatCleanDecimal($this->unit_price, 4),
+            'actual_unit_price'=> \App\Support\DecimalHelper::formatCleanDecimal($this->unit_price, 4),
             'line_total'       => number_format((float) ($this->line_total > 0 ? $this->line_total : round((float)$this->quantity * (float)$this->unit_price, 2)), 2, '.', ''),
             'actual_line_total'=> number_format((float) ($this->line_total > 0 ? $this->line_total : round((float)$this->quantity * (float)$this->unit_price, 2)), 2, '.', ''),
-            'final_quantity'   => number_format((float) $this->quantity, 2, '.', ''),
-            'final_unit_price' => number_format((float) $this->unit_price, 2, '.', ''),
+            'final_quantity'   => \App\Support\DecimalHelper::formatCleanDecimal($this->quantity, 4),
+            'final_unit_price' => \App\Support\DecimalHelper::formatCleanDecimal($this->unit_price, 4),
             'final_line_total' => number_format((float) ($this->line_total > 0 ? $this->line_total : round((float)$this->quantity * (float)$this->unit_price, 2)), 2, '.', ''),
             'specifications'   => $this->specifications,
             'is_supplementary' => (bool) $this->is_supplementary,

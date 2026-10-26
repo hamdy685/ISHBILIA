@@ -37,10 +37,15 @@ class PurchaseRequestQuote extends Model
     {
         return [
             'total_amount' => 'decimal:2',
-            'unit_price' => 'decimal:2',
+            'unit_price' => 'decimal:4',
             'file_size' => 'integer',
             'selected_at' => 'datetime',
         ];
+    }
+
+    public function getUnitPriceAttribute($value): ?string
+    {
+        return $value !== null ? \App\Support\DecimalHelper::formatCleanDecimal($value, 4) : null;
     }
 
     protected function fileUrl(): Attribute

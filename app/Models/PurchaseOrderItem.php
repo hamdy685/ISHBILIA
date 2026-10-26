@@ -36,10 +36,20 @@ class PurchaseOrderItem extends Model
         return [
             'is_supplementary' => 'boolean',
             'supplement_batch' => 'integer',
-            'quantity' => 'decimal:2',
-            'unit_price' => 'decimal:2',
+            'quantity' => 'decimal:4',
+            'unit_price' => 'decimal:4',
             'line_total' => 'decimal:2',
         ];
+    }
+
+    public function getQuantityAttribute($value): ?string
+    {
+        return $value !== null ? \App\Support\DecimalHelper::formatCleanDecimal($value, 4) : null;
+    }
+
+    public function getUnitPriceAttribute($value): ?string
+    {
+        return $value !== null ? \App\Support\DecimalHelper::formatCleanDecimal($value, 4) : null;
     }
 
     protected $appends = [

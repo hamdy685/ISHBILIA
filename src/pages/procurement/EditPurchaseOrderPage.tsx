@@ -971,7 +971,7 @@ export const EditPurchaseOrderPage: React.FC = () => {
                       <input
                         type="number"
                         min="0"
-                        step="0.01"
+                        step="any"
                         required
                         disabled={!isEditable || busy}
                         value={item.unit_price}
@@ -1143,7 +1143,7 @@ export const EditPurchaseOrderPage: React.FC = () => {
                     <label className="block text-[10px] text-slate-500 mb-0.5">سعر الوحدة</label>
                     <input
                       type="number"
-                      step="0.01"
+                      step="any"
                       disabled={!isEditable || busy}
                       value={item.unit_price}
                       onChange={(e) => handleItemFieldChange(idx, 'unit_price', Number(e.target.value))}

@@ -31,11 +31,26 @@ class WeighingGroupItem extends Model
     protected function casts(): array
     {
         return [
-            'ordered_weight'  => 'decimal:3',
-            'received_weight' => 'decimal:3',
-            'unit_price'      => 'decimal:2',
+            'ordered_weight'  => 'decimal:4',
+            'received_weight' => 'decimal:4',
+            'unit_price'      => 'decimal:4',
             'line_total'      => 'decimal:2',
         ];
+    }
+
+    public function getOrderedWeightAttribute($value): ?string
+    {
+        return $value !== null ? \App\Support\DecimalHelper::formatCleanDecimal($value, 4) : null;
+    }
+
+    public function getReceivedWeightAttribute($value): ?string
+    {
+        return $value !== null ? \App\Support\DecimalHelper::formatCleanDecimal($value, 4) : null;
+    }
+
+    public function getUnitPriceAttribute($value): ?string
+    {
+        return $value !== null ? \App\Support\DecimalHelper::formatCleanDecimal($value, 4) : null;
     }
 
     public function weighingGroup(): BelongsTo

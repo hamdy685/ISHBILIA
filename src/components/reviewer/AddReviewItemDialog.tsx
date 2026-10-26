@@ -174,8 +174,8 @@ export const AddReviewItemDialog: React.FC<Props> = ({
             <FormField label="الكمية" required>
               <Input
                 type="number"
-                step="0.01"
-                min="0.01"
+                step="any"
+                min="0"
                 required
                 value={quantity}
                 onChange={(e) => setQuantity(parseFloat(e.target.value) || 0)}

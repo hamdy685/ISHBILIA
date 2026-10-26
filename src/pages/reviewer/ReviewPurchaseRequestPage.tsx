@@ -488,8 +488,8 @@ export const ReviewPurchaseRequestPage: React.FC = () => {
                   <TableCell>
                     <Input
                       type="number"
-                      step="0.01"
-                      min="0.01"
+                      step="any"
+                      min="0"
                       disabled={!canEdit}
                       defaultValue={parseFloat(item.quantity)}
                       onFocus={e => e.target.select()}
@@ -587,8 +587,8 @@ export const ReviewPurchaseRequestPage: React.FC = () => {
                     <label className="mb-1 block text-slate-400 font-medium">الكمية</label>
                     <Input
                       type="number"
-                      step="0.01"
-                      min="0.01"
+                      step="any"
+                      min="0"
                       disabled={!canEdit}
                       defaultValue={parseFloat(item.quantity)}
                       onFocus={e => e.target.select()}

@@ -6,7 +6,7 @@ import LoadingSpinner from '../../components/LoadingSpinner';
 import ErrorMessage from '../../components/ErrorMessage';
 import { getProcurementPendingReceiptsApi } from '../../api/procurement';
 import { getReceiptPhotoUrl } from '../../api/purchaseReceipts';
-import { formatCleanNumber } from '../../utils/numberFormat';
+import { formatCleanNumber, formatCleanQty } from '../../utils/numberFormat';
 import { exportToCsv } from '../../utils/exportCsv';
 import { toast } from '../../utils/toast';
 
@@ -593,11 +593,11 @@ export const ProcurementPendingReceiptsPage: React.FC = () => {
                     </div>
                     <div className="text-left font-mono">
                       <span className="text-amber-300 font-bold block">
-                        المستلم: {formatCleanNumber(it.received_quantity)} {it.uom}
+                        المستلم: {formatCleanQty(it.received_quantity)} {it.uom}
                       </span>
                       {it.ordered_quantity && (
                         <span className="text-[10px] text-slate-500">
-                          المطلوب: {formatCleanNumber(it.ordered_quantity)} {it.uom}
+                          المطلوب: {formatCleanQty(it.ordered_quantity)} {it.uom}
                         </span>
                       )}
                     </div>

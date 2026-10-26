@@ -294,7 +294,7 @@ class PurchaseQuoteController extends Controller
         $contactName = htmlspecialchars($quote->supplier?->contact_name ?: '—');
         $phone = htmlspecialchars($quote->supplier?->phone ?: '—');
         $amount = number_format((float) $quote->total_amount, 2);
-        $unitPrice = number_format((float) $quote->unit_price, 2);
+        $unitPrice = \App\Support\DecimalHelper::formatCleanDecimal($quote->unit_price, 4);
         $currency = htmlspecialchars($quote->currency ?: 'EGP');
         $quoteDate = $quote->created_at ? $quote->created_at->format('Y-m-d H:i') : date('Y-m-d');
         $prNumber = htmlspecialchars($quote->purchaseRequest?->request_number ?: ('PR-' . $quote->purchase_request_id));
@@ -308,7 +308,7 @@ class PurchaseQuoteController extends Controller
             foreach ($prItems as $idx => $item) {
                 $num = $idx + 1;
                 $desc = htmlspecialchars($item->item_description ?: ($item->item?->name ?: 'صنف مشتريات'));
-                $qty = number_format((float) $item->quantity, 2);
+                $qty = \App\Support\DecimalHelper::formatCleanDecimal($item->quantity, 4);
                 $uom = htmlspecialchars($item->uom ?: 'قطعة');
                 $itemsRows .= "<tr>
                     <td style=\"text-align: center;\">{$num}</td>
