@@ -20,18 +20,21 @@ class GoogleDriveAuditCommand extends Command
         $this->info('====================================================');
 
         // 1. Connection check
-        $this->line("\n1. Testing Google Drive Connection...");
+        $this->line("\n1. Testing Google Drive Connection & Folders...");
         $test = GoogleDriveService::testConnection();
         if ($test['success']) {
             $this->info("   [SUCCESS] Connected to Google Drive!");
-            $this->line("   Folder ID:   {$test['folder_id']}");
-            $this->line("   Folder Name: {$test['folder_name']}");
+            $this->line("   Root Folder ID:       {$test['folder_id']}");
+            $this->line("   Root Folder Name:     {$test['folder_name']}");
+            $this->line("   Receipts Folder ID:   " . GoogleDriveService::receiptsFolderId() . " (أذونات استلام إشبيليا)");
+            $this->line("   Invoices Folder ID:   " . GoogleDriveService::invoicesFolderId() . " (فواتير)");
+            $this->line("   Quotes Folder ID:     " . GoogleDriveService::quotesFolderId() . " (عروض أسعار)");
         } else {
             $this->warn("   [NOT CONNECTED / NEED TOKEN]: " . ($test['error'] ?? 'Unknown'));
         }
 
         // 2. Audit Purchase Receipts
-        $this->line("\n2. Auditing Purchase Receipts Attachments...");
+        $this->line("\n2. Auditing Purchase Receipts Attachments (أذونات استلام إشبيليا)...");
         $receipts = PurchaseReceipt::all();
         $totalReceipts = $receipts->count();
         $driveReceipts = 0;
@@ -82,7 +85,7 @@ class GoogleDriveAuditCommand extends Command
         }
 
         // 3. Audit Purchase Orders Invoices
-        $this->line("\n3. Auditing Purchase Orders Invoices...");
+        $this->line("\n3. Auditing Purchase Orders Invoices (فواتير)...");
         $pos = PurchaseOrder::whereNotNull('invoice_photo_path')->get();
         $totalInvoices = $pos->count();
         $driveInvoices = 0;
@@ -107,6 +110,33 @@ class GoogleDriveAuditCommand extends Command
         $this->line("   With Google Drive / Cloud Link: {$driveInvoices}");
         $this->line("   Local Invoices on Disk:         {$localInvoices}");
         $this->line("   Orphaned / Missing Invoices:    {$missingInvoices}");
+
+        // 4. Audit Purchase Request Quotes
+        $this->line("\n4. Auditing Purchase Request Quotes (عروض أسعار)...");
+        $quotes = \App\Models\PurchaseRequestQuote::whereNotNull('file_path')->get();
+        $totalQuotes = $quotes->count();
+        $driveQuotes = 0;
+        $localQuotes = 0;
+        $missingQuotes = 0;
+
+        foreach ($quotes as $q) {
+            $qPath = $q->file_path;
+            if (str_starts_with($qPath, 'http://') || str_starts_with($qPath, 'https://') || $q->file_drive_id) {
+                $driveQuotes++;
+            } else {
+                $exists = Storage::disk('public')->exists($qPath) || file_exists(storage_path('app/public/' . $qPath));
+                if ($exists) {
+                    $localQuotes++;
+                } else {
+                    $missingQuotes++;
+                }
+            }
+        }
+
+        $this->line("   Total Quotes with Files:        {$totalQuotes}");
+        $this->line("   With Google Drive / Cloud Link: {$driveQuotes}");
+        $this->line("   Local Quotes on Disk:           {$localQuotes}");
+        $this->line("   Orphaned / Missing Quotes:      {$missingQuotes}");
 
         $this->info("\nAudit complete.");
         return 0;

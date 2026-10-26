@@ -6,12 +6,15 @@ use App\Models\Attachment;
 use App\Models\Department;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
+use App\Models\PurchaseReceipt;
 use App\Models\PurchaseRequest;
 use App\Models\PurchaseRequestItem;
 use App\Models\PurchaseRequestQuote;
 use App\Models\Role;
 use App\Models\Supplier;
 use App\Models\User;
+use App\Models\WeighingGroup;
+use App\Models\WeighingGroupItem;
 use App\Services\GoogleDriveService;
 use App\Services\PurchaseQuoteService;
 use App\Services\StorageService;
@@ -31,6 +34,8 @@ class GoogleDriveInvoicesAndQuotesFoldersTest extends TestCase
 
     private User $procurementManager;
     private User $siteAccountant;
+    private User $warehouseKeeper;
+    private User $siteEngineer;
     private Supplier $supplier1;
     private Supplier $supplier2;
     private Department $dept;
@@ -47,6 +52,7 @@ class GoogleDriveInvoicesAndQuotesFoldersTest extends TestCase
         Config::set('google_drive.client_secret', 'test-client-secret');
         Config::set('google_drive.refresh_token', 'test-refresh-token');
         Config::set('google_drive.folder_id', '1EB9h3hue3aPM_zlx_AbRBydPZP3nnPDU');
+        Config::set('google_drive.receipts_folder_id', '1rWlfFrs1yKe6XW5wJh2tl5e8I3gBncqh');
         Config::set('google_drive.invoices_folder_id', '1OPejUvtGzsvs8vxXjEET47EUvgnF_O4F');
         Config::set('google_drive.quotes_folder_id', '1osldpISMDMMxYsggcwSQm6viRO46TNui');
 
@@ -57,6 +63,10 @@ class GoogleDriveInvoicesAndQuotesFoldersTest extends TestCase
 
         $this->procurementManager = $this->makeUser('proc.manager@example.com', 'مدير المشتريات', 'procurement_manager');
         $this->siteAccountant = $this->makeUser('accountant@example.com', 'محاسب الموقع', 'site_accountant');
+        $this->warehouseKeeper = $this->makeUser('warehouse@example.com', 'أمين المخزن', 'warehouse_keeper');
+        $this->siteEngineer = $this->makeUser('engineer@example.com', 'مهندس الموقع', 'site_engineer');
+
+        $this->dept->update(['site_engineer_user_id' => $this->siteEngineer->id]);
 
         $this->supplier1 = Supplier::create([
             'name' => 'شركة التوريدات المتكاملة',
@@ -98,6 +108,7 @@ class GoogleDriveInvoicesAndQuotesFoldersTest extends TestCase
             'request_type' => 'PROJECT_MATERIALS',
             'department_id' => $this->dept->id,
             'user_id' => $this->procurementManager->id,
+            'site_engineer_user_id' => $this->siteEngineer->id,
             'status' => $status,
             'notes' => 'طلب شراء تجريبي لمواد بناء',
             'parcel_reference' => '102',
@@ -126,7 +137,7 @@ class GoogleDriveInvoicesAndQuotesFoldersTest extends TestCase
     }
 
     /**
-     * Test 1: Uploading an invoice to an actual PO uploads to Google Drive and links to attachments without overwriting.
+     * Test 1: Uploading multiple invoices on actual PO persists to Google Drive "فواتير" folder and attachments.
      */
     public function test_uploading_multiple_invoices_on_actual_po_persists_each_to_attachments_without_overwriting(): void
     {
@@ -257,7 +268,86 @@ class GoogleDriveInvoicesAndQuotesFoldersTest extends TestCase
     }
 
     /**
-     * Test 3: StorageService routes 'quotes' to Google Drive and captures drive_id.
+     * Test 3: StorageService routes 'receipts' to Google Drive folder "أذونات استلام إشبيليا".
+     */
+    public function test_storage_service_routes_receipts_to_google_drive(): void
+    {
+        $this->fakeGoogleDriveHttpSuccess();
+
+        $file = UploadedFile::fake()->image('grn_delivery_note.jpg', 800, 600);
+
+        $result = StorageService::storeUploadedFile($file, 'receipts');
+
+        $this->assertStringContainsString('https://drive.google.com/file/d/test-drive-file-id-', $result['url']);
+        $this->assertNotEmpty($result['drive_id']);
+        $this->assertEquals('grn_delivery_note.jpg', $result['name']);
+        $this->assertEquals('google_drive', $result['disk']);
+    }
+
+    /**
+     * Test 4: Warehouse keeper creates purchase receipt and saves photo_drive_id in "أذونات استلام إشبيليا".
+     */
+    public function test_warehouse_keeper_receipt_upload_saves_photo_drive_id(): void
+    {
+        $this->fakeGoogleDriveHttpSuccess();
+
+        $pr = $this->createSamplePr('PR-2026-WH-1');
+        $prItem = PurchaseRequestItem::create([
+            'purchase_request_id' => $pr->id,
+            'item_description' => 'أسمنت مقاوم للملوحة',
+            'quantity' => 100,
+            'estimated_unit_price' => 200,
+            'estimated_total_price' => 20000,
+            'uom' => 'شكارة',
+        ]);
+
+        $po = PurchaseOrder::create([
+            'po_number' => 'PO-2026-WH-1',
+            'purchase_request_id' => $pr->id,
+            'supplier_id' => $this->supplier1->id,
+            'created_by_user_id' => $this->procurementManager->id,
+            'status' => 'APPROVED_BY_ACCOUNTING',
+            'subtotal' => 20000,
+            'grand_total' => 20000,
+            'currency' => 'EGP',
+        ]);
+
+        $poItem = PurchaseOrderItem::create([
+            'purchase_order_id' => $po->id,
+            'pr_item_id' => $prItem->id,
+            'item_description' => 'أسمنت مقاوم للملوحة',
+            'quantity' => 100,
+            'unit_price' => 200,
+            'total_price' => 20000,
+            'uom' => 'شكارة',
+        ]);
+
+        $receiptPhoto = UploadedFile::fake()->image('cement_grn.jpg', 1000, 800);
+
+        $response = $this->actingAs($this->warehouseKeeper, 'sanctum')
+            ->post("/api/v1/purchase-receipts/purchase-orders/{$po->id}", [
+                'items' => [
+                    [
+                        'purchase_order_item_id' => $poItem->id,
+                        'received_quantity' => 100,
+                    ],
+                ],
+                'photo' => $receiptPhoto,
+                'warehouse_notes' => 'تم استلام الكمية وفحصها في المخزن بحالة ممتازة',
+                'actual_receiver_name' => 'محمد رجب - أمين المخزن',
+            ]);
+
+        $response->assertStatus(201);
+
+        $receipt = PurchaseReceipt::where('purchase_order_id', $po->id)->first();
+        $this->assertNotNull($receipt);
+        $this->assertNotEmpty($receipt->photo_drive_id);
+        $this->assertStringContainsString('https://drive.google.com/file/d/test-drive-file-id-', $receipt->photo_path);
+        $this->assertEquals('cement_grn.jpg', $receipt->photo_name);
+    }
+
+    /**
+     * Test 5: StorageService routes 'quotes' to Google Drive and captures drive_id.
      */
     public function test_storage_service_routes_quotes_to_google_drive(): void
     {
@@ -274,7 +364,7 @@ class GoogleDriveInvoicesAndQuotesFoldersTest extends TestCase
     }
 
     /**
-     * Test 4: Creating quotes with file persists file_drive_id in database.
+     * Test 6: Creating quotes with file persists file_drive_id in database.
      */
     public function test_creating_quotes_with_file_persists_file_drive_id(): void
     {
@@ -321,9 +411,9 @@ class GoogleDriveInvoicesAndQuotesFoldersTest extends TestCase
     }
 
     /**
-     * Test 5: Production safeguard refuses silent local storage when Google Drive fails for quotes.
+     * Test 7: Production safeguard refuses silent local storage when Google Drive fails for quotes and receipts.
      */
-    public function test_production_safeguard_refuses_silent_local_fallback_for_quotes_when_drive_fails(): void
+    public function test_production_safeguard_refuses_silent_local_fallback_when_drive_fails(): void
     {
         $this->app->detectEnvironment(fn () => 'production');
         Config::set('google_drive.enabled', true);
@@ -341,15 +431,21 @@ class GoogleDriveInvoicesAndQuotesFoldersTest extends TestCase
     }
 
     /**
-     * Test 6: Invoices & Quotes folder config values match requirements.
+     * Test 8: Folders configuration matches Google Drive structure.
      */
-    public function test_google_drive_service_uses_arabic_folder_names(): void
+    public function test_google_drive_three_folders_configuration(): void
     {
         $this->assertNotEmpty(config('google_drive.folder_id'));
+        $this->assertNotEmpty(config('google_drive.receipts_folder_id'));
         $this->assertNotEmpty(config('google_drive.invoices_folder_id'));
         $this->assertNotEmpty(config('google_drive.quotes_folder_id'));
+
+        $this->assertEquals('1EB9h3hue3aPM_zlx_AbRBydPZP3nnPDU', config('google_drive.folder_id'));
+        $this->assertEquals('1rWlfFrs1yKe6XW5wJh2tl5e8I3gBncqh', config('google_drive.receipts_folder_id'));
         $this->assertEquals('1OPejUvtGzsvs8vxXjEET47EUvgnF_O4F', config('google_drive.invoices_folder_id'));
         $this->assertEquals('1osldpISMDMMxYsggcwSQm6viRO46TNui', config('google_drive.quotes_folder_id'));
+
+        $this->assertEquals('1rWlfFrs1yKe6XW5wJh2tl5e8I3gBncqh', GoogleDriveService::receiptsFolderId());
         $this->assertEquals('1OPejUvtGzsvs8vxXjEET47EUvgnF_O4F', GoogleDriveService::invoicesFolderId());
         $this->assertEquals('1osldpISMDMMxYsggcwSQm6viRO46TNui', GoogleDriveService::quotesFolderId());
     }

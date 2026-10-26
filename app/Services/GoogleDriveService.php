@@ -40,7 +40,27 @@ class GoogleDriveService
 
     public static function folderId(): string
     {
-        return (string) config('google_drive.folder_id', env('GOOGLE_DRIVE_RECEIPTS_FOLDER_ID', env('GOOGLE_DRIVE_FOLDER_ID', '1EB9h3hue3aPM_zlx_AbRBydPZP3nnPDU')));
+        return (string) config('google_drive.folder_id', env('GOOGLE_DRIVE_FOLDER_ID', '1EB9h3hue3aPM_zlx_AbRBydPZP3nnPDU'));
+    }
+
+    public static function receiptsFolderId(): string
+    {
+        $configured = (string) config('google_drive.receipts_folder_id', env('GOOGLE_DRIVE_RECEIPTS_FOLDER_ID', ''));
+        if (! empty($configured)) {
+            return $configured;
+        }
+
+        // Auto-resolve or create "أذونات استلام إشبيليا" folder in Google Drive (or use existing alternative names)
+        return (string) Cache::remember('google_drive_receipts_resolved_folder_id', 86400, function () {
+            return self::getOrCreateFolder('أذونات استلام إشبيليا', self::folderId(), [
+                'أذونات استلام اشبيليا',
+                'اذونات استلام اشبيليا',
+                'اذونات استلام إشبيليا',
+                'أذونات الاستلام',
+                'اذونات الاستلام',
+                'Receipts',
+            ]) ?: self::folderId();
+        });
     }
 
     public static function invoicesFolderId(): string
@@ -50,9 +70,9 @@ class GoogleDriveService
             return $configured;
         }
 
-        // Auto-resolve or create "الفواتير" folder in Google Drive (or use existing "فواتير")
+        // Auto-resolve or create "فواتير" folder in Google Drive (or use existing "الفواتير")
         return (string) Cache::remember('google_drive_invoices_resolved_folder_id', 86400, function () {
-            return self::getOrCreateFolder('الفواتير', self::folderId(), ['فواتير', 'Invoices']) ?: self::folderId();
+            return self::getOrCreateFolder('فواتير', self::folderId(), ['الفواتير', 'Invoices']) ?: self::folderId();
         });
     }
 
@@ -63,9 +83,9 @@ class GoogleDriveService
             return $configured;
         }
 
-        // Auto-resolve or create "عروض الأسعار" folder in Google Drive (or use existing "عروض الاسعار")
+        // Auto-resolve or create "عروض أسعار" folder in Google Drive (or use existing "عروض الأسعار")
         return (string) Cache::remember('google_drive_quotes_resolved_folder_id', 86400, function () {
-            return self::getOrCreateFolder('عروض الأسعار', self::folderId(), ['عروض الاسعار', 'عروض اسعار', 'Quotes', 'Price Quotes']) ?: self::folderId();
+            return self::getOrCreateFolder('عروض أسعار', self::folderId(), ['عروض الأسعار', 'عروض اسعار', 'عروض الاسعار', 'Quotes', 'Price Quotes']) ?: self::folderId();
         });
     }
 
@@ -326,6 +346,20 @@ class GoogleDriveService
     ): array {
         $quotesFolderId = self::quotesFolderId();
         return self::upload($binaryContent, $fileName, $mimeType, $quotesFolderId);
+    }
+
+    /**
+     * Upload a delivery receipt / warehouse note document to the dedicated "أذونات استلام إشبيليا" folder in Google Drive.
+     *
+     * @throws \RuntimeException If upload fails
+     */
+    public static function uploadReceipt(
+        string $binaryContent,
+        string $fileName,
+        string $mimeType = 'image/jpeg'
+    ): array {
+        $receiptsFolderId = self::receiptsFolderId();
+        return self::upload($binaryContent, $fileName, $mimeType, $receiptsFolderId);
     }
 
     /**

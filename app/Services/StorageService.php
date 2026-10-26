@@ -53,6 +53,8 @@ class StorageService
                     $driveData = GoogleDriveService::uploadInvoice($content, $fileName, $mimeType);
                 } elseif ($directory === 'quotes') {
                     $driveData = GoogleDriveService::uploadQuote($content, $fileName, $mimeType);
+                } elseif ($directory === 'receipts') {
+                    $driveData = GoogleDriveService::uploadReceipt($content, $fileName, $mimeType);
                 } else {
                     $driveData = GoogleDriveService::upload($content, $fileName, $mimeType);
                 }
@@ -150,6 +152,8 @@ class StorageService
                     $driveData = GoogleDriveService::uploadInvoice($decoded, $fileName, $mimeType);
                 } elseif ($directory === 'quotes') {
                     $driveData = GoogleDriveService::uploadQuote($decoded, $fileName, $mimeType);
+                } elseif ($directory === 'receipts') {
+                    $driveData = GoogleDriveService::uploadReceipt($decoded, $fileName, $mimeType);
                 } else {
                     $driveData = GoogleDriveService::upload($decoded, $fileName, $mimeType);
                 }

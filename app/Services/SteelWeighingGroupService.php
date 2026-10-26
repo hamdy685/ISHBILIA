@@ -470,13 +470,30 @@ class SteelWeighingGroupService
                 ]);
             }
 
+            $photoPath = $scaleTicketPhoto ?: $group->scale_ticket_photo;
+            $photoDriveId = null;
+
+            if ($photoPath && (str_starts_with($photoPath, 'data:') || str_contains($photoPath, ';base64,'))) {
+                $stored = \App\Services\StorageService::storeBase64(
+                    $photoPath,
+                    'receipts',
+                    'scale_ticket_group_' . $group->id . '.jpg'
+                );
+                if ($stored) {
+                    $photoPath = $stored['path'];
+                    $photoDriveId = $stored['drive_id'] ?? null;
+                }
+            } elseif ($photoPath) {
+                $photoDriveId = \App\Services\GoogleDriveService::extractFileId($photoPath);
+            }
+
             // Update weighing group record with received scale weight and exact total value
             $group->update([
                 'status'                => 'RECEIVED',
                 'total_received_weight' => round($receivedTotalWeight, 3),
                 'total_amount'          => $receivedTotalAmount,
                 'weight_difference'     => $diff,
-                'scale_ticket_photo'    => $scaleTicketPhoto ?: $group->scale_ticket_photo,
+                'scale_ticket_photo'    => $photoPath,
                 'receiver_notes'        => $receiverNotes,
                 'received_by_user_id'   => $user->id,
                 'received_at'           => now(),
@@ -501,7 +518,8 @@ class SteelWeighingGroupService
                 'actual_receiver_user_id' => $user->id,
                 'warehouse_submitted_at'  => now(),
                 'site_engineer_approved_at'=> now(),
-                'photo_path'              => $scaleTicketPhoto ?: $group->scale_ticket_photo,
+                'photo_path'              => $photoPath,
+                'photo_drive_id'          => $photoDriveId,
                 'warehouse_notes'         => "استلام وزنة حديد مجمعة ({$group->group_number}) - إجمالي البسكول: {$receivedTotalWeight} طن" . ($diff != 0 ? " (فرق: {$diff} طن)" : ''),
                 'site_engineer_notes'     => $receiverNotes,
             ]);

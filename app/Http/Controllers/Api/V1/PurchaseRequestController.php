@@ -479,6 +479,7 @@ class PurchaseRequestController extends Controller
             'uploaded_by_user_id' => $request->user()->id,
             'file_name' => $stored['name'],
             'file_path' => $stored['path'],
+            'drive_id' => $stored['drive_id'] ?? null,
             'mime_type' => $stored['mime_type'],
             'file_size' => $stored['size'],
         ]);
