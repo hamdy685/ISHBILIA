@@ -839,11 +839,20 @@ class ProcurementPurchaseOrderController extends Controller
                     'invoice_photo_uploaded_by_user_id' => $request->user()->id,
                 ]);
 
+                $finalizedPo->attachments()->create([
+                    'uploaded_by_user_id' => $request->user()->id,
+                    'file_name' => $uploadedData['name'] ?? 'invoice_' . time(),
+                    'file_path' => $uploadedData['path'],
+                    'drive_id' => $uploadedData['drive_id'] ?? null,
+                    'mime_type' => $uploadedData['mime_type'] ?? 'application/pdf',
+                    'file_size' => $uploadedData['size'] ?? 0,
+                ]);
+
                 app(\App\Services\SystemEventService::class)->recordAction(
                     $finalizedPo,
                     'INVOICE_ATTACHED',
                     "تم إرفاق فاتورة أمر الشراء الفعلي ({$finalizedPo->po_number}) وتخزينها في Google Drive بمجلد الفواتير.",
-                    ['user_id' => $request->user()->id, 'invoice_path' => $uploadedData['path']]
+                    ['user_id' => $request->user()->id, 'invoice_path' => $uploadedData['path'], 'drive_id' => $uploadedData['drive_id'] ?? null]
                 );
             }
         } catch (\RuntimeException $e) {
@@ -895,11 +904,20 @@ class ProcurementPurchaseOrderController extends Controller
             'invoice_photo_uploaded_by_user_id' => $request->user()->id,
         ]);
 
+        $po->attachments()->create([
+            'uploaded_by_user_id' => $request->user()->id,
+            'file_name' => $uploadedData['name'] ?? 'invoice_' . time(),
+            'file_path' => $uploadedData['path'],
+            'drive_id' => $uploadedData['drive_id'] ?? null,
+            'mime_type' => $uploadedData['mime_type'] ?? 'application/pdf',
+            'file_size' => $uploadedData['size'] ?? 0,
+        ]);
+
         app(\App\Services\SystemEventService::class)->recordAction(
             $po,
             'INVOICE_UPLOADED',
             "تم إرفاق فاتورة أمر الشراء الفعلي ({$po->po_number}) وتخزينها في Google Drive بمجلد الفواتير.",
-            ['user_id' => $request->user()->id, 'invoice_path' => $uploadedData['path']]
+            ['user_id' => $request->user()->id, 'invoice_path' => $uploadedData['path'], 'drive_id' => $uploadedData['drive_id'] ?? null]
         );
 
         return response()->json([
@@ -924,38 +942,56 @@ class ProcurementPurchaseOrderController extends Controller
 
         $po = PurchaseOrder::withoutGlobalScopes()->findOrFail((int) $id);
 
-        if (! $po->invoice_photo_path) {
+        $attachmentId = $request->query('attachment_id');
+        $filePath = $po->invoice_photo_path;
+        $fileName = $po->invoice_photo_name ?: "invoice_po_{$po->id}.pdf";
+        $mimeType = $po->invoice_photo_mime_type ?: 'application/pdf';
+        $driveId = $po->invoice_photo_drive_id;
+
+        if ($attachmentId) {
+            $att = $po->attachments()->find((int) $attachmentId);
+            if ($att) {
+                $filePath = $att->file_path;
+                $fileName = $att->file_name;
+                $mimeType = $att->mime_type;
+                $driveId = $att->drive_id ?: \App\Services\GoogleDriveService::extractFileId($att->file_path);
+            }
+        }
+
+        if (! $filePath) {
             abort(404, 'لم يتم إرفاق فاتورة لهذا الأمر.');
         }
 
+        $download = $request->boolean('download');
+
         // 1. Google Drive direct stream check
-        $driveId = $po->invoice_photo_drive_id ?: \App\Services\GoogleDriveService::extractFileId($po->invoice_photo_path);
+        $driveId = $driveId ?: \App\Services\GoogleDriveService::extractFileId($filePath);
         if ($driveId && \App\Services\GoogleDriveService::isConfigured()) {
             try {
                 return \App\Services\GoogleDriveService::streamFile(
                     $driveId,
-                    $po->invoice_photo_name ?: "invoice_po_{$po->id}.pdf",
-                    $po->invoice_photo_mime_type ?: 'application/pdf',
-                    false
+                    $fileName,
+                    $mimeType,
+                    $download
                 );
             } catch (\Throwable $e) {
                 \Illuminate\Support\Facades\Log::warning("Drive stream failed for invoice {$po->id}: " . $e->getMessage());
-                if (filter_var($po->invoice_photo_path, FILTER_VALIDATE_URL)) {
-                    return redirect()->away($po->invoice_photo_path);
+                if (filter_var($filePath, FILTER_VALIDATE_URL)) {
+                    return redirect()->away($filePath);
                 }
             }
         }
 
-        if (filter_var($po->invoice_photo_path, FILTER_VALIDATE_URL)) {
-            return redirect()->away($po->invoice_photo_path);
+        if (filter_var($filePath, FILTER_VALIDATE_URL)) {
+            return redirect()->away($filePath);
         }
 
         try {
             return \App\Services\StorageService::streamResponse(
-                $po->invoice_photo_path,
-                $po->invoice_photo_name ?: "invoice_po_{$po->id}.pdf",
-                $po->invoice_photo_mime_type ?: 'application/pdf',
-                false
+                $filePath,
+                $fileName,
+                $mimeType,
+                $download
             );
         } catch (\Throwable) {
             abort(404, 'ملف الفاتورة مفقود من الخادم القديم (تم حذفه في عملية نشر سابقة قبل ربط التخزين الدائم). يرجى إعادة إرفاق الفاتورة.');

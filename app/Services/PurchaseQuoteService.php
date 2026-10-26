@@ -76,6 +76,7 @@ class PurchaseQuoteService
                 $fileName = null;
                 $fileSize = null;
                 $mimeType = null;
+                $fileDriveId = null;
 
                 if (isset($quote['file']) && $quote['file'] instanceof \Illuminate\Http\UploadedFile) {
                     $saved = \App\Services\StorageService::storeUploadedFile($quote['file'], 'quotes');
@@ -83,11 +84,13 @@ class PurchaseQuoteService
                     $fileName = $saved['name'];
                     $fileSize = $saved['size'];
                     $mimeType = $saved['mime_type'];
+                    $fileDriveId = $saved['drive_id'] ?? null;
                 } elseif (!empty($quote['file_path'])) {
                     $filePath = $quote['file_path'];
                     $fileName = $quote['file_name'] ?? basename($filePath);
                     $fileSize = $quote['file_size'] ?? null;
                     $mimeType = $quote['mime_type'] ?? null;
+                    $fileDriveId = $quote['file_drive_id'] ?? \App\Services\GoogleDriveService::extractFileId($filePath);
                 }
 
                 $pr->quotes()->create([
@@ -100,6 +103,7 @@ class PurchaseQuoteService
                     'file_path' => $filePath,
                     'file_name' => $fileName,
                     'file_size' => $fileSize,
+                    'file_drive_id' => $fileDriveId,
                     'mime_type' => $mimeType,
                     'status' => 'SUBMITTED',
                 ]);

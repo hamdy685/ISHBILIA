@@ -828,20 +828,40 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
                 )}
               </div>
 
-              {/* If PO already has an invoice attached */}
-              {po?.invoice_photo_url && !invoiceFile && (
-                <div className="flex items-center justify-between text-xs text-slate-300 bg-slate-900/90 p-2.5 rounded-lg border border-amber-500/30">
-                  <span className="flex items-center gap-1.5 text-amber-300 font-bold truncate">
-                    <span>📄</span> فاتورة سابقة مرفقة: {po.invoice_photo_name || 'فاتورة المورد'}
-                  </span>
-                  <a
-                    href={po.invoice_photo_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-cyan-400 hover:text-cyan-300 font-bold underline flex items-center gap-1 shrink-0 ml-2"
-                  >
-                    <span>👁️ معاينة الفاتورة</span>
-                  </a>
+              {/* If PO already has invoice(s) attached */}
+              {!invoiceFile && (po?.invoice_attachments?.length || po?.invoice_photo_url) && (
+                <div className="space-y-1.5">
+                  {po?.invoice_attachments && po.invoice_attachments.length > 0 ? (
+                    po.invoice_attachments.map((att, idx) => (
+                      <div key={att.id || idx} className="flex items-center justify-between text-xs text-slate-300 bg-slate-900/90 p-2.5 rounded-lg border border-amber-500/30">
+                        <span className="flex items-center gap-1.5 text-amber-300 font-bold truncate">
+                          <span>📄</span> فاتورة #{idx + 1}: {att.file_name}
+                        </span>
+                        <a
+                          href={att.file_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-cyan-400 hover:text-cyan-300 font-bold underline flex items-center gap-1 shrink-0 ml-2"
+                        >
+                          <span>👁️ معاينة الفاتورة</span>
+                        </a>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="flex items-center justify-between text-xs text-slate-300 bg-slate-900/90 p-2.5 rounded-lg border border-amber-500/30">
+                      <span className="flex items-center gap-1.5 text-amber-300 font-bold truncate">
+                        <span>📄</span> فاتورة سابقة مرفقة: {po?.invoice_photo_name || 'فاتورة المورد'}
+                      </span>
+                      <a
+                        href={po?.invoice_photo_url || ''}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-cyan-400 hover:text-cyan-300 font-bold underline flex items-center gap-1 shrink-0 ml-2"
+                      >
+                        <span>👁️ معاينة الفاتورة</span>
+                      </a>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

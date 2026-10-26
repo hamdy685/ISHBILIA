@@ -24,6 +24,7 @@ class PurchaseRequestQuote extends Model
         'file_path',
         'file_name',
         'file_size',
+        'file_drive_id',
         'mime_type',
         'status',
         'selected_at',

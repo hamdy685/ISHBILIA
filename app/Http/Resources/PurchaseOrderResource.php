@@ -107,8 +107,21 @@ class PurchaseOrderResource extends JsonResource
             'invoice_photo_url' => $this->invoice_photo_url,
             'invoice_photo_name' => $this->invoice_photo_name,
             'invoice_photo_size' => $this->invoice_photo_size,
+            'invoice_photo_drive_id' => $this->invoice_photo_drive_id,
             'invoice_photo_uploaded_at' => $this->invoice_photo_uploaded_at ? \Illuminate\Support\Carbon::parse($this->invoice_photo_uploaded_at)->toIso8601String() : null,
             'has_invoice_attachment' => (bool) $this->has_invoice_attachment,
+            'invoice_attachments' => $this->attachments()->latest('id')->get()->map(function ($att) {
+                return [
+                    'id' => $att->id,
+                    'file_name' => $att->file_name,
+                    'file_size' => $att->file_size,
+                    'mime_type' => $att->mime_type,
+                    'drive_id' => $att->drive_id,
+                    'file_url' => "/api/v1/purchase-orders/{$this->id}/invoice-photo?attachment_id={$att->id}",
+                    'download_url' => "/api/v1/purchase-orders/{$this->id}/invoice-photo?attachment_id={$att->id}&download=1",
+                    'uploaded_at' => $att->created_at ? $att->created_at->toIso8601String() : null,
+                ];
+            })->values(),
             'rejection_reason' => $this->rejection_reason,
             'created_at' => $this->created_at ? $this->created_at->toIso8601String() : null,
             'updated_at' => $this->updated_at ? $this->updated_at->toIso8601String() : null,

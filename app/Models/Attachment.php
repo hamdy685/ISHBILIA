@@ -19,6 +19,7 @@ class Attachment extends Model
         'uploaded_by_user_id',
         'file_name',
         'file_path',
+        'drive_id',
         'mime_type',
         'file_size',
     ];

@@ -1318,17 +1318,35 @@ export const EditPurchaseOrderPage: React.FC = () => {
                 </p>
               </div>
             </div>
-            {po.has_invoice_attachment && (po.invoice_photo_url || (po as any).invoice_photo_path) && (
-              <a
-                href={po.invoice_photo_url || `/api/v1/purchase-orders/${po.id}/invoice-photo`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-amber-950 font-black text-xs px-3 py-1.5 shadow-sm transition-all whitespace-nowrap self-start sm:self-auto cursor-pointer"
-                title="استعراض الفاتورة المرفوعة حالياً"
-              >
-                <span>🔍</span>
-                <span>معاينة الفاتورة الحالية ({po.invoice_photo_name || 'ملف الفاتورة'})</span>
-              </a>
+            {po.has_invoice_attachment && (
+              <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                {po.invoice_attachments && po.invoice_attachments.length > 0 ? (
+                  po.invoice_attachments.map((att, idx) => (
+                    <a
+                      key={att.id || idx}
+                      href={att.file_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-amber-950 font-black text-xs px-3 py-1.5 shadow-sm transition-all whitespace-nowrap cursor-pointer"
+                      title="استعراض الفاتورة من Google Drive"
+                    >
+                      <span>🧾</span>
+                      <span>فاتورة #{idx + 1}: {att.file_name}</span>
+                    </a>
+                  ))
+                ) : (po.invoice_photo_url || (po as any).invoice_photo_path) && (
+                  <a
+                    href={po.invoice_photo_url || `/api/v1/purchase-orders/${po.id}/invoice-photo`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-amber-950 font-black text-xs px-3 py-1.5 shadow-sm transition-all whitespace-nowrap cursor-pointer"
+                    title="استعراض الفاتورة المرفوعة حالياً"
+                  >
+                    <span>🔍</span>
+                    <span>معاينة الفاتورة ({po.invoice_photo_name || 'ملف الفاتورة'})</span>
+                  </a>
+                )}
+              </div>
             )}
           </div>
 

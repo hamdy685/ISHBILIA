@@ -40,7 +40,7 @@ class GoogleDriveService
 
     public static function folderId(): string
     {
-        return (string) config('google_drive.folder_id', env('GOOGLE_DRIVE_RECEIPTS_FOLDER_ID', env('GOOGLE_DRIVE_FOLDER_ID', '1ZdrP3K-NqU4uIs5GL3JD7biz7rDpSIdX')));
+        return (string) config('google_drive.folder_id', env('GOOGLE_DRIVE_RECEIPTS_FOLDER_ID', env('GOOGLE_DRIVE_FOLDER_ID', '1EB9h3hue3aPM_zlx_AbRBydPZP3nnPDU')));
     }
 
     public static function invoicesFolderId(): string
@@ -50,16 +50,29 @@ class GoogleDriveService
             return $configured;
         }
 
-        // Auto-resolve or create "فواتير" folder in Google Drive
+        // Auto-resolve or create "الفواتير" folder in Google Drive (or use existing "فواتير")
         return (string) Cache::remember('google_drive_invoices_resolved_folder_id', 86400, function () {
-            return self::getOrCreateFolder('فواتير', self::folderId()) ?: self::folderId();
+            return self::getOrCreateFolder('الفواتير', self::folderId(), ['فواتير', 'Invoices']) ?: self::folderId();
+        });
+    }
+
+    public static function quotesFolderId(): string
+    {
+        $configured = (string) config('google_drive.quotes_folder_id', env('GOOGLE_DRIVE_QUOTES_FOLDER_ID', ''));
+        if (! empty($configured)) {
+            return $configured;
+        }
+
+        // Auto-resolve or create "عروض الأسعار" folder in Google Drive (or use existing "عروض الاسعار")
+        return (string) Cache::remember('google_drive_quotes_resolved_folder_id', 86400, function () {
+            return self::getOrCreateFolder('عروض الأسعار', self::folderId(), ['عروض الاسعار', 'عروض اسعار', 'Quotes', 'Price Quotes']) ?: self::folderId();
         });
     }
 
     /**
      * Search for a folder by name inside a parent, or create it if missing.
      */
-    public static function getOrCreateFolder(string $folderName, ?string $parentFolderId = null): ?string
+    public static function getOrCreateFolder(string $folderName, ?string $parentFolderId = null, array $alternativeNames = []): ?string
     {
         $accessToken = self::getAccessToken();
         if (! $accessToken) {
@@ -69,29 +82,32 @@ class GoogleDriveService
         $parent = $parentFolderId ?: self::folderId();
 
         try {
-            // 1. Search for existing folder
-            $query = "name = '{$folderName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false";
-            if ($parent) {
-                $query .= " and '{$parent}' in parents";
-            }
+            // 1. Search for existing folder by primary name or alternatives
+            $allNames = array_unique(array_merge([$folderName], $alternativeNames));
+            foreach ($allNames as $name) {
+                $query = "name = '{$name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false";
+                if ($parent) {
+                    $query .= " and '{$parent}' in parents";
+                }
 
-            $searchResponse = Http::withToken($accessToken)
-                ->timeout(15)
-                ->get('https://www.googleapis.com/drive/v3/files', [
-                    'q' => $query,
-                    'fields' => 'files(id, name)',
-                    'supportsAllDrives' => 'true',
-                    'includeItemsFromAllDrives' => 'true',
-                ]);
+                $searchResponse = Http::withToken($accessToken)
+                    ->timeout(15)
+                    ->get('https://www.googleapis.com/drive/v3/files', [
+                        'q' => $query,
+                        'fields' => 'files(id, name)',
+                        'supportsAllDrives' => 'true',
+                        'includeItemsFromAllDrives' => 'true',
+                    ]);
 
-            if ($searchResponse->successful()) {
-                $files = $searchResponse->json('files', []);
-                if (! empty($files) && ! empty($files[0]['id'])) {
-                    return $files[0]['id'];
+                if ($searchResponse->successful()) {
+                    $files = $searchResponse->json('files', []);
+                    if (! empty($files) && ! empty($files[0]['id'])) {
+                        return $files[0]['id'];
+                    }
                 }
             }
 
-            // 2. Create the folder if not found
+            // 2. Create the folder if not found (using primary name)
             $createPayload = [
                 'name' => $folderName,
                 'mimeType' => 'application/vnd.google-apps.folder',
@@ -285,7 +301,7 @@ class GoogleDriveService
     }
 
     /**
-     * Upload an invoice document to the dedicated "فواتير" folder in Google Drive.
+     * Upload an invoice document to the dedicated "الفواتير" folder in Google Drive.
      *
      * @throws \RuntimeException If upload fails
      */
@@ -296,6 +312,20 @@ class GoogleDriveService
     ): array {
         $invoicesFolderId = self::invoicesFolderId();
         return self::upload($binaryContent, $fileName, $mimeType, $invoicesFolderId);
+    }
+
+    /**
+     * Upload a quote document to the dedicated "عروض الأسعار" folder in Google Drive.
+     *
+     * @throws \RuntimeException If upload fails
+     */
+    public static function uploadQuote(
+        string $binaryContent,
+        string $fileName,
+        string $mimeType = 'application/pdf'
+    ): array {
+        $quotesFolderId = self::quotesFolderId();
+        return self::upload($binaryContent, $fileName, $mimeType, $quotesFolderId);
     }
 
     /**

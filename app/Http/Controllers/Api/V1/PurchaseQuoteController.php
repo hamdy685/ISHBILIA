@@ -188,6 +188,26 @@ class PurchaseQuoteController extends Controller
             }
         }
 
+        $download = $request->boolean('download');
+
+        // 1. Google Drive direct stream check
+        $driveId = $quote->file_drive_id ?: \App\Services\GoogleDriveService::extractFileId($quote->file_path);
+        if ($driveId && \App\Services\GoogleDriveService::isConfigured()) {
+            try {
+                return \App\Services\GoogleDriveService::streamFile(
+                    $driveId,
+                    $quote->file_name ?: "quote_{$quote->id}.pdf",
+                    $quote->mime_type ?: 'application/pdf',
+                    $download
+                );
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning("Drive stream failed for quote {$quote->id}: " . $e->getMessage());
+                if (filter_var($quote->file_path, FILTER_VALIDATE_URL)) {
+                    return redirect()->away($quote->file_path);
+                }
+            }
+        }
+
         if ($quote->file_path || $quote->file_name) {
             $path = $quote->file_path ?: ('quotes/' . $quote->file_name);
             try {
@@ -195,7 +215,7 @@ class PurchaseQuoteController extends Controller
                     $path,
                     $quote->file_name ?: basename($path),
                     $quote->mime_type,
-                    false
+                    $download
                 );
             } catch (\Throwable) {
                 if (filter_var($quote->file_path, FILTER_VALIDATE_URL)) {

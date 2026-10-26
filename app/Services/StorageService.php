@@ -42,16 +42,20 @@ class StorageService
         $fileName = Str::slug(pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)) . '_' . time() . '_' . Str::random(6) . '.' . $extension;
         $mimeType = $file->getClientMimeType() ?: $file->getMimeType();
 
-        $isGoogleDriveCandidate = ($directory === 'receipts' || $directory === 'invoices' || GoogleDriveService::isConfigured())
+        $isGoogleDriveCandidate = ($directory === 'receipts' || $directory === 'invoices' || $directory === 'quotes' || GoogleDriveService::isConfigured())
             && config('google_drive.enabled', true);
 
         // 1. Upload to Google Drive
         if ($isGoogleDriveCandidate) {
             try {
                 $content = $file->getContent();
-                $driveData = ($directory === 'invoices')
-                    ? GoogleDriveService::uploadInvoice($content, $fileName, $mimeType)
-                    : GoogleDriveService::upload($content, $fileName, $mimeType);
+                if ($directory === 'invoices') {
+                    $driveData = GoogleDriveService::uploadInvoice($content, $fileName, $mimeType);
+                } elseif ($directory === 'quotes') {
+                    $driveData = GoogleDriveService::uploadQuote($content, $fileName, $mimeType);
+                } else {
+                    $driveData = GoogleDriveService::upload($content, $fileName, $mimeType);
+                }
 
                 if (! empty($driveData['path']) && ! empty($driveData['id'])) {
                     // Cache a temporary local copy if possible, but Google Drive is the source of truth
@@ -136,15 +140,19 @@ class StorageService
 
         $fileName = ($customName ? Str::slug(pathinfo($customName, PATHINFO_FILENAME)) . '_' : 'receipt_') . time() . '_' . Str::random(8) . '.' . $extension;
 
-        $isGoogleDriveCandidate = ($directory === 'receipts' || $directory === 'invoices' || GoogleDriveService::isConfigured())
+        $isGoogleDriveCandidate = ($directory === 'receipts' || $directory === 'invoices' || $directory === 'quotes' || GoogleDriveService::isConfigured())
             && config('google_drive.enabled', true);
 
         // 1. Upload to Google Drive
         if ($isGoogleDriveCandidate) {
             try {
-                $driveData = ($directory === 'invoices')
-                    ? GoogleDriveService::uploadInvoice($decoded, $fileName, $mimeType)
-                    : GoogleDriveService::upload($decoded, $fileName, $mimeType);
+                if ($directory === 'invoices') {
+                    $driveData = GoogleDriveService::uploadInvoice($decoded, $fileName, $mimeType);
+                } elseif ($directory === 'quotes') {
+                    $driveData = GoogleDriveService::uploadQuote($decoded, $fileName, $mimeType);
+                } else {
+                    $driveData = GoogleDriveService::upload($decoded, $fileName, $mimeType);
+                }
 
                 if (! empty($driveData['path']) && ! empty($driveData['id'])) {
                     try {

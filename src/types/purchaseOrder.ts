@@ -213,8 +213,19 @@ export interface PurchaseOrder {
   invoice_photo_url?: string | null;
   invoice_photo_name?: string | null;
   invoice_photo_size?: number | null;
+  invoice_photo_drive_id?: string | null;
   invoice_photo_uploaded_at?: string | null;
   has_invoice_attachment?: boolean;
+  invoice_attachments?: Array<{
+    id: number;
+    file_name: string;
+    file_size?: number | null;
+    mime_type?: string | null;
+    drive_id?: string | null;
+    file_url: string;
+    download_url?: string | null;
+    uploaded_at?: string | null;
+  }>;
   finalized_by_user_id?: number | null;
   finalized_at?: string | null;
   finalization_notes?: string | null;

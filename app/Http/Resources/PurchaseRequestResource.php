@@ -146,6 +146,7 @@ class PurchaseRequestResource extends JsonResource
                     'file_name' => $quote->file_name,
                     'file_size' => $quote->file_size,
                     'file_url' => $quote->file_url,
+                    'file_drive_id' => $quote->file_drive_id,
                     'mime_type' => $quote->mime_type,
                     'status' => $quote->status,
                     'recommendations' => $quote->relationLoaded('recommendations')
@@ -176,6 +177,7 @@ class PurchaseRequestResource extends JsonResource
                     'file_name' => $this->selectedQuote->file_name,
                     'file_size' => $this->selectedQuote->file_size,
                     'file_url' => $this->selectedQuote->file_url,
+                    'file_drive_id' => $this->selectedQuote->file_drive_id,
                     'mime_type' => $this->selectedQuote->mime_type,
                     'status' => $this->selectedQuote->status,
                 ] : null;
