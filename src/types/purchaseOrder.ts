@@ -59,6 +59,8 @@ export interface PurchaseOrderItem {
   actual_unit_price?: string | number | null;
   line_total: string;
   actual_line_total?: string | number | null;
+  is_discount_applied?: boolean;
+  discount_amount?: string | number | null;
   specifications?: string | null;
   supplier_id?: number | null;
   supplier?: {
@@ -199,6 +201,10 @@ export interface PurchaseOrder {
   /** Always 'EGP' — Egyptian Pound */
   currency: string;
   subtotal: string;
+  discount_type?: 'NONE' | 'TOTAL' | 'SELECTED_ITEMS';
+  discount_percentage?: string | number | null;
+  discount_amount?: string | number | null;
+  tax_amount?: string | number | null;
   grand_total: string;
   payment_terms?: string | null;
   delivery_terms?: string | null;
@@ -330,6 +336,9 @@ export interface PurchaseOrderPayload {
   finalization_notes?: string;
   parcel_reference?: string;
   region?: string;
+  discount_type?: 'NONE' | 'TOTAL' | 'SELECTED_ITEMS';
+  discount_percentage?: number;
+  discount_item_ids?: number[];
   items?: Array<{
     id?: number;
     pr_item_id?: number | null;
@@ -342,6 +351,7 @@ export interface PurchaseOrderPayload {
     unit_price?: number;
     specifications?: string;
     supplier_id?: number | null;
+    is_discount_applied?: boolean;
   }>;
   groups?: PurchaseOrderGroupPayload[];
 }
@@ -390,6 +400,8 @@ export interface FinalizeActualPoItemPayload {
   quantity: number;
   uom?: string | null;
   unit_price: number;
+  is_discount_applied?: boolean;
+  discount_amount?: number;
   specifications?: string | null;
   supplier_id?: number | null;
 }
@@ -398,6 +410,9 @@ export interface FinalizeActualPoPayload {
   supplier_id?: number | null;
   parcel_reference?: string;
   region?: string;
+  discount_type?: 'NONE' | 'TOTAL' | 'SELECTED_ITEMS';
+  discount_percentage?: number;
+  discount_item_ids?: number[];
   items: FinalizeActualPoItemPayload[];
   notes?: string;
   invoice_file?: File | null;

@@ -782,8 +782,13 @@ class ProcurementPurchaseOrderController extends Controller
             'items.*.quantity'         => ['required', 'numeric', 'gte:0'],
             'items.*.uom'              => ['nullable', 'string', 'max:20'],
             'items.*.unit_price'       => ['required', 'numeric', 'gte:0'],
+            'items.*.is_discount_applied' => ['nullable', 'boolean'],
             'items.*.specifications'   => ['nullable', 'string'],
             'items.*.supplier_id'      => ['nullable', 'integer', 'exists:suppliers,id'],
+            'discount_type'            => ['nullable', 'string', 'in:NONE,TOTAL,SELECTED_ITEMS'],
+            'discount_percentage'      => ['nullable', 'numeric', 'gte:0', 'lte:100'],
+            'discount_item_ids'        => ['nullable', 'array'],
+            'discount_item_ids.*'      => ['integer'],
             'notes'                    => ['nullable', 'string', 'max:3000'],
             'invoice_file'             => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:20480'],
             'invoice_photo'            => ['nullable', 'string'],
@@ -805,6 +810,21 @@ class ProcurementPurchaseOrderController extends Controller
             ], 409);
         }
 
+        // Validate that all discount_item_ids belong to this PO
+        $poItemIds = $po->items->pluck('id')->all();
+        if (!empty($validated['discount_item_ids'])) {
+            foreach ($validated['discount_item_ids'] as $discountItemId) {
+                if (!in_array((int) $discountItemId, $poItemIds, true)) {
+                    return response()->json([
+                        'message' => 'البند المحدد للخصم لا ينتمي لأمر الشراء الحالي.',
+                        'errors' => [
+                            'discount_item_ids' => ['البند المحدد للخصم لا ينتمي لأمر الشراء الحالي.']
+                        ]
+                    ], 422);
+                }
+            }
+        }
+
         try {
             $finalizedPo = $this->poService->finalizeActualPo(
                 $request->user(),
@@ -813,7 +833,10 @@ class ProcurementPurchaseOrderController extends Controller
                 $validated['notes'] ?? null,
                 !empty($validated['supplier_id']) ? (int) $validated['supplier_id'] : null,
                 !empty($validated['parcel_reference']) ? trim((string) $validated['parcel_reference']) : null,
-                !empty($validated['region']) ? trim((string) $validated['region']) : null
+                !empty($validated['region']) ? trim((string) $validated['region']) : null,
+                $validated['discount_type'] ?? null,
+                isset($validated['discount_percentage']) ? (float) $validated['discount_percentage'] : null,
+                $validated['discount_item_ids'] ?? null
             );
 
             // Handle optional invoice attachment uploaded during actual PO finalization

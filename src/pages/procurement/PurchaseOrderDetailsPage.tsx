@@ -17,7 +17,7 @@ import { getUnitLabel } from '../../utils/units';
 import SystemEventTimeline from '../../components/ui/SystemEventTimeline';
 import { UnifiedNotesCard } from '../../components/common/UnifiedNotesCard';
 import { SupplementItemBadge } from '../../components/common/SupplementItemBadge';
-import { isActualPurchaseOrder, getActualPoLineItems, calculateActualPoGrandTotal } from '../../utils/actualPo';
+import { isActualPurchaseOrder, getActualPoLineItems, calculateActualPoGrandTotal, calculateActualPoFinancials } from '../../utils/actualPo';
 import { getSummaryParcels, getSummaryRegions, getSummaryProject } from '../../utils/formatRequestSummary';
 import CreateWeighingGroupModal from '../../components/procurement/CreateWeighingGroupModal';
 import CreateShipmentGroupModal from '../../components/procurement/CreateShipmentGroupModal';
@@ -73,6 +73,16 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
   const isActual = React.useMemo(() => isActualPurchaseOrder(po), [po]);
   const displayedItems = React.useMemo(() => getActualPoLineItems(po), [po]);
   const displayedGrandTotal = React.useMemo(() => calculateActualPoGrandTotal(displayedItems, po?.grand_total), [displayedItems, po?.grand_total]);
+
+  const poFinancials = React.useMemo(() => {
+    if (!po) return null;
+    return calculateActualPoFinancials(
+      displayedItems,
+      po.discount_type || 'NONE',
+      Number(po.discount_percentage) || 0,
+      Number(po.tax_amount) || 0
+    );
+  }, [po, displayedItems]);
 
   const loadPo = async (): Promise<PurchaseOrder | null> => {
     if (!id) return null;
@@ -576,6 +586,16 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
                         isSupplementary={item.is_supplementary}
                         batchNumber={item.supplement_batch}
                       />
+                      {po.discount_type === 'SELECTED_ITEMS' && item.is_discount_applied && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                          🏷️ خاضع لخصم ({Number(po.discount_percentage || 0)}%)
+                        </span>
+                      )}
+                      {po.discount_type === 'TOTAL' && Number(po.discount_percentage || 0) > 0 && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
+                          🏷️ مشمول بخصم الإجمالي
+                        </span>
+                      )}
                       {item.supplier && item.supplier.id !== po.supplier_id && (
                         <span className="text-[10px] font-bold text-amber-300 bg-amber-950/70 border border-amber-600/40 px-2 py-0.5 rounded">
                           مورد البند: {item.supplier.company_name}
@@ -629,6 +649,16 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
                       isSupplementary={item.is_supplementary}
                       batchNumber={item.supplement_batch}
                     />
+                    {po.discount_type === 'SELECTED_ITEMS' && item.is_discount_applied && (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                        🏷️ خاضع لخصم ({Number(po.discount_percentage || 0)}%)
+                      </span>
+                    )}
+                    {po.discount_type === 'TOTAL' && Number(po.discount_percentage || 0) > 0 && (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
+                        🏷️ مشمول بخصم الإجمالي
+                      </span>
+                    )}
                     {item.shipment_group && (
                       <span className="text-[10px] font-bold text-amber-300 bg-amber-950/70 border border-amber-500/50 px-2 py-0.5 rounded flex items-center gap-1">
                         <span>🚚</span>
@@ -678,10 +708,55 @@ export const PurchaseOrderDetailsPage: React.FC = () => {
 
         {/* Financial Recalculated Totals */}
         <div className="flex justify-end pt-3 border-t border-slate-800">
-          <div className="w-full sm:w-80 bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2 text-xs">
-            <div className="flex justify-between items-center text-sm font-black text-cyan-400">
-              <span>الإجمالي الكلي:</span>
-              <CurrencyDisplay amount={po.grand_total || 0} amountClassName="font-mono text-lg font-black text-cyan-400" />
+          <div className="w-full sm:w-88 bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2 text-xs">
+            <div className="flex justify-between items-center text-slate-400">
+              <span>إجمالي البنود (قبل الخصم):</span>
+              <CurrencyDisplay
+                amount={poFinancials?.subtotal ?? (Number(po.subtotal) || displayedGrandTotal)}
+                amountClassName="font-mono font-bold text-slate-200"
+              />
+            </div>
+
+            {po.discount_type === 'SELECTED_ITEMS' && (poFinancials?.targetedSubtotal || 0) > 0 && (
+              <div className="flex justify-between items-center text-amber-400/90 bg-amber-950/20 px-2.5 py-1 rounded border border-amber-800/30 text-[11px]">
+                <span>إجمالي البنود المستهدفة بالخصم ({poFinancials?.targetedCount || 0} بنود):</span>
+                <CurrencyDisplay
+                  amount={poFinancials?.targetedSubtotal || 0}
+                  amountClassName="font-mono font-bold text-amber-300"
+                />
+              </div>
+            )}
+
+            {(Number(po.discount_amount) > 0 || (poFinancials?.discountAmount || 0) > 0) && (
+              <div className="flex justify-between items-center text-rose-400 bg-rose-950/20 px-2.5 py-1 rounded border border-rose-800/30">
+                <span className="flex items-center gap-1">
+                  <span>🏷️ الخصم</span>
+                  <span className="text-[10px] text-rose-300/80">
+                    ({po.discount_type === 'TOTAL' ? 'على الإجمالي' : 'على بنود محددة'} - {po.discount_percentage || poFinancials?.discountPercentage}%)
+                  </span>
+                  :
+                </span>
+                <span className="font-mono font-bold text-rose-300">
+                  - <CurrencyDisplay amount={Number(po.discount_amount) || poFinancials?.discountAmount || 0} amountClassName="font-mono font-bold text-rose-300" />
+                </span>
+              </div>
+            )}
+
+            {Number(po.tax_amount) > 0 && (
+              <div className="flex justify-between items-center text-slate-400">
+                <span>ضريبة القيمة المضافة:</span>
+                <span className="font-mono font-bold text-slate-200">
+                  + <CurrencyDisplay amount={Number(po.tax_amount)} amountClassName="font-mono font-bold text-slate-200" />
+                </span>
+              </div>
+            )}
+
+            <div className="flex justify-between items-center border-t border-slate-800 pt-2 text-sm font-black text-cyan-400">
+              <span>المبلغ الإجمالي الكلي:</span>
+              <CurrencyDisplay
+                amount={Number(po.grand_total) || poFinancials?.grandTotal || displayedGrandTotal}
+                amountClassName="font-mono text-lg font-black text-cyan-400"
+              />
             </div>
           </div>
         </div>

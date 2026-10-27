@@ -5,7 +5,7 @@ import { getUnitLabel } from '../../utils/units';
 import { printDocumentOnly } from '../../utils/print';
 import { formatCleanNumber, formatCleanQty } from '../../utils/numberFormat';
 import { extractRebarInfo } from '../../utils/rebar';
-import { isActualPurchaseOrder, getActualPoLineItems, calculateActualPoGrandTotal } from '../../utils/actualPo';
+import { isActualPurchaseOrder, getActualPoLineItems, calculateActualPoGrandTotal, calculateActualPoFinancials } from '../../utils/actualPo';
 
 interface PurchaseOrderPrintModalProps {
   po: PurchaseOrder;
@@ -41,7 +41,15 @@ export const PurchaseOrderPrintModal: React.FC<PurchaseOrderPrintModalProps> = (
 
   const isActual = isActualPurchaseOrder(po);
   const items = React.useMemo(() => getActualPoLineItems(po), [po]);
-  const grandTotal = React.useMemo(() => calculateActualPoGrandTotal(items, po?.grand_total), [items, po?.grand_total]);
+  const financials = React.useMemo(() => {
+    return calculateActualPoFinancials(
+      items,
+      po.discount_type || 'NONE',
+      Number(po.discount_percentage) || 0,
+      Number(po.tax_amount) || 0
+    );
+  }, [items, po]);
+  const grandTotal = Number(po?.grand_total) || financials.grandTotal;
 
   if (!isOpen || !po) return null;
 
@@ -64,7 +72,8 @@ export const PurchaseOrderPrintModal: React.FC<PurchaseOrderPrintModalProps> = (
     window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
   };
 
-  const emptyRowsCount = Math.max(TOTAL_FIXED_ROWS - items.length, 0);
+  const discountRowsCount = (financials.discountAmount > 0 || Number(po.discount_amount) > 0) ? 2 : 0;
+  const emptyRowsCount = Math.max(TOTAL_FIXED_ROWS - items.length - discountRowsCount, 0);
 
   const requestNumber = po.manual_po_number || po.purchase_request?.manual_request_number || po.po_number || po.purchase_request?.request_number || '—';
   const isOfficePr = po.purchase_request?.request_type === 'OFFICE_SUPPLIES';
@@ -218,6 +227,9 @@ export const PurchaseOrderPrintModal: React.FC<PurchaseOrderPrintModalProps> = (
                             {item.item_reference ? (
                               <div className="text-slate-700 text-[11px]">قطعة {item.item_reference}</div>
                             ) : null}
+                            {po.discount_type === 'SELECTED_ITEMS' && item.is_discount_applied && (
+                              <div className="text-amber-800 font-bold text-[10px]">🏷️ خاضع لخصم ({Number(po.discount_percentage || 0)}%)</div>
+                            )}
                           </td>
                         </tr>
                       );
@@ -242,10 +254,38 @@ export const PurchaseOrderPrintModal: React.FC<PurchaseOrderPrintModalProps> = (
                       );
                     })}
 
+                    {/* Subtotal & Discount Rows if discount exists */}
+                    {(financials.discountAmount > 0 || Number(po.discount_amount) > 0) && (
+                      <>
+                        <tr className="border border-black bg-slate-50 font-bold text-xs">
+                          <td colSpan={4} className="border border-black p-1 text-center">
+                            إجمالي البنود قبل الخصم
+                          </td>
+                          <td colSpan={2} className="border border-black p-1 text-center font-mono font-bold">
+                            {formatCleanNumber(financials.subtotal || Number(po.subtotal))}
+                          </td>
+                          <td className="border border-black p-1 text-[11px] text-slate-600">
+                            {po.discount_type === 'SELECTED_ITEMS' ? `بنود محددة (${financials.targetedCount})` : 'إجمالي الأمر'}
+                          </td>
+                        </tr>
+                        <tr className="border border-black bg-rose-50/70 font-bold text-xs text-rose-900">
+                          <td colSpan={4} className="border border-black p-1 text-center">
+                            الخصم المطبق ({financials.discountPercentage}%) {po.discount_type === 'SELECTED_ITEMS' ? 'على البنود المحددة' : 'على الإجمالي'}
+                          </td>
+                          <td colSpan={2} className="border border-black p-1 text-center font-mono font-bold text-rose-700">
+                            - {formatCleanNumber(Number(po.discount_amount) || financials.discountAmount)}
+                          </td>
+                          <td className="border border-black p-1 text-[11px] text-rose-700">
+                            صافي بعد الخصم
+                          </td>
+                        </tr>
+                      </>
+                    )}
+
                     {/* Total Row with Vibrant Yellow Box matching exact template */}
                     <tr className="border-2 border-black" style={{ borderTop: '2px solid #000' }}>
                       <td colSpan={4} className="border border-black p-2 text-center font-black text-base tracking-widest bg-white">
-                        الأجـــــــــــــــــمالـــــــــي
+                        {financials.discountAmount > 0 || Number(po.discount_amount) > 0 ? 'صافي الإجمالي النهائي المستحق' : 'الأجـــــــــــــــــمالـــــــــي'}
                       </td>
                       <td
                         colSpan={2}
@@ -254,7 +294,9 @@ export const PurchaseOrderPrintModal: React.FC<PurchaseOrderPrintModalProps> = (
                       >
                         {formatCleanNumber(grandTotal)}
                       </td>
-                      <td className="border border-black p-2 bg-white"></td>
+                      <td className="border border-black p-2 bg-white text-center font-bold text-xs">
+                        {po.currency || 'ج.م'}
+                      </td>
                     </tr>
                   </tbody>
                 </table>

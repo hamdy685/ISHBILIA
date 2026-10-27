@@ -36,6 +36,10 @@ class PurchaseOrder extends Model
         'created_by_user_id',
         'status',
         'subtotal',
+        'discount_type',
+        'discount_percentage',
+        'discount_amount',
+        'tax_amount',
         'grand_total',
         'payment_terms',
         'delivery_terms',
@@ -190,6 +194,9 @@ class PurchaseOrder extends Model
     {
         return [
             'subtotal' => 'decimal:2',
+            'discount_percentage' => 'decimal:4',
+            'discount_amount' => 'decimal:2',
+            'tax_amount' => 'decimal:2',
             'grand_total' => 'decimal:2',
             'delivery_date' => 'date',
             'actual_delivery_date' => 'date',

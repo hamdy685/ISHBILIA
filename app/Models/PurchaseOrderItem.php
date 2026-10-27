@@ -23,6 +23,9 @@ class PurchaseOrderItem extends Model
         'quantity',
         'uom',
         'unit_price',
+        'is_discount_applied',
+        'discount_amount',
+        'tax_amount',
         'line_total',
         'is_supplementary',
         'supplement_batch',
@@ -34,10 +37,13 @@ class PurchaseOrderItem extends Model
     protected function casts(): array
     {
         return [
+            'is_discount_applied' => 'boolean',
             'is_supplementary' => 'boolean',
             'supplement_batch' => 'integer',
             'quantity' => 'decimal:4',
             'unit_price' => 'decimal:4',
+            'discount_amount' => 'decimal:2',
+            'tax_amount' => 'decimal:2',
             'line_total' => 'decimal:2',
         ];
     }

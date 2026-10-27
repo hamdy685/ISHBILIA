@@ -63,22 +63,108 @@ class PurchaseOrderService
     }
 
     /**
-     * Recalculate PO grand total: grand_total = SUM(quantity × unit_price).
-     *
+     * Recalculate PO totals:
+     * - Line base value = quantity × unit_price
+     * - subtotal = SUM(quantity × unit_price)
+     * - Discount:
+     *     - TOTAL: discount_amount = subtotal × (discount_percentage / 100)
+     *     - SELECTED_ITEMS: discount_amount = SUM(selected_items base value) × (discount_percentage / 100)
+     * - grand_total = max(0, subtotal - discount_amount + tax_amount)
      */
-    public function recalculateTotals(PurchaseOrder $po): void
-    {
+    public function recalculateTotals(
+        PurchaseOrder $po,
+        ?string $discountType = null,
+        ?float $discountPercentage = null,
+        ?array $targetedItemIds = null
+    ): void {
+        $po->loadMissing('items');
         $items = $po->items;
 
-        $grandTotal = 0.00;
+        $subtotal = 0.00;
         foreach ($items as $item) {
-            $grandTotal += round((float) $item->quantity * (float) $item->unit_price, 2);
+            $qty = (float) ($item->quantity ?? 0);
+            $price = (float) ($item->unit_price ?? 0);
+            $lineBase = round($qty * $price, 2);
+            $subtotal += $lineBase;
         }
-        $grandTotal = round($grandTotal, 2);
+        $subtotal = round($subtotal, 2);
+
+        // Determine effective discount parameters:
+        $effectiveType = $discountType !== null ? strtoupper(trim($discountType)) : ($po->discount_type ?? 'NONE');
+        if (! in_array($effectiveType, ['NONE', 'TOTAL', 'SELECTED_ITEMS'], true)) {
+            $effectiveType = 'NONE';
+        }
+
+        $effectivePercentage = $discountPercentage !== null
+            ? max(0.0, min(100.0, (float) $discountPercentage))
+            : max(0.0, min(100.0, (float) ($po->discount_percentage ?? 0)));
+
+        $discountAmount = 0.00;
+
+        if ($effectiveType === 'TOTAL' && $effectivePercentage > 0) {
+            $discountAmount = round($subtotal * ($effectivePercentage / 100), 2);
+
+            foreach ($items as $item) {
+                $itemSub = round((float) $item->quantity * (float) $item->unit_price, 2);
+                $itemDiscount = $subtotal > 0 ? round($itemSub * ($effectivePercentage / 100), 2) : 0.00;
+                $item->updateQuietly([
+                    'is_discount_applied' => false,
+                    'discount_amount'     => $itemDiscount,
+                ]);
+            }
+        } elseif ($effectiveType === 'SELECTED_ITEMS' && $effectivePercentage > 0) {
+            $totalSelectedItemsDiscount = 0.00;
+
+            foreach ($items as $item) {
+                $isTargeted = false;
+                if ($targetedItemIds !== null) {
+                    $isTargeted = in_array((int) $item->id, $targetedItemIds, true);
+                } else {
+                    $isTargeted = (bool) $item->is_discount_applied;
+                }
+
+                $itemSub = round((float) $item->quantity * (float) $item->unit_price, 2);
+
+                if ($isTargeted) {
+                    $itemDiscount = round($itemSub * ($effectivePercentage / 100), 2);
+                    $totalSelectedItemsDiscount += $itemDiscount;
+                    $item->updateQuietly([
+                        'is_discount_applied' => true,
+                        'discount_amount'     => $itemDiscount,
+                    ]);
+                } else {
+                    $item->updateQuietly([
+                        'is_discount_applied' => false,
+                        'discount_amount'     => 0.00,
+                    ]);
+                }
+            }
+            $discountAmount = round($totalSelectedItemsDiscount, 2);
+        } else {
+            // NONE or percentage is 0
+            $effectiveType = 'NONE';
+            $effectivePercentage = 0.00;
+            $discountAmount = 0.00;
+            foreach ($items as $item) {
+                if ($item->is_discount_applied || (float) $item->discount_amount > 0) {
+                    $item->updateQuietly([
+                        'is_discount_applied' => false,
+                        'discount_amount'     => 0.00,
+                    ]);
+                }
+            }
+        }
+
+        $taxAmount = (float) ($po->tax_amount ?? 0);
+        $grandTotal = max(0.00, round($subtotal - $discountAmount + $taxAmount, 2));
 
         $po->update([
-            'subtotal'        => $grandTotal,  // subtotal = grand_total (no deductions)
-            'grand_total'     => $grandTotal,
+            'subtotal'            => $subtotal,
+            'discount_type'       => $effectiveType,
+            'discount_percentage' => $effectivePercentage,
+            'discount_amount'     => $discountAmount,
+            'tax_amount'          => $taxAmount,
+            'grand_total'         => $grandTotal,
         ]);
     }
 
@@ -386,7 +472,18 @@ class PurchaseOrderService
         return DB::transaction(function () use ($user, $po, $data) {
             $lockedPo = PurchaseOrder::where('id', $po->id)->lockForUpdate()->first();
 
-            $allowedFields = ['supplier_id', 'payment_terms', 'delivery_terms', 'delivery_date', 'budget_code', 'financial_notes', 'notes', 'finalization_notes'];
+            $allowedFields = [
+                'supplier_id',
+                'payment_terms',
+                'delivery_terms',
+                'delivery_date',
+                'budget_code',
+                'financial_notes',
+                'notes',
+                'finalization_notes',
+                'discount_type',
+                'discount_percentage',
+            ];
             $updateFields = [];
 
             foreach ($allowedFields as $field) {
@@ -446,6 +543,14 @@ class PurchaseOrderService
 
             if (! empty($data['items']) && is_array($data['items'])) {
                 $this->syncPoItems($user, $lockedPo, $data['items']);
+            }
+
+            $discountType = array_key_exists('discount_type', $data) ? $data['discount_type'] : null;
+            $discountPct = array_key_exists('discount_percentage', $data) ? (float) $data['discount_percentage'] : null;
+            $discountItemIds = array_key_exists('discount_item_ids', $data) ? (array) $data['discount_item_ids'] : null;
+
+            if ($discountType !== null || $discountPct !== null || $discountItemIds !== null) {
+                $this->recalculateTotals($lockedPo, $discountType, $discountPct, $discountItemIds);
             }
 
             return $lockedPo->fresh(['purchaseRequest.requester', 'purchaseRequest.department', 'purchaseRequest.assignedReviewer', 'purchaseRequest.approvalHistory.actor', 'selectedQuote', 'supplier', 'createdBy', 'items.item']);
@@ -671,6 +776,7 @@ class PurchaseOrderService
                     'specifications'   => array_key_exists('specifications', $input) ? $input['specifications'] : $existingItem->specifications,
                     'is_supplementary' => isset($input['is_supplementary']) ? (bool) $input['is_supplementary'] : $existingItem->is_supplementary,
                     'supplement_batch' => isset($input['supplement_batch']) ? $input['supplement_batch'] : $existingItem->supplement_batch,
+                    'is_discount_applied' => array_key_exists('is_discount_applied', $input) ? (bool) $input['is_discount_applied'] : ($existingItem->is_discount_applied ?? false),
                 ]);
 
                 AuditLog::create([
@@ -698,6 +804,7 @@ class PurchaseOrderService
                     'supplier_id'      => $input['supplier_id'] ?? $lockedPo->supplier_id ?? null,
                     'is_supplementary' => !empty($input['is_supplementary']),
                     'supplement_batch' => !empty($input['supplement_batch']) ? (int) $input['supplement_batch'] : null,
+                    'is_discount_applied' => !empty($input['is_discount_applied']),
                 ]);
 
                 AuditLog::create([
@@ -738,7 +845,10 @@ class PurchaseOrderService
         ?string $notes = null,
         ?int $headerSupplierId = null,
         ?string $parcelReference = null,
-        ?string $region = null
+        ?string $region = null,
+        ?string $discountType = null,
+        ?float $discountPercentage = null,
+        ?array $discountItemIds = null
     ): PurchaseOrder {
         if ($po->status !== 'PENDING_ACTUAL_PO') {
             throw new \RuntimeException('لا يمكن إصدار أمر الشراء الفعلي إلا بعد اعتماد إذن الاستلام وانتقال الملف لمرحلة بانتظار الإصدار الفعلي.');
@@ -750,7 +860,7 @@ class PurchaseOrderService
             ]);
         }
 
-        return DB::transaction(function () use ($user, $po, $items, $notes, $headerSupplierId, $parcelReference, $region) {
+        return DB::transaction(function () use ($user, $po, $items, $notes, $headerSupplierId, $parcelReference, $region, $discountType, $discountPercentage, $discountItemIds) {
             $lockedPo = PurchaseOrder::where('id', $po->id)->lockForUpdate()->firstOrFail();
 
             if ($lockedPo->status !== 'PENDING_ACTUAL_PO') {
@@ -829,6 +939,11 @@ class PurchaseOrderService
                     if (empty($input['region']) && !empty($region)) {
                         $input['region'] = trim((string) $region);
                     }
+                    if ($discountItemIds !== null) {
+                        $input['is_discount_applied'] = in_array((int) $existingPoItem->id, $discountItemIds, true)
+                            || (!empty($input['id']) && in_array((int) $input['id'], $discountItemIds, true))
+                            || !empty($input['is_discount_applied']);
+                    }
                     $finalizedItems[] = $input;
                 } else {
                     // Item was in Master PO but omitted from input: preserve it with actual received quantity or 0
@@ -847,6 +962,7 @@ class PurchaseOrderService
                         'supplier_id' => $existingPoItem->supplier_id ?? ($headerSupplierId ?: $lockedPo->supplier_id),
                         'is_supplementary' => $existingPoItem->is_supplementary,
                         'supplement_batch' => $existingPoItem->supplement_batch,
+                        'is_discount_applied' => $discountItemIds !== null ? in_array((int) $existingPoItem->id, $discountItemIds, true) : (bool) $existingPoItem->is_discount_applied,
                     ];
                 }
             }
@@ -863,6 +979,9 @@ class PurchaseOrderService
                     if (empty($newItem['region']) && !empty($region)) {
                         $newItem['region'] = trim((string) $region);
                     }
+                    if ($discountItemIds !== null && !empty($newItem['id'])) {
+                        $newItem['is_discount_applied'] = in_array((int) $newItem['id'], $discountItemIds, true) || !empty($newItem['is_discount_applied']);
+                    }
                     $finalizedItems[] = $newItem;
                 }
             }
@@ -874,7 +993,10 @@ class PurchaseOrderService
             }
 
             // ── Full items sync (preserves all items, sets actual quantities including 0) ──
-            $grandTotal = $this->syncPoItems($user, $lockedPo, $finalizedItems);
+            $this->syncPoItems($user, $lockedPo, $finalizedItems);
+
+            // Authoritative recalculation of subtotal, discount, tax, and grand total
+            $this->recalculateTotals($lockedPo, $discountType, $discountPercentage, $discountItemIds);
 
             // Determine effective PO header supplier:
             $allItemSuppliers = $lockedPo->items()->pluck('supplier_id')->filter()->unique();
@@ -888,12 +1010,10 @@ class PurchaseOrderService
                 $newHeaderSupplierId = (int) $lockedPo->supplier_id;
             }
 
-            // Update PO totals and transition to ISSUED so accounting can see it
+            // Update PO header status and transition to ISSUED so accounting can see it
             $lockedPo->update([
                 'supplier_id'          => $newHeaderSupplierId,
                 'status'               => 'ISSUED',
-                'subtotal'             => round($grandTotal, 2),
-                'grand_total'          => round($grandTotal, 2),
                 'finalized_by_user_id' => $user->id,
                 'finalized_at'         => now(),
                 'finalization_notes'   => $notes,

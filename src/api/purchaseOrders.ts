@@ -110,6 +110,15 @@ export const finalizeActualPurchaseOrderApi = async (id: number, payload: Finali
     if (payload.supplier_id) formData.append('supplier_id', String(payload.supplier_id));
     if (payload.parcel_reference) formData.append('parcel_reference', payload.parcel_reference);
     if (payload.region) formData.append('region', payload.region);
+    if (payload.discount_type) formData.append('discount_type', payload.discount_type);
+    if (payload.discount_percentage !== undefined && payload.discount_percentage !== null) {
+      formData.append('discount_percentage', String(payload.discount_percentage));
+    }
+    if (payload.discount_item_ids && payload.discount_item_ids.length > 0) {
+      payload.discount_item_ids.forEach((dId, dIdx) => {
+        formData.append(`discount_item_ids[${dIdx}]`, String(dId));
+      });
+    }
     if (payload.notes) formData.append('notes', payload.notes);
     formData.append('invoice_file', payload.invoice_file);
     payload.items.forEach((item, idx) => {
@@ -122,6 +131,9 @@ export const finalizeActualPurchaseOrderApi = async (id: number, payload: Finali
       formData.append(`items[${idx}][quantity]`, String(item.quantity));
       if (item.uom) formData.append(`items[${idx}][uom]`, item.uom);
       formData.append(`items[${idx}][unit_price]`, String(item.unit_price));
+      if (item.is_discount_applied !== undefined) {
+        formData.append(`items[${idx}][is_discount_applied]`, item.is_discount_applied ? '1' : '0');
+      }
       if (item.specifications) formData.append(`items[${idx}][specifications]`, item.specifications);
       if (item.supplier_id) formData.append(`items[${idx}][supplier_id]`, String(item.supplier_id));
     });

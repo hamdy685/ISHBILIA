@@ -21,6 +21,7 @@ import { toast } from '../../utils/toast';
 import { formatCleanNumber } from '../../utils/numberFormat';
 import { parseApiError } from '../../utils/apiError';
 import { getSummaryParcels, getSummaryRegions } from '../../utils/formatRequestSummary';
+import { calculateActualPoFinancials, ActualPoDiscountType } from '../../utils/actualPo';
 
 export interface FinalizeActualPoModalProps {
   isOpen: boolean;
@@ -44,6 +45,7 @@ interface EditableModalItem {
   supplier_id?: number | null;
   is_supplementary?: boolean;
   supplement_batch?: number | null;
+  is_discount_applied?: boolean;
 }
 
 export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
@@ -59,6 +61,8 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
   const [items, setItems] = useState<EditableModalItem[]>([]);
   const [headerParcel, setHeaderParcel] = useState<string>('');
   const [headerRegion, setHeaderRegion] = useState<string>('');
+  const [discountType, setDiscountType] = useState<ActualPoDiscountType>('NONE');
+  const [discountPercentage, setDiscountPercentage] = useState<number>(0);
   const [finalizationNotes, setFinalizationNotes] = useState<string>('');
   const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
   const [busy, setBusy] = useState<boolean>(false);
@@ -71,6 +75,8 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
       setItems([]);
       setHeaderParcel('');
       setHeaderRegion('');
+      setDiscountType('NONE');
+      setDiscountPercentage(0);
       setFinalizationNotes('');
       setInvoiceFile(null);
       setError(null);
@@ -91,6 +97,8 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
         const loadedSuppliers = Array.isArray(sups) ? sups : ((sups as any)?.data || []);
         setSuppliers(loadedSuppliers);
         setFinalizationNotes(data.finalization_notes || '');
+        setDiscountType((data.discount_type as ActualPoDiscountType) || 'NONE');
+        setDiscountPercentage(Number(data.discount_percentage) || 0);
 
         const pSummary = getSummaryParcels(data);
         const rSummary = getSummaryRegions(data);
@@ -165,6 +173,7 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
             supplier_id: it.supplier_id ?? data.supplier_id,
             is_supplementary: isSupplementary,
             supplement_batch: supplementBatch,
+            is_discount_applied: Boolean(it.is_discount_applied),
           });
         });
 
@@ -183,11 +192,14 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
     };
   }, [isOpen, poId]);
 
-  // Live calculated grand total
-  const calculatedGrandTotal = items.reduce(
-    (acc, it) => acc + (Number(it.quantity || 0) * Number(it.unit_price || 0)),
-    0
-  );
+  // Financial calculations
+  const financials = useMemo(() => {
+    return calculateActualPoFinancials({
+      items,
+      discountType,
+      discountPercentage,
+    });
+  }, [items, discountType, discountPercentage]);
 
   const allSuppliers = useMemo(() => {
     const list = [...suppliers];
@@ -246,6 +258,44 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
     setError(null);
   };
 
+  const handleItemDiscountToggle = (index: number) => {
+    setItems((prev) => {
+      const updated = [...prev];
+      updated[index] = {
+        ...updated[index],
+        is_discount_applied: !updated[index].is_discount_applied,
+      };
+      return updated;
+    });
+    setError(null);
+  };
+
+  const handleSelectAllDiscounts = (applied: boolean) => {
+    setItems((prev) =>
+      prev.map((it) => ({
+        ...it,
+        is_discount_applied: applied,
+      }))
+    );
+    setError(null);
+  };
+
+  const validateDiscounts = (): boolean => {
+    const pct = Number(discountPercentage) || 0;
+    if (pct < 0 || pct > 100) {
+      setError('نسبة الخصم يجب أن تكون بين 0% و 100%.');
+      return false;
+    }
+    if (discountType === 'SELECTED_ITEMS') {
+      const hasSelected = items.some((it) => it.is_discount_applied);
+      if (!hasSelected && pct > 0) {
+        setError('يرجى تحديد بند واحد على الأقل لتطبيق الخصم عليه، أو اختيار «بدون خصم».');
+        return false;
+      }
+    }
+    return true;
+  };
+
   const handleSaveOnly = async () => {
     if (!po) return;
     if (items.length === 0) {
@@ -253,14 +303,26 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
       return;
     }
 
+    if (!validateDiscounts()) {
+      return;
+    }
+
     setSaveBusy(true);
     setError(null);
     try {
       const targetHeaderSupplierId = unifiedSupplierValue ? Number(unifiedSupplierValue) : undefined;
+      const discountPct = Number(discountPercentage) || 0;
+      const targetedItemIds = discountType === 'SELECTED_ITEMS'
+        ? items.filter((it) => it.is_discount_applied && it.id).map((it) => it.id!)
+        : [];
+
       await updatePurchaseOrderApi(po.id, {
         supplier_id: targetHeaderSupplierId,
         parcel_reference: headerParcel.trim() || undefined,
         region: headerRegion.trim() || undefined,
+        discount_type: discountType,
+        discount_percentage: discountPct,
+        discount_item_ids: targetedItemIds,
         finalization_notes: finalizationNotes || undefined,
         items: items.map((it) => ({
           id: it.id ? Number(it.id) : undefined,
@@ -274,6 +336,7 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
           unit_price: Number(it.unit_price),
           specifications: it.specifications,
           supplier_id: it.supplier_id ? Number(it.supplier_id) : (targetHeaderSupplierId || po.supplier_id),
+          is_discount_applied: discountType === 'SELECTED_ITEMS' ? Boolean(it.is_discount_applied) : false,
         })),
       });
       if (invoiceFile) {
@@ -303,10 +366,19 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
       return;
     }
 
+    if (!validateDiscounts()) {
+      return;
+    }
+
     setBusy(true);
     setError(null);
     try {
       const targetHeaderSupplierId = unifiedSupplierValue ? Number(unifiedSupplierValue) : undefined;
+      const discountPct = Number(discountPercentage) || 0;
+      const targetedItemIds = discountType === 'SELECTED_ITEMS'
+        ? items.filter((it) => it.is_discount_applied && it.id).map((it) => it.id!)
+        : [];
+
       const payloadItems: FinalizeActualPoItemPayload[] = items.map((it) => ({
         id: it.id ? Number(it.id) : undefined,
         item_id: it.item_id ? Number(it.item_id) : undefined,
@@ -319,12 +391,16 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
         unit_price: Number(it.unit_price),
         specifications: it.specifications,
         supplier_id: it.supplier_id ? Number(it.supplier_id) : (targetHeaderSupplierId || po.supplier_id),
+        is_discount_applied: discountType === 'SELECTED_ITEMS' ? Boolean(it.is_discount_applied) : false,
       }));
 
       await finalizeActualPurchaseOrderApi(po.id, {
         supplier_id: targetHeaderSupplierId,
         parcel_reference: headerParcel.trim() || undefined,
         region: headerRegion.trim() || undefined,
+        discount_type: discountType,
+        discount_percentage: discountPct,
+        discount_item_ids: targetedItemIds,
         items: payloadItems,
         notes: finalizationNotes.trim() || undefined,
         invoice_file: invoiceFile,
@@ -508,11 +584,119 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
                 <p className="mt-0.5 text-[11px] text-slate-300">
                   يمكنك تعديل <strong className="text-cyan-300 mx-0.5">اسم الصنف، الكمية، السعر، رقم القطعة، والمنطقة</strong> لكل بند، بالإضافة إلى
                   <strong className="text-emerald-300 mx-1 font-bold">تحديد المورد الفعلي لكل بند</strong>
+                  وضبط <strong className="text-amber-300 mx-1 font-bold">نظام الخصم (على الإجمالي أو بنود محددة)</strong>
                   ثم اضغط على
                   <strong className="text-emerald-300 mx-1 font-bold">«اعتماد وإرسال للإدارة المالية»</strong>
                   لترحيل كافة التعديلات مباشرة إلى شاشات وحسابات الإدارة المالية.
                 </p>
               </div>
+            </div>
+
+            {/* ── Discount Configuration Card ── */}
+            <div className="rounded-xl border border-amber-500/40 bg-slate-950/90 p-4 space-y-3 shadow-md">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">🏷️</span>
+                  <span className="font-bold text-xs sm:text-sm text-slate-100">نظام الخصومات في أمر الشراء الفعلي:</span>
+                </div>
+                {discountType !== 'NONE' && (
+                  <span className="text-[11px] font-bold text-amber-300 bg-amber-950/60 border border-amber-800/80 px-2.5 py-0.5 rounded-full">
+                    {discountType === 'TOTAL' ? 'خصم على كامل أمر الشراء' : 'خصم على بنود محددة مختارة'}
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-center">
+                {/* 1. Discount Type Selector */}
+                <div className="lg:col-span-7 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDiscountType('NONE')}
+                    disabled={busy || saveBusy}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      discountType === 'NONE'
+                        ? 'bg-slate-700 text-white shadow'
+                        : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
+                    }`}
+                  >
+                    بدون خصم
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDiscountType('TOTAL')}
+                    disabled={busy || saveBusy}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      discountType === 'TOTAL'
+                        ? 'bg-amber-600 text-white shadow-lg shadow-amber-950/50'
+                        : 'bg-slate-900 text-slate-400 hover:text-amber-300 border border-slate-800'
+                    }`}
+                  >
+                    خصم على إجمالي أمر الشراء
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDiscountType('SELECTED_ITEMS')}
+                    disabled={busy || saveBusy}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      discountType === 'SELECTED_ITEMS'
+                        ? 'bg-amber-600 text-white shadow-lg shadow-amber-950/50'
+                        : 'bg-slate-900 text-slate-400 hover:text-amber-300 border border-slate-800'
+                    }`}
+                  >
+                    خصم على بنود محددة
+                  </button>
+                </div>
+
+                {/* 2. Discount Percentage Input */}
+                {discountType !== 'NONE' && (
+                  <div className="lg:col-span-5 flex items-center gap-2 justify-start lg:justify-end">
+                    <label className="text-xs text-amber-200 font-bold whitespace-nowrap">نسبة الخصم (%):</label>
+                    <div className="relative w-32">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={discountPercentage || ''}
+                        onChange={(e) => {
+                          const val = Math.min(100, Math.max(0, Number(e.target.value) || 0));
+                          setDiscountPercentage(val);
+                        }}
+                        disabled={busy || saveBusy}
+                        placeholder="0.00"
+                        className="w-full bg-[#0b1424] border border-amber-500/60 rounded-lg px-2.5 py-1 text-xs text-amber-300 font-mono font-black text-center outline-none focus:border-amber-300"
+                      />
+                      <span className="absolute left-2 top-1.5 text-xs text-amber-400 font-bold">%</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {discountType === 'SELECTED_ITEMS' && (
+                <div className="rounded-lg bg-amber-950/30 border border-amber-800/40 p-2.5 text-[11px] text-amber-200 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span>📌</span>
+                    <span>حدد البنود المستهدفة بالخصم من خانات الاختيار (✓) بالجدول أدناه. البنود غير المحددة لن تتأثر بالخصم مطلقاً.</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleSelectAllDiscounts(true)}
+                      className="text-[10px] font-bold text-amber-300 underline hover:text-white cursor-pointer"
+                    >
+                      تحديد الكل
+                    </button>
+                    <span className="text-slate-600">|</span>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectAllDiscounts(false)}
+                      className="text-[10px] font-bold text-slate-400 underline hover:text-white cursor-pointer"
+                    >
+                      إلغاء التحديد
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* ── Items Table (Desktop) ── */}
@@ -521,6 +705,20 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
                 <thead className="bg-slate-900 text-cyan-200">
                   <tr>
                     <th className="p-3 text-center w-10">#</th>
+                    {discountType === 'SELECTED_ITEMS' && (
+                      <th className="p-3 text-center w-20 bg-amber-950/40 text-amber-300">
+                        <label className="flex items-center justify-center gap-1 cursor-pointer" title="تحديد/إلغاء تحديد كل البنود للخصم">
+                          <input
+                            type="checkbox"
+                            checked={items.length > 0 && items.every((it) => it.is_discount_applied)}
+                            onChange={(e) => handleSelectAllDiscounts(e.target.checked)}
+                            disabled={busy || saveBusy}
+                            className="rounded accent-amber-500 cursor-pointer"
+                          />
+                          <span>خصم</span>
+                        </label>
+                      </th>
+                    )}
                     <th className="p-3 min-w-[200px]">اسم الصنف والمواصفات</th>
                     <th className="p-3 text-center w-48">القطعة والمنطقة</th>
                     <th className="p-3 text-center w-44">المورد الفعلي</th>
@@ -532,120 +730,159 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
                 <tbody className="divide-y divide-slate-800/80">
                   {items.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="p-8 text-center text-rose-300 font-bold">
+                      <td colSpan={discountType === 'SELECTED_ITEMS' ? 8 : 7} className="p-8 text-center text-rose-300 font-bold">
                         لا توجد بنود متاحة للإصدار الفعلي.
                       </td>
                     </tr>
                   ) : (
-                    items.map((item, idx) => (
-                      <tr key={item.id || idx} className="hover:bg-slate-900/50 transition-colors">
-                        <td className="p-3 text-center font-mono text-slate-400 font-bold">{idx + 1}</td>
-                        <td className="p-3 font-bold text-slate-100">
-                          <div className="space-y-1">
-                            <span className="sr-only">{item.item_description}</span>
-                            <input
-                              type="text"
-                              value={item.item_description}
-                              onChange={(e) => handleItemFieldChange(idx, 'item_description', e.target.value)}
-                              disabled={busy || saveBusy}
-                              className="w-full bg-[#0b1424] border border-slate-700 focus:border-cyan-400 rounded-lg px-2 py-1 text-xs text-slate-100 font-bold outline-none"
-                              placeholder="اسم الصنف..."
-                              title="تعديل اسم الصنف الفعلي"
-                            />
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <SupplementItemBadge
-                                isSupplementary={item.is_supplementary}
-                                batchNumber={item.supplement_batch}
+                    items.map((item, idx) => {
+                      const isItemDiscounted = discountType === 'SELECTED_ITEMS' && item.is_discount_applied;
+                      const discountedLineTotal = isItemDiscounted
+                        ? Math.max(0, item.line_total * (1 - (Number(discountPercentage) || 0) / 100))
+                        : item.line_total;
+
+                      return (
+                        <tr
+                          key={item.id || idx}
+                          className={`transition-colors ${
+                            isItemDiscounted
+                              ? 'bg-amber-950/15 hover:bg-amber-950/25'
+                              : 'hover:bg-slate-900/50'
+                          }`}
+                        >
+                          <td className="p-3 text-center font-mono text-slate-400 font-bold">{idx + 1}</td>
+                          {discountType === 'SELECTED_ITEMS' && (
+                            <td className="p-3 text-center bg-amber-950/20">
+                              <label className="flex items-center justify-center gap-1 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(item.is_discount_applied)}
+                                  onChange={() => handleItemDiscountToggle(idx)}
+                                  disabled={busy || saveBusy}
+                                  className="h-4 w-4 rounded accent-amber-500 cursor-pointer"
+                                />
+                              </label>
+                            </td>
+                          )}
+                          <td className="p-3 font-bold text-slate-100">
+                            <div className="space-y-1">
+                              <span className="sr-only">{item.item_description}</span>
+                              <input
+                                type="text"
+                                value={item.item_description}
+                                onChange={(e) => handleItemFieldChange(idx, 'item_description', e.target.value)}
+                                disabled={busy || saveBusy}
+                                className="w-full bg-[#0b1424] border border-slate-700 focus:border-cyan-400 rounded-lg px-2 py-1 text-xs text-slate-100 font-bold outline-none"
+                                placeholder="اسم الصنف..."
+                                title="تعديل اسم الصنف الفعلي"
+                              />
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <SupplementItemBadge
+                                  isSupplementary={item.is_supplementary}
+                                  batchNumber={item.supplement_batch}
+                                />
+                                {isItemDiscounted && (
+                                  <span className="text-[10px] font-bold text-amber-300 bg-amber-950/70 border border-amber-700/60 px-1.5 py-0.5 rounded">
+                                    🏷️ خاضع لخصم {discountPercentage}%
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* ── Per-Item Parcel & Region Inputs ── */}
+                          <td className="p-3 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <input
+                                type="text"
+                                value={item.item_reference || ''}
+                                onChange={(e) => handleItemFieldChange(idx, 'item_reference', e.target.value)}
+                                disabled={busy || saveBusy}
+                                placeholder="قطعة..."
+                                className="w-20 bg-[#0b1424] border border-amber-500/40 focus:border-amber-300 rounded-lg px-1.5 py-1 text-[11px] text-amber-200 font-mono font-bold outline-none text-center"
+                                title="رقم قطعة الأرض لهذا البند"
+                              />
+                              <input
+                                type="text"
+                                value={item.region || ''}
+                                onChange={(e) => handleItemFieldChange(idx, 'region', e.target.value)}
+                                disabled={busy || saveBusy}
+                                placeholder="المنطقة..."
+                                className="w-24 bg-[#0b1424] border border-amber-500/40 focus:border-amber-300 rounded-lg px-1.5 py-1 text-[11px] text-amber-300 font-bold outline-none text-center"
+                                title="المنطقة لهذا البند"
                               />
                             </div>
-                          </div>
-                        </td>
+                          </td>
 
-                        {/* ── Per-Item Parcel & Region Inputs ── */}
-                        <td className="p-3 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <input
-                              type="text"
-                              value={item.item_reference || ''}
-                              onChange={(e) => handleItemFieldChange(idx, 'item_reference', e.target.value)}
+                          {/* ── Supplier Selection per item ── */}
+                          <td className="p-3 text-center">
+                            <select
+                              value={item.supplier_id || po.supplier_id || ''}
+                              onChange={(e) => handleItemFieldChange(idx, 'supplier_id', e.target.value ? Number(e.target.value) : null)}
                               disabled={busy || saveBusy}
-                              placeholder="قطعة..."
-                              className="w-20 bg-[#0b1424] border border-amber-500/40 focus:border-amber-300 rounded-lg px-1.5 py-1 text-[11px] text-amber-200 font-mono font-bold outline-none text-center"
-                              title="رقم قطعة الأرض لهذا البند"
-                            />
-                            <input
-                              type="text"
-                              value={item.region || ''}
-                              onChange={(e) => handleItemFieldChange(idx, 'region', e.target.value)}
-                              disabled={busy || saveBusy}
-                              placeholder="المنطقة..."
-                              className="w-24 bg-[#0b1424] border border-amber-500/40 focus:border-amber-300 rounded-lg px-1.5 py-1 text-[11px] text-amber-300 font-bold outline-none text-center"
-                              title="المنطقة لهذا البند"
-                            />
-                          </div>
-                        </td>
+                              className="w-full min-w-[130px] max-w-[160px] h-9 rounded-lg border border-cyan-500/60 bg-[#0b1424] px-2 text-xs text-slate-100 font-bold outline-none focus:border-cyan-300 disabled:opacity-60 truncate cursor-pointer"
+                              title="تحديد المورد الفعلي لهذا البند"
+                            >
+                              {allSuppliers.map((s) => (
+                                <option key={s.id} value={s.id}>
+                                  {s.company_name}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
 
-                        {/* ── Supplier Selection per item ── */}
-                        <td className="p-3 text-center">
-                          <select
-                            value={item.supplier_id || po.supplier_id || ''}
-                            onChange={(e) => handleItemFieldChange(idx, 'supplier_id', e.target.value ? Number(e.target.value) : null)}
-                            disabled={busy || saveBusy}
-                            className="w-full min-w-[130px] max-w-[160px] h-9 rounded-lg border border-cyan-500/60 bg-[#0b1424] px-2 text-xs text-slate-100 font-bold outline-none focus:border-cyan-300 disabled:opacity-60 truncate cursor-pointer"
-                            title="تحديد المورد الفعلي لهذا البند"
-                          >
-                            {allSuppliers.map((s) => (
-                              <option key={s.id} value={s.id}>
-                                {s.company_name}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
+                          <td className="p-3 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <input
+                                type="number"
+                                min="0"
+                                step="any"
+                                value={item.quantity ?? ''}
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => handleItemFieldChange(idx, 'quantity', e.target.value)}
+                                disabled={busy || saveBusy}
+                                className="h-9 w-24 rounded-lg border border-cyan-500/60 bg-[#0b1424] px-2 text-center font-mono text-xs text-slate-100 outline-none focus:border-cyan-300 disabled:opacity-60"
+                              />
+                              <span className="text-[11px] font-bold text-amber-300">
+                                {getUnitLabel(item.uom)}
+                              </span>
+                            </div>
+                          </td>
 
-                        <td className="p-3 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
-                            <input
-                              type="number"
-                              min="0"
-                              step="any"
-                              value={item.quantity ?? ''}
-                              onFocus={(e) => e.target.select()}
-                              onChange={(e) => handleItemFieldChange(idx, 'quantity', e.target.value)}
+                          <td className="p-3 text-center align-middle">
+                            <SmartKgPricingInput
+                              unitPrice={item.unit_price}
+                              quantity={item.quantity}
+                              uom={item.uom}
+                              itemDescription={item.item_description}
                               disabled={busy || saveBusy}
-                              className="h-9 w-24 rounded-lg border border-cyan-500/60 bg-[#0b1424] px-2 text-center font-mono text-xs text-slate-100 outline-none focus:border-cyan-300 disabled:opacity-60"
+                              onChangeUnitPrice={(newPrice) =>
+                                handleItemFieldChange(idx, 'unit_price', newPrice)
+                              }
+                              onConvertToTon={(newQty, tonPrice) => {
+                                handleItemFieldChange(idx, 'quantity', newQty);
+                                handleItemFieldChange(idx, 'uom', 'TON');
+                                handleItemFieldChange(idx, 'unit_price', tonPrice);
+                              }}
+                              onConvertToKgPrice={(newKgPrice) => {
+                                handleItemFieldChange(idx, 'unit_price', newKgPrice);
+                              }}
                             />
-                            <span className="text-[11px] font-bold text-amber-300">
-                              {getUnitLabel(item.uom)}
+                          </td>
+
+                          <td className="p-3 text-center font-mono font-black text-sm">
+                            <span className={isItemDiscounted ? 'text-slate-400 line-through text-xs block' : 'text-emerald-300'}>
+                              {formatCleanNumber(item.line_total, 2)} ج.م
                             </span>
-                          </div>
-                        </td>
-
-                        <td className="p-3 text-center align-middle">
-                          <SmartKgPricingInput
-                            unitPrice={item.unit_price}
-                            quantity={item.quantity}
-                            uom={item.uom}
-                            itemDescription={item.item_description}
-                            disabled={busy || saveBusy}
-                            onChangeUnitPrice={(newPrice) =>
-                              handleItemFieldChange(idx, 'unit_price', newPrice)
-                            }
-                            onConvertToTon={(newQty, tonPrice) => {
-                              handleItemFieldChange(idx, 'quantity', newQty);
-                              handleItemFieldChange(idx, 'uom', 'TON');
-                              handleItemFieldChange(idx, 'unit_price', tonPrice);
-                            }}
-                            onConvertToKgPrice={(newKgPrice) => {
-                              handleItemFieldChange(idx, 'unit_price', newKgPrice);
-                            }}
-                          />
-                        </td>
-
-                        <td className="p-3 text-center font-mono font-black text-emerald-300 text-sm">
-                          {formatCleanNumber(item.line_total, 2)} ج.م
-                        </td>
-                      </tr>
-                    ))
+                            {isItemDiscounted && (
+                              <span className="text-emerald-300 text-xs font-black block">
+                                {formatCleanNumber(discountedLineTotal, 2)} ج.م
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -653,120 +890,198 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
 
             {/* ── Items Mobile Cards ── */}
             <div className="space-y-3 sm:hidden">
-              {items.map((item, idx) => (
-                <div
-                  key={`mobile-${item.id || idx}`}
-                  className="rounded-xl border border-slate-800 bg-slate-950/80 p-3.5 space-y-3 text-xs"
-                >
-                  <div className="flex items-start justify-between gap-2 border-b border-slate-850 pb-2">
-                    <div className="w-full">
-                      <span className="text-[10px] font-bold text-cyan-400">بند #{idx + 1}</span>
-                      <span className="sr-only">{item.item_description}</span>
-                      <input
-                        type="text"
-                        value={item.item_description}
-                        onChange={(e) => handleItemFieldChange(idx, 'item_description', e.target.value)}
-                        disabled={busy || saveBusy}
-                        className="w-full bg-[#0b1424] border border-slate-700 focus:border-cyan-400 rounded-lg px-2 py-1 text-xs text-slate-100 font-bold outline-none mt-1"
-                        placeholder="اسم الصنف..."
-                      />
-                    </div>
-                    <span className="text-[11px] font-bold bg-amber-950/50 text-amber-300 border border-amber-800/50 px-2 py-0.5 rounded shrink-0 self-start mt-4">
-                      {getUnitLabel(item.uom)}
-                    </span>
-                  </div>
+              {items.map((item, idx) => {
+                const isItemDiscounted = discountType === 'SELECTED_ITEMS' && item.is_discount_applied;
+                const discountedLineTotal = isItemDiscounted
+                  ? Math.max(0, item.line_total * (1 - (Number(discountPercentage) || 0) / 100))
+                  : item.line_total;
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-[11px] text-amber-300 block mb-1 font-bold">رقم القطعة:</label>
-                      <input
-                        type="text"
-                        value={item.item_reference || ''}
-                        onChange={(e) => handleItemFieldChange(idx, 'item_reference', e.target.value)}
-                        disabled={busy || saveBusy}
-                        placeholder="رقم القطعة..."
-                        className="h-9 w-full rounded-lg border border-amber-500/40 bg-[#0b1424] px-2 font-mono font-bold text-xs text-amber-200 outline-none focus:border-amber-300"
-                      />
+                return (
+                  <div
+                    key={`mobile-${item.id || idx}`}
+                    className={`rounded-xl border p-3.5 space-y-3 text-xs ${
+                      isItemDiscounted
+                        ? 'border-amber-600/50 bg-slate-950/90'
+                        : 'border-slate-800 bg-slate-950/80'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2 border-b border-slate-850 pb-2">
+                      <div className="w-full">
+                        <span className="text-[10px] font-bold text-cyan-400">بند #{idx + 1}</span>
+                        <span className="sr-only">{item.item_description}</span>
+                        <input
+                          type="text"
+                          value={item.item_description}
+                          onChange={(e) => handleItemFieldChange(idx, 'item_description', e.target.value)}
+                          disabled={busy || saveBusy}
+                          className="w-full bg-[#0b1424] border border-slate-700 focus:border-cyan-400 rounded-lg px-2 py-1 text-xs text-slate-100 font-bold outline-none mt-1"
+                          placeholder="اسم الصنف..."
+                        />
+                      </div>
+                      <span className="text-[11px] font-bold bg-amber-950/50 text-amber-300 border border-amber-800/50 px-2 py-0.5 rounded shrink-0 self-start mt-4">
+                        {getUnitLabel(item.uom)}
+                      </span>
                     </div>
-                    <div>
-                      <label className="text-[11px] text-amber-300 block mb-1 font-bold">المنطقة:</label>
-                      <input
-                        type="text"
-                        value={item.region || ''}
-                        onChange={(e) => handleItemFieldChange(idx, 'region', e.target.value)}
-                        disabled={busy || saveBusy}
-                        placeholder="المنطقة..."
-                        className="h-9 w-full rounded-lg border border-amber-500/40 bg-[#0b1424] px-2 font-bold text-xs text-amber-300 outline-none focus:border-amber-300"
-                      />
-                    </div>
-                  </div>
 
-                  <div>
-                    <label className="text-[11px] text-slate-400 block mb-1">المورد الفعلي للبند:</label>
-                    <select
-                      value={item.supplier_id || po.supplier_id || ''}
-                      onChange={(e) => handleItemFieldChange(idx, 'supplier_id', e.target.value ? Number(e.target.value) : null)}
-                      disabled={busy || saveBusy}
-                      className="h-9 w-full rounded-lg border border-cyan-500/60 bg-[#0b1424] px-2 text-xs text-slate-100 font-bold outline-none focus:border-cyan-300"
-                    >
-                      {allSuppliers.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.company_name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                    {discountType === 'SELECTED_ITEMS' && (
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-amber-950/30 border border-amber-800/40">
+                        <span className="text-[11px] font-bold text-amber-300">تطبيق الخصم على هذا البند:</span>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(item.is_discount_applied)}
+                            onChange={() => handleItemDiscountToggle(idx)}
+                            disabled={busy || saveBusy}
+                            className="h-4 w-4 rounded accent-amber-500 cursor-pointer"
+                          />
+                          <span className="text-xs font-bold text-amber-200">
+                            {item.is_discount_applied ? `محدد (${discountPercentage}%) ✓` : 'غير محدد'}
+                          </span>
+                        </label>
+                      </div>
+                    )}
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-[11px] text-slate-400 block mb-1">الكمية الفعلية:</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="any"
-                        value={item.quantity ?? ''}
-                        onFocus={(e) => e.target.select()}
-                        onChange={(e) => handleItemFieldChange(idx, 'quantity', e.target.value)}
-                        disabled={busy || saveBusy}
-                        className="h-9 w-full rounded-lg border border-cyan-500/60 bg-[#0b1424] px-2 text-center font-mono text-xs text-slate-100 outline-none focus:border-cyan-300"
-                      />
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[11px] text-amber-300 block mb-1 font-bold">رقم القطعة:</label>
+                        <input
+                          type="text"
+                          value={item.item_reference || ''}
+                          onChange={(e) => handleItemFieldChange(idx, 'item_reference', e.target.value)}
+                          disabled={busy || saveBusy}
+                          placeholder="رقم القطعة..."
+                          className="h-9 w-full rounded-lg border border-amber-500/40 bg-[#0b1424] px-2 font-mono font-bold text-xs text-amber-200 outline-none focus:border-amber-300"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] text-amber-300 block mb-1 font-bold">المنطقة:</label>
+                        <input
+                          type="text"
+                          value={item.region || ''}
+                          onChange={(e) => handleItemFieldChange(idx, 'region', e.target.value)}
+                          disabled={busy || saveBusy}
+                          placeholder="المنطقة..."
+                          className="h-9 w-full rounded-lg border border-amber-500/40 bg-[#0b1424] px-2 font-bold text-xs text-amber-300 outline-none focus:border-amber-300"
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <label className="text-[11px] text-slate-400 block mb-1">سعر الوحدة:</label>
-                      <SmartKgPricingInput
-                        unitPrice={item.unit_price}
-                        quantity={item.quantity}
-                        uom={item.uom}
-                        itemDescription={item.item_description}
-                        disabled={busy || saveBusy}
-                        onChangeUnitPrice={(newPrice) =>
-                          handleItemFieldChange(idx, 'unit_price', newPrice)
-                        }
-                      />
-                    </div>
-                  </div>
 
-                  <div className="flex justify-between items-center rounded-lg bg-emerald-950/30 border border-emerald-800/40 px-3 py-2">
-                    <span className="text-slate-400 text-xs">إجمالي البند:</span>
-                    <strong className="font-mono text-emerald-300 font-bold">
-                      {formatCleanNumber(item.line_total, 2)} ج.م
-                    </strong>
+                    <div>
+                      <label className="text-[11px] text-slate-400 block mb-1">المورد الفعلي للبند:</label>
+                      <select
+                        value={item.supplier_id || po.supplier_id || ''}
+                        onChange={(e) => handleItemFieldChange(idx, 'supplier_id', e.target.value ? Number(e.target.value) : null)}
+                        disabled={busy || saveBusy}
+                        className="h-9 w-full rounded-lg border border-cyan-500/60 bg-[#0b1424] px-2 text-xs text-slate-100 font-bold outline-none focus:border-cyan-300"
+                      >
+                        {allSuppliers.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.company_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[11px] text-slate-400 block mb-1">الكمية الفعلية:</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={item.quantity ?? ''}
+                          onFocus={(e) => e.target.select()}
+                          onChange={(e) => handleItemFieldChange(idx, 'quantity', e.target.value)}
+                          disabled={busy || saveBusy}
+                          className="h-9 w-full rounded-lg border border-cyan-500/60 bg-[#0b1424] px-2 text-center font-mono text-xs text-slate-100 outline-none focus:border-cyan-300"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] text-slate-400 block mb-1">سعر الوحدة:</label>
+                        <SmartKgPricingInput
+                          unitPrice={item.unit_price}
+                          quantity={item.quantity}
+                          uom={item.uom}
+                          itemDescription={item.item_description}
+                          disabled={busy || saveBusy}
+                          onChangeUnitPrice={(newPrice) =>
+                            handleItemFieldChange(idx, 'unit_price', newPrice)
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center rounded-lg bg-emerald-950/30 border border-emerald-800/40 px-3 py-2">
+                      <span className="text-slate-400 text-xs">إجمالي البند:</span>
+                      <div className="text-left font-mono font-bold">
+                        <span className={isItemDiscounted ? 'text-slate-400 line-through text-[11px] block' : 'text-emerald-300'}>
+                          {formatCleanNumber(item.line_total, 2)} ج.م
+                        </span>
+                        {isItemDiscounted && (
+                          <span className="text-emerald-300 text-xs block">
+                            {formatCleanNumber(discountedLineTotal, 2)} ج.م
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
-            {/* ── Grand Total Bar ── */}
-            <div className="rounded-xl border border-slate-850 bg-slate-900/90 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
-              <div className="text-xs text-slate-400 flex items-center gap-2">
-                <span>عدد البنود الفعلية:</span>
-                <strong className="text-slate-100 font-bold">{items.length}</strong>
+            {/* ── Financial Summary & Grand Total Bar ── */}
+            <div className="rounded-2xl border-2 border-slate-800 bg-slate-900/95 p-4 shadow-xl space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                <div className="text-xs text-slate-400 flex items-center gap-2">
+                  <span>عدد البنود الفعلية:</span>
+                  <strong className="text-slate-100 font-bold">{items.length}</strong>
+                  {financials.discountType === 'SELECTED_ITEMS' && (
+                    <span className="text-[11px] font-bold text-amber-300 bg-amber-950/60 border border-amber-800/80 px-2 py-0.5 rounded-full mr-2">
+                      {financials.targetedCount} بنود مستهدفة بالخصم
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-4 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-400">الإجمالي قبل الخصم:</span>
+                    <span className="font-mono font-bold text-slate-200">
+                      {formatCleanNumber(financials.subtotal, 2)} ج.م
+                    </span>
+                  </div>
+                  {financials.discountType === 'SELECTED_ITEMS' && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-amber-400">إجمالي البنود المستهدفة:</span>
+                      <span className="font-mono font-bold text-amber-200">
+                        {formatCleanNumber(financials.targetedSubtotal, 2)} ج.م
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="text-xs sm:text-sm font-bold text-slate-300">الإجمالي الكلي الفعلي:</span>
-                <span className="font-mono font-black text-emerald-400 text-lg sm:text-xl">
-                  {formatCleanNumber(calculatedGrandTotal, 2)} ج.م
-                </span>
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                <div className="flex items-center gap-3">
+                  {financials.discountAmount > 0 ? (
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-rose-950/50 border border-rose-500/40 text-xs">
+                      <span className="text-rose-300 font-bold">
+                        🏷️ {financials.discountType === 'TOTAL' ? 'خصم إجمالي' : 'خصم بنود محددة'} ({formatCleanNumber(financials.discountPercentage, 2)}%):
+                      </span>
+                      <span className="font-mono font-black text-rose-300">
+                        -{formatCleanNumber(financials.discountAmount, 2)} ج.م
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-slate-500">لا يوجد خصم مطبق</span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <span className="text-xs sm:text-sm font-bold text-slate-200">الإجمالي النهائي بعد الخصم:</span>
+                  <span className="font-mono font-black text-emerald-400 text-xl sm:text-2xl drop-shadow">
+                    {formatCleanNumber(financials.grandTotal, 2)} ج.م
+                  </span>
+                </div>
               </div>
             </div>
 
