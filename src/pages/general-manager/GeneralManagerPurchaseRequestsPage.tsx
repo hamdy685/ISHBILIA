@@ -60,14 +60,15 @@ const toDraftItems = (request: PurchaseRequest): DraftItemState[] =>
 
 export const isPrReturnedFromProcurement = (request: PurchaseRequest | null | undefined): boolean => {
   if (!request) return false;
+  if (request.executive_stage === 'FINAL_APPROVAL') return true;
+  if (request.executive_stage === 'INITIAL_APPROVAL') return false;
+  if (request.is_returned_from_procurement !== undefined) return Boolean(request.is_returned_from_procurement);
   const isInitialStatus = ['DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'APPROVED_BY_REVIEWER'].includes(request.status);
   if (isInitialStatus) return false;
   return (
     request.status === 'APPROVED_BY_PROCUREMENT' ||
-    request.procurement_route === 'DIRECT' ||
-    Boolean(request.direct_supplier_id || request.direct_supplier) ||
-    Number(request.total_estimated_cost || 0) > 0 ||
-    Boolean(request.items?.some((it) => Number(it.estimated_unit_price || 0) > 0))
+    (request.procurement_route === 'DIRECT' && (Boolean(request.direct_supplier_id || request.direct_supplier) || Boolean(request.items?.some((it) => Number(it.estimated_unit_price || 0) > 0)))) ||
+    (Boolean(request.direct_supplier_id || request.direct_supplier) && (Number(request.total_estimated_cost || 0) > 0 || Boolean(request.items?.some((it) => Number(it.estimated_unit_price || 0) > 0))))
   );
 };
 

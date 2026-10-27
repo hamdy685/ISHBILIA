@@ -12,7 +12,7 @@ export const getGeneralManagerPurchaseOrdersApi = async (params?: { per_page?: n
 export const getGeneralManagerPurchaseOrderApi = async (id: number): Promise<PurchaseOrder> =>
   (await apiClient.get<{ data: PurchaseOrder }>(`${BASE}/${id}`)).data.data;
 
-export const getGeneralManagerPurchaseRequestsApi = async (perPage: number = 30): Promise<PurchaseRequest[]> =>
+export const getGeneralManagerPurchaseRequestsApi = async (perPage: number = 100): Promise<PurchaseRequest[]> =>
   (await apiClient.get<{ data: PurchaseRequest[] }>(`${REQUESTS_BASE}?per_page=${perPage}`)).data.data;
 
 export const getGeneralManagerPurchaseRequestApi = async (id: number): Promise<PurchaseRequest> =>

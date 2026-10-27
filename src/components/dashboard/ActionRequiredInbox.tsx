@@ -590,6 +590,12 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
       const msg = isSupplement
         ? `تم اعتماد طلب الكمالة ${approveModal.item.code} وتوجيهه مباشرة لمدير المشتريات بنجاح ⚡`
         : `تم اعتماد ${approveModal.item.code} وتحديد مسار الاستلام بنجاح ✅`;
+      setDismissedItemIds((prev) => {
+        const next = new Set(prev);
+        if (approveModal.item?.id != null) next.add(approveModal.item.id);
+        if (approveModal.item?.rawId != null) next.add(approveModal.item.rawId);
+        return next;
+      });
       toast.success(msg);
       showToast(msg, 'success');
       setApproveModal({ isOpen: false, item: null, comment: '', isSubmitting: false });
@@ -611,6 +617,12 @@ export const ActionRequiredInbox: React.FC<ActionRequiredInboxProps> = ({
     setRejectModal((prev) => ({ ...prev, isSubmitting: true, error: undefined }));
     try {
       await rejectModal.item.onDirectReject(rejectModal.item, rejectModal.reason.trim());
+      setDismissedItemIds((prev) => {
+        const next = new Set(prev);
+        if (rejectModal.item?.id != null) next.add(rejectModal.item.id);
+        if (rejectModal.item?.rawId != null) next.add(rejectModal.item.rawId);
+        return next;
+      });
       showToast(`تم تسجيل الرفض/الإعادة للمعاملة ${rejectModal.item.code}`, 'success');
       setRejectModal({ isOpen: false, item: null, reason: '', isSubmitting: false });
       onItemActionComplete?.();

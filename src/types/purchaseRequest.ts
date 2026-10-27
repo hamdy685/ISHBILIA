@@ -247,6 +247,10 @@ export interface PurchaseRequest {
   status: PurchaseRequestStatus;
   procurement_route?: 'UNDECIDED' | 'DIRECT' | 'QUOTES' | string;
   direct_supplier_id?: number | null;
+  executive_stage?: 'INITIAL_APPROVAL' | 'FINAL_APPROVAL' | 'QUOTE_AWARD' | 'NONE' | string;
+  is_returned_from_procurement?: boolean;
+  next_actor_label?: string | null;
+  required_action_label?: string | null;
   requires_warehouse_receipt?: boolean;
   target_department_id?: number | null;
   reviewer_user_id?: number | null;

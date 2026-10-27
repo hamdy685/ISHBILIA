@@ -167,6 +167,85 @@ class PurchaseRequest extends Model
         return false;
     }
 
+    /**
+     * Determines whether a purchase request in PENDING_EXECUTIVE_APPROVAL has completed
+     * pricing and supplier selection by procurement, qualifying for Final Executive Approval.
+     */
+    public function isPricedForFinalApproval(): bool
+    {
+        if ($this->status !== 'PENDING_EXECUTIVE_APPROVAL') {
+            return false;
+        }
+
+        $hasProcurementPricingHistory = false;
+        if ($this->relationLoaded('approvalHistory')) {
+            $hasProcurementPricingHistory = $this->approvalHistory->contains(function ($entry) {
+                return in_array($entry->action, [
+                    'DIRECT_EXECUTIVE_REVIEW_REQUIRED',
+                    'FAST_TRACK_PRICING_SKIPPED_PRELIMINARY',
+                    'EDITED_BY_EXECUTIVE',
+                    'DIRECT_PRICED',
+                ], true) || (
+                    $entry->relationLoaded('actor') &&
+                    $entry->actor &&
+                    $entry->actor->relationLoaded('roles') &&
+                    $entry->actor->roles->contains(fn ($r) => in_array($r->slug, ['procurement_manager', 'admin'], true)) &&
+                    in_array($entry->to_state, ['PENDING_EXECUTIVE_APPROVAL', 'APPROVED_BY_PROCUREMENT'], true)
+                );
+            });
+        } elseif ($this->exists) {
+            $hasProcurementPricingHistory = $this->approvalHistory()
+                ->whereIn('action', [
+                    'DIRECT_EXECUTIVE_REVIEW_REQUIRED',
+                    'FAST_TRACK_PRICING_SKIPPED_PRELIMINARY',
+                    'EDITED_BY_EXECUTIVE',
+                    'DIRECT_PRICED',
+                ])
+                ->exists();
+        }
+
+        $items = $this->relationLoaded('items') ? $this->items : ($this->exists ? $this->items()->get() : collect());
+        $hasItems = $items->isNotEmpty();
+        $hasItemPrices = $hasItems && $items->contains(fn ($it) => (float) ($it->estimated_unit_price ?? 0) > 0);
+        $hasSupplier = !empty($this->direct_supplier_id) || ($hasItems && $items->contains(fn ($it) => !empty($it->supplier_id)));
+        $hasTotalCost = (float) ($this->total_estimated_cost ?? 0) > 0;
+
+        if ($hasProcurementPricingHistory) {
+            return true;
+        }
+
+        if ($this->procurement_route === 'DIRECT' && ($hasTotalCost || $hasItemPrices || $hasSupplier)) {
+            return true;
+        }
+
+        if ($hasSupplier && ($hasTotalCost || $hasItemPrices)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Returns the exact executive decision stage for this purchase request.
+     * Returns:
+     * - 'INITIAL_APPROVAL': Waiting for preliminary executive approval to dispatch to procurement.
+     * - 'FINAL_APPROVAL': Priced by procurement with supplier and unit prices, waiting for final executive approval before accounting.
+     * - 'QUOTE_AWARD': Multi-quote evaluation waiting for executive selection/awarding decision.
+     * - 'NONE': Does not currently require executive decision.
+     */
+    public function getExecutiveDecisionStage(): string
+    {
+        if ($this->status === 'PENDING_EXECUTIVE_QUOTE_DECISION') {
+            return 'QUOTE_AWARD';
+        }
+
+        if ($this->status === 'PENDING_EXECUTIVE_APPROVAL') {
+            return $this->isPricedForFinalApproval() ? 'FINAL_APPROVAL' : 'INITIAL_APPROVAL';
+        }
+
+        return 'NONE';
+    }
+
     public function isProjectRequest(): bool
     {
         return ! $this->isOfficeRequest();

@@ -273,17 +273,21 @@ class GeneralManagerPurchaseRequestService
         $actorTitle = $executive->hasRole('execution_manager') ? "مدير مشروعات التنفيذ ({$executive->name})" : "المدير التنفيذي ({$executive->name})";
 
         return DB::transaction(function () use ($executive, $request, $comment, $actorTitle): PurchaseRequest {
-            $pr = PurchaseRequest::query()->lockForUpdate()->findOrFail($request->id);
+            $pr = PurchaseRequest::query()->lockForUpdate()->with(['items', 'approvalHistory.actor.roles'])->findOrFail($request->id);
             if ($pr->status !== self::PENDING_STATUS) {
                 throw new \RuntimeException('تم اتخاذ قرار بشأن طلب الشراء بالفعل أو لم يعد بانتظار المدير التنفيذي.');
             }
-            $isDirect = $pr->procurement_route === 'DIRECT';
-            $nextStatus = $isDirect ? 'PENDING_ACCOUNTING_APPROVAL' : 'PENDING_PROCUREMENT_APPROVAL';
+            $isFinalApproval = $pr->isPricedForFinalApproval();
+            $nextStatus = $isFinalApproval ? 'PENDING_ACCOUNTING_APPROVAL' : 'PENDING_PROCUREMENT_APPROVAL';
             $pr->update([
                 'status' => $nextStatus,
             ]);
 
             app(NotificationService::class)->markEntityNotificationsAsRead($pr);
+
+            $defaultComment = $isFinalApproval
+                ? "اعتمد {$actorTitle} طلب الشراء بعد التسعير وحوله إلى الإدارة المالية للموافقة."
+                : "تم الاعتماد المبدئي للطلب من {$actorTitle} وإرساله للمشتريات للبدء في التسعير.";
 
             ApprovalHistory::create([
                 'target_type' => PurchaseRequest::class,
@@ -292,41 +296,45 @@ class GeneralManagerPurchaseRequestService
                 'action' => 'APPROVED_BY_EXECUTIVE',
                 'from_state' => self::PENDING_STATUS,
                 'to_state' => $nextStatus,
-                'comments' => $comment ?? ($isDirect ? "اعتمد {$actorTitle} طلب الشراء المباشر وحوله إلى الإدارة المالية للموافقة." : "تم اعتماد الطلب من {$actorTitle} وإرساله للمشتريات."),
+                'comments' => $comment ?? $defaultComment,
             ]);
 
             app(SystemEventService::class)->recordAction(
                 $pr,
                 'APPROVED_BY_EXECUTIVE',
-                $isDirect ? "اعتمد {$actorTitle} طلب الشراء المباشر وحوله إلى الإدارة المالية." : "اعتمد {$actorTitle} طلب الشراء وأرسله إلى مدير المشتريات.",
+                $isFinalApproval ? "اعتمد {$actorTitle} طلب الشراء بعد التسعير وحوله إلى الإدارة المالية." : "اعتمد {$actorTitle} طلب الشراء مبدئياً وأرسله إلى مدير المشتريات.",
                 [
                     'event_type' => 'purchase_request.approved_by_executive',
                     'from_state' => self::PENDING_STATUS,
                     'to_state' => $nextStatus,
                     'actor_user_id' => $executive->id,
-                    'metadata' => ['comment' => $comment, 'is_direct' => $isDirect],
+                    'metadata' => [
+                        'comment' => $comment,
+                        'is_final_approval' => $isFinalApproval,
+                        'stage' => $isFinalApproval ? 'FINAL_APPROVAL' : 'INITIAL_APPROVAL',
+                    ],
                 ]
             );
 
             app(NotificationService::class)->queueNotification(
                 $pr->user_id,
                 'purchase_request_approved_by_executive',
-                'تم اعتماد طلب الشراء تنفيذيًا',
+                $isFinalApproval ? 'تم الاعتماد النهائي لطلب الشراء تنفيذيًا' : 'تم الاعتماد المبدئي لطلب الشراء تنفيذيًا',
                 "اعتمد {$actorTitle} طلب الشراء {$pr->request_number}.",
                 $pr
             );
 
-            if ($isDirect) {
+            if ($isFinalApproval) {
                 $notificationService = app(NotificationService::class);
                 $notificationService->queueUsers(
                     $notificationService->resolveUsersWithPermission('purchase_request.accounting_view'),
                     'purchase_request_pending_accounting_approval',
-                    'طلب شراء مباشر معتمد تنفيذيًا بانتظار الموافقة المالية',
-                    "اعتمد {$actorTitle} الطلب المباشر {$pr->request_number}، وهو الآن بانتظار موافقة المدير المالي / الحسابات.",
+                    'طلب شراء معتمد تنفيذيًا بانتظار الموافقة المالية',
+                    "اعتمد {$actorTitle} الطلب {$pr->request_number} بعد التسعير، وهو الآن بانتظار موافقة المدير المالي / الحسابات.",
                     $pr
                 );
             } else {
-                $this->notifyProcurement($pr, "اعتمد {$actorTitle} طلب الشراء، وهو بانتظار إجراء مدير المشتريات.");
+                $this->notifyProcurement($pr, "اعتمد {$actorTitle} طلب الشراء مبدئيًا، وهو بانتظار بدء التسعير من إدارة المشتريات.");
             }
 
             return $pr->fresh(['requester', 'department', 'assignedReviewer', 'siteEngineer', 'items.item', 'items.supplier', 'approvalHistory']);

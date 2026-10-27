@@ -91,17 +91,168 @@ export const GeneralManagerDashboardPage: React.FC = () => {
     return Array.from(options, ([id, name]) => ({ id, name }));
   }, [pos]);
 
-  if (loading) {
-    return <div className="text-cyan-400 animate-pulse text-xs p-6" dir="rtl">جاري تحميل بيانات لوحة الإدارة العامة...</div>;
-  }
-
   const isActualPo = (p: any) =>
     Boolean(p.finalized_at) ||
     ['ISSUED', 'APPROVED_BY_ACCOUNTING', 'FINAL_APPROVED'].includes(p.status);
 
   const actualPos = filteredPos.filter(isActualPo);
   const totalValue = actualPos.reduce((acc, x) => acc + Number(x.grand_total || 0), 0);
-  const pendingGmRequestsCount = requests.length;
+
+  // حساب القرارات التنفيذية المطلوبة بدقة مع منع التكرار تماماً
+  const gmActionItems: ActionInboxItem[] = useMemo(() => {
+    const seenPrIds = new Set<number>();
+    const items: ActionInboxItem[] = [];
+
+    // 1. طلبات الشراء بانتظار قرار المدير التنفيذي (سواء اعتماد مبدئي أو اعتماد نهائي بعد التسعير)
+    for (const req of requests) {
+      if (seenPrIds.has(req.id)) continue;
+      seenPrIds.add(req.id);
+
+      const isFinalApproval = Boolean(
+        req.executive_stage === 'FINAL_APPROVAL' ||
+        req.is_returned_from_procurement ||
+        req.status === 'APPROVED_BY_PROCUREMENT' ||
+        (req.procurement_route === 'DIRECT' && (Boolean(req.direct_supplier_id || req.direct_supplier) || Boolean(req.items?.some((it) => Number(it.estimated_unit_price || 0) > 0)))) ||
+        (Boolean(req.direct_supplier_id || req.direct_supplier) && (Number(req.total_estimated_cost || 0) > 0 || Boolean(req.items?.some((it) => Number(it.estimated_unit_price || 0) > 0))))
+      );
+
+      items.push({
+        id: `req-${req.id}`,
+        rawId: req.id,
+        type: 'PR' as const,
+        code: req.request_number,
+        title: req.justification || (req.request_type === 'OFFICE_SUPPLIES' ? 'طلب مستلزمات مكتبية' : 'طلب مواد مشروعات'),
+        subtitle: req.justification ? (req.request_type === 'OFFICE_SUPPLIES' ? 'مستلزمات مكتبية' : 'مشتريات مواقع') : undefined,
+        department: req.department?.name,
+        requester: req.requester?.name,
+        amount: isFinalApproval && req.total_estimated_cost ? Number(req.total_estimated_cost) : undefined,
+        supplier: isFinalApproval ? (req.direct_supplier?.company_name || req.items?.find((i) => i.supplier?.company_name)?.supplier?.company_name) : undefined,
+        urgency: req.priority === 'HIGH' ? ('CRITICAL' as const) : ('HIGH' as const),
+
+        // تمييز شارة المرحلة بوضوح تام
+        stageBadge: isFinalApproval
+          ? {
+              text: 'راجع من المشتريات (مسعر)',
+              icon: '📥',
+              className: 'bg-emerald-950/90 text-emerald-300 border-emerald-600/70 shadow-emerald-950/40',
+            }
+          : {
+              text: 'رايح للمشتريات (طلب جديد)',
+              icon: '🛫',
+              className: 'bg-sky-950/90 text-sky-300 border-sky-600/70 shadow-sky-950/40',
+            },
+
+        reason: isFinalApproval
+          ? 'طلب شراء مسعر من إدارة المشتريات ومحدد المورد والأسعار — بانتظار اعتمادك النهائي للإحالة للحسابات'
+          : 'طلب شراء جديد معتمد من المراجع — بانتظار موافقتك المبدئية لإحالته لإدارة المشتريات للبدء في التسعير',
+
+        next_actor: isFinalApproval
+          ? (req.next_actor_label || 'الإدارة المالية (الحسابات)')
+          : (req.next_actor_label || 'إدارة المشتريات'),
+
+        actionUrl: `/general-manager/purchase-requests?open=${req.id}&view=items_only`,
+        actionLabel: isFinalApproval
+          ? 'مراجعة الأسعار والمورد وتعديل الطلب'
+          : 'مراجعة وتعديل الطلب',
+
+        created_at: req.created_at,
+        timeAgo: req.created_at ? formatDateTime24h(req.created_at) : undefined,
+        purpose: req.notes || (req as any).purpose || req.justification || '',
+        notes: req.notes || (req as any).purpose || '',
+        request_type: req.request_type,
+        date_needed: req.date_needed || undefined,
+        priority: req.priority,
+        parcel_number: req.items?.[0]?.item_reference || undefined,
+        region: req.items?.[0]?.region || undefined,
+        items_count: req.items?.length || 0,
+        items_list: req.items?.map((it) => ({
+          description: it.item_description || it.item?.name || 'صنف',
+          quantity: it.quantity,
+          uom: it.uom,
+          parcel: it.item_reference,
+          region: it.region,
+          unit_price: isFinalApproval ? it.estimated_unit_price : undefined,
+          line_total: isFinalApproval ? it.estimated_line_total : undefined,
+          specifications: it.specifications,
+        })),
+        onDirectApprove: async (_item: any, comment?: string) => {
+          await approveGeneralManagerPurchaseRequestApi(req.id, comment);
+          await loadData(true);
+        },
+        onDirectReject: async (_item: any, reason: string) => {
+          await rejectGeneralManagerPurchaseRequestApi(req.id, reason);
+          await loadData(true);
+        },
+
+        // أزرار اتخاذ القرار الدقيقة لكل حالة
+        directApproveLabel: isFinalApproval
+          ? 'اعتماد تنفيذي نهائي'
+          : 'موافقة وإرسال للمشتريات',
+        directApproveIcon: isFinalApproval ? '👑✓' : '📤',
+        directApproveClassName: isFinalApproval
+          ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-950/40 ring-1 ring-emerald-400/40'
+          : 'bg-sky-600 hover:bg-sky-500 text-white shadow-md shadow-sky-950/40 ring-1 ring-sky-400/40',
+        directRejectLabel: 'رفض الطلب',
+        requireApproveModal: false,
+      });
+    }
+
+    // 2. قرارات البت والترسية التنفيذية لعروض الأسعار الموصى بها
+    for (const q of quoteRequests) {
+      if (q.status !== 'PENDING_EXECUTIVE_QUOTE_DECISION') continue;
+      if (seenPrIds.has(q.id)) continue;
+      seenPrIds.add(q.id);
+
+      items.push({
+        id: `quote-${q.id}`,
+        rawId: q.id,
+        type: 'QUOTE' as const,
+        code: q.request_number,
+        title: q.justification || 'عروض أسعار بانتظار الاعتماد والترسية التنفيذية',
+        subtitle: `${q.quotes?.length || 'عدة'} عروض أسعار تمت التوصية بها`,
+        department: q.department?.name,
+        requester: q.requester?.name,
+        amount: q.total_estimated_cost ? Number(q.total_estimated_cost) : undefined,
+        urgency: 'CRITICAL' as const,
+        stageBadge: {
+          text: 'ترسية عروض أسعار',
+          icon: '⚖️',
+          className: 'bg-indigo-950/90 text-indigo-300 border-indigo-600/70 shadow-indigo-950/40',
+        },
+        reason: 'عروض أسعار مكتملة التوصيات من القسم والمشتريات بانتظار البت والترسية التنفيذية لاختيار العرض الفائز',
+        next_actor: 'إدارة المشتريات (لإصدار أمر الشراء بعد الترسية)',
+        actionUrl: `/general-manager/purchase-quotes?open=${q.id}`,
+        actionLabel: 'البت والترسية التنفيذية لعروض الأسعار',
+        created_at: q.created_at || undefined,
+        timeAgo: q.created_at ? formatDateTime24h(q.created_at) : undefined,
+        purpose: q.notes || (q as any).purpose || q.justification || '',
+        notes: q.notes || (q as any).purpose || '',
+        items_count: q.items?.length || 0,
+        items_list: q.items?.map((it) => ({
+          description: it.item_description || it.item?.name || 'صنف',
+          quantity: it.quantity,
+          uom: it.uom,
+          parcel: it.item_reference,
+          region: it.region,
+          unit_price: it.estimated_unit_price,
+          line_total: it.estimated_line_total,
+        })),
+        directApproveLabel: undefined,
+        directRejectLabel: undefined,
+      });
+    }
+
+    return items;
+  }, [requests, quoteRequests]);
+
+  const pendingGmRequestsCount = useMemo(
+    () => gmActionItems.filter((i) => i.type === 'PR').length,
+    [gmActionItems]
+  );
+  const pendingGmQuotesCount = useMemo(
+    () => gmActionItems.filter((i) => i.type === 'QUOTE').length,
+    [gmActionItems]
+  );
 
   // القسم Spend Breakdown (Actual POs only to prevent inflated numbers)
   const deptSpendMap = actualPos.reduce((acc: Record<string, number>, p) => {
@@ -123,145 +274,20 @@ export const GeneralManagerDashboardPage: React.FC = () => {
     { label: 'معتمد نهائيًا', value: filteredPos.filter((po) => po.status === 'FINAL_APPROVED').length, color: '#06b6d4' },
   ];
 
+  if (loading) {
+    return <div className="text-cyan-400 animate-pulse text-xs p-6" dir="rtl">جاري تحميل بيانات لوحة الإدارة العامة...</div>;
+  }
+
   return (
     <div className="space-y-6 animate-fade-in" dir="rtl">
       {/* ── صندوق القرارات التنفيذية المطلوبة منك الآن (يظهر في أعلى الصفحة للمدير العام مباشرة) ── */}
-      {(() => {
-        const gmActionItems: ActionInboxItem[] = [
-          ...requests.map((req) => {
-            const isInitialStatus = ['DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'APPROVED_BY_REVIEWER'].includes(req.status);
-            const isReturnedFromProcurement =
-              !isInitialStatus &&
-              (req.status === 'APPROVED_BY_PROCUREMENT' ||
-                req.procurement_route === 'DIRECT' ||
-                Boolean(req.direct_supplier_id || req.direct_supplier) ||
-                Number(req.total_estimated_cost || 0) > 0 ||
-                Boolean(req.items?.some((it) => Number(it.estimated_unit_price || 0) > 0)));
-
-            return {
-              id: `req-${req.id}`,
-              rawId: req.id,
-              type: 'PR' as const,
-              code: req.request_number,
-              title: req.justification || (req.request_type === 'OFFICE_SUPPLIES' ? 'طلب مستلزمات مكتبية' : 'طلب مواد مشروعات'),
-              subtitle: req.justification ? (req.request_type === 'OFFICE_SUPPLIES' ? 'مستلزمات مكتبية' : 'مشتريات مواقع') : undefined,
-              department: req.department?.name,
-              requester: req.requester?.name,
-              amount: isReturnedFromProcurement && req.total_estimated_cost ? Number(req.total_estimated_cost) : undefined,
-              supplier: isReturnedFromProcurement ? req.direct_supplier?.company_name : undefined,
-              urgency: req.priority === 'HIGH' ? ('CRITICAL' as const) : ('HIGH' as const),
-
-              // Stage badge differentiation
-              stageBadge: isReturnedFromProcurement
-                ? {
-                    text: 'راجع من المشتريات (مسعر)',
-                    icon: '📥',
-                    className: 'bg-emerald-950/90 text-emerald-300 border-emerald-600/70 shadow-emerald-950/40',
-                  }
-                : {
-                    text: 'رايح للمشتريات (طلب جديد)',
-                    icon: '🛫',
-                    className: 'bg-sky-950/90 text-sky-300 border-sky-600/70 shadow-sky-950/40',
-                  },
-
-              reason: isReturnedFromProcurement
-                ? 'طلب شراء مسعر من إدارة المشتريات ومحدد المورد — بانتظار اعتمادك النهائي للإحالة للحسابات'
-                : 'طلب شراء جديد معتمد من المراجع — بانتظار موافقتك لإحالته لإدارة المشتريات للبدء في التسعير',
-
-              next_actor: isReturnedFromProcurement
-                ? 'الإدارة المالية (الحسابات)'
-                : 'إدارة المشتريات',
-
-              actionUrl: `/general-manager/purchase-requests?open=${req.id}&view=items_only`,
-              actionLabel: isReturnedFromProcurement
-                ? 'مراجعة الأسعار والمورد وتعديل الطلب'
-                : 'مراجعة وتعديل الطلب',
-
-              created_at: req.created_at,
-              timeAgo: req.created_at ? formatDateTime24h(req.created_at) : undefined,
-              purpose: req.notes || (req as any).purpose || req.justification || '',
-              notes: req.notes || (req as any).purpose || '',
-              request_type: req.request_type,
-              date_needed: req.date_needed || undefined,
-              priority: req.priority,
-              parcel_number: req.items?.[0]?.item_reference || undefined,
-              region: req.items?.[0]?.region || undefined,
-              items_count: req.items?.length || 0,
-              items_list: req.items?.map((it) => ({
-                description: it.item_description || it.item?.name || 'صنف',
-                quantity: it.quantity,
-                uom: it.uom,
-                parcel: it.item_reference,
-                region: it.region,
-                unit_price: isReturnedFromProcurement ? it.estimated_unit_price : undefined,
-                line_total: isReturnedFromProcurement ? it.estimated_line_total : undefined,
-                specifications: it.specifications,
-              })),
-              onDirectApprove: async (_item: any, comment?: string) => {
-                await approveGeneralManagerPurchaseRequestApi(req.id, comment);
-                await loadData(true);
-              },
-              onDirectReject: async (_item: any, reason: string) => {
-                await rejectGeneralManagerPurchaseRequestApi(req.id, reason);
-                await loadData(true);
-              },
-
-              // Differentiated action buttons
-              directApproveLabel: isReturnedFromProcurement
-                ? 'اعتماد تنفيذي نهائي'
-                : 'موافقة وإرسال للمشتريات',
-              directApproveIcon: isReturnedFromProcurement ? '👑✓' : '📤',
-              directApproveClassName: isReturnedFromProcurement
-                ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-950/40 ring-1 ring-emerald-400/40'
-                : 'bg-sky-600 hover:bg-sky-500 text-white shadow-md shadow-sky-950/40 ring-1 ring-sky-400/40',
-              directRejectLabel: 'رفض الطلب',
-              requireApproveModal: false,
-            };
-          }),
-          // 2. Pending Executive Quote Decisions
-          ...quoteRequests
-            .filter((q) => q.status === 'PENDING_EXECUTIVE_QUOTE_DECISION')
-            .map((q) => ({
-              id: `quote-${q.id}`,
-              rawId: q.id,
-              type: 'QUOTE' as const,
-              code: q.request_number,
-              title: q.justification || 'عروض أسعار بانتظار الاعتماد التنفيذي',
-              subtitle: `${q.quotes?.length || 'عدة'} عروض أسعار تمت التوصية بها`,
-              department: q.department?.name,
-              requester: q.requester?.name,
-              amount: q.total_estimated_cost ? Number(q.total_estimated_cost) : undefined,
-              urgency: 'CRITICAL' as const,
-              reason: 'عروض أسعار موصى بها من القسم المختص بانتظار اعتماد الترسية التنفيذية',
-              actionUrl: `/general-manager/purchase-quotes?open=${q.id}`,
-              actionLabel: 'البت والاعتماد التنفيذي لعروض الأسعار',
-              created_at: q.created_at || undefined,
-              timeAgo: q.created_at ? formatDateTime24h(q.created_at) : undefined,
-              purpose: q.notes || (q as any).purpose || q.justification || '',
-              notes: q.notes || (q as any).purpose || '',
-              items_count: q.items?.length || 0,
-              items_list: q.items?.map((it) => ({
-                description: it.item_description || it.item?.name || 'صنف',
-                quantity: it.quantity,
-                uom: it.uom,
-                parcel: it.item_reference,
-                region: it.region,
-                unit_price: it.estimated_unit_price,
-                line_total: it.estimated_line_total,
-              })),
-            })),
-        ];
-
-        return (
-          <ActionRequiredInbox
-            title="القرارات التنفيذية المطلوبة منك الآن"
-            description="طلبات الشراء وعروض الأسعار المعلقة التي تتطلب قرارك المباشر حصراً (اعتماد، رفض، أو بت في الترسية)."
-            roleName="الإدارة التنفيذية العليا"
-            onItemActionComplete={() => loadData(true)}
-            items={gmActionItems}
-          />
-        );
-      })()}
+      <ActionRequiredInbox
+        title="القرارات التنفيذية المطلوبة منك الآن"
+        description="طلبات الشراء وعروض الأسعار المعلقة التي تتطلب قرارك المباشر حصراً (اعتماد مبدئي، اعتماد نهائي بعد التسعير، أو بت في الترسية)."
+        roleName="الإدارة التنفيذية العليا"
+        onItemActionComplete={() => loadData(true)}
+        items={gmActionItems}
+      />
 
       {/* Filters */}
       <div className="grid grid-cols-1 gap-3 rounded-xl border border-slate-800 bg-slate-950/70 p-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5" aria-label="فلاتر لوحة المدير العام">
@@ -312,7 +338,7 @@ export const GeneralManagerDashboardPage: React.FC = () => {
         />
         <KpiPill
           title="بانتظار الاعتماد التنفيذي"
-          value={pendingGmRequestsCount}
+          value={`${pendingGmRequestsCount} طلب`}
           accentColor="amber"
           icon={<span className="text-xs">⏳</span>}
           to="/general-manager/purchase-requests"
@@ -320,7 +346,7 @@ export const GeneralManagerDashboardPage: React.FC = () => {
         />
         <KpiPill
           title="عروض أسعار للترسية"
-          value={<span className="text-xs font-bold text-indigo-300">قرار الترسية</span>}
+          value={`${pendingGmQuotesCount} معاملة`}
           accentColor="indigo"
           icon={<span className="text-xs">⚖️</span>}
           to="/general-manager/purchase-quotes"

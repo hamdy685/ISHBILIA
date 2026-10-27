@@ -10,6 +10,23 @@ class PurchaseRequestResource extends JsonResource
     public function toArray(Request $request): array
     {
         $lifecycle = $this->getEffectiveLifecycle();
+        $executiveStage = $this->getExecutiveDecisionStage();
+        $isReturnedFromProcurement = ($executiveStage === 'FINAL_APPROVAL');
+
+        $nextActorLabel = null;
+        $requiredActionLabel = null;
+        if ($this->status === 'PENDING_EXECUTIVE_APPROVAL') {
+            if ($isReturnedFromProcurement) {
+                $nextActorLabel = 'الإدارة المالية (الحسابات)';
+                $requiredActionLabel = 'اعتماد تنفيذي نهائي (بعد التسعير)';
+            } else {
+                $nextActorLabel = 'إدارة المشتريات';
+                $requiredActionLabel = 'موافقة مبدئية وإرسال للمشتريات';
+            }
+        } elseif ($this->status === 'PENDING_EXECUTIVE_QUOTE_DECISION') {
+            $nextActorLabel = 'إدارة المشتريات (لإصدار أمر الشراء)';
+            $requiredActionLabel = 'البت والترسية التنفيذية لعروض الأسعار';
+        }
 
         return [
             'id' => $this->id,
@@ -37,6 +54,10 @@ class PurchaseRequestResource extends JsonResource
             ] : null,
             'procurement_route' => $this->procurement_route,
             'direct_supplier_id' => $this->direct_supplier_id,
+            'executive_stage' => $executiveStage,
+            'is_returned_from_procurement' => $isReturnedFromProcurement,
+            'next_actor_label' => $nextActorLabel,
+            'required_action_label' => $requiredActionLabel,
             'requires_warehouse_receipt' => (bool) ($this->requires_warehouse_receipt ?? true),
             'total_estimated_cost' => number_format((float) $this->total_estimated_cost, 2, '.', ''),
             'purchase_order_issued' => (int) ($this->issued_purchase_orders_count ?? 0) > 0 || (bool) $lifecycle['po_number'],
