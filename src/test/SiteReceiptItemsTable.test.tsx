@@ -203,4 +203,19 @@ describe('SiteReceiptItemsTable Component', () => {
       unmount();
     }
   });
+
+  it('opts out of the global mobile table min-width so all 4 columns stay inside the container', () => {
+    const { container } = render(<SiteReceiptItemsTable receipt={sampleReceipt} />);
+    const table = container.querySelector('table') as HTMLTableElement;
+    // index.css forces `table:not(.no-min-width) { min-width: 650px }` under 640px,
+    // which pushed the quantity/unit columns out of view in RTL on phones.
+    expect(table.classList.contains('no-min-width')).toBe(true);
+    expect(table.style.tableLayout).toBe('fixed');
+    expect(container.querySelectorAll('colgroup col').length).toBe(4);
+    container.querySelectorAll('tbody tr').forEach((row) => {
+      const cells = row.querySelectorAll('td');
+      const span = Array.from(cells).reduce((n, td) => n + (td.colSpan || 1), 0);
+      expect(span).toBe(4);
+    });
+  });
 });

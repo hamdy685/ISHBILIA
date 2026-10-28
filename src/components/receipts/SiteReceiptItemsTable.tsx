@@ -46,10 +46,14 @@ export const SiteReceiptItemsTable: React.FC<SiteReceiptItemsTableProps> = ({
 
   /*
     Exact 4-Column Layout (RTL: Right to Left)
-    1. البند والمواصفات (47%)
-    2. كمية المخزن (18%)
-    3. الكمية المعتمدة مدنيًا (22%)
-    4. الوحدة (13% - أقصى اليسار)
+    1. البند والمواصفات (43%)
+    2. كمية المخزن (17%)
+    3. الكمية المعتمدة مدنيًا (23%)
+    4. الوحدة (17% - أقصى اليسار)
+
+    The table carries `no-min-width` to opt out of the global mobile rule in
+    index.css (`table:not(.no-min-width) { min-width: 650px }`), which otherwise
+    widens it past its container and pushes the left columns out of view in RTL.
   */
   const warehouseQtyLabel =
     receipt.receipt_type === 'REQUESTER_OFFICE'
@@ -62,42 +66,47 @@ export const SiteReceiptItemsTable: React.FC<SiteReceiptItemsTableProps> = ({
 
   return (
     <div className="w-full" dir="rtl">
-      {/* 
-        Zero horizontal scroll container:
-        100% width, table-layout fixed, no min-width, no overflow-x clipping.
-      */}
       <div className="w-full rounded-xl border border-slate-800/80 bg-slate-950/90 shadow-xs overflow-hidden">
         <table
-          className="w-full text-right text-xs border-collapse"
-          style={{ tableLayout: 'fixed', width: '100%' }}
+          className="no-min-width w-full text-right text-xs border-collapse"
+          style={{ tableLayout: 'fixed', width: '100%', minWidth: 0 }}
         >
           {/* Strict 4-column width distribution totalling 100% */}
           <colgroup>
-            <col style={{ width: '47%' }} />
-            <col style={{ width: '18%' }} />
-            <col style={{ width: '22%' }} />
-            <col style={{ width: '13%' }} />
+            <col style={{ width: '43%' }} />
+            <col style={{ width: '17%' }} />
+            <col style={{ width: '23%' }} />
+            <col style={{ width: '17%' }} />
           </colgroup>
 
           <thead>
             <tr className="border-b border-slate-700/80 bg-slate-900/95 text-slate-300 font-bold select-none">
               {/* ① البند والمواصفات */}
-              <th className="py-2.5 px-2 text-right font-bold text-xs">
+              <th className="py-2 px-2 text-right font-bold text-xs align-bottom">
                 البند والمواصفات
               </th>
 
               {/* ② كمية المخزن */}
-              <th className="py-2.5 px-1 text-center font-bold text-xs whitespace-nowrap">
+              <th
+                className="py-2 px-0.5 text-center font-bold text-[11px] sm:text-xs leading-tight align-bottom"
+                style={{ whiteSpace: 'normal' }}
+              >
                 {warehouseQtyLabel}
               </th>
 
               {/* ③ الكمية المعتمدة مدنيًا */}
-              <th className="py-2.5 px-1 text-center font-bold text-xs whitespace-nowrap">
+              <th
+                className="py-2 px-0.5 text-center font-bold text-[11px] sm:text-xs leading-tight align-bottom"
+                style={{ whiteSpace: 'normal' }}
+              >
                 {confirmedQtyLabel}
               </th>
 
               {/* ④ الوحدة (أقصى اليسار) */}
-              <th className="py-2.5 px-1 text-center font-bold text-xs whitespace-nowrap">
+              <th
+                className="py-2 px-0.5 text-center font-bold text-[11px] sm:text-xs leading-tight align-bottom"
+                style={{ whiteSpace: 'normal' }}
+              >
                 الوحدة
               </th>
             </tr>
@@ -207,25 +216,28 @@ export const SiteReceiptItemsTable: React.FC<SiteReceiptItemsTableProps> = ({
                     </td>
 
                     {/* ② كمية المخزن */}
-                    <td className="py-2 px-1 text-center align-middle whitespace-nowrap">
+                    <td className="py-2 px-0.5 text-center align-middle" style={{ wordBreak: 'break-all' }}>
                       <span className="font-mono font-black text-cyan-300 text-xs sm:text-sm">
                         {displayWarehouseQty ?? '—'}
                       </span>
                       {isDiffUom && (
-                        <span className="block text-[9px] text-slate-400 font-normal leading-none mt-0.5">
+                        <span className="block text-[10px] text-slate-400 font-normal leading-tight mt-0.5">
                           ({item.received_quantity} {getUnitLabel(poItem?.uom || '')})
                         </span>
                       )}
                     </td>
 
                     {/* ③ الكمية المعتمدة مدنيًا */}
-                    <td className="py-2 px-1 text-center align-middle whitespace-nowrap">
+                    <td className="py-2 px-0.5 text-center align-middle">
                       {readOnly ? (
-                        <span className="font-mono font-black text-emerald-300 text-xs sm:text-sm bg-emerald-950/40 border border-emerald-800/50 px-2 py-0.5 rounded-md inline-block">
+                        <span
+                          className="font-mono font-black text-emerald-300 text-xs sm:text-sm bg-emerald-950/40 border border-emerald-800/50 px-1.5 py-0.5 rounded-md inline-block max-w-full"
+                          style={{ wordBreak: 'break-all' }}
+                        >
                           {displayConfirmedQty ?? '—'}
                         </span>
                       ) : (
-                        <div className="flex items-center justify-center">
+                        <div className="flex items-center justify-center min-w-0">
                           <input
                             id={`site-qty-${key}`}
                             type="number"
@@ -235,15 +247,18 @@ export const SiteReceiptItemsTable: React.FC<SiteReceiptItemsTableProps> = ({
                             onChange={(e) => onQuantityChange?.(key, e.target.value)}
                             placeholder="0"
                             title={isReviewer ? 'الكمية المعتمدة بالمراجعة الفنية' : 'الكمية المعتمدة مدنيًا'}
-                            className="w-full max-w-[58px] sm:max-w-[75px] h-7 sm:h-8 text-center font-mono font-black text-emerald-200 bg-slate-950 border border-emerald-500/70 hover:border-emerald-400 focus:border-emerald-300 focus:ring-1 focus:ring-emerald-500/30 rounded-lg text-xs sm:text-sm transition-all outline-none p-0"
+                            className="w-full min-w-0 max-w-[64px] sm:max-w-[80px] h-7 sm:h-8 text-center font-mono font-black text-emerald-200 bg-slate-950 border border-emerald-500/70 hover:border-emerald-400 focus:border-emerald-300 focus:ring-1 focus:ring-emerald-500/30 rounded-lg text-xs sm:text-sm transition-all outline-none p-0"
                           />
                         </div>
                       )}
                     </td>
 
                     {/* ④ الوحدة (أقصى اليسار) */}
-                    <td className="py-2 px-1 text-center align-middle whitespace-nowrap">
-                      <span className="text-[10px] sm:text-xs font-bold text-slate-300 bg-slate-900/80 border border-slate-700/60 px-1.5 py-0.5 rounded inline-block">
+                    <td className="py-2 px-0.5 text-center align-middle">
+                      <span
+                        className="text-[11px] sm:text-xs font-bold text-slate-300 bg-slate-900/80 border border-slate-700/60 px-1 py-0.5 rounded inline-block max-w-full leading-tight"
+                        style={{ overflowWrap: 'anywhere' }}
+                      >
                         {uomLabel || '—'}
                       </span>
                     </td>
