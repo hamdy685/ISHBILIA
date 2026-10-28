@@ -841,13 +841,27 @@ class ProcurementPurchaseOrderController extends Controller
 
             // Handle optional invoice attachment uploaded during actual PO finalization
             $uploadedData = null;
+            $invoiceNumber = $request->input('invoice_number');
             if ($request->hasFile('invoice_file')) {
-                $uploadedData = \App\Services\StorageService::storeUploadedFile($request->file('invoice_file'), 'invoices');
+                $ext = $request->file('invoice_file')->getClientOriginalExtension() ?: 'pdf';
+                $customName = \App\Services\DocumentNamingService::generateInvoiceName(
+                    $finalizedPo,
+                    $invoiceNumber,
+                    $ext,
+                    1
+                );
+                $uploadedData = \App\Services\StorageService::storeUploadedFile($request->file('invoice_file'), 'invoices', $customName);
             } elseif ($request->filled('invoice_photo')) {
+                $customName = \App\Services\DocumentNamingService::generateInvoiceName(
+                    $finalizedPo,
+                    $invoiceNumber,
+                    'pdf',
+                    1
+                );
                 $uploadedData = \App\Services\StorageService::storeBase64File(
                     $request->input('invoice_photo'),
                     'invoices',
-                    $request->input('invoice_photo_name')
+                    $customName
                 );
             }
 
@@ -896,17 +910,31 @@ class ProcurementPurchaseOrderController extends Controller
             'invoice_photo_name' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $po = PurchaseOrder::findOrFail((int) $id);
+        $po = PurchaseOrder::with(['items.item', 'supplier', 'purchaseRequest.landParcel'])->findOrFail((int) $id);
 
         $uploadedData = null;
+        $invoiceNumber = $request->input('invoice_number');
         try {
             if ($request->hasFile('invoice_file')) {
-                $uploadedData = \App\Services\StorageService::storeUploadedFile($request->file('invoice_file'), 'invoices');
+                $ext = $request->file('invoice_file')->getClientOriginalExtension() ?: 'pdf';
+                $customName = \App\Services\DocumentNamingService::generateInvoiceName(
+                    $po,
+                    $invoiceNumber,
+                    $ext,
+                    1
+                );
+                $uploadedData = \App\Services\StorageService::storeUploadedFile($request->file('invoice_file'), 'invoices', $customName);
             } elseif ($request->filled('invoice_photo')) {
+                $customName = \App\Services\DocumentNamingService::generateInvoiceName(
+                    $po,
+                    $invoiceNumber,
+                    'pdf',
+                    1
+                );
                 $uploadedData = \App\Services\StorageService::storeBase64File(
                     $request->input('invoice_photo'),
                     'invoices',
-                    $request->input('invoice_photo_name')
+                    $customName
                 );
             }
         } catch (\RuntimeException $e) {

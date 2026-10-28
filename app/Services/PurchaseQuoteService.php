@@ -67,7 +67,7 @@ class PurchaseQuoteService
 
         return DB::transaction(function () use ($procurementManager, $request, $quotes, $quoteCount): PurchaseRequest {
             $pr = PurchaseRequest::query()->lockForUpdate()->findOrFail($request->id);
-            $pr->loadMissing('requester.roles');
+            $pr->loadMissing(['requester.roles', 'items.item', 'landParcel']);
             $isExecutiveRequester = $pr->requester?->hasRole('general_manager') ?? false;
             $pr->quotes()->delete();
 
@@ -79,7 +79,16 @@ class PurchaseQuoteService
                 $fileDriveId = null;
 
                 if (isset($quote['file']) && $quote['file'] instanceof \Illuminate\Http\UploadedFile) {
-                    $saved = \App\Services\StorageService::storeUploadedFile($quote['file'], 'quotes');
+                    $supplier = !empty($quote['supplier_id']) ? \App\Models\Supplier::find((int) $quote['supplier_id']) : null;
+                    $ext = $quote['file']->getClientOriginalExtension() ?: 'pdf';
+                    $customName = \App\Services\DocumentNamingService::generateQuotationName(
+                        $pr,
+                        $supplier,
+                        $quote['items'] ?? null,
+                        $ext,
+                        $index + 1
+                    );
+                    $saved = \App\Services\StorageService::storeUploadedFile($quote['file'], 'quotes', $customName);
                     $filePath = $saved['path'];
                     $fileName = $saved['name'];
                     $fileSize = $saved['size'];

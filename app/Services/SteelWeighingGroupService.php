@@ -474,10 +474,16 @@ class SteelWeighingGroupService
             $photoDriveId = null;
 
             if ($photoPath && (str_starts_with($photoPath, 'data:') || str_contains($photoPath, ';base64,'))) {
+                $customName = \App\Services\DocumentNamingService::generateScaleTicketName(
+                    $group,
+                    $group->group_number,
+                    'jpg',
+                    1
+                );
                 $stored = \App\Services\StorageService::storeBase64(
                     $photoPath,
                     'receipts',
-                    'scale_ticket_group_' . $group->id . '.jpg'
+                    $customName
                 );
                 if ($stored) {
                     $photoPath = $stored['path'];

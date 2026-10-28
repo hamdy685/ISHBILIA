@@ -422,7 +422,7 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
       const photo = receiptPhotos[order.id];
       const actualReceiverName = actualReceivers[order.id]?.trim() || undefined;
 
-      await createPurchaseReceiptApi(order.id, { 
+      const createdReceipt = await createPurchaseReceiptApi(order.id, { 
         items, 
         warehouse_notes: notes[order.id],
         photo_base64: photo?.base64,
@@ -431,7 +431,12 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
         weighing_group_id: activeWg?.id,
         scale_ticket_weight: scaleWeightVal,
       });
-      setSuccessMessage(`تم تسجيل استلام أمر الشراء ${order.po_number} وإرساله للمستلم/مهندس الموقع للفحص والاعتماد.`);
+      const driveFileName = createdReceipt?.photo_name;
+      setSuccessMessage(
+        driveFileName
+          ? `تم تسجيل استلام أمر الشراء ${order.po_number} ورفع الملف إلى Google Drive بالاسم الموحد:\n${driveFileName}`
+          : `تم تسجيل استلام أمر الشراء ${order.po_number} وإرساله للمستلم/مهندس الموقع للفحص والاعتماد.`
+      );
       await load();
     } catch (err) {
       setError(parseApiError(err).message);
@@ -1226,8 +1231,20 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                                   <span>تم التقاط صورة بون الميزان بنجاح!</span>
                                 </div>
                                 <p className="text-slate-300 text-xs sm:text-sm">
-                                  الملف: {receiptPhotos[order.id]!.name}
+                                  الملف المختار: {receiptPhotos[order.id]!.name}
                                 </p>
+                                <div className="p-2.5 rounded-xl bg-slate-900/90 border border-emerald-500/30 text-xs space-y-1 text-right">
+                                  <div className="text-emerald-300 font-bold flex items-center gap-1.5">
+                                    <span>🏷️</span>
+                                    <span>بيانات التسمية الموحدة لـ Google Drive:</span>
+                                  </div>
+                                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-slate-300 text-[11px] pt-1">
+                                    <div><span className="text-slate-400">القطعة:</span> {order.purchase_request?.parcel_reference || (order.purchase_request as any)?.land_parcel?.parcel_reference || order.items?.[0]?.item_reference || 'غير محدد'}</div>
+                                    <div><span className="text-slate-400">المنطقة:</span> {order.purchase_request?.region || order.items?.[0]?.region || 'غير محدد'}</div>
+                                    <div><span className="text-slate-400">البند:</span> {order.items?.length === 1 ? (order.items[0].item?.name || order.items[0].item_description) : 'متعدد البنود'}</div>
+                                    <div><span className="text-slate-400">المورد:</span> {order.supplier?.company_name || (order.supplier as any)?.name || 'غير محدد'}</div>
+                                  </div>
+                                </div>
                                 <button
                                   type="button"
                                   onClick={() => setPreviewPhotoUrl(receiptPhotos[order.id]!.base64)}

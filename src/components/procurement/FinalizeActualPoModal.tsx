@@ -1143,6 +1143,21 @@ export const FinalizeActualPoModal: React.FC<FinalizeActualPoModalProps> = ({
                 )}
               </div>
 
+              {invoiceFile && (
+                <div className="p-3 rounded-xl bg-slate-900/90 border border-amber-500/30 text-xs space-y-1.5 animate-fade-in text-right">
+                  <div className="text-amber-300 font-bold flex items-center gap-1.5">
+                    <span>🏷️</span>
+                    <span>بيانات التسمية الموحدة للفاتورة في Google Drive:</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-slate-300 text-[11px] pt-1">
+                    <div><span className="text-slate-400">القطعة:</span> {po?.purchase_request?.parcel_reference || (po as any)?.purchase_request?.land_parcel?.parcel_reference || po?.items?.[0]?.item_reference || 'غير محدد'}</div>
+                    <div><span className="text-slate-400">المنطقة:</span> {po?.purchase_request?.region || po?.items?.[0]?.region || 'غير محدد'}</div>
+                    <div><span className="text-slate-400">البند:</span> {po?.items?.length === 1 ? (po.items[0].item?.name || po.items[0].item_description) : 'متعدد البنود'}</div>
+                    <div><span className="text-slate-400">المورد:</span> {po?.supplier?.company_name || (po?.supplier as any)?.name || 'غير محدد'}</div>
+                  </div>
+                </div>
+              )}
+
               {/* If PO already has invoice(s) attached */}
               {!invoiceFile && (po?.invoice_attachments?.length || po?.invoice_photo_url) && (
                 <div className="space-y-1.5">

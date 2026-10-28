@@ -36,10 +36,14 @@ class StorageService
      *
      * @throws \RuntimeException If cloud upload fails in production
      */
-    public static function storeUploadedFile(UploadedFile $file, string $directory = 'attachments'): array
+    public static function storeUploadedFile(UploadedFile $file, string $directory = 'attachments', ?string $customName = null): array
     {
         $extension = $file->getClientOriginalExtension() ?: 'bin';
-        $fileName = Str::slug(pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)) . '_' . time() . '_' . Str::random(6) . '.' . $extension;
+        if ($customName) {
+            $fileName = DocumentNamingService::sanitizeFileName($customName, $extension);
+        } else {
+            $fileName = Str::slug(pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)) . '_' . time() . '_' . Str::random(6) . '.' . $extension;
+        }
         $mimeType = $file->getClientMimeType() ?: $file->getMimeType();
 
         $isGoogleDriveCandidate = ($directory === 'receipts' || $directory === 'invoices' || $directory === 'quotes' || GoogleDriveService::isConfigured())
@@ -69,7 +73,7 @@ class StorageService
                         'disk' => 'google_drive',
                         'path' => $driveData['path'],
                         'drive_id' => $driveData['id'],
-                        'name' => $file->getClientOriginalName(),
+                        'name' => $customName ? $fileName : $file->getClientOriginalName(),
                         'size' => $file->getSize(),
                         'mime_type' => $mimeType,
                         'url' => $driveData['url'],
@@ -94,7 +98,7 @@ class StorageService
             'disk' => $disk,
             'path' => $path,
             'drive_id' => null,
-            'name' => $file->getClientOriginalName(),
+            'name' => $customName ? $fileName : $file->getClientOriginalName(),
             'size' => $file->getSize(),
             'mime_type' => $mimeType,
             'url' => self::url($path, $disk),
@@ -140,7 +144,11 @@ class StorageService
             return null;
         }
 
-        $fileName = ($customName ? Str::slug(pathinfo($customName, PATHINFO_FILENAME)) . '_' : 'receipt_') . time() . '_' . Str::random(8) . '.' . $extension;
+        if ($customName) {
+            $fileName = DocumentNamingService::sanitizeFileName($customName, $extension);
+        } else {
+            $fileName = 'receipt_' . time() . '_' . Str::random(8) . '.' . $extension;
+        }
 
         $isGoogleDriveCandidate = ($directory === 'receipts' || $directory === 'invoices' || $directory === 'quotes' || GoogleDriveService::isConfigured())
             && config('google_drive.enabled', true);

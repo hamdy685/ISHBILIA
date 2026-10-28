@@ -34,6 +34,15 @@ class Supplier extends Model
         ];
     }
 
+    protected $appends = [
+        'name',
+    ];
+
+    public function getNameAttribute(): ?string
+    {
+        return $this->company_name;
+    }
+
     public function purchaseOrders(): HasMany
     {
         return $this->hasMany(PurchaseOrder::class, 'supplier_id');

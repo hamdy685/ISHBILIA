@@ -458,7 +458,7 @@ class PurchaseRequestController extends Controller
             ],
         ]);
 
-        $pr = PurchaseRequest::findOrFail((int) $id);
+        $pr = PurchaseRequest::with(['items.item', 'landParcel'])->findOrFail((int) $id);
 
         if ($pr->user_id !== $request->user()->id) {
             return response()->json(['message' => 'ليس لديك صلاحية لتنفيذ هذا الإجراء.'], 403);
@@ -471,7 +471,13 @@ class PurchaseRequestController extends Controller
         }
 
         $file = $request->file('file');
-        $stored = \App\Services\StorageService::storeUploadedFile($file, "attachments/pr/{$id}");
+        $customName = \App\Services\DocumentNamingService::generateAttachmentName(
+            $pr,
+            $file->getClientOriginalName(),
+            $file->getClientOriginalExtension() ?: 'pdf',
+            $pr->attachments()->count() + 1
+        );
+        $stored = \App\Services\StorageService::storeUploadedFile($file, "attachments/pr/{$id}", $customName);
 
         $attachment = Attachment::create([
             'attachable_type' => PurchaseRequest::class,

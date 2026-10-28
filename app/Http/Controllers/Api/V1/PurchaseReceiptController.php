@@ -50,22 +50,44 @@ class PurchaseReceiptController extends Controller
             'items.*.notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
+        $purchaseOrder = PurchaseOrder::with(['items.item', 'supplier', 'purchaseRequest.landParcel'])->findOrFail($purchaseOrderId);
+        $weighingGroup = !empty($validated['weighing_group_id'])
+            ? \App\Models\WeighingGroup::with('items')->find($validated['weighing_group_id'])
+            : null;
+
         $photoData = null;
         try {
             if ($request->hasFile('photo')) {
-                $photoData = \App\Services\StorageService::storeUploadedFile($request->file('photo'), 'receipts');
+                $ext = $request->file('photo')->getClientOriginalExtension() ?: 'jpg';
+                $customName = \App\Services\DocumentNamingService::generateReceiptName(
+                    $purchaseOrder,
+                    $validated['items'] ?? [],
+                    null,
+                    $ext,
+                    $weighingGroup,
+                    1,
+                    $validated['received_at'] ?? null
+                );
+                $photoData = \App\Services\StorageService::storeUploadedFile($request->file('photo'), 'receipts', $customName);
             } elseif ($request->filled('photo_base64')) {
+                $customName = \App\Services\DocumentNamingService::generateReceiptName(
+                    $purchaseOrder,
+                    $validated['items'] ?? [],
+                    null,
+                    'jpg',
+                    $weighingGroup,
+                    1,
+                    $validated['received_at'] ?? null
+                );
                 $photoData = \App\Services\StorageService::storeBase64(
                     $request->input('photo_base64'),
                     'receipts',
-                    $request->input('photo_name')
+                    $customName
                 );
             }
         } catch (\RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
-
-        $purchaseOrder = PurchaseOrder::findOrFail($purchaseOrderId);
         try {
             $receipt = $this->service->createByWarehouse(
                 $request->user(),
