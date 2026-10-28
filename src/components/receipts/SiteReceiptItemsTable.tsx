@@ -29,6 +29,7 @@ export const SiteReceiptItemsTable: React.FC<SiteReceiptItemsTableProps> = ({
 }) => {
   const receiptItems = items || receipt.items || [];
   const [expandedItemId, setExpandedItemId] = useState<number | null>(null);
+  const [activeNoteItemId, setActiveNoteItemId] = useState<number | null>(null);
 
   if (!receiptItems || receiptItems.length === 0) {
     return (
@@ -43,80 +44,66 @@ export const SiteReceiptItemsTable: React.FC<SiteReceiptItemsTableProps> = ({
     return `receipt-${receipt.id}-${itemId}`;
   };
 
-  const warehouseQtyLabel =
-    receipt.receipt_type === 'REQUESTER_OFFICE'
-      ? 'كمية أمر الشراء'
-      : receipt.receipt_type === 'SITE_DIRECT'
-      ? 'كمية التوريد'
-      : 'كمية المخزن';
+  const warehouseQtyLabel = readOnly
+    ? 'الكمية المطلوبة'
+    : receipt.receipt_type === 'REQUESTER_OFFICE'
+    ? 'كمية أمر الشراء'
+    : receipt.receipt_type === 'SITE_DIRECT'
+    ? 'كمية التوريد المباشر'
+    : 'كمية المخزن';
 
   const confirmedQtyLabel = readOnly
     ? 'الكمية المستلمة'
     : receipt.receipt_type === 'REQUESTER_OFFICE'
-    ? 'الكمية المستلمة'
-    : 'الكمية المعتمدة';
+    ? 'الكمية المستلمة فعلياً'
+    : 'الكمية المعتمدة ميدانياً';
 
   return (
-    <div className="w-full" dir="rtl">
-      {/*
-        ┌──────────────────────────────────────────────────────────────────┐
-        │  STRICT 4-COLUMN LAYOUT — NO HORIZONTAL SCROLL                   │
-        │  RTL order: البند | كمية المخزن | الكمية المعتمدة | الوحدة       │
-        │  Columns use table-layout: fixed + percentage widths             │
-        └──────────────────────────────────────────────────────────────────┘
+    <div className="w-full space-y-2" dir="rtl">
+      {/* 
+        Responsive, organized table wrapper without unwanted clipping or hidden overflow 
       */}
-      <div className="rounded-xl border border-slate-800/80 bg-slate-950/90 shadow-sm">
-        <table
-          className="w-full text-right text-xs border-collapse"
-          style={{ tableLayout: 'fixed' }}
-        >
-          {/* Column width distribution (total = 100%):
-              البند: 46% — widest to show item name
-              كمية المخزن: 17%
-              الكمية المعتمدة: 22%
-              الوحدة: 15%
-          */}
-          <colgroup>
-            <col style={{ width: '46%' }} />
-            <col style={{ width: '17%' }} />
-            <col style={{ width: '22%' }} />
-            <col style={{ width: '15%' }} />
-          </colgroup>
-
+      <div className="w-full overflow-x-auto rounded-2xl border border-slate-800/90 bg-slate-950/90 shadow-md">
+        <table className="w-full text-right text-xs sm:text-sm border-collapse min-w-[640px]">
           <thead>
-            <tr className="border-b border-slate-700/80 bg-slate-900/95 text-slate-400">
-              {/* عمود: البند */}
-              <th className="py-2 px-2.5 text-right font-bold text-xs">
-                البند والمواصفات
-              </th>
-              {/* عمود: كمية المخزن */}
-              <th className="py-2 px-2 text-center font-bold text-xs whitespace-nowrap">
+            <tr className="border-b border-slate-800 bg-slate-900/95 text-slate-300 font-bold select-none">
+              {/* # Index */}
+              <th className="py-3 px-2.5 w-10 text-center text-slate-400">#</th>
+              {/* Item Description */}
+              <th className="py-3 px-3 text-right">البند والمواصفات</th>
+              {/* Parcel / Region */}
+              <th className="py-3 px-2.5 text-center whitespace-nowrap">القطعة / المنطقة</th>
+              {/* Unit */}
+              <th className="py-3 px-2.5 text-center whitespace-nowrap">الوحدة</th>
+              {/* Warehouse / Ordered Qty */}
+              <th className="py-3 px-2.5 text-center whitespace-nowrap">
                 {warehouseQtyLabel}
               </th>
-              {/* عمود: الكمية المعتمدة */}
-              <th className="py-2 px-2 text-center font-bold text-xs whitespace-nowrap">
+              {/* Confirmed / Received Qty */}
+              <th className="py-3 px-2.5 text-center whitespace-nowrap">
                 {confirmedQtyLabel}
               </th>
-              {/* عمود: الوحدة — أقصى اليسار */}
-              <th className="py-2 px-2 text-center font-bold text-xs">
-                الوحدة
+              {/* Notes */}
+              <th className="py-3 px-2.5 text-center whitespace-nowrap">
+                ملاحظات
               </th>
             </tr>
           </thead>
 
-          <tbody className="divide-y divide-slate-800/50">
+          <tbody className="divide-y divide-slate-800/60">
             {receiptItems.map((item, idx) => {
               const key = resolveKey(item.id);
               const val = quantities[key] ?? String(item.received_quantity ?? '');
+              const noteVal = itemNotes[key] ?? (item.notes || '');
 
               const poItem = item.purchase_order_item;
               const prItem = poItem?.pr_item;
               const itemName =
                 poItem?.item_description || poItem?.item?.name || 'بند استلام';
 
-              /* UOM resolution */
+              /* Unit resolution */
               const siteUom = prItem?.uom || poItem?.uom || '';
-              const uomLabel = getUnitLabel(siteUom) || siteUom || '—';
+              const uomLabel = getUnitLabel(siteUom) || siteUom;
 
               /* Quantity conversion when PR and PO have different units */
               const poQty = Number(poItem?.quantity || 0);
@@ -135,15 +122,19 @@ export const SiteReceiptItemsTable: React.FC<SiteReceiptItemsTableProps> = ({
                   : Math.round(Number(item.received_quantity) * (prQty / poQty))
                 : item.received_quantity;
 
-              /* In read-only (archive) mode display confirmed qty */
+              /* Ordered Quantity from PO */
+              const orderedQty = item.ordered_quantity ?? poItem?.quantity ?? '—';
+
+              /* In read-only (archive) mode display received quantity */
               const displayConfirmedQty = displayWarehouseQty;
 
-              /* Supplementary info for tooltip/drawer */
+              /* Supplementary info */
               const parcel =
                 poItem?.item_reference ||
                 prItem?.item_reference ||
                 receipt.purchase_order?.purchase_request?.parcel_reference ||
                 receipt.purchase_request?.parcel_reference;
+
               const region =
                 poItem?.region ||
                 prItem?.region ||
@@ -151,161 +142,226 @@ export const SiteReceiptItemsTable: React.FC<SiteReceiptItemsTableProps> = ({
                 receipt.purchase_request?.region;
 
               const isExpanded = expandedItemId === item.id;
-              const noteVal = (itemNotes[key] ?? item.notes) || '';
-
-              /* Build full tooltip text */
-              const tooltipText = [
-                itemName,
-                parcel ? `قطعة: ${parcel}` : null,
-                region ? `المنطقة: ${region}` : null,
-                noteVal ? `ملاحظة: ${noteVal}` : null,
-              ]
-                .filter(Boolean)
-                .join(' | ');
+              const isNoteOpen = activeNoteItemId === item.id;
 
               return (
                 <React.Fragment key={item.id}>
-                  {/* ── Main row ── */}
+                  {/* ── Main Item Row ── */}
                   <tr
                     className={`transition-colors ${
                       isExpanded
-                        ? 'bg-emerald-950/20'
+                        ? 'bg-emerald-950/25'
                         : idx % 2 === 0
                         ? 'bg-transparent hover:bg-slate-900/40'
-                        : 'bg-slate-900/25 hover:bg-slate-900/50'
+                        : 'bg-slate-900/20 hover:bg-slate-900/50'
                     }`}
                   >
-                    {/* ① البند — single line, truncated, clickable for full details */}
-                    <td className="py-2 px-2.5 align-middle" style={{ maxWidth: 0 }}>
-                      <div
-                        className="flex items-center gap-1 overflow-hidden"
-                        style={{ minWidth: 0 }}
-                      >
-                        {/* Row index badge */}
-                        <span className="text-slate-500 font-mono text-[10px] shrink-0 w-4 text-center">
-                          {idx + 1}
-                        </span>
+                    {/* Index */}
+                    <td className="py-3 px-2.5 text-center font-mono text-xs text-slate-400 font-bold whitespace-nowrap">
+                      {idx + 1}
+                    </td>
 
-                        {/* Item name — single line, ellipsis */}
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setExpandedItemId(isExpanded ? null : item.id)
-                          }
-                          title={tooltipText}
-                          className="flex-1 text-right font-bold text-slate-100 hover:text-emerald-300 transition-colors text-xs leading-tight cursor-pointer"
-                          style={{
-                            overflow: 'hidden',
-                            whiteSpace: 'nowrap',
-                            textOverflow: 'ellipsis',
-                            display: 'block',
-                            minWidth: 0,
-                          }}
-                        >
-                          {itemName}
-                        </button>
+                    {/* Item Name & Badges */}
+                    <td className="py-3 px-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setExpandedItemId(isExpanded ? null : item.id)
+                            }
+                            title={`${itemName} (انقر لعرض التفاصيل الكاملة)`}
+                            className="text-right font-bold text-slate-100 hover:text-emerald-300 transition-colors text-xs sm:text-sm leading-snug cursor-pointer select-none"
+                          >
+                            {itemName}
+                          </button>
 
-                        {/* Supplementary badge — shrinks, never breaks line */}
-                        <SupplementItemBadge
-                          isSupplementary={poItem?.is_supplementary}
-                          batchNumber={poItem?.supplement_batch}
-                        />
+                          <SupplementItemBadge
+                            isSupplementary={poItem?.is_supplementary}
+                            batchNumber={poItem?.supplement_batch}
+                          />
+
+                          {poItem?.shipment_group && (
+                            <span className="text-[10px] font-bold text-amber-300 bg-amber-950/90 border border-amber-600/60 px-2 py-0.5 rounded flex items-center gap-1 shadow-xs whitespace-nowrap">
+                              <span>🚚</span>
+                              <span>شحنة: {poItem.shipment_group.group_number}</span>
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Different Unit Conversion Hint */}
+                        {isDiffUom && (
+                          <div className="text-[11px] text-slate-400 font-sans">
+                            (ما يعادل {item.received_quantity} {getUnitLabel(poItem?.uom || '')})
+                          </div>
+                        )}
                       </div>
                     </td>
 
-                    {/* ② كمية المخزن */}
-                    <td className="py-2 px-2 text-center align-middle whitespace-nowrap">
-                      <span className="font-mono font-black text-cyan-300 text-sm">
-                        {displayWarehouseQty ?? '—'}
-                      </span>
-                    </td>
-
-                    {/* ③ الكمية المعتمدة مدنياً */}
-                    <td className="py-2 px-1.5 text-center align-middle whitespace-nowrap">
-                      {readOnly ? (
-                        <span className="font-mono font-black text-emerald-300 text-sm bg-emerald-950/40 border border-emerald-800/50 px-2 py-0.5 rounded-md inline-block">
-                          {displayConfirmedQty ?? '—'}
-                        </span>
+                    {/* Parcel & Region */}
+                    <td className="py-3 px-2.5 text-center whitespace-nowrap">
+                      {parcel || region ? (
+                        <div className="flex flex-col gap-1 items-center justify-center">
+                          {parcel && (
+                            <span className="font-mono text-cyan-300 bg-cyan-950/80 border border-cyan-800/60 px-2 py-0.5 rounded text-[11px] font-bold inline-flex items-center gap-1 shadow-xs">
+                              <span>🏷️</span>
+                              <span>{parcel}</span>
+                            </span>
+                          )}
+                          {region && (
+                            <span className="text-amber-300 bg-amber-950/80 border border-amber-800/60 px-2 py-0.5 rounded text-[11px] font-bold inline-flex items-center gap-1 shadow-xs">
+                              <span>📍</span>
+                              <span>{region}</span>
+                            </span>
+                          )}
+                        </div>
                       ) : (
-                        <input
-                          id={`site-qty-${key}`}
-                          type="number"
-                          min="0"
-                          step="any"
-                          value={val}
-                          onChange={(e) => onQuantityChange?.(key, e.target.value)}
-                          placeholder="0"
-                          title={isReviewer ? 'الكمية المعتمدة بالمراجعة الفنية' : 'الكمية المعتمدة مدنياً'}
-                          className="w-full h-8 text-center font-mono font-black text-emerald-200 bg-slate-950 border border-emerald-500/60 hover:border-emerald-400 focus:border-emerald-300 focus:ring-2 focus:ring-emerald-500/25 rounded-lg text-sm transition-all outline-none"
-                          style={{ minWidth: 0 }}
-                        />
+                        <span className="text-slate-600 font-bold">—</span>
                       )}
                     </td>
 
-                    {/* ④ الوحدة — far left */}
-                    <td className="py-2 px-2 text-center align-middle whitespace-nowrap">
-                      <span className="text-[11px] font-bold text-slate-300 bg-slate-900/70 border border-slate-700/60 px-1.5 py-0.5 rounded inline-block">
-                        {uomLabel}
+                    {/* Unit */}
+                    <td className="py-3 px-2.5 text-center whitespace-nowrap">
+                      <span className="text-xs font-bold text-slate-200 bg-slate-900 border border-slate-700/80 px-2.5 py-1 rounded-md inline-block">
+                        {uomLabel || '—'}
                       </span>
+                    </td>
+
+                    {/* Warehouse Recorded Quantity or Ordered Quantity (readOnly) */}
+                    <td className="py-3 px-2.5 text-center whitespace-nowrap">
+                      {readOnly ? (
+                        <div className="font-mono font-black text-cyan-300 text-sm sm:text-base">
+                          {orderedQty}
+                        </div>
+                      ) : (
+                        <div className="font-mono font-black text-cyan-300 text-sm sm:text-base">
+                          {displayWarehouseQty ?? '—'}
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Confirmed / Received Quantity */}
+                    <td className="py-3 px-2.5 text-center whitespace-nowrap">
+                      {readOnly ? (
+                        <span className="font-mono font-black text-emerald-300 text-sm sm:text-base bg-emerald-950/60 border border-emerald-700/60 px-3 py-1 rounded-lg inline-block">
+                          {displayConfirmedQty ?? '—'}
+                        </span>
+                      ) : (
+                        <div className="flex items-center justify-center">
+                          <input
+                            id={`site-qty-${key}`}
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={val}
+                            onChange={(e) => onQuantityChange?.(key, e.target.value)}
+                            placeholder="0"
+                            title={isReviewer ? 'الكمية المعتمدة بالمراجعة الفنية' : 'الكمية المعتمدة ميدانياً'}
+                            className="w-24 sm:w-28 h-9 text-center font-mono font-black text-emerald-200 bg-slate-950 border-2 border-emerald-500/70 hover:border-emerald-400 focus:border-emerald-300 focus:ring-2 focus:ring-emerald-500/30 rounded-xl text-sm sm:text-base transition-all outline-none shadow-inner"
+                          />
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Notes Action or Display */}
+                    <td className="py-3 px-2.5 text-center whitespace-nowrap">
+                      {readOnly ? (
+                        item.notes ? (
+                          <span
+                            className="text-xs text-amber-300 bg-amber-950/70 border border-amber-800/60 px-2.5 py-1 rounded-lg inline-flex items-center gap-1 max-w-[160px] truncate"
+                            title={item.notes}
+                          >
+                            <span>📝</span>
+                            <span className="truncate">{item.notes}</span>
+                          </span>
+                        ) : (
+                          <span className="text-slate-600">—</span>
+                        )
+                      ) : (
+                        <div className="flex flex-col items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setActiveNoteItemId(isNoteOpen ? null : item.id)
+                            }
+                            title="إضافة ملاحظة على هذا البند"
+                            className={`text-xs px-2.5 py-1 rounded-lg border transition-all cursor-pointer inline-flex items-center gap-1.5 ${
+                              noteVal
+                                ? 'bg-amber-950/90 border-amber-500/80 text-amber-200 font-bold shadow-xs'
+                                : 'bg-slate-900/90 border-slate-700/70 text-slate-300 hover:text-white hover:border-slate-500'
+                            }`}
+                          >
+                            <span>{noteVal ? '📝' : '💬'}</span>
+                            <span className="text-[11px] font-bold">
+                              {noteVal ? 'تعديل' : '+ ملاحظة'}
+                            </span>
+                          </button>
+                          {noteVal && (
+                            <span
+                              className="text-[10px] text-amber-300 max-w-[120px] truncate"
+                              title={noteVal}
+                            >
+                              {noteVal}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </td>
                   </tr>
 
-                  {/* ── Expanded details drawer — collapses inline ── */}
+                  {/* ── Expanded Full Details Drawer ── */}
                   {isExpanded && (
-                    <tr className="bg-slate-950/70 border-b border-slate-800/60">
-                      <td colSpan={4} className="px-3 py-2.5">
-                        <div className="flex items-start justify-between gap-2 mb-1.5">
-                          <span className="text-[11px] font-black text-emerald-400 flex items-center gap-1">
-                            📋 تفاصيل البند:
+                    <tr className="bg-slate-900/90 border-b border-slate-800">
+                      <td colSpan={7} className="p-4 space-y-2.5">
+                        <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                          <span className="font-bold text-emerald-300 text-xs sm:text-sm">
+                            📋 تفاصيل البند كاملة:
                           </span>
                           <button
                             type="button"
                             onClick={() => setExpandedItemId(null)}
-                            className="text-[10px] text-slate-500 hover:text-slate-300 font-bold shrink-0"
+                            className="text-slate-400 hover:text-slate-200 text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
                           >
                             ✕ إغلاق
                           </button>
                         </div>
 
-                        {/* Full item name */}
-                        <p className="text-xs font-bold text-slate-100 whitespace-normal leading-snug mb-1.5">
+                        <p className="text-slate-100 font-bold text-sm whitespace-normal leading-relaxed">
                           {itemName}
                         </p>
 
-                        {/* Metadata chips */}
-                        <div className="flex flex-wrap items-center gap-1.5">
+                        <div className="flex items-center gap-2.5 flex-wrap text-xs text-slate-300 pt-1">
                           {parcel && (
-                            <span className="text-[11px] font-mono text-cyan-300 bg-cyan-950/60 border border-cyan-800/50 px-2 py-0.5 rounded">
-                              🏷️ {parcel}
+                            <span className="bg-cyan-950/80 border border-cyan-800/70 px-2.5 py-1 rounded-lg text-cyan-300 font-mono font-bold">
+                              🏷️ قطعة الأرض: <strong>{parcel}</strong>
                             </span>
                           )}
                           {region && (
-                            <span className="text-[11px] text-amber-300 bg-amber-950/60 border border-amber-800/50 px-2 py-0.5 rounded">
-                              📍 {region}
+                            <span className="bg-amber-950/80 border border-amber-800/70 px-2.5 py-1 rounded-lg text-amber-300 font-bold">
+                              📍 المنطقة: <strong>{region}</strong>
                             </span>
                           )}
                           {poItem?.quantity && (
-                            <span className="text-[11px] text-slate-300 bg-slate-900/60 border border-slate-700/50 px-2 py-0.5 rounded">
-                              📋 مطلوب: {poItem.quantity} {uomLabel}
+                            <span className="bg-slate-900 border border-slate-700 px-2.5 py-1 rounded-lg text-slate-200">
+                              📋 الكمية المطلوبة بأمر الشراء: <strong className="text-cyan-300 font-mono">{poItem.quantity} {uomLabel}</strong>
                             </span>
                           )}
                           {poItem?.shipment_group && (
-                            <span className="text-[11px] font-bold text-amber-300 bg-amber-950/60 border border-amber-700/50 px-2 py-0.5 rounded">
-                              🚚 شحنة {poItem.shipment_group.group_number}
+                            <span className="bg-amber-950/80 border border-amber-700/70 px-2.5 py-1 rounded-lg text-amber-300 font-bold">
+                              🚚 رقم الشحنة: {poItem.shipment_group.group_number}
                             </span>
                           )}
-                          {noteVal && (
-                            <span className="text-[11px] text-amber-200 bg-amber-950/40 border border-amber-900/40 px-2 py-0.5 rounded">
-                              📝 {noteVal}
+                          {item.notes && (
+                            <span className="bg-slate-950 border border-amber-600/50 px-2.5 py-1 rounded-lg text-amber-300">
+                              📝 ملاحظة سابقة: {item.notes}
                             </span>
                           )}
                         </div>
 
-                        {/* Note input in editable mode */}
                         {!readOnly && (
-                          <div className="mt-2 flex items-center gap-2">
-                            <span className="text-[11px] font-bold text-slate-400 shrink-0">
-                              {isReviewer ? 'ملاحظة المراجع:' : 'ملاحظة:'}
+                          <div className="mt-2 pt-2 border-t border-slate-800/80 flex items-center gap-2">
+                            <span className="text-xs font-bold text-slate-300 shrink-0">
+                              {isReviewer ? 'ملاحظة المراجع:' : 'ملاحظة على الاستلام:'}
                             </span>
                             <input
                               type="text"
@@ -315,13 +371,48 @@ export const SiteReceiptItemsTable: React.FC<SiteReceiptItemsTableProps> = ({
                               }
                               placeholder={
                                 isReviewer
-                                  ? 'ملاحظة فنية على هذا الصنف...'
-                                  : 'ملاحظة على استلام هذا الصنف...'
+                                  ? 'اكتب ملاحظتك الفنية على هذا الصنف...'
+                                  : 'اكتب ملاحظتك على استلام هذا الصنف...'
                               }
-                              className="flex-1 h-7 rounded-md border border-slate-700 bg-slate-900 px-2.5 text-xs text-slate-200 focus:border-cyan-400 focus:outline-none"
+                              className="flex-1 h-8 rounded-lg border border-slate-700 bg-slate-950 px-3 text-xs text-slate-100 focus:border-cyan-400 focus:outline-none"
                             />
                           </div>
                         )}
+                      </td>
+                    </tr>
+                  )}
+
+                  {/* ── Inline Note Input Row (when toggled from notes button) ── */}
+                  {isNoteOpen && !readOnly && (
+                    <tr className="bg-slate-900/95 border-b border-slate-800 animate-fade-in">
+                      <td colSpan={7} className="p-3">
+                        <div className="flex items-center gap-2 bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+                          <span className="text-xs font-bold text-slate-300 shrink-0 flex items-center gap-1.5">
+                            <span>📝</span>
+                            <span>{isReviewer ? 'ملاحظة المراجع الفني:' : 'ملاحظة مهندس الموقع:'}</span>
+                          </span>
+                          <input
+                            type="text"
+                            value={noteVal}
+                            onChange={(e) =>
+                              onItemNoteChange?.(key, e.target.value)
+                            }
+                            placeholder={
+                              isReviewer
+                                ? 'اكتب ملاحظتك الفنية على هذا الصنف...'
+                                : 'اكتب ملاحظتك على استلام هذا الصنف...'
+                            }
+                            className="flex-1 h-8 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-slate-100 focus:border-cyan-400 focus:outline-none"
+                            autoFocus
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setActiveNoteItemId(null)}
+                            className="text-xs text-emerald-400 hover:text-emerald-300 font-bold px-3 py-1 bg-emerald-950/70 border border-emerald-600/60 rounded-lg cursor-pointer transition-colors"
+                          >
+                            تم ✓
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )}
@@ -332,9 +423,10 @@ export const SiteReceiptItemsTable: React.FC<SiteReceiptItemsTableProps> = ({
         </table>
       </div>
 
-      {/* Hint text */}
-      <p className="text-[10px] text-slate-500 mt-1.5 text-right">
-        💡 اضغط على اسم أي بند لعرض التفاصيل الكاملة وإضافة ملاحظة.
+      {/* Helper text */}
+      <p className="text-[11px] text-slate-400 text-right flex items-center gap-1.5 flex-wrap select-none px-1">
+        <span>💡</span>
+        <span>اضغط على اسم أي بند لعرض التفاصيل الكاملة (قطعة الأرض، المنطقة، رقم الشحنة)، أو انقر على «+ ملاحظة» لكتابة ملاحظة خاصة بالبند.</span>
       </p>
     </div>
   );
