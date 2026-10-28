@@ -113,7 +113,7 @@ describe('PurchaseReceiptPage Role Isolation', () => {
     // Site engineer sees the new compact table headers
     expect((await screen.findAllByText('REC-SITE-50')).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('البند والمواصفات')).toBeInTheDocument();
-    expect(screen.getByText('الكمية المعتمدة ميدانياً')).toBeInTheDocument();
+    expect(screen.getByText('الكمية المعتمدة مدنيًا')).toBeInTheDocument();
     expect(screen.getAllByText('خرسانة جاهزة للقواعد المسلحة').length).toBeGreaterThanOrEqual(1);
 
     // The quantity input is present and bound

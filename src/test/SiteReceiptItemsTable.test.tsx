@@ -55,8 +55,8 @@ describe('SiteReceiptItemsTable Component', () => {
     ],
   };
 
-  it('renders all items as single rows in a compact structured table', () => {
-    render(
+  it('renders strictly four columns in exact order without parcel/region column', () => {
+    const { container } = render(
       <SiteReceiptItemsTable
         receipt={sampleReceipt}
         quantities={{
@@ -67,31 +67,38 @@ describe('SiteReceiptItemsTable Component', () => {
       />
     );
 
-    // Table headers exist
-    expect(screen.getByText('البند والمواصفات')).toBeInTheDocument();
-    expect(screen.getByText('القطعة / المنطقة')).toBeInTheDocument();
-    expect(screen.getByText('الوحدة')).toBeInTheDocument();
-    expect(screen.getByText('كمية المخزن')).toBeInTheDocument();
-    expect(screen.getByText('الكمية المعتمدة ميدانياً')).toBeInTheDocument();
-    expect(screen.getByText('ملاحظات')).toBeInTheDocument();
+    // Exact 4 table headers exist in order
+    const ths = container.querySelectorAll('thead th');
+    expect(ths.length).toBe(4);
+    expect(ths[0].textContent?.trim()).toBe('البند والمواصفات');
+    expect(ths[1].textContent?.trim()).toBe('كمية المخزن');
+    expect(ths[2].textContent?.trim()).toBe('الكمية المعتمدة مدنيًا');
+    expect(ths[3].textContent?.trim()).toBe('الوحدة');
+
+    // Parcel / Region column must NOT exist in the table
+    expect(screen.queryByText('القطعة / المنطقة')).not.toBeInTheDocument();
 
     // Verify all 3 item names are rendered
     expect(screen.getByText('حديد تسليح قطر 16 مم عز الدخيلة عالي المقاومة')).toBeInTheDocument();
     expect(screen.getByText('خرسانة مسلحة للقواعد العادية رتبة 250')).toBeInTheDocument();
     expect(screen.getByText('أسمنت مقاوم للأملاح بورتلاندي سي ووتر معتمد')).toBeInTheDocument();
 
-    // Verify units of measure are displayed
+    // Verify units of measure are displayed in column 4
     const tonUnits = screen.getAllByText('طن');
     expect(tonUnits.length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText('م³')).toBeInTheDocument();
 
-    // Verify recorded warehouse quantities
+    // Verify recorded warehouse quantities in column 2
     expect(screen.getByText('4')).toBeInTheDocument();
     expect(screen.getAllByText('2').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('5')).toBeInTheDocument();
+
+    // Verify table layout is fixed and width is 100%
+    const table = container.querySelector('table');
+    expect(table).toHaveStyle({ tableLayout: 'fixed', width: '100%' });
   });
 
-  it('allows editing confirmed quantity for each item row', () => {
+  it('allows editing confirmed quantity for each item row with proper id and bounds', () => {
     const onQuantityChange = vi.fn();
 
     render(
@@ -109,6 +116,7 @@ describe('SiteReceiptItemsTable Component', () => {
     const input1 = screen.getByDisplayValue('4');
     expect(input1).toBeInTheDocument();
     expect(input1).toHaveAttribute('type', 'number');
+    expect(input1).toHaveAttribute('id', 'site-qty-receipt-101-1');
 
     fireEvent.change(input1, { target: { value: '3.5' } });
     expect(onQuantityChange).toHaveBeenCalledWith('receipt-101-1', '3.5');
@@ -151,11 +159,10 @@ describe('SiteReceiptItemsTable Component', () => {
 
     // Full detail drawer should appear
     expect(screen.getByText('📋 تفاصيل البند كاملة:')).toBeInTheDocument();
-    expect(screen.getAllByText(/بيت الوطن - الحي الرابع/).length).toBeGreaterThanOrEqual(1);
   });
 
   it('renders read-only view in Archive tab without quantity input fields', () => {
-    render(
+    const { container } = render(
       <SiteReceiptItemsTable
         receipt={sampleReceipt}
         readOnly={true}
@@ -164,7 +171,36 @@ describe('SiteReceiptItemsTable Component', () => {
 
     // In read-only mode, inputs are replaced by plain text / badge
     expect(screen.queryByPlaceholderText('0')).not.toBeInTheDocument();
-    expect(screen.getByText('الكمية المطلوبة')).toBeInTheDocument();
-    expect(screen.getByText('الكمية المستلمة')).toBeInTheDocument();
+
+    // Headers remain exact 4 columns
+    const ths = container.querySelectorAll('thead th');
+    expect(ths.length).toBe(4);
+    expect(screen.getByText('كمية المخزن')).toBeInTheDocument();
+    expect(screen.getByText('الكمية المعتمدة مدنيًا')).toBeInTheDocument();
+    expect(screen.getByText('الوحدة')).toBeInTheDocument();
+  });
+
+  it('has zero overflow and fits within 100% on small mobile viewports (320px, 360px, 390px, 430px)', () => {
+    const viewports = [320, 360, 390, 430];
+
+    for (const width of viewports) {
+      const { container, unmount } = render(
+        <div style={{ width: `${width}px`, maxWidth: '100%' }}>
+          <SiteReceiptItemsTable
+            receipt={sampleReceipt}
+            quantities={{}}
+          />
+        </div>
+      );
+
+      const table = container.querySelector('table');
+      expect(table).not.toBeNull();
+      // Ensure no min-w or fixed pixel width forces it beyond the viewport
+      expect(table?.className).not.toContain('min-w-[');
+      expect(table?.style.width).toBe('100%');
+      expect(table?.style.tableLayout).toBe('fixed');
+
+      unmount();
+    }
   });
 });

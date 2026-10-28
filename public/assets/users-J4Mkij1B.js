@@ -1,0 +1,1 @@
+import{a0 as s}from"./index-NVaIAzjV.js";const n=async()=>(await s.get("/admin/users")).data.data,i=async a=>(await s.post("/admin/users",a)).data.data,d=async(a,t)=>(await s.put(`/admin/users/${a}`,t)).data.data,c=async a=>(await s.delete(`/admin/users/${a}`)).data;export{i as c,n as g,c as t,d as u};
