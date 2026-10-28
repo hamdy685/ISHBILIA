@@ -26,6 +26,7 @@ import { useRealtimeRefresh } from '../../hooks/useRealtimeRefresh';
 import { SupplementItemBadge } from '../../components/common/SupplementItemBadge';
 import ActionRequiredInbox, { ActionInboxItem } from '../../components/dashboard/ActionRequiredInbox';
 import { formatDateTime24h } from '../../utils/dateTime';
+import SiteReceiptItemsTable from '../../components/receipts/SiteReceiptItemsTable';
 
 interface ReceiptColorTheme {
   border: string;
@@ -80,6 +81,7 @@ type ActiveTab = 'QUEUE' | 'ARCHIVE';
 export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) => {
   const { hasRole } = useAuth();
   const isReviewer = hasRole('reviewer');
+  const isWarehouseKeeper = mode === 'warehouse' || hasRole('warehouse_keeper');
   const [activeTab, setActiveTab] = useState<ActiveTab>('QUEUE');
   const [orders, setOrders] = useState<ReceiptPurchaseOrder[]>([]);
   const [receipts, setReceipts] = useState<ReceiptRecord[]>([]);
@@ -1634,132 +1636,18 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                               </span>
                             </h4>
 
-                        <div className="space-y-3.5">
-                          {(receipt.items || []).map((item, idx) => {
-                            const key = `receipt-${receipt.id}-${item.id}`;
-                            const val = quantities[key] ?? String(item.received_quantity);
-
-                            return (
-                              <div
-                                key={item.id}
-                                className="rounded-2xl border-2 border-slate-700/80 bg-slate-950/90 p-4 sm:p-5 space-y-3.5 shadow-lg"
-                              >
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="space-y-1 flex-1">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                      <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-300 font-black text-sm border border-emerald-500/40 shrink-0">
-                                        #{idx + 1}
-                                      </span>
-                                      <h4 className="text-base sm:text-lg font-black text-slate-50 tracking-wide flex items-center gap-2 flex-wrap">
-                                        <span>{item.purchase_order_item?.item_description || item.purchase_order_item?.item?.name}</span>
-                                        <SupplementItemBadge
-                                          isSupplementary={item.purchase_order_item?.is_supplementary}
-                                          batchNumber={item.purchase_order_item?.supplement_batch}
-                                        />
-                                        {item.purchase_order_item?.shipment_group && (
-                                          <span className="text-xs font-bold text-amber-300 bg-amber-950 border border-amber-500/60 px-2.5 py-0.5 rounded-xl flex items-center gap-1 shadow-sm">
-                                            <span>🚚</span>
-                                            <span>شحنة: {item.purchase_order_item.shipment_group.group_number}</span>
-                                          </span>
-                                        )}
-                                      </h4>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                <div className="flex items-center gap-2 flex-wrap text-xs sm:text-sm">
-                                  {(item.purchase_order_item?.item_reference || item.purchase_order_item?.pr_item?.item_reference || receipt.purchase_order?.purchase_request?.parcel_reference || receipt.purchase_request?.parcel_reference) && (
-                                    <span className="inline-flex items-center gap-1.5 font-mono text-cyan-200 bg-cyan-950 border border-cyan-700/80 px-3 py-1 rounded-xl font-black">
-                                      <span>🏷️</span> قطعة الأرض: {item.purchase_order_item?.item_reference || item.purchase_order_item?.pr_item?.item_reference || receipt.purchase_order?.purchase_request?.parcel_reference || receipt.purchase_request?.parcel_reference}
-                                    </span>
-                                  )}
-                                  {(item.purchase_order_item?.region || item.purchase_order_item?.pr_item?.region || receipt.purchase_order?.purchase_request?.region || receipt.purchase_request?.region) && (
-                                    <span className="inline-flex items-center gap-1.5 text-amber-200 bg-amber-950 border border-amber-700/80 px-3 py-1 rounded-xl font-black">
-                                      <span>📍</span> المنطقة: {item.purchase_order_item?.region || item.purchase_order_item?.pr_item?.region || receipt.purchase_order?.purchase_request?.region || receipt.purchase_request?.region}
-                                    </span>
-                                  )}
-                                </div>
-
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
-                                  {/* Warehouse Recorded Quantity or Ordered Quantity for SITE_DIRECT */}
-                                  {(() => {
-                                    const poItem = item.purchase_order_item;
-                                    const prItem = poItem?.pr_item;
-                                    const poQty = Number(poItem?.quantity || 0);
-                                    const prQty = Number(prItem?.quantity || 0);
-                                    const isDiffUom = Boolean(prItem?.uom && poItem?.uom && prItem.uom !== poItem.uom && poQty > 0 && prQty > 0);
-                                    const displayReceivedQty = isDiffUom
-                                      ? (Number(item.received_quantity) > poQty * 2 ? Number(item.received_quantity) : Math.round(Number(item.received_quantity) * (prQty / poQty)))
-                                      : item.received_quantity;
-                                    const siteUom = prItem?.uom || poItem?.uom || '';
-
-                                    return (
-                                      <>
-                                        <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-4 flex flex-col justify-between space-y-1">
-                                          <span className="text-xs font-bold text-slate-400">
-                                            {receipt.receipt_type === 'REQUESTER_OFFICE'
-                                              ? 'الكمية المطلوبة في أمر الشراء:'
-                                              : receipt.receipt_type === 'SITE_DIRECT'
-                                              ? 'الكمية المطلوبة للتوريد المباشر بالموقع:'
-                                              : 'الكمية المسجلة من أمين المخزن:'}
-                                          </span>
-                                          <div className="font-mono text-xl sm:text-2xl font-black text-cyan-300 flex items-baseline gap-2 mt-1">
-                                            <span>{displayReceivedQty}</span>
-                                            <span className="text-base font-bold text-slate-300">{getUnitLabel(siteUom)}</span>
-                                          </div>
-                                        </div>
-
-                                        {/* Site Engineer / Receiver Confirmed Quantity */}
-                                        <div className="rounded-2xl border-2 border-emerald-500/80 bg-emerald-950/30 p-4 space-y-2 shadow-inner">
-                                          <div className="flex items-center justify-between">
-                                            <label htmlFor={`site-qty-${key}`} className="text-xs sm:text-sm font-black text-emerald-300 flex items-center gap-1.5">
-                                              <span>{receipt.receipt_type === 'REQUESTER_OFFICE' ? '🏢' : '👷'}</span>
-                                              <span>
-                                                {receipt.receipt_type === 'REQUESTER_OFFICE'
-                                                  ? 'الكمية المستلمة فعلياً في المقر:'
-                                                  : 'الكمية المعتمدة ميدانياً:'}
-                                              </span>
-                                            </label>
-                                            <span className="text-[11px] font-bold text-emerald-400 bg-emerald-950 border border-emerald-500/50 px-2 py-0.5 rounded-full">
-                                              جاهزة للاعتماد
-                                            </span>
-                                          </div>
-                                          <div className="relative flex items-center">
-                                            <input
-                                              id={`site-qty-${key}`}
-                                              type="number"
-                                              min="0"
-                                              step="any"
-                                              placeholder="أدخل الكمية المعتمدة..."
-                                              value={val}
-                                              onChange={(e) => setQuantities({ ...quantities, [key]: e.target.value })}
-                                              className="w-full h-12 rounded-xl border-2 border-emerald-400 bg-slate-900/95 pl-24 pr-3.5 text-lg sm:text-xl font-black text-emerald-200 placeholder:text-slate-500 focus:border-emerald-300 focus:ring-4 focus:ring-emerald-500/30 focus:outline-none transition-all shadow-inner"
-                                            />
-                                            <div className="absolute left-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-emerald-950/90 border border-emerald-500/50 px-2.5 py-1 rounded-lg pointer-events-none">
-                                              <span className="text-xs font-black text-emerald-300">
-                                                {getUnitLabel(siteUom)}
-                                              </span>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      </>
-                                    );
-                                  })()}
-                                </div>
-
-                                <div className="space-y-1 pt-1">
-                                  <input
-                                    type="text"
-                                    placeholder={isReviewer ? "ملاحظات المراجع الفني على هذا الصنف..." : "ملاحظات مهندس الموقع على هذا الصنف..."}
-                                    value={itemNotes[key] ?? (item.notes || '')}
-                                    onChange={(e) => setItemNotes({ ...itemNotes, [key]: e.target.value })}
-                                    className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs sm:text-sm text-slate-200 focus:border-cyan-400 focus:outline-none"
-                                  />
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
+                        <SiteReceiptItemsTable
+                          receipt={receipt}
+                          quantities={quantities}
+                          onQuantityChange={(key, val) =>
+                            setQuantities((prev) => ({ ...prev, [key]: val }))
+                          }
+                          itemNotes={itemNotes}
+                          onItemNoteChange={(key, val) =>
+                            setItemNotes((prev) => ({ ...prev, [key]: val }))
+                          }
+                          isReviewer={isReviewer}
+                        />
                       </>
                     )}
 
@@ -2071,93 +1959,100 @@ export const PurchaseReceiptPage: React.FC<{ mode: ReceiptMode }> = ({ mode }) =
                       ) : (
                         <>
                           <h4 className="text-xs sm:text-sm font-bold text-slate-300">تفاصيل البنود والكميات المسجلة في هذا الإذن:</h4>
-                      <div className="space-y-2.5">
-                        {(receipt.items || []).map((item, idx) => (
-                          <div key={item.id} className="rounded-xl border border-slate-800 bg-slate-950/80 p-3.5 space-y-2">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-mono text-cyan-400 font-bold text-xs">#{idx + 1}</span>
-                                <span className="font-black text-sm text-slate-100 flex items-center gap-2 flex-wrap">
-                                  <span>{item.purchase_order_item?.item_description || item.purchase_order_item?.item?.name}</span>
-                                  <SupplementItemBadge
-                                    isSupplementary={item.purchase_order_item?.is_supplementary}
-                                    batchNumber={item.purchase_order_item?.supplement_batch}
-                                  />
-                                  {item.purchase_order_item?.shipment_group && (
-                                    <span className="text-[10px] font-bold text-amber-300 bg-amber-950/80 border border-amber-600/50 px-2 py-0.5 rounded flex items-center gap-1 shadow-sm">
-                                      <span>🚚</span>
-                                      <span>شحنة: {item.purchase_order_item.shipment_group.group_number}</span>
-                                    </span>
+                          {isWarehouseKeeper ? (
+                            <div className="space-y-2.5">
+                              {(receipt.items || []).map((item, idx) => (
+                                <div key={item.id} className="rounded-xl border border-slate-800 bg-slate-950/80 p-3.5 space-y-2">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="font-mono text-cyan-400 font-bold text-xs">#{idx + 1}</span>
+                                      <span className="font-black text-sm text-slate-100 flex items-center gap-2 flex-wrap">
+                                        <span>{item.purchase_order_item?.item_description || item.purchase_order_item?.item?.name}</span>
+                                        <SupplementItemBadge
+                                          isSupplementary={item.purchase_order_item?.is_supplementary}
+                                          batchNumber={item.purchase_order_item?.supplement_batch}
+                                        />
+                                        {item.purchase_order_item?.shipment_group && (
+                                          <span className="text-[10px] font-bold text-amber-300 bg-amber-950/80 border border-amber-600/50 px-2 py-0.5 rounded flex items-center gap-1 shadow-sm">
+                                            <span>🚚</span>
+                                            <span>شحنة: {item.purchase_order_item.shipment_group.group_number}</span>
+                                          </span>
+                                        )}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-2 flex-wrap text-xs">
+                                    {(item.purchase_order_item?.item_reference || item.purchase_order_item?.pr_item?.item_reference || receipt.purchase_order?.purchase_request?.parcel_reference || receipt.purchase_request?.parcel_reference) && (
+                                      <span className="font-mono text-cyan-300 bg-cyan-950/80 border border-cyan-800/60 px-2.5 py-0.5 rounded-lg font-bold">
+                                        قطعة الأرض: {item.purchase_order_item?.item_reference || item.purchase_order_item?.pr_item?.item_reference || receipt.purchase_order?.purchase_request?.parcel_reference || receipt.purchase_request?.parcel_reference}
+                                      </span>
+                                    )}
+                                    {(item.purchase_order_item?.region || item.purchase_order_item?.pr_item?.region || receipt.purchase_order?.purchase_request?.region || receipt.purchase_request?.region) && (
+                                      <span className="text-amber-300 bg-amber-950/80 border border-amber-800/60 px-2.5 py-0.5 rounded-lg font-bold">
+                                        المنطقة: {item.purchase_order_item?.region || item.purchase_order_item?.pr_item?.region || receipt.purchase_order?.purchase_request?.region || receipt.purchase_request?.region}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {(() => {
+                                    const poItem = item.purchase_order_item;
+                                    const prItem = poItem?.pr_item;
+                                    const poQty = Number(poItem?.quantity || 0);
+                                    const prQty = Number(prItem?.quantity || 0);
+                                    const isDiffUom = Boolean(prItem?.uom && poItem?.uom && prItem.uom !== poItem.uom && poQty > 0 && prQty > 0);
+                                    const displayReceivedQty = isDiffUom
+                                      ? (Number(item.received_quantity) > poQty * 2 ? Number(item.received_quantity) : Math.round(Number(item.received_quantity) * (prQty / poQty)))
+                                      : item.received_quantity;
+                                    const displayUom = prItem?.uom || poItem?.uom || '';
+
+                                    return (
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                                        <div className="bg-slate-900/90 p-3 rounded-xl border border-slate-800 flex items-center justify-between text-xs sm:text-sm">
+                                          <span className="text-slate-400 font-bold flex items-center gap-1.5">
+                                            <span>📋</span> الكمية المطلوبة بأمر الشراء:
+                                          </span>
+                                          <span className="font-mono font-black text-cyan-300 text-sm sm:text-base">
+                                            {item.ordered_quantity ?? poItem?.quantity ?? '—'} {getUnitLabel(poItem?.uom || '')}
+                                            {isDiffUom && prItem?.quantity && (
+                                              <span className="block text-[11px] font-normal text-slate-400">
+                                                ({prItem.quantity} {getUnitLabel(displayUom)})
+                                              </span>
+                                            )}
+                                          </span>
+                                        </div>
+                                        <div className="bg-emerald-950/40 p-3 rounded-xl border border-emerald-800/60 flex items-center justify-between text-xs sm:text-sm">
+                                          <span className="text-emerald-300 font-bold flex items-center gap-1.5">
+                                            <span>✓</span> الكمية الفعلية المستلمة:
+                                          </span>
+                                          <span className="font-mono font-black text-emerald-200 text-sm sm:text-base">
+                                            {displayReceivedQty} {getUnitLabel(displayUom)}
+                                            {isDiffUom && (
+                                              <span className="block text-[11px] font-normal text-slate-400">
+                                                (ما يعادل {item.received_quantity} {getUnitLabel(poItem?.uom || '')})
+                                              </span>
+                                            )}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    );
+                                  })()}
+                                  {item.notes && (
+                                    <p className="text-xs text-slate-400 bg-slate-900/60 p-2 rounded-lg">
+                                      ملاحظات: {item.notes}
+                                    </p>
                                   )}
-                                </span>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-2 flex-wrap text-xs">
-                              {(item.purchase_order_item?.item_reference || item.purchase_order_item?.pr_item?.item_reference || receipt.purchase_order?.purchase_request?.parcel_reference || receipt.purchase_request?.parcel_reference) && (
-                                <span className="font-mono text-cyan-300 bg-cyan-950/80 border border-cyan-800/60 px-2.5 py-0.5 rounded-lg font-bold">
-                                  قطعة الأرض: {item.purchase_order_item?.item_reference || item.purchase_order_item?.pr_item?.item_reference || receipt.purchase_order?.purchase_request?.parcel_reference || receipt.purchase_request?.parcel_reference}
-                                </span>
-                              )}
-                              {(item.purchase_order_item?.region || item.purchase_order_item?.pr_item?.region || receipt.purchase_order?.purchase_request?.region || receipt.purchase_request?.region) && (
-                                <span className="text-amber-300 bg-amber-950/80 border border-amber-800/60 px-2.5 py-0.5 rounded-lg font-bold">
-                                  المنطقة: {item.purchase_order_item?.region || item.purchase_order_item?.pr_item?.region || receipt.purchase_order?.purchase_request?.region || receipt.purchase_request?.region}
-                                </span>
-                              )}
-                            </div>
-
-                            {(() => {
-                              const poItem = item.purchase_order_item;
-                              const prItem = poItem?.pr_item;
-                              const poQty = Number(poItem?.quantity || 0);
-                              const prQty = Number(prItem?.quantity || 0);
-                              const isDiffUom = Boolean(prItem?.uom && poItem?.uom && prItem.uom !== poItem.uom && poQty > 0 && prQty > 0);
-                              const displayReceivedQty = isDiffUom
-                                ? (Number(item.received_quantity) > poQty * 2 ? Number(item.received_quantity) : Math.round(Number(item.received_quantity) * (prQty / poQty)))
-                                : item.received_quantity;
-                              const displayUom = prItem?.uom || poItem?.uom || '';
-
-                              return (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-                                  <div className="bg-slate-900/90 p-3 rounded-xl border border-slate-800 flex items-center justify-between text-xs sm:text-sm">
-                                    <span className="text-slate-400 font-bold flex items-center gap-1.5">
-                                      <span>📋</span> الكمية المطلوبة بأمر الشراء:
-                                    </span>
-                                    <span className="font-mono font-black text-cyan-300 text-sm sm:text-base">
-                                      {item.ordered_quantity ?? poItem?.quantity ?? '—'} {getUnitLabel(poItem?.uom || '')}
-                                      {isDiffUom && prItem?.quantity && (
-                                        <span className="block text-[11px] font-normal text-slate-400">
-                                          ({prItem.quantity} {getUnitLabel(displayUom)})
-                                        </span>
-                                      )}
-                                    </span>
-                                  </div>
-                                  <div className="bg-emerald-950/40 p-3 rounded-xl border border-emerald-800/60 flex items-center justify-between text-xs sm:text-sm">
-                                    <span className="text-emerald-300 font-bold flex items-center gap-1.5">
-                                      <span>✓</span> الكمية الفعلية المستلمة:
-                                    </span>
-                                    <span className="font-mono font-black text-emerald-200 text-sm sm:text-base">
-                                      {displayReceivedQty} {getUnitLabel(displayUom)}
-                                      {isDiffUom && (
-                                        <span className="block text-[11px] font-normal text-slate-400">
-                                          (ما يعادل {item.received_quantity} {getUnitLabel(poItem?.uom || '')})
-                                        </span>
-                                      )}
-                                    </span>
-                                  </div>
                                 </div>
-                              );
-                            })()}
-                            {item.notes && (
-                              <p className="text-xs text-slate-400 bg-slate-900/60 p-2 rounded-lg">
-                                ملاحظات: {item.notes}
-                              </p>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  )}
+                              ))}
+                            </div>
+                          ) : (
+                            <SiteReceiptItemsTable
+                              receipt={receipt}
+                              readOnly={true}
+                            />
+                          )}
+                        </>
+                      )}
                 </div>
               )}
                 </Card>
